@@ -800,3 +800,15 @@ button.tm-calendar-task.is-timed { position: absolute; margin: 0; min-height: 12
 .tm-calendar-task.is-resizing { outline: 2px solid var(--interactive-accent); z-index: 4; }
 .tm-calendar-resize-preview { display: none; }
 .tm-calendar-task.is-resizing .tm-calendar-resize-preview { display: block; position: absolute; inset: 0; background: var(--background-secondary); padding: 2px 4px; font-size: 11px; pointer-events: none; }
+
+button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var(--text-faint); cursor: grab; }
+.tm-task-row.is-dragging { opacity: .45; }
+.tm-task-row[data-drop-position] { position: relative; }
+.tm-task-row[data-drop-position="before"] { box-shadow: inset 0 2px var(--interactive-accent); }
+.tm-task-row[data-drop-position="after"], .tm-task-row[data-drop-position="outdent"] { box-shadow: inset 0 -2px var(--interactive-accent); }
+.tm-task-row[data-drop-position="child"], .tm-section[data-drop-position="group"], .tm-task-list[data-drop-position="group"] { outline: 2px solid var(--interactive-accent); outline-offset: -2px; background: var(--background-modifier-hover); }
+.tm-task-row[data-drop-position="child"]::after, .tm-task-row[data-drop-position="outdent"]::after { position: absolute; right: 36px; bottom: 0; font-size: 10px; color: var(--text-accent); background: var(--background-primary); padding: 1px 4px; pointer-events: none; }
+.tm-task-row[data-drop-position="child"]::after { content: "Nest inside"; }
+.tm-task-row[data-drop-position="outdent"]::after { content: "Outdent"; }
+.tm-task-list:empty { min-height: 28px; }
+button.tm-list-drag-handle { touch-action: none; }

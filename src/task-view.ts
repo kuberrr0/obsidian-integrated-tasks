@@ -1,5 +1,8 @@
+import { splitDestination } from "./structure";
+import { ListDragController } from "./list-drag-view";
+import { draftForGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
 import { renderCalendar } from "./calendar-view";
-import { rescheduledDraft, type CalendarScope } from "./calendar";
+import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { TASK_PROPERTIES, filterOperators, propertyValue, propertyLabel } from "./task-properties";
 import { ItemView, Menu, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
@@ -33,6 +36,7 @@ export class TaskMainView extends ItemView {
   private filtersExpanded = false;
   private unsubscribe?: () => void;
   private taskResults?: HTMLElement;
+  private listDrag?: ListDragController;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
     super(leaf);
@@ -98,6 +102,7 @@ export class TaskMainView extends ItemView {
     const container = this.taskResults;
     if (!container) return;
     container.empty();
+    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement));
     const query: TaskQuery = {
       mode: this.pagePath ? "project" : this.calendar && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
       showCompleted: this.showCompleted,
@@ -141,7 +146,7 @@ export class TaskMainView extends ItemView {
       for (const [key, group] of groupTasks(tasks, this.grouping)) {
         const title = this.grouping === "date" && key !== "No date" ? formatDate(key, this.plugin.dateFormat())
           : this.grouping === "source" ? key.replace(/\.md$/i, "") : key;
-        this.renderSection(container, title, group);
+        this.renderSection(container, title, group, undefined, taskGroupTarget(this.grouping, group[0]));
       }
       return;
     }
@@ -151,10 +156,10 @@ export class TaskMainView extends ItemView {
     }
     if (this.state.mode === "today") {
       const today = todayIso();
-      this.renderSection(container, "Overdue", tasks.filter((task) => (actionDate(task) ?? today) < today), "alert");
-      this.renderSection(container, "Today", tasks.filter((task) => actionDate(task) === today));
+      this.renderSection(container, "Overdue", tasks.filter((task) => (actionDate(task) ?? today) < today), "alert", { property: "date", value: addDays(today, -1) });
+      this.renderSection(container, "Today", tasks.filter((task) => actionDate(task) === today), undefined, { property: "date", value: today });
     } else if (this.state.mode === "upcoming") {
-      for (const [date, group] of groupTasks(tasks, "date")) this.renderSection(container, formatDate(date, this.plugin.dateFormat()), group);
+      for (const [date, group] of groupTasks(tasks, "date")) this.renderSection(container, formatDate(date, this.plugin.dateFormat()), group, undefined, taskGroupTarget("date", group[0]));
     } else if (this.state.mode === "all") {
       const groups = new Map<string, Task[]>();
       for (const task of tasks) groups.set(task.path, [...(groups.get(task.path) ?? []), task]);
@@ -162,8 +167,9 @@ export class TaskMainView extends ItemView {
         if (this.plugin.index.isProject(path)) {
           const project = container.createEl("section", { cls: "tm-section" });
           project.createEl("h2", { text: path.replace(/\.md$/i, "") });
+          this.listDrag?.group(project, { destination: path });
           this.renderProjectSections(project, path, group);
-        } else this.renderSection(container, path.replace(/\.md$/i, ""), group);
+        } else this.renderSection(container, path.replace(/\.md$/i, ""), group, undefined, { destination: path });
       }
     } else {
       this.renderTaskList(container, tasks);
@@ -171,13 +177,15 @@ export class TaskMainView extends ItemView {
   }
 
   private renderProjectSections(container: HTMLElement, path: string, tasks: Task[]): void {
-    this.renderTaskList(container, tasks.filter((task) => task.sectionLine === undefined));
+    this.renderTaskList(container, tasks.filter((task) => task.sectionLine === undefined), { destination: path });
     for (const heading of this.plugin.index.headingsForPath(path)) {
       const group = tasks.filter((task) => task.sectionLine === heading.line);
       const section = container.createEl("section", { cls: "tm-section" });
       const title = section.createEl("h2", { text: heading.name });
       title.createSpan({ cls: "tm-section-count", text: String(group.length) });
-      this.renderTaskList(section, group);
+      const target = { destination: `${path}#${heading.name}` };
+      this.listDrag?.group(section, target);
+      this.renderTaskList(section, group, target);
     }
     if (!tasks.length && !this.plugin.index.headingsForPath(path).length) this.renderEmpty(container);
   }
@@ -382,21 +390,45 @@ export class TaskMainView extends ItemView {
     }
   }
 
-  private renderSection(container: HTMLElement, title: string, tasks: Task[], variant?: "alert"): void {
-    if (!tasks.length) return;
+  private renderSection(container: HTMLElement, title: string, tasks: Task[], variant?: "alert", target?: ListDropGroup): void {
+    if (!tasks.length && !target) return;
     const section = container.createEl("section", { cls: `tm-section${variant ? ` is-${variant}` : ""}` });
     const heading = section.createEl("h2");
     heading.createSpan({ text: title });
     heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
-    this.renderTaskList(section, tasks);
+    if (target) this.listDrag?.group(section, target);
+    this.renderTaskList(section, tasks, target);
   }
 
-  private renderTaskList(container: HTMLElement, tasks: Task[]): void {
+  private renderTaskList(container: HTMLElement, tasks: Task[], target?: ListDropGroup): void {
     const list = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
+    if (target) this.listDrag?.group(list, target);
     const visibleIds = new Set(tasks.map((task) => task.id));
     for (const task of orderTaskTree(tasks)) {
       const relativeDepth = this.depthWithin(task, visibleIds);
-      this.renderTaskRow(list, task, relativeDepth);
+      this.renderTaskRow(list, task, relativeDepth, target);
+    }
+  }
+
+  private async dropListTask(original: Task, group?: ListDropGroup, originalAnchor?: Task, placement?: ListPlacement): Promise<void> {
+    try {
+      const task = this.plugin.index.taskById(original.id);
+      if (!task || task.raw !== original.raw) throw new Error("Task changed while dragging. Refresh and try again.");
+      const draft = draftForGroup(task, group);
+      const anchor = originalAnchor ? this.plugin.index.taskById(originalAnchor.id) : undefined;
+      if (originalAnchor && (!anchor || anchor.raw !== originalAnchor.raw)) throw new Error("Drop target changed while dragging. Refresh and try again.");
+      if (anchor && placement) {
+        await this.plugin.store.relocate(task, anchor, placement, draft);
+        // Physical ordering must be visible after a manual reorder.
+        this.sort = "source";
+        this.descending = false;
+      } else await this.plugin.store.update(task, draft);
+      const destination = anchor?.path ?? splitDestination(draft.destination).path;
+      await this.plugin.index.refreshPath(task.path);
+      if (destination !== task.path) await this.plugin.index.refreshPath(destination);
+      this.render();
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not move task.");
     }
   }
 
@@ -410,7 +442,7 @@ export class TaskMainView extends ItemView {
     return depth;
   }
 
-  private renderTaskRow(list: HTMLElement, task: Task, depth: number): void {
+  private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup): void {
     const row = list.createDiv({ cls: `tm-task-row${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
     const checkboxTarget = row.createEl("label", { cls: "tm-checkbox-target" });
@@ -429,6 +461,7 @@ export class TaskMainView extends ItemView {
     checkbox.addEventListener("change", () => { void toggleTask(); });
     const content = row.createDiv({ cls: "tm-task-content" });
     const primary = content.createDiv({ cls: "tm-task-primary" });
+    this.listDrag?.row(row, primary, task, target);
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title });
     title.addEventListener("click", () => this.plugin.openEditor({ ...this.state, task }));
     if (task.childIds.length) {

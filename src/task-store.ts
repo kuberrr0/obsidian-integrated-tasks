@@ -1,8 +1,9 @@
+import { liveTaskBlock, rewriteBlock, placeTaskBlock } from "./task-block";
+import type { ListPlacement } from "./list-drag";
 import { splitDestination } from "./structure";
 import { normalizePath, type App, TFile, TFolder } from "obsidian";
 import {
   insertIntoDestination,
-  findLiveLine,
   removeTaskBlockFromContent,
   toggleTaskInContent,
   updateTaskInContent
@@ -42,34 +43,77 @@ export class TaskStore {
     await this.app.vault.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat()));
   }
 
+  async relocate(task: Task, anchor: Task, placement: ListPlacement, draft: TaskDraft): Promise<void> {
+    const source = this.requireFile(task.path);
+    const target = this.requireFile(anchor.path);
+    if (source.path === target.path) {
+      await this.app.vault.process(source, content => {
+        const block = liveTaskBlock(content, task, this.getDateFormat());
+        const destination = liveTaskBlock(content, anchor, this.getDateFormat());
+        const indent = destination.indent + (placement === "child" ? 2 : 0);
+        return placeTaskBlock(content, task, anchor, placement, rewriteBlock(block, draft, indent, this.getDateFormat()), this.getDateFormat());
+      });
+      return;
+    }
+    const content = await this.app.vault.read(source);
+    const block = liveTaskBlock(content, task, this.getDateFormat());
+    let before = "";
+    let after = "";
+    await this.app.vault.process(target, current => {
+      before = current;
+      const destination = liveTaskBlock(current, anchor, this.getDateFormat());
+      after = placeTaskBlock(current, undefined, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? 2 : 0), this.getDateFormat()), this.getDateFormat());
+      return after;
+    });
+    try {
+      await this.app.vault.process(source, current => {
+        const latest = liveTaskBlock(current, task, this.getDateFormat());
+        if (latest.lines.join("\n") !== block.lines.join("\n")) throw new Error("Task changed while moving. Try again.");
+        return removeTaskBlockFromContent(current, task, latest.lines.length);
+      });
+    } catch (cause) {
+      await this.app.vault.process(target, current => {
+        if (current !== after) throw new Error("Source task was kept, but the destination changed during the move. Check the destination for a duplicate.");
+        return before;
+      });
+      throw cause;
+    }
+  }
+
   private async move(task: Task, draft: TaskDraft): Promise<void> {
     const source = this.requireFile(task.path);
     const { path, heading } = splitDestination(draft.destination);
     const target = heading ? this.requireFile(path) : await this.ensureFile(path);
-    const sourceContent = await this.app.vault.read(source);
-    const sourceLines = sourceContent.split(/\r?\n/);
-    const liveLine = findLiveLine(sourceLines, task);
-    const lineOffset = liveLine - task.line;
-    const liveEnd = Math.min(sourceLines.length - 1, task.endLine + lineOffset);
-    const descendants = sourceLines.slice(liveLine + 1, liveEnd + 1).map((line) => {
-      let remaining = task.indent;
-      let cursor = 0;
-      while (remaining > 0 && cursor < line.length && line[cursor] === " ") {
-        remaining -= 1;
-        cursor += 1;
-      }
-      return line.slice(cursor);
-    });
-    const block = [serializeTask({ ...draft, indent: 0 }, this.getDateFormat()), ...descendants];
-
     if (source.path === target.path) {
-      await this.app.vault.process(source, (content) =>
-        insertIntoDestination(removeTaskBlockFromContent(content, task, block.length), block, heading, this.getNewTaskPosition())
-      );
+      await this.app.vault.process(source, content => {
+        const block = liveTaskBlock(content, task, this.getDateFormat());
+        return insertIntoDestination(removeTaskBlockFromContent(content, task, block.lines.length),
+          rewriteBlock(block, draft, 0, this.getDateFormat()), heading, this.getNewTaskPosition());
+      });
       return;
     }
-    await this.app.vault.process(target, (content) => insertIntoDestination(content, block, heading, this.getNewTaskPosition()));
-    await this.app.vault.process(source, (content) => removeTaskBlockFromContent(content, task, block.length));
+    const content = await this.app.vault.read(source);
+    const block = liveTaskBlock(content, task, this.getDateFormat());
+    let before = "";
+    let after = "";
+    await this.app.vault.process(target, current => {
+      before = current;
+      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat()), heading, this.getNewTaskPosition());
+      return after;
+    });
+    try {
+      await this.app.vault.process(source, current => {
+        const latest = liveTaskBlock(current, task, this.getDateFormat());
+        if (latest.lines.join("\n") !== block.lines.join("\n")) throw new Error("Task changed while moving. Try again.");
+        return removeTaskBlockFromContent(current, task, latest.lines.length);
+      });
+    } catch (cause) {
+      await this.app.vault.process(target, current => {
+        if (current !== after) throw new Error("Source task was kept, but the destination changed during the move. Check the destination for a duplicate.");
+        return before;
+      });
+      throw cause;
+    }
   }
 
   private requireFile(path: string): TFile {
