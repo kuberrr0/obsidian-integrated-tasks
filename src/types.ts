@@ -3,7 +3,9 @@ export type Priority = 1 | 2 | 3;
 export interface ParsedTaskMetadata {
   title: string;
   scheduledDate?: string;
+  scheduledTime?: string;
   deadline?: string;
+  deadlineTime?: string;
   durationMinutes?: number;
   priority?: Priority;
 }
@@ -22,7 +24,7 @@ export interface Task extends ParsedTaskMetadata {
   childIds: string[];
 }
 
-export type ProjectProperties = Pick<ParsedTaskMetadata, "scheduledDate" | "deadline" | "durationMinutes" | "priority">;
+export type ProjectProperties = Pick<ParsedTaskMetadata, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority">;
 
 export interface Project extends ProjectProperties {
   path: string;

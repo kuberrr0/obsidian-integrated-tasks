@@ -1,6 +1,6 @@
 import { destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
-import { formatDate, parseDateExpression, todayIso, tomorrowIso } from "./date";
+import { formatDate, formatDateTime, parseDateTimeExpression, todayIso, tomorrowIso } from "./date";
 import { formatDuration, parseTaskInput, parseTaskLine, serializeTaskInput } from "./parser";
 import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from "./types";
 
@@ -19,7 +19,9 @@ function initialDraft(options: TaskEditorOptions): TaskDraft {
     return {
       title: options.task.title,
       scheduledDate: options.task.scheduledDate,
+      scheduledTime: options.task.scheduledTime,
       deadline: options.task.deadline,
+      deadlineTime: options.task.deadlineTime,
       durationMinutes: options.task.durationMinutes,
       priority: options.task.priority,
       completed: options.task.completed,
@@ -68,7 +70,7 @@ export class TaskEditorModal extends Modal {
     const rawField = contentEl.createDiv({ cls: "tm-editor-raw-field" });
     this.rawInput = rawField.createEl("textarea", { cls: "tm-editor-raw" });
     this.rawInput.setAttribute("aria-label", "Task text");
-    this.rawInput.placeholder = "Task today {tomorrow} 30m p1 ~[[Project#Heading]]";
+    this.rawInput.placeholder = "Task today at 9pm {tomorrow at noon} 30m p1 ~[[Project#Heading]]";
     this.rawInput.rows = 2;
     this.rawInput.value = serializeTaskInput(this.draft, this.options.dateFormat);
 
@@ -79,12 +81,12 @@ export class TaskEditorModal extends Modal {
 
     this.scheduledInput = contentEl.createEl("input", { type: "text" });
     this.scheduledInput.placeholder = `Tomorrow, next Friday, or ${formatDate(todayIso(), this.options.dateFormat)}`;
-    this.scheduledInput.value = this.draft.scheduledDate ? formatDate(this.draft.scheduledDate, this.options.dateFormat) : "";
-    field(contentEl, "Scheduled date", this.scheduledInput);
+    this.scheduledInput.value = this.draft.scheduledDate ? formatDateTime(this.draft.scheduledDate, this.draft.scheduledTime, this.options.dateFormat) : "";
+    field(contentEl, "Scheduled date and time", this.scheduledInput);
 
     this.deadlineInput = contentEl.createEl("input", { type: "text" });
-    this.deadlineInput.placeholder = "Optional deadline";
-    this.deadlineInput.value = this.draft.deadline ? formatDate(this.draft.deadline, this.options.dateFormat) : "";
+    this.deadlineInput.placeholder = "Tomorrow at noon";
+    this.deadlineInput.value = this.draft.deadline ? formatDateTime(this.draft.deadline, this.draft.deadlineTime, this.options.dateFormat) : "";
     field(contentEl, "Deadline", this.deadlineInput);
 
     this.durationInput = contentEl.createEl("input", { type: "text" });
@@ -136,12 +138,12 @@ export class TaskEditorModal extends Modal {
     ] as const) {
       input.addEventListener("blur", () => {
         if (!input.value.trim()) return;
-        const resolved = parseDateExpression(input.value, new Date(), this.options.dateFormat);
+        const resolved = parseDateTimeExpression(input.value, new Date(), this.options.dateFormat);
         if (!resolved) {
           error.setText(`Could not understand the ${label}.`);
           return;
         }
-        input.value = formatDate(resolved, this.options.dateFormat);
+        input.value = formatDateTime(resolved.date, resolved.time, this.options.dateFormat);
         syncFromStructured();
       });
     }
@@ -154,8 +156,8 @@ export class TaskEditorModal extends Modal {
       }
       error.empty();
       this.titleInput.value = parsed.title;
-      this.scheduledInput.value = parsed.scheduledDate ? formatDate(parsed.scheduledDate, this.options.dateFormat) : "";
-      this.deadlineInput.value = parsed.deadline ? formatDate(parsed.deadline, this.options.dateFormat) : "";
+      this.scheduledInput.value = parsed.scheduledDate ? formatDateTime(parsed.scheduledDate, parsed.scheduledTime, this.options.dateFormat) : "";
+      this.deadlineInput.value = parsed.deadline ? formatDateTime(parsed.deadline, parsed.deadlineTime, this.options.dateFormat) : "";
       this.durationInput.value = parsed.durationMinutes ? formatDuration(parsed.durationMinutes) : "";
       this.priorityInput.value = parsed.priority ? String(parsed.priority) : "";
       if (parsed.destination) {
@@ -239,8 +241,10 @@ export class TaskEditorModal extends Modal {
     }
     return {
       title,
-      scheduledDate,
-      deadline,
+      scheduledDate: scheduledDate?.date,
+      scheduledTime: scheduledDate?.time,
+      deadline: deadline?.date,
+      deadlineTime: deadline?.time,
       durationMinutes,
       priority: this.priorityInput.value ? Number(this.priorityInput.value) as 1 | 2 | 3 : undefined,
       completed: this.draft.completed,
@@ -249,9 +253,9 @@ export class TaskEditorModal extends Modal {
     };
   }
 
-  private readDate(value: string, label: string, notify: boolean): string | undefined {
+  private readDate(value: string, label: string, notify: boolean): { date: string; time?: string } | undefined {
     if (!value.trim()) return undefined;
-    const parsed = parseDateExpression(value, new Date(), this.options.dateFormat);
+    const parsed = parseDateTimeExpression(value, new Date(), this.options.dateFormat);
     if (!parsed && notify) new Notice(`Could not understand the ${label}.`);
     return parsed;
   }

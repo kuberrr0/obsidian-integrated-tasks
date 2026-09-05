@@ -269,3 +269,34 @@ describe("curly-brace deadline input", () => {
     }
   );
 });
+
+
+describe("task times", () => {
+  it("parses and round trips independent scheduled and deadline times", () => {
+    const parsed = parseTaskLine("- [ ] do this task [[2026-09-05]] 9pm 1h30m {[[2026-09-07]] at noon} p1", reference)!;
+    expect(parsed).toMatchObject({ title: "do this task", scheduledDate: "2026-09-05", scheduledTime: "21:00", durationMinutes: 90, deadline: "2026-09-07", deadlineTime: "12:00", priority: 1 });
+    const saved = serializeTask({ ...parsed, destination: "Inbox.md" });
+    expect(saved).toBe("- [ ] do this task [[2026-09-05]] 21:00 1h30m {[[2026-09-07]] 12:00} p1");
+    expect(parseTaskLine(saved, reference)).toEqual(parsed);
+  });
+
+  it.each([["9pm", "21:00"], ["at 9:15 pm", "21:15"], ["21:30", "21:30"], ["noon", "12:00"], ["midnight", "00:00"]])("parses linked dates with %s", (time, expected) => {
+    expect(parseTaskLine(`- [ ] Call [[05-09-2026]] ${time} {[[07-09-2026]] ${time}}`, reference, "DD-MM-YYYY")).toMatchObject({ title: "Call", scheduledTime: expected, deadlineTime: expected });
+  });
+
+  it("preserves times in natural scheduled and deadline input", () => {
+    expect(parseTaskInput("Call tomorrow at 9pm {next Friday at noon} 1h30m", reference)).toMatchObject({ title: "Call", scheduledDate: "2026-09-05", scheduledTime: "21:00", deadline: "2026-09-11", deadlineTime: "12:00", durationMinutes: 90 });
+    expect(parseTaskInput("Call {tomorrow at noon} about launch", reference)).toMatchObject({ title: "Call about launch", deadlineTime: "12:00" });
+    expect(parseTaskInput("Call at 9pm", reference)).toMatchObject({ title: "Call", scheduledDate: "2026-09-04", scheduledTime: "21:00" });
+  });
+
+  it.each(["Call [[2026-09-05]] 25:00", "Call {[[2026-09-05]] nonsense}", "Read `9pm`", "Read [[9pm ideas]]", "Read [9pm](https://example.com)"])("preserves invalid or protected times: %s", (input) => {
+    expect(parseTaskInput(input, reference)).toMatchObject({ title: input });
+  });
+
+  it("does not invent times for date-only tasks", () => {
+    const task = parseTaskInput("Call tomorrow {next Friday}", reference);
+    expect(task?.scheduledTime).toBeUndefined();
+    expect(task?.deadlineTime).toBeUndefined();
+  });
+});

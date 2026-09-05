@@ -36,3 +36,13 @@ describe("note token pills", () => {
     expect(taskTokens("- [ ] Task 30m p3 ~[[Project#Plan]]").map((token) => token.label)).toEqual(["30m", "P3"]);
   });
 });
+
+
+it("includes times in date pills while retaining date-only link targets", () => {
+  const line = "- [ ] Call [[2026-09-05]] 9pm 1h30m {[[2026-09-07]] noon}";
+  const tokens = taskTokens(line);
+  expect(tokens.map((token) => line.slice(token.from, token.to))).toEqual(["[[2026-09-05]] 9pm", "1h30m", "{[[2026-09-07]] noon}"]);
+  expect(tokens.map((token) => token.label)).toEqual(["2026-09-05 21:00", "1h30m", "Due 2026-09-07 12:00"]);
+  expect(tokens[0].linkText).toBe("2026-09-05");
+  expect(tokens[2].linkText).toBe("2026-09-07");
+});

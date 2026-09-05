@@ -16,8 +16,8 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
     const source = line.slice(range.from, range.to);
     const date = /\[\[([^\]]+)\]\]/.exec(source)?.[1] ?? source.replace(/^\{|\}$/g, "").trim();
     switch (range.kind) {
-      case "scheduledDate": return { ...range, label: date, description: `Scheduled: ${date}`, linkText: date };
-      case "deadline": return { ...range, label: `Due ${date}`, description: `Deadline: ${date}`, linkText: source.includes("[[") ? date : undefined };
+      case "scheduledDate": return { ...range, label: `${date}${parsed.scheduledTime ? ` ${parsed.scheduledTime}` : ""}`, description: `Scheduled: ${date}${parsed.scheduledTime ? ` ${parsed.scheduledTime}` : ""}`, linkText: date };
+      case "deadline": return { ...range, label: `Due ${date}${parsed.deadlineTime && source.includes("[[") ? ` ${parsed.deadlineTime}` : ""}`, description: `Deadline: ${date}${parsed.deadlineTime && source.includes("[[") ? ` ${parsed.deadlineTime}` : ""}`, linkText: source.includes("[[") ? date : undefined };
       case "durationMinutes": return { ...range, label: formatDuration(parsed.durationMinutes!), description: `Duration: ${formatDuration(parsed.durationMinutes!)}` };
       case "priority": return { ...range, label: `P${parsed.priority}`, description: `Priority ${parsed.priority}`, priority: parsed.priority };
     }

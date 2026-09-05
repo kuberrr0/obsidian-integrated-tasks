@@ -1,11 +1,11 @@
 import { bodyLines, scanHeadings, splitDestination, destinationString } from "./structure";
-import { findInputDate, findInputDeadline, formatDate, parseDateExpression } from "./date";
+import { findInputDate, findInputDeadline, formatDate, parseDateTimeExpression } from "./date";
 import type { ParsedTaskMetadata, Priority, Task, TaskDraft } from "./types";
 
 const CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
 const PRIORITY = /(?:^|\s)p([123])\s*$/i;
-const DEADLINE = /(?:^|\s)\{(?:\[\[([^\]]+)\]\]|([^{}\[\]]+))\}\s*$/;
-const SCHEDULED = /(?:^|\s)\[\[([^\]]+)\]\]\s*$/;
+const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
+const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}\[\]]+))?)\s*$/;
 const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 const DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
 
@@ -83,9 +83,10 @@ export function parseTaskLine(
       consumed.add("priority");
       changed = true;
     } else if (!consumed.has("deadline") && (match = DEADLINE.exec(remainder))) {
-      const date = parseDateExpression(match[1] ?? match[2], reference, dateFormat);
+      const date = parseDateTimeExpression(match[1], reference, dateFormat);
       if (date) {
-        metadata.deadline = date;
+        metadata.deadline = date.date;
+        if (date.time) metadata.deadlineTime = date.time;
         recordToken("deadline", match);
         remainder = remainder.slice(0, match.index).trimEnd();
         consumed.add("deadline");
@@ -101,9 +102,10 @@ export function parseTaskLine(
         changed = true;
       }
     } else if (!consumed.has("scheduled") && (match = SCHEDULED.exec(remainder))) {
-      const date = parseDateExpression(match[1], reference, dateFormat);
+      const date = parseDateTimeExpression(match[1], reference, dateFormat);
       if (date) {
-        metadata.scheduledDate = date;
+        metadata.scheduledDate = date.date;
+        if (date.time) metadata.scheduledTime = date.time;
         recordToken("scheduledDate", match);
         remainder = remainder.slice(0, match.index).trimEnd();
         consumed.add("scheduled");
@@ -115,6 +117,7 @@ export function parseTaskLine(
       const date = findInputDeadline(remainder, reference, dateFormat);
       if (date) {
         metadata.deadline = date.date;
+        if (date.time) metadata.deadlineTime = date.time;
         remainder = `${remainder.slice(0, date.index)} ${remainder.slice(date.index + date.text.length)}`.replace(/ {2,}/g, " ").trim();
         consumed.add("deadline");
         changed = true;
@@ -125,6 +128,7 @@ export function parseTaskLine(
       const date = findInputDate(remainder, reference);
       if (date) {
         metadata.scheduledDate = date.date;
+        if (date.time) metadata.scheduledTime = date.time;
         remainder = `${remainder.slice(0, date.index)}${remainder.slice(date.index + date.text.length)}`.replace(/ {2,}/g, " ").trim();
         consumed.add("scheduled");
         changed = true;
@@ -155,9 +159,9 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string): string {
   const indent = " ".repeat(Math.max(0, draft.indent));
   const title = draft.title.trim();
   const metadata = [
-    draft.scheduledDate ? `[[${formatDate(draft.scheduledDate, dateFormat)}]]` : "",
+    draft.scheduledDate ? `[[${formatDate(draft.scheduledDate, dateFormat)}]]${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
-    draft.deadline ? `{[[${formatDate(draft.deadline, dateFormat)}]]}` : "",
+    draft.deadline ? `{[[${formatDate(draft.deadline, dateFormat)}]]${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
     draft.priority ? `p${draft.priority}` : ""
   ].filter(Boolean);
   const metadataGap = metadata.length ? " " : "";
