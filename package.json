@@ -1,5 +1,5 @@
 {
-  "name": "obsidian-task-manager",
+  "name": "obsidian-integrated-task-manager",
   "version": "0.1.0",
   "description": "A Markdown-native task manager for Obsidian.",
   "main": "main.js",

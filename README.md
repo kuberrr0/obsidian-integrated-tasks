@@ -1,4 +1,4 @@
-# Task Manager for Obsidian
+# Integrated Task Manager for Obsidian
 
 A Markdown-native task manager with Inbox, Today, Upcoming, All Tasks, and Projects views. Your notes remain the only source of truth.
 
@@ -43,4 +43,4 @@ npm test
 npm run build
 ```
 
-Copy `manifest.json`, `main.js`, and `styles.css` into `.obsidian/plugins/task-manager/` in a test vault, then enable **Task Manager** under Community plugins.
+Copy `manifest.json`, `main.js`, and `styles.css` into `.obsidian/plugins/task-manager/` in a test vault, then enable **Integrated Task Manager** under Community plugins.

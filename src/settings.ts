@@ -9,7 +9,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Task Manager" });
+    containerEl.createEl("h2", { text: "Integrated Task Manager" });
     new Setting(containerEl)
       .setName("Inbox note")
       .setDesc("Quick-created tasks are inserted at the top of this Markdown note.")

@@ -29,7 +29,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     this.registerMarkdownPostProcessor((element) => renderNoteTokens(element, this.dateFormat()));
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
-    this.addRibbonIcon("circle-check-big", "Open Task Manager", () => void this.activateNavigation());
+    this.addRibbonIcon("circle-check-big", "Open Integrated Task Manager", () => void this.activateNavigation());
 
     const commands: Array<[TaskViewMode, string, string]> = [
       ["inbox", "Open Inbox", "open-inbox"],
