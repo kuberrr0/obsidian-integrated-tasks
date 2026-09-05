@@ -1,5 +1,9 @@
 import * as chrono from "chrono-node";
-import moment from "moment";
+import { moment as obsidianMoment } from "obsidian";
+import type momentFactory from "moment";
+
+// Obsidian provides the callable factory, but declares it as a module namespace.
+const moment = obsidianMoment as unknown as typeof momentFactory;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const DEFAULT_DATE_FORMAT = "YYYY-MM-DD";
@@ -76,7 +80,7 @@ export function findInputDate(value: string, reference = new Date()): { index: n
 /** Curly braces route editor dates to Deadline, even in the middle of a title. */
 export function findInputDeadline(value: string, reference = new Date(), dateFormat?: string): { index: number; text: string; date: string; time?: string } | undefined {
   const prose = value.replace(/`[^`]*`|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)/g, (match) => " ".repeat(match.length));
-  const pattern = /(?:^|\s)\{([^{}\[\]]+)\}(?=\s|$)/g;
+  const pattern = /(?:^|\s)\{([^{}[\]]+)\}(?=\s|$)/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(prose))) {
     const date = parseDateTimeExpression(match[1], reference, dateFormat);

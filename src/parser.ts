@@ -5,7 +5,7 @@ import type { ParsedTaskMetadata, Priority, Task, TaskDraft } from "./types";
 const CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
 const PRIORITY = /(?:^|\s)p([123])\s*$/i;
 const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
-const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}\[\]]+))?)\s*$/;
+const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
 const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 const DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
 

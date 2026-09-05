@@ -41,10 +41,13 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
       if (last.atomic) range.setEndAfter(last.node);
       else range.setEnd(last.node, token.to - last.from);
       const fragment = range.extractContents();
-      const pill = document.createElement("span");
-      pill.className = tokenClass(token);
-      pill.title = token.description;
-      pill.setAttribute("aria-label", token.description);
+      // A detached parent keeps the pill in this window's document until insertion.
+      const win = document.win as Window & { createFragment: typeof createFragment };
+      const pill = win.createFragment().createSpan({
+        cls: tokenClass(token),
+        title: token.description,
+        attr: { "aria-label": token.description }
+      });
       const link = fragment.querySelector("a.internal-link");
       if (link) {
         if (token.kind === "deadline") pill.appendChild(document.createTextNode("Due "));

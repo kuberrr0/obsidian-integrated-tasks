@@ -33,7 +33,7 @@ export function parseProjectProperties(frontmatter: Record<string, unknown> | un
 /** Add editable project fields without replacing existing values or aliases. */
 export function addProjectProperties(frontmatter: Record<string, unknown>): void {
   const rawTags = frontmatter.tags;
-  const tags = Array.isArray(rawTags) ? [...rawTags] : typeof rawTags === "string" ? rawTags.split(/[,\s]+/).filter(Boolean) : [];
+  const tags: unknown[] = Array.isArray(rawTags) ? [...(rawTags as unknown[])] : typeof rawTags === "string" ? rawTags.split(/[,\s]+/).filter(Boolean) : [];
   if (!tags.some((tag) => typeof tag === "string" && /^#?project(?:\/|$)/.test(tag))) tags.push("project");
   frontmatter.tags = tags;
   const keys = new Set(Object.keys(frontmatter).map((key) => key.toLowerCase().replace(/[\s_-]/g, "")));

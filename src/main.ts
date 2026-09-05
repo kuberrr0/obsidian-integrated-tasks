@@ -30,7 +30,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     this.registerMarkdownPostProcessor((element) => renderNoteTokens(element, this.dateFormat()));
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
-    this.addRibbonIcon("circle-check-big", "Open Integrated Task Manager", () => void this.activateNavigation());
+    this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
 
     const commands: Array<[TaskViewMode, string, string]> = [
       ["inbox", "Open Inbox", "open-inbox"],
@@ -40,14 +40,14 @@ export default class TaskManagerPlugin extends Plugin {
       ["projects", "Open Projects", "open-projects"]
     ];
     for (const [mode, name, id] of commands) {
-      this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }) });
+      this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new Notice(String(error))) });
     }
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
 
     this.addCommand({
       id: "toggle-page-task-view", name: "Toggle task view for current page",
       checkCallback: (checking) => {
-        const view = this.app.workspace.activeLeaf?.view;
+        const view = this.app.workspace.getActiveViewOfType(TaskMainView) ?? this.app.workspace.getActiveViewOfType(MarkdownView);
         const path = view instanceof TaskMainView ? view.pagePath : view instanceof MarkdownView ? view.file?.path : undefined;
         if (!path) return false;
         if (!checking) void this.togglePageTaskView().catch((error) => new Notice(String(error)));
@@ -57,7 +57,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.addCommand({
       id: "convert-to-project", name: "Convert to project",
       checkCallback: (checking) => {
-        const view = this.app.workspace.activeLeaf?.view;
+        const view = this.app.workspace.getActiveViewOfType(TaskMainView) ?? this.app.workspace.getActiveViewOfType(MarkdownView);
         const path = view instanceof TaskMainView ? view.pagePath : view instanceof MarkdownView ? view.file?.path : undefined;
         const file = path ? this.app.vault.getAbstractFileByPath(path) : undefined;
         if (!(file instanceof TFile) || file.extension !== "md") return false;
@@ -67,7 +67,7 @@ export default class TaskManagerPlugin extends Plugin {
     });
 
     await this.index.initialize();
-    this.app.workspace.onLayoutReady(() => void this.activateNavigation(false));
+    this.app.workspace.onLayoutReady(() => void this.activateNavigation(false).catch((error) => new Notice(String(error))));
   }
 
   onunload(): void {
@@ -90,7 +90,7 @@ export default class TaskManagerPlugin extends Plugin {
       if (!leaf) return;
       await leaf.setViewState({ type: TASK_NAV_VIEW, active: true });
     }
-    if (reveal) this.app.workspace.revealLeaf(leaf);
+    if (reveal) await this.app.workspace.revealLeaf(leaf);
   }
 
   async openTaskView(state: TaskViewState): Promise<void> {
@@ -102,7 +102,7 @@ export default class TaskManagerPlugin extends Plugin {
     const currentView = leaf.view;
     if (currentView instanceof TaskMainView) await currentView.setState({ ...state });
     else if (existingView instanceof TaskMainView) await existingView.setState({ ...state });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
     for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
       const view = navLeaf.view;
       if (view instanceof TaskNavigationView) view.setActive(state.mode);
@@ -110,9 +110,9 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   async togglePageTaskView(): Promise<void> {
-    const leaf = this.app.workspace.activeLeaf;
-    if (!leaf) return;
-    const view = leaf.view;
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView) ?? this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view) return;
+    const leaf = view.leaf;
     if (view instanceof TaskMainView && view.pagePath) {
       const file = this.app.vault.getAbstractFileByPath(view.pagePath);
       if (!(file instanceof TFile)) { new Notice("The source note no longer exists."); return; }

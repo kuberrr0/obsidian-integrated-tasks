@@ -357,7 +357,7 @@ export class TaskMainView extends ItemView {
     const checkboxTarget = row.createEl("label", { cls: "tm-checkbox-target" });
     const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: "tm-task-checkbox", attr: { "aria-label": `Complete ${task.title}` } });
     checkbox.checked = task.completed;
-    checkbox.addEventListener("change", async () => {
+    const toggleTask = async (): Promise<void> => {
       checkbox.disabled = true;
       try {
         await this.plugin.store.toggle(task, checkbox.checked);
@@ -366,7 +366,8 @@ export class TaskMainView extends ItemView {
         checkbox.disabled = false;
         new Notice(cause instanceof Error ? cause.message : "Could not update the task.");
       }
-    });
+    };
+    checkbox.addEventListener("change", () => { void toggleTask(); });
     const content = row.createDiv({ cls: "tm-task-content" });
     const primary = content.createDiv({ cls: "tm-task-primary" });
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title });

@@ -26,15 +26,34 @@ describe("page task view", () => {
     const markdownState = { file: file.path, mode: "source", source: true };
     const markdown = Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, { file, getState: () => markdownState });
     const leaf = { view: markdown, setViewState: vi.fn() };
-    plugin.app = { workspace: { activeLeaf: leaf }, vault: { getAbstractFileByPath: () => file } } as unknown as App;
+    Object.assign(markdown, { leaf });
+    plugin.app = { workspace: { getActiveViewOfType: (type: typeof MarkdownView) => leaf.view instanceof type ? leaf.view : null }, vault: { getAbstractFileByPath: () => file } } as unknown as App;
     await plugin.togglePageTaskView();
     expect(leaf.setViewState).toHaveBeenCalledWith({ type: TASK_MAIN_VIEW, active: true, state: { mode: "all", pagePath: "Notes.md", markdownState } });
     const view = new TaskMainView(leaf as unknown as WorkspaceLeaf, plugin);
     vi.spyOn(view, "render").mockImplementation(() => {});
     await view.setState(leaf.setViewState.mock.calls[0][0].state);
     Object.assign(leaf, { view });
+    Object.assign(view, { leaf });
     await plugin.togglePageTaskView();
     expect(leaf.setViewState).toHaveBeenLastCalledWith({ type: "markdown", active: true, state: markdownState });
+  });
+
+  it.each(["navigation", "tasks"])("waits for %s reveal and propagates reveal failures", async (target) => {
+    const plugin = new TaskManagerPlugin({} as App, {} as never);
+    const leaf = { view: { getState: () => ({}) }, setViewState: vi.fn().mockResolvedValue(undefined) };
+    let rejectReveal!: (error: Error) => void;
+    const revealed = new Promise<void>((_resolve, reject) => { rejectReveal = reject; });
+    const revealLeaf = vi.fn(() => revealed);
+    plugin.app = { workspace: { getLeavesOfType: () => [leaf], revealLeaf } } as unknown as App;
+    const operation = target === "navigation" ? plugin.activateNavigation() : plugin.openTaskView({ mode: "today" });
+    const settled = vi.fn();
+    void operation.then(settled, settled);
+    await vi.waitFor(() => expect(revealLeaf).toHaveBeenCalledWith(leaf));
+    expect(settled).not.toHaveBeenCalled();
+    const failure = new Error("Could not reveal view");
+    rejectReveal(failure);
+    await expect(operation).rejects.toThrow(failure);
   });
 
   it.each<TaskViewState>([

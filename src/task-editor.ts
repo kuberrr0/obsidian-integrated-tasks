@@ -181,7 +181,7 @@ export class TaskEditorModal extends Modal {
     const save = actions.createEl("button", { text: "Save task", cls: "mod-cta" });
     const saveIcon = save.createSpan({ cls: "tm-button-icon" });
     setIcon(saveIcon, "check");
-    save.addEventListener("click", async () => {
+    const saveTask = async (): Promise<void> => {
       if (save.disabled) return;
       try {
         const next = this.rawDirty ? this.readRaw() : this.readStructured(true);
@@ -195,7 +195,8 @@ export class TaskEditorModal extends Modal {
         error.setText(message);
         new Notice(message);
       }
-    });
+    };
+    save.addEventListener("click", () => { void saveTask(); });
 
     contentEl.onkeydown = (event: KeyboardEvent): void => {
       if (event.key !== "Enter" || event.isComposing) return;

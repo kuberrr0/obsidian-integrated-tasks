@@ -1,3 +1,5 @@
+export { default as moment } from "moment";
+
 // Obsidian ships declarations only; these stand-ins exercise vault writes in Node.
 export class TFile { path = ""; }
 export class TFolder {}

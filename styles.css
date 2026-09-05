@@ -44,7 +44,7 @@
   gap: 2px;
 }
 
-button.tm-nav-item {
+.tm-navigation button.tm-nav-item {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -55,20 +55,20 @@ button.tm-nav-item {
   border: 0;
   border-radius: var(--radius-s);
   box-shadow: none;
-  background: transparent !important;
+  background: transparent;
   color: var(--text-muted);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-button.tm-nav-item:hover {
-  background: var(--background-modifier-hover) !important;
+.tm-navigation button.tm-nav-item:hover {
+  background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
-button.tm-nav-item.is-active {
-  background: var(--background-modifier-active-hover) !important;
+.tm-navigation button.tm-nav-item.is-active {
+  background: var(--background-modifier-active-hover);
   color: var(--text-accent);
 }
 
@@ -222,11 +222,15 @@ button.tm-source {
   padding: 0;
   border: 0;
   box-shadow: none;
-  background: transparent !important;
+  background: transparent;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
+
+/* Scoped specificity overrides native button backgrounds without affecting sizing. */
+.tm-main-view button.tm-task-title,
+.tm-main-view button.tm-source { background: transparent; }
 
 button.tm-task-title {
   overflow: hidden;
@@ -251,7 +255,6 @@ button.tm-source:hover {
   overflow-x: auto;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
-  scrollbar-width: none;
 }
 
 .tm-task-metadata::-webkit-scrollbar {
@@ -515,20 +518,27 @@ button.tm-source,
 }
 
 
-.tm-project-row .tm-task-content:has(.tm-project-metadata) {
+.tm-project-row .tm-task-content {
   grid-template-columns: minmax(100px, 1fr) minmax(0, auto) auto;
 }
+
+/* Explicit columns also work when the optional metadata element is absent. */
+.tm-project-row .tm-task-primary { grid-column: 1; }
+.tm-project-row .tm-project-metadata { grid-column: 2; }
+.tm-project-row .tm-project-progress { grid-column: 3; }
 
 .tm-project-metadata .tm-meta {
   flex-shrink: 0;
 }
 
 @media (max-width: 700px) {
-  .tm-project-row .tm-task-content:has(.tm-project-metadata) {
+  .tm-project-row .tm-task-content {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .tm-project-metadata {
+  .tm-project-row .tm-project-progress { grid-column: 2; grid-row: 1; }
+
+  .tm-project-row .tm-project-metadata {
     grid-column: 1 / -1;
     grid-row: 2;
     justify-content: flex-start;
@@ -539,8 +549,9 @@ button.tm-source,
 }
 
 /* Note pills are presentation only; the stored checklist syntax is unchanged. */
+/* A non-wrapping inline box keeps the entire pill background and rounded edges. */
 .tm-note-token {
-  display: inline;
+  display: inline-block;
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--background-secondary-alt);
@@ -549,8 +560,6 @@ button.tm-source,
   font-size: 0.85em;
   line-height: inherit;
   white-space: nowrap;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
 }
 
 .cm-editor .tm-note-token { cursor: text; }
@@ -567,7 +576,15 @@ button.tm-source,
 .tm-note-token-editor .tm-note-token-brace { display: none; }
 
 
-.tm-filter-controls { display: contents; }
+/* Keep a real controls box for browser and accessibility compatibility. */
+.tm-filters { grid-template-columns: minmax(160px, 1fr) minmax(0, 4fr); }
+.tm-filters > input { align-self: start; }
+.tm-filter-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--size-4-2);
+  min-width: 0;
+}
 button.tm-filter-toggle { display: none; }
 .tm-checkbox-target { display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .tm-checkbox-target .tm-task-checkbox { margin: 0; }
@@ -613,7 +630,7 @@ button.tm-filter-toggle { display: none; }
   .tm-section h2 { overflow-wrap: anywhere; }
   .tm-section-count { flex-shrink: 0; }
   .tm-empty { min-height: 220px; }
-  button.tm-nav-item { min-height: 44px; }
+  .tm-navigation button.tm-nav-item { min-height: 44px; }
   .tm-editor-modal { width: calc(100vw - 16px); max-width: 520px; max-height: calc(100dvh - 16px); }
   .tm-editor-modal .modal-content { min-height: 0; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
   .tm-editor-field { gap: 6px; margin-bottom: 16px; }

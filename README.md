@@ -2,6 +2,10 @@
 
 A Markdown-native task manager with Inbox, Today, Upcoming, All Tasks, and Projects views. Your notes remain the only source of truth.
 
+Requires Obsidian **1.7.2 or newer**, on desktop or mobile.
+
+The plugin enumerates Markdown files in the current vault to build its local task and project index. It reads those notes and writes task changes to their source notes. This vault-wide access supports the cross-note views; indexing happens locally and does not upload notes or task data to an external service.
+
 Use **Toggle task view for current page** from the command palette to switch any Markdown note between its editor and a task view in the same tab. No project tag is required; **Add task** saves to that note. Run the command again to return to the note.
 
 **Convert to project** adds the `project` tag and missing `date`, `end date`, `priority`, and `duration` properties to the current note. Existing tags, property values, and supported property aliases are preserved. It also works from a page or project task view.
@@ -51,3 +55,7 @@ npm run build
 ```
 
 Copy `manifest.json`, `main.js`, and `styles.css` into `.obsidian/plugins/integrated-task-manager/` in a test vault, then enable **Integrated Task Manager** under Community plugins.
+
+## License
+
+[MIT](LICENSE), copyright 2026 Integrated Task Manager contributors.
