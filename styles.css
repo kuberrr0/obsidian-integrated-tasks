@@ -1,5 +1,4 @@
-.workspace-leaf-content[data-type="task-manager-navigation"] .view-content,
-.workspace-leaf-content[data-type="task-manager-main"] .view-content {
+.workspace-leaf-content[data-type="task-manager-navigation"] .view-content {
   padding: 0;
 }
 
@@ -81,11 +80,14 @@ button.tm-nav-item.is-active {
   flex: 0 0 18px;
 }
 
-.tm-main-view {
+.workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view {
   width: 100%;
   max-width: calc(var(--file-line-width, 700px) + 96px);
   margin: 0 auto;
-  padding: 3em 48px 64px;
+  /* Match the note title inset, including theme-defined multi-value margins. */
+  padding: var(--file-margins, 32px);
+  padding-inline: 48px;
+  padding-bottom: 64px;
 }
 
 .tm-view-header {
@@ -144,7 +146,7 @@ button.tm-nav-item.is-active {
 
 .tm-filters {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(110px, auto)) minmax(160px, auto);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--size-4-2);
   margin: calc(var(--size-4-4) * -1) 0 var(--size-4-6);
 }
@@ -464,8 +466,9 @@ button.tm-source,
 }
 
 @media (max-width: 700px) {
-  .tm-main-view {
-    padding: 3em var(--size-4-4) var(--size-4-8);
+  .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view {
+    padding-inline: var(--size-4-4);
+    padding-bottom: var(--size-4-8);
   }
 
   .tm-view-header {

@@ -2,6 +2,12 @@
 
 A Markdown-native task manager with Inbox, Today, Upcoming, All Tasks, and Projects views. Your notes remain the only source of truth.
 
+Use **Toggle task view for current page** from the command palette to switch any Markdown note between its editor and a task view in the same tab. No project tag is required; **Add task** saves to that note. Run the command again to return to the note.
+
+**Convert to project** adds the `project` tag and missing `date`, `end date`, `priority`, and `duration` properties to the current note. Existing tags, property values, and supported property aliases are preserved. It also works from a page or project task view.
+
+Every task view—Inbox, Today, Upcoming, All Tasks, individual projects, and any page—includes search, priority/date filters, sorting by date/priority/title/note order/duration in either direction, and grouping by date/priority/source note/status or no grouping. Views spanning multiple notes also have a source-note filter. **Group: View default** retains each view's original layout, including note headings for page and project views. Visible subtasks stay beside their parents, with the selected sort applied among siblings. Controls reset when switching to a different view or page.
+
 ## Task syntax
 
 ```markdown

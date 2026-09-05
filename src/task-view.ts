@@ -1,9 +1,9 @@
 import { ItemView, Menu, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
-import { groupByActionDate } from "./query";
+import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
-import type { Priority, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState } from "./types";
+import type { Priority, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
@@ -23,6 +23,9 @@ export class TaskMainView extends ItemView {
   private priority?: Priority;
   private sourcePath = "";
   private dateFilter = "";
+  private sort: TaskSort = "date";
+  private descending = false;
+  private grouping: TaskGrouping = "default";
   private unsubscribe?: () => void;
   private taskResults?: HTMLElement;
 
@@ -30,9 +33,11 @@ export class TaskMainView extends ItemView {
     super(leaf);
   }
 
+  get pagePath(): string | undefined { return this.state.pagePath ?? this.state.projectPath; }
+
   getViewType(): string { return TASK_MAIN_VIEW; }
   getDisplayText(): string {
-    if (this.state.projectPath) return this.state.projectPath.replace(/\.md$/i, "").split("/").pop() ?? "Project";
+    if (this.pagePath) return this.pagePath.replace(/\.md$/i, "").split("/").pop() ?? "Project";
     return TITLES[this.state.mode];
   }
   getIcon(): string { return this.state.mode === "projects" ? "folder-kanban" : "circle-check-big"; }
@@ -40,7 +45,18 @@ export class TaskMainView extends ItemView {
 
   async setState(state: Record<string, unknown>): Promise<void> {
     const mode = state.mode;
+    if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath) {
+      this.search = "";
+      this.priority = undefined;
+      this.sourcePath = "";
+      this.dateFilter = "";
+      this.sort = "date";
+      this.descending = false;
+      this.grouping = "default";
+    }
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode as TaskViewMode;
+    this.state.pagePath = typeof state.pagePath === "string" ? state.pagePath : undefined;
+    this.state.markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState as Record<string, unknown> : undefined;
     this.state.projectPath = typeof state.projectPath === "string" ? state.projectPath : undefined;
     this.render();
   }
@@ -59,13 +75,13 @@ export class TaskMainView extends ItemView {
     container.empty();
     this.taskResults = undefined;
     container.addClass("tm-main-view");
-    if (this.state.mode === "projects" && !this.state.projectPath) {
+    if (this.state.mode === "projects" && !this.pagePath) {
       this.renderProjectList(container);
       return;
     }
 
     this.renderHeader(container);
-    if (this.state.mode === "all") this.renderFilters(container);
+    this.renderFilters(container);
     this.taskResults = container.createDiv({ cls: "tm-task-results" });
     this.renderTaskResults();
   }
@@ -75,30 +91,43 @@ export class TaskMainView extends ItemView {
     if (!container) return;
     container.empty();
     const query: TaskQuery = {
-      mode: this.state.projectPath ? "project" : this.state.mode,
+      mode: this.pagePath ? "project" : this.state.mode,
       showCompleted: this.showCompleted,
-      projectPath: this.state.projectPath,
+      projectPath: this.pagePath,
       sourcePath: this.sourcePath || undefined,
       priority: this.priority,
       search: this.search || undefined,
       dateFilter: this.dateFilter ? this.dateFilter as "dated" | "undated" | "overdue" : undefined
     };
-    const tasks = this.plugin.index.query(query);
-    if (this.state.projectPath) {
-      this.renderProjectSections(container, this.state.projectPath, tasks);
-      return;
-    }
+    const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
     if (!tasks.length) {
-      this.renderEmpty(container);
+      if (this.pagePath && this.grouping === "default" && !this.search && !this.priority && !this.dateFilter) {
+        this.renderProjectSections(container, this.pagePath, tasks);
+      } else this.renderEmpty(container);
       return;
     }
-
+    if (this.grouping === "none") {
+      this.renderTaskList(container, tasks);
+      return;
+    }
+    if (this.grouping !== "default") {
+      for (const [key, group] of groupTasks(tasks, this.grouping)) {
+        const title = this.grouping === "date" && key !== "No date" ? formatDate(key, this.plugin.dateFormat())
+          : this.grouping === "source" ? key.replace(/\.md$/i, "") : key;
+        this.renderSection(container, title, group);
+      }
+      return;
+    }
+    if (this.pagePath) {
+      this.renderProjectSections(container, this.pagePath, tasks);
+      return;
+    }
     if (this.state.mode === "today") {
       const today = todayIso();
       this.renderSection(container, "Overdue", tasks.filter((task) => (actionDate(task) ?? today) < today), "alert");
       this.renderSection(container, "Today", tasks.filter((task) => actionDate(task) === today));
     } else if (this.state.mode === "upcoming") {
-      for (const [date, group] of groupByActionDate(tasks)) this.renderSection(container, formatDate(date, this.plugin.dateFormat()), group);
+      for (const [date, group] of groupTasks(tasks, "date")) this.renderSection(container, formatDate(date, this.plugin.dateFormat()), group);
     } else if (this.state.mode === "all") {
       const groups = new Map<string, Task[]>();
       for (const task of tasks) groups.set(task.path, [...(groups.get(task.path) ?? []), task]);
@@ -129,7 +158,7 @@ export class TaskMainView extends ItemView {
   private renderHeader(container: HTMLElement): void {
     const header = container.createDiv({ cls: "tm-view-header" });
     const titleGroup = header.createDiv({ cls: "tm-title-group" });
-    if (this.state.projectPath) {
+    if (this.state.projectPath && !this.state.pagePath) {
       const back = titleGroup.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Back to projects" } });
       setIcon(back, "arrow-left");
       back.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects" }));
@@ -155,11 +184,11 @@ export class TaskMainView extends ItemView {
   }
 
   private subtitle(): string {
-    if (this.state.projectPath) return this.state.projectPath;
+    if (this.pagePath) return this.pagePath;
     if (this.state.mode === "today") {
       return formatDate(todayIso(), this.plugin.dateFormat());
     }
-    if (this.state.mode === "upcoming") return "Every future task, grouped by its next date";
+    if (this.state.mode === "upcoming") return "Every future task";
     if (this.state.mode === "inbox") return this.plugin.settings.inboxPath;
     if (this.state.mode === "all") return "Every checklist task in your vault";
     return "";
@@ -187,6 +216,33 @@ export class TaskMainView extends ItemView {
       this.dateFilter = date.value;
       this.renderTaskResults();
     });
+    const sort = filters.createEl("select", { attr: { "aria-label": "Sort tasks" } });
+    for (const [value, label] of [["date", "Sort: Date"], ["priority", "Sort: Priority"], ["title", "Sort: Title"], ["source", "Sort: Note order"], ["duration", "Sort: Duration"]]) {
+      sort.createEl("option", { value, text: label });
+    }
+    sort.value = this.sort;
+    sort.addEventListener("change", () => {
+      this.sort = sort.value as TaskSort;
+      this.renderTaskResults();
+    });
+    const direction = filters.createEl("select", { attr: { "aria-label": "Sort direction" } });
+    direction.createEl("option", { value: "asc", text: "Ascending" });
+    direction.createEl("option", { value: "desc", text: "Descending" });
+    direction.value = this.descending ? "desc" : "asc";
+    direction.addEventListener("change", () => {
+      this.descending = direction.value === "desc";
+      this.renderTaskResults();
+    });
+    const grouping = filters.createEl("select", { attr: { "aria-label": "Group tasks" } });
+    for (const [value, label] of [["default", "Group: View default"], ["none", "No grouping"], ["date", "Group: Date"], ["priority", "Group: Priority"], ["source", "Group: Source note"], ["status", "Group: Status"]]) {
+      grouping.createEl("option", { value, text: label });
+    }
+    grouping.value = this.grouping;
+    grouping.addEventListener("change", () => {
+      this.grouping = grouping.value as TaskGrouping;
+      this.renderTaskResults();
+    });
+    if (this.pagePath || this.state.mode === "inbox") return;
     const source = filters.createEl("select", { attr: { "aria-label": "Filter by source note" } });
     source.createEl("option", { value: "", text: "Any note" });
     for (const path of [...new Set(this.plugin.index.allTasks().map((task) => task.path))].sort()) {
@@ -276,7 +332,7 @@ export class TaskMainView extends ItemView {
   private renderTaskList(container: HTMLElement, tasks: Task[]): void {
     const list = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
     const visibleIds = new Set(tasks.map((task) => task.id));
-    for (const task of tasks) {
+    for (const task of orderTaskTree(tasks)) {
       const relativeDepth = this.depthWithin(task, visibleIds);
       this.renderTaskRow(list, task, relativeDepth);
     }
@@ -310,7 +366,7 @@ export class TaskMainView extends ItemView {
     const content = row.createDiv({ cls: "tm-task-content" });
     const primary = content.createDiv({ cls: "tm-task-primary" });
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title });
-    title.addEventListener("click", () => this.plugin.openEditor({ mode: this.state.mode, projectPath: this.state.projectPath, task }));
+    title.addEventListener("click", () => this.plugin.openEditor({ ...this.state, task }));
     if (task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
@@ -357,6 +413,6 @@ export class TaskMainView extends ItemView {
     const icon = empty.createDiv({ cls: "tm-empty-icon" });
     setIcon(icon, "circle-check-big");
     empty.createEl("h3", { text: "Nothing here" });
-    empty.createEl("p", { text: this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
+    empty.createEl("p", { text: this.search || this.priority || this.sourcePath || this.dateFilter ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
   }
 }

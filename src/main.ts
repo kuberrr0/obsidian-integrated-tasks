@@ -1,6 +1,6 @@
 import { noteTokenEditor } from "./note-token-editor";
 import { renderNoteTokens } from "./note-token-reading";
-import { Notice, Plugin, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from "obsidian";
 import { TaskEditorModal, type TaskEditorOptions } from "./task-editor";
 import { TaskIndex } from "./task-index";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
@@ -8,6 +8,7 @@ import { TaskStore } from "./task-store";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
 import { DEFAULT_SETTINGS, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
+import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
 
 interface OpenEditorState extends TaskViewState {
@@ -43,6 +44,28 @@ export default class TaskManagerPlugin extends Plugin {
     }
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
 
+    this.addCommand({
+      id: "toggle-page-task-view", name: "Toggle task view for current page",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.activeLeaf?.view;
+        const path = view instanceof TaskMainView ? view.pagePath : view instanceof MarkdownView ? view.file?.path : undefined;
+        if (!path) return false;
+        if (!checking) void this.togglePageTaskView().catch((error) => new Notice(String(error)));
+        return true;
+      }
+    });
+    this.addCommand({
+      id: "convert-to-project", name: "Convert to project",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.activeLeaf?.view;
+        const path = view instanceof TaskMainView ? view.pagePath : view instanceof MarkdownView ? view.file?.path : undefined;
+        const file = path ? this.app.vault.getAbstractFileByPath(path) : undefined;
+        if (!(file instanceof TFile) || file.extension !== "md") return false;
+        if (!checking) void this.convertToProject(file);
+        return true;
+      }
+    });
+
     await this.index.initialize();
     this.app.workspace.onLayoutReady(() => void this.activateNavigation(false));
   }
@@ -72,7 +95,7 @@ export default class TaskManagerPlugin extends Plugin {
 
   async openTaskView(state: TaskViewState): Promise<void> {
     await this.activateNavigation(false);
-    let leaf: WorkspaceLeaf | undefined = this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)[0];
+    let leaf: WorkspaceLeaf | undefined = this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW).find((candidate) => !candidate.view.getState().pagePath);
     const existingView = leaf?.view;
     if (!leaf) leaf = this.app.workspace.getLeaf("tab");
     await leaf.setViewState({ type: TASK_MAIN_VIEW, active: true, state: { ...state } });
@@ -86,9 +109,36 @@ export default class TaskManagerPlugin extends Plugin {
     }
   }
 
+  async togglePageTaskView(): Promise<void> {
+    const leaf = this.app.workspace.activeLeaf;
+    if (!leaf) return;
+    const view = leaf.view;
+    if (view instanceof TaskMainView && view.pagePath) {
+      const file = this.app.vault.getAbstractFileByPath(view.pagePath);
+      if (!(file instanceof TFile)) { new Notice("The source note no longer exists."); return; }
+      const state = view.getState();
+      await leaf.setViewState({ type: "markdown", active: true, state: { ...(state.markdownState as Record<string, unknown> ?? {}), file: file.path } });
+    } else if (view instanceof MarkdownView && view.file) {
+      await leaf.setViewState({ type: TASK_MAIN_VIEW, active: true, state: {
+        mode: "all", pagePath: view.file.path, markdownState: view.getState()
+      } });
+    }
+  }
+
+  private async convertToProject(file: TFile): Promise<void> {
+    try {
+      await this.app.fileManager.processFrontMatter(file, addProjectProperties);
+      await this.index.refreshPath(file.path);
+      new Notice(`Converted ${file.basename} to a project.`);
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
+    }
+  }
+
   openEditor(state: OpenEditorState): void {
     const options: TaskEditorOptions = {
       ...state,
+      projectPath: state.pagePath ?? state.projectPath,
       projects: this.index.projects(),
       settings: this.settings,
       dateFormat: this.dateFormat(),

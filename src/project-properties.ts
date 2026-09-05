@@ -29,3 +29,20 @@ export function parseProjectProperties(frontmatter: Record<string, unknown> | un
     durationMinutes
   };
 }
+
+/** Add editable project fields without replacing existing values or aliases. */
+export function addProjectProperties(frontmatter: Record<string, unknown>): void {
+  const rawTags = frontmatter.tags;
+  const tags = Array.isArray(rawTags) ? [...rawTags] : typeof rawTags === "string" ? rawTags.split(/[,\s]+/).filter(Boolean) : [];
+  if (!tags.some((tag) => typeof tag === "string" && /^#?project(?:\/|$)/.test(tag))) tags.push("project");
+  frontmatter.tags = tags;
+  const keys = new Set(Object.keys(frontmatter).map((key) => key.toLowerCase().replace(/[\s_-]/g, "")));
+  for (const [name, aliases] of [
+    ["date", ["date", "startdate", "scheduleddate"]],
+    ["end date", ["enddate", "deadline"]],
+    ["priority", ["priority"]],
+    ["duration", ["duration"]]
+  ] as const) {
+    if (!aliases.some((alias) => keys.has(alias))) frontmatter[name] = null;
+  }
+}

@@ -38,7 +38,12 @@ export type TaskViewMode = "inbox" | "today" | "upcoming" | "all" | "projects";
 export interface TaskViewState {
   mode: TaskViewMode;
   projectPath?: string;
+  pagePath?: string;
+  markdownState?: Record<string, unknown>;
 }
+
+export type TaskSort = "date" | "priority" | "title" | "source" | "duration";
+export type TaskGrouping = "default" | "none" | "date" | "priority" | "source" | "status";
 
 export interface TaskQuery {
   mode: TaskViewMode | "project";

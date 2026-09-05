@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseProjectProperties } from "../src/project-properties";
+import { addProjectProperties, parseProjectProperties } from "../src/project-properties";
 
 describe("project note properties", () => {
   it("reads the note's date, end date, priority and duration", () => {
@@ -23,5 +23,27 @@ describe("project note properties", () => {
 
   it.each([["high", 1], ["Medium", 2], ["low", 3]])("maps %s priority", (priority, expected) => {
     expect(parseProjectProperties({ priority }).priority).toBe(expected);
+  });
+});
+
+describe("convert to project", () => {
+  it("adds a project tag and empty editable properties", () => {
+    const properties = {};
+    addProjectProperties(properties);
+    expect(properties).toEqual({ tags: ["project"], date: null, "end date": null, priority: null, duration: null });
+  });
+
+  it("preserves existing tags, aliases, values and unrelated properties on repeated conversion", () => {
+    const properties = { tags: ["work", "#project/client"], "Start-Date": "2026-09-10", deadline: "2026-09-12", Priority: "p1", duration: 45, owner: "Me" };
+    const original = structuredClone(properties);
+    addProjectProperties(properties);
+    addProjectProperties(properties);
+    expect(properties).toEqual(original);
+  });
+
+  it("normalizes scalar tag lists without losing tags or duplicating project", () => {
+    const properties = { tags: "work, #project personal" };
+    addProjectProperties(properties);
+    expect(properties.tags).toEqual(["work", "#project", "personal"]);
   });
 });
