@@ -11,7 +11,7 @@ export class ListDragController {
   private highlighted?: HTMLElement;
   private targets = new Map<HTMLElement, (point: { clientX: number; clientY: number }) => DropIntent>();
   constructor(private readonly getTask: (id: string) => Task | undefined,
-    private readonly drop: (task: Task, group?: ListDropGroup, anchor?: Task, placement?: ListPlacement) => Promise<void>) {}
+    private readonly drop: (task: Task, group?: ListDropGroup, anchor?: Task, placement?: ListPlacement) => Promise<void>, private readonly allowNesting = true) {}
 
   private clear(): void {
     this.highlighted?.removeAttribute("data-drop-position");
@@ -63,8 +63,8 @@ export class ListDragController {
       const rect = row.getBoundingClientRect();
       const left = primary.getBoundingClientRect().left;
       let anchor = task;
-      let placement: ListPlacement = event.clientX > left + 64 ? "child" : event.clientY < rect.top + rect.height / 2 ? "before" : "after";
-      if (event.clientX < left - 16 && anchor.parentId) {
+      let placement: ListPlacement = this.allowNesting && event.clientX > left + 64 ? "child" : event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      if (this.allowNesting && event.clientX < left - 16 && anchor.parentId) {
         let levels = Math.max(1, Math.floor((left - event.clientX) / 24));
         while (anchor.parentId && levels-- > 0) {
           const parent = this.getTask(anchor.parentId);

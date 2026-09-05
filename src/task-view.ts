@@ -1,3 +1,4 @@
+import { kanbanColumns } from "./kanban";
 import { splitDestination } from "./structure";
 import { ListDragController } from "./list-drag-view";
 import { draftForGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
@@ -23,7 +24,7 @@ const TITLES: Record<TaskViewMode, string> = {
 
 export class TaskMainView extends ItemView {
   private state: TaskViewState = { mode: "today" };
-  private calendar = false;
+  private layout: "list" | "calendar" | "kanban" = "list";
   private calendarScope: CalendarScope = "month";
   private calendarAnchor = todayIso();
   private showCompleted = false;
@@ -50,11 +51,12 @@ export class TaskMainView extends ItemView {
     return TITLES[this.state.mode];
   }
   getIcon(): string { return this.state.mode === "projects" ? "folder-kanban" : "circle-check-big"; }
-  getState(): Record<string, unknown> { return { ...this.state, calendar: this.calendar, calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
+  getState(): Record<string, unknown> { return { ...this.state, layout: this.layout, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
 
   async setState(state: Record<string, unknown>): Promise<void> {
     const mode = state.mode;
-    if (typeof state.calendar === "boolean") this.calendar = state.calendar;
+    if (state.layout === "list" || state.layout === "calendar" || state.layout === "kanban") this.layout = state.layout;
+    else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
     if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath) {
@@ -86,7 +88,8 @@ export class TaskMainView extends ItemView {
     container.empty();
     this.taskResults = undefined;
     container.addClass("tm-main-view");
-    container.classList.toggle("is-calendar-view", this.calendar && (this.state.mode !== "projects" || Boolean(this.pagePath)));
+    container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
+    container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "projects" && !this.pagePath) {
       this.renderProjectList(container);
       return;
@@ -102,16 +105,16 @@ export class TaskMainView extends ItemView {
     const container = this.taskResults;
     if (!container) return;
     container.empty();
-    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement));
+    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban");
     const query: TaskQuery = {
-      mode: this.pagePath ? "project" : this.calendar && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
-      showCompleted: this.showCompleted,
+      mode: this.pagePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
+      showCompleted: this.showCompleted || this.layout === "kanban",
       projectPath: this.pagePath,
       filters: this.propertyFilters,
       search: this.search || undefined
     };
     const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
-    if (this.calendar) {
+    if (this.layout === "calendar") {
       renderCalendar(container, {
         anchor: this.calendarAnchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
         navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.renderTaskResults(); },
@@ -130,6 +133,10 @@ export class TaskMainView extends ItemView {
           await this.plugin.index.refreshPath(latest.path);
         }
       });
+      return;
+    }
+    if (this.layout === "kanban") {
+      this.renderKanban(container, tasks);
       return;
     }
     if (!tasks.length) {
@@ -176,6 +183,30 @@ export class TaskMainView extends ItemView {
     }
   }
 
+  private renderKanban(container: HTMLElement, tasks: Task[]): void {
+    const columns = kanbanColumns(tasks, this.grouping);
+    if (!columns.length) { this.renderEmpty(container); return; }
+    const board = container.createDiv({ cls: "tm-kanban", attr: { "aria-label": "Task board" } });
+    for (const column of columns) {
+      const section = board.createEl("section", { cls: "tm-kanban-column" });
+      const header = section.createDiv({ cls: "tm-kanban-column-header" });
+      const title = column.target?.property && ["date", "scheduledDate", "deadline"].includes(column.target.property) && typeof column.target.value === "string"
+        ? formatDate(column.target.value, this.plugin.dateFormat()) : column.title;
+      header.createEl("h2", { text: title });
+      header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
+      const add = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `Add task to ${title}`, title: `Add task to ${title}` } });
+      setIcon(add, "plus");
+      add.addEventListener("click", () => {
+        const blank: Task = { id: "", path: this.pagePath ?? this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
+        const preset = draftForGroup(blank, column.target);
+        this.plugin.openEditor({ ...this.state, preset });
+      });
+      if (column.target) this.listDrag?.group(section, column.target);
+      this.renderTaskList(section, column.tasks, column.target);
+      if (!column.tasks.length) section.createDiv({ cls: "tm-kanban-empty", text: "No tasks" });
+    }
+  }
+
   private renderProjectSections(container: HTMLElement, path: string, tasks: Task[]): void {
     this.renderTaskList(container, tasks.filter((task) => task.sectionLine === undefined), { destination: path });
     for (const heading of this.plugin.index.headingsForPath(path)) {
@@ -202,9 +233,12 @@ export class TaskMainView extends ItemView {
     heading.createEl("h1", { text: this.getDisplayText() });
 
     const actions = header.createDiv({ cls: "tm-header-actions" });
-    const calendar = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": this.calendar ? "Show task list" : "Show calendar", title: this.calendar ? "Show task list" : "Show calendar", "aria-pressed": String(this.calendar) } });
-    setIcon(calendar, this.calendar ? "list" : "calendar-days");
-    calendar.addEventListener("click", () => { this.calendar = !this.calendar; this.render(); });
+    const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Task view layout" } });
+    for (const [layout, icon, label] of [["list", "list", "List"], ["calendar", "calendar-days", "Calendar"], ["kanban", "columns-3", "Kanban"]] as const) {
+      const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${label} view`, title: `${label} view`, "aria-pressed": String(this.layout === layout) } });
+      setIcon(button, icon);
+      button.addEventListener("click", () => { this.layout = layout; this.render(); });
+    }
     const add = actions.createEl("button", { cls: "mod-cta tm-add-task" });
     const icon = add.createSpan();
     setIcon(icon, "plus");
@@ -415,6 +449,13 @@ export class TaskMainView extends ItemView {
       const task = this.plugin.index.taskById(original.id);
       if (!task || task.raw !== original.raw) throw new Error("Task changed while dragging. Refresh and try again.");
       const draft = draftForGroup(task, group);
+      if (this.layout === "kanban" && group) {
+        const previous = group.property ? taskGroupTarget(group.property, task) : undefined;
+        if (group.value !== previous?.value || (group.destination && group.destination !== draftForGroup(task).destination)) {
+          originalAnchor = undefined;
+          placement = undefined;
+        }
+      }
       const anchor = originalAnchor ? this.plugin.index.taskById(originalAnchor.id) : undefined;
       if (originalAnchor && (!anchor || anchor.raw !== originalAnchor.raw)) throw new Error("Drop target changed while dragging. Refresh and try again.");
       if (anchor && placement) {

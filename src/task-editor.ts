@@ -1,4 +1,4 @@
-import type { CalendarPreset } from "./calendar";
+import type { TaskEditorPreset } from "./types";
 import { trackModalViewport } from "./mobile-layout";
 import { destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
@@ -8,7 +8,7 @@ import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from
 
 export interface TaskEditorOptions {
   task?: Task;
-  preset?: CalendarPreset;
+  preset?: TaskEditorPreset;
   mode: TaskViewMode;
   projectPath?: string;
   projects: Project[];

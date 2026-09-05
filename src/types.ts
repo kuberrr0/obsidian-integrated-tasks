@@ -82,3 +82,5 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   tasksHeading: "Tasks",
   newTaskPosition: "top"
 };
+
+export type TaskEditorPreset = Partial<Omit<TaskDraft, "indent">>;

@@ -82,7 +82,7 @@
 
 .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view {
   width: 100%;
-  max-width: calc(var(--file-line-width, 700px) + 96px);
+  max-width: none;
   margin: 0 auto;
   /* Match the note title inset, including theme-defined multi-value margins. */
   padding: var(--file-margins, 32px);
@@ -812,3 +812,53 @@ button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var
 .tm-task-row[data-drop-position="outdent"]::after { content: "Outdent"; }
 .tm-task-list:empty { min-height: 28px; }
 button.tm-list-drag-handle { touch-action: none; }
+
+.tm-layout-controls { display: flex; gap: 2px; }
+.tm-layout-controls button[aria-pressed="true"] { background: var(--background-modifier-hover); color: var(--text-accent); }
+.workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view.is-kanban-view { max-width: none; width: 100%; }
+.tm-kanban { display: flex; align-items: stretch; gap: 16px; overflow-x: auto; padding: 4px 2px 16px; min-height: 320px; }
+.tm-kanban-column { flex: 1 0 280px; min-width: 280px; max-width: 360px; background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 10px; padding: 12px; }
+.tm-kanban-column-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.tm-kanban-column-header h2 { font-size: var(--font-ui-medium); margin: 0; overflow-wrap: anywhere; flex: 1; }
+.tm-kanban .tm-task-list { display: flex; flex-direction: column; gap: 8px; min-height: 48px; }
+.tm-kanban .tm-task-row { grid-template-columns: 24px minmax(0, 1fr) 24px; align-items: start; padding: 10px; min-height: 72px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; margin-left: min(calc(var(--tm-depth) * 10px), 30px); }
+.tm-kanban .tm-task-content { display: flex; flex-direction: column; align-items: stretch; min-width: 0; gap: 8px; text-align: left; }
+.tm-kanban .tm-task-primary { align-items: flex-start; justify-content: flex-start; }
+.tm-kanban button.tm-task-title { height: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; justify-content: flex-start; }
+.tm-kanban .tm-task-metadata { display: flex; flex-wrap: wrap; justify-content: flex-start; max-width: 100%; }
+.tm-kanban .tm-row-menu { opacity: 1; visibility: visible; width: 24px; }
+.tm-kanban-column[data-drop-position="group"] { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
+.tm-kanban-empty { color: var(--text-muted); font-size: var(--font-ui-small); text-align: center; padding: 16px; pointer-events: none; }
+@media (max-width: 700px) { .tm-kanban .tm-checkbox-target { width: 24px; } .tm-kanban .tm-task-row { grid-template-columns: 24px minmax(0, 1fr) 24px; } }
+
+.tm-main-view .tm-list-drag-handle { display: none; }
+
+/* Let list properties use the row width and wrap instead of clipping. */
+.tm-main-view:not(.is-kanban-view) .tm-task-row:not(.tm-project-row) .tm-task-content {
+  display: flex;
+  flex-wrap: wrap;
+}
+.tm-main-view:not(.is-kanban-view) .tm-task-row:not(.tm-project-row) .tm-task-primary {
+  flex: 1 1 160px;
+}
+.tm-main-view:not(.is-kanban-view) .tm-task-metadata {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.tm-main-view:not(.is-kanban-view) .tm-task-metadata .tm-meta,
+.tm-main-view:not(.is-kanban-view) button.tm-source {
+  max-width: 100%;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+.tm-main-view:not(.is-kanban-view) .tm-meta > span { min-width: 0; }
+.tm-main-view:not(.is-kanban-view) .tm-meta svg { flex-shrink: 0; }
+@media (max-width: 700px) {
+  .tm-main-view:not(.is-kanban-view) .tm-task-row:not(.tm-project-row) .tm-task-primary,
+  .tm-main-view:not(.is-kanban-view) .tm-task-row:not(.tm-project-row) .tm-task-metadata { flex-basis: 100%; }
+}
