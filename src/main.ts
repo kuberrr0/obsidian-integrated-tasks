@@ -47,6 +47,27 @@ export default class TaskManagerPlugin extends Plugin {
     for (const [mode, name, id] of commands) {
       this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new Notice(String(error))) });
     }
+    for (const [scope, layouts] of [["task", ["list", "calendar", "kanban"]], ["projects", ["list", "gantt"]]] as const) {
+      for (const layout of layouts) {
+        this.addCommand({
+          id: `switch-${scope}-view-${layout}`,
+          name: `Switch ${scope} view to ${layout}`,
+          checkCallback: (checking) => {
+            const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+            if (!view) return false;
+            const state = view.getState();
+            const isProjects = state.mode === "projects" && !view.pagePath;
+            if (isProjects !== (scope === "projects")) return false;
+            if (!checking) {
+              void view.setState({ ...state, [isProjects ? "projectLayout" : "layout"]: layout })
+                .then(() => this.app.workspace.requestSaveLayout())
+                .catch(error => new Notice(String(error)));
+            }
+            return true;
+          }
+        });
+      }
+    }
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
 
