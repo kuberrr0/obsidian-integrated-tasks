@@ -8,7 +8,7 @@ The plugin enumerates Markdown files in the current vault to build its local tas
 
 Use **Toggle task view for current page** from the command palette to switch any Markdown note between its editor and a task view in the same tab. No project tag is required; **Add task** saves to that note. Run the command again to return to the note.
 
-**Convert to project** adds the `project` tag and missing `date`, `end date`, `priority`, and `duration` properties to the current note. Existing tags, property values, and supported property aliases are preserved. It also works from a page or project task view.
+**Convert to project** adds the `project` tag and missing `date`, `end date`, `deadline`, `priority`, and `duration` properties to the current note. Existing tags, property values, and supported property aliases are preserved. It also works from a page or project task view.
 
 Every task view—Inbox, Today, Upcoming, All Tasks, individual projects, and any page—includes search, priority/date filters, sorting by date/priority/title/note order/duration in either direction, and grouping by date/priority/source note/status or no grouping. Views spanning multiple notes also have a source-note filter. **Group: View default** retains each view's original layout, including note headings for page and project views. Visible subtasks stay beside their parents, with the selected sort applied among siblings. Controls reset when switching to a different view or page.
 
@@ -30,6 +30,10 @@ In Markdown notes, recognized task dates, durations, deadlines, and priorities a
 
 Add `#project` to a note body or its frontmatter tags to include it in Projects. Indented checklist items are displayed as parent-child task trees. Headings in project notes appear as sections in the task view, in note order. The Projects list shows completed tasks as a percentage of all tasks, including subtasks (empty projects show 0%). Notes tagged both `#project` and `#archived` are hidden from this list until **Show archived projects** is checked. Archiving a project does not hide its tasks from other task views.
 
+In **Projects**, select **Gantt** to display projects on a timeline, including their parent hierarchy. Bars run from `date` (or `start-date`) to `deadline` when present, otherwise to `end date`. When both finish dates exist, a draggable `|` marks `end date` independently, including dates later than the deadline. Drag the left/right edges to change the start/finish date, or drag the marker to change only the end date. If a project has no end date, click a day inside its bar to set one. Drag across an entirely undated project row to set start and end dates together. Edge handles appear on hover or keyboard focus; arrow keys on a focused handle adjust its date by one day. Changes save to the project's frontmatter, preserving property aliases and date-link formatting. Projects without enough dates remain visible with a link to edit their note.
+
+`end date` and `deadline` are separate project properties; `end date` is no longer interpreted as a deadline alias.
+
 Project note properties appear as the same badges used for tasks:
 
 ```yaml
@@ -38,6 +42,7 @@ tags: [project]
 priority: p1
 date: 2026-09-05
 end date: 2026-09-10
+deadline: 2026-09-12
 duration: 1h30m
 ---
 ```

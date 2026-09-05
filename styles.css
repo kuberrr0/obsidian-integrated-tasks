@@ -864,3 +864,46 @@ button.tm-list-drag-handle { touch-action: none; }
 }
 
 .tm-editor-actions button.tm-delete-task { margin-right: auto; flex: 0 0 auto; color: var(--text-error); }
+
+.tm-gantt-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--background-modifier-border); border-radius: 8px; --tm-gantt-label: 220px; }
+.tm-gantt-row { display: grid; grid-template-columns: var(--tm-gantt-label) var(--tm-gantt-width); width: max-content; min-height: 44px; }
+.tm-gantt-label { position: sticky; left: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-start; padding: 10px 12px; background: var(--background-primary); border: 0; border-right: 1px solid var(--background-modifier-border); border-bottom: 1px solid var(--background-modifier-border); border-radius: 0; box-shadow: none; text-align: left; height: auto; white-space: normal; overflow-wrap: anywhere; }
+.tm-gantt-header { position: sticky; top: 0; z-index: 4; background: var(--background-secondary); }
+.tm-gantt-header .tm-gantt-label, .tm-gantt-group .tm-gantt-label { background: var(--background-secondary); font-weight: 600; }
+.tm-gantt-group { background: var(--background-secondary); min-height: 32px; }
+.tm-gantt-dates { display: flex; }
+.tm-gantt-date { flex: 0 0 var(--tm-gantt-day); width: var(--tm-gantt-day); font-size: 10px; white-space: normal; padding: 4px 0; border: 0; border-right: 1px solid var(--background-modifier-border); border-radius: 0; box-shadow: none; height: auto; background: var(--background-secondary); }
+.tm-gantt-date.is-today { background: var(--interactive-accent); color: var(--text-on-accent); }
+.tm-gantt-track { position: relative; min-height: 44px; border-bottom: 1px solid var(--background-modifier-border); background: repeating-linear-gradient(to right, transparent 0, transparent calc(var(--tm-gantt-day) - 1px), var(--background-modifier-border) calc(var(--tm-gantt-day) - 1px), var(--background-modifier-border) var(--tm-gantt-day)); overflow: hidden; }
+button.tm-gantt-bar { position: absolute; top: 8px; height: 28px; min-width: 0; padding: 3px 6px; border: none; border-radius: 6px; background: var(--interactive-accent); color: var(--text-on-accent); text-align: left; justify-content: flex-start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+button.tm-gantt-bar.is-overdue { box-shadow: inset 0 -3px var(--text-error); }
+.tm-gantt-row.is-completed .tm-gantt-bar { opacity: .55; text-decoration: line-through; }
+.tm-gantt-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--interactive-accent); pointer-events: none; }
+.tm-gantt-undated { display: inline-block; padding: 12px; font-size: var(--font-ui-small); color: var(--text-muted); }
+button.tm-gantt-jump { margin: 8px; height: 28px; font-size: var(--font-ui-small); }
+.tm-gantt-preview { position: absolute; right: 4px; top: 0; font-size: 10px; background: var(--background-primary); pointer-events: none; }
+.tm-gantt-preview[hidden] { display: none; }
+@media (max-width: 700px) { .tm-gantt-scroll { --tm-gantt-label: 150px; } }
+
+.tm-gantt-date { box-sizing: border-box; text-align: center; }
+.tm-gantt-bar[hidden], .tm-gantt-handle[hidden], .tm-gantt-jump[hidden] { display: none; }
+button.tm-gantt-handle { position: absolute; top: 8px; height: 28px; width: 8px; min-width: 0; padding: 0; border: 0; border-radius: 2px; box-shadow: none; background: var(--text-on-accent); opacity: .65; cursor: ew-resize; touch-action: none; z-index: 2; }
+button.tm-gantt-handle.is-end { width: 12px; top: 4px; height: 36px; background: transparent; opacity: 1; }
+button.tm-gantt-handle.is-end::after { content: ""; position: absolute; left: 5px; top: 0; bottom: 0; width: 2px; background: var(--text-normal); box-shadow: 0 0 0 1px var(--background-primary); }
+button.tm-gantt-handle:hover, button.tm-gantt-handle:focus-visible { opacity: 1; outline: 2px solid var(--text-accent); }
+.tm-gantt-row.is-resizing .tm-gantt-bar { opacity: .8; }
+.tm-gantt-row.is-archived .tm-gantt-label { color: var(--text-muted); }
+.tm-gantt-preview { z-index: 3; }
+
+/* Edge grips stay unobtrusive until the project row is hovered or focused. */
+button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; }
+.tm-gantt-track:hover > .tm-gantt-handle.is-start,
+.tm-gantt-track:hover > .tm-gantt-handle.is-finish,
+.tm-gantt-track:focus-within > .tm-gantt-handle.is-start,
+.tm-gantt-track:focus-within > .tm-gantt-handle.is-finish,
+.tm-gantt-row.is-resizing .tm-gantt-handle.is-start,
+.tm-gantt-row.is-resizing .tm-gantt-handle.is-finish { opacity: .85; }
+.tm-gantt-track.is-unscheduled { cursor: crosshair; touch-action: none; }
+.tm-gantt-selection { position: absolute; top: 8px; height: 28px; border-radius: 6px; background: var(--interactive-accent); color: var(--text-on-accent); opacity: .8; pointer-events: none; white-space: nowrap; overflow: hidden; font-size: 11px; padding: 4px; box-sizing: border-box; }
+.tm-gantt-selection[hidden] { display: none; }
+.tm-gantt-undated[hidden] { display: none; }

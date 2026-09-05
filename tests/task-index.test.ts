@@ -62,10 +62,32 @@ it("updates project property badges when note properties change or are removed",
   const { index, setProperties } = setup();
   await index.initialize();
   setProperties({ date: "2026-09-05", "end date": "2026-09-10", priority: "p2", duration: "1h30m" });
-  expect(index.projects()[0]).toMatchObject({ scheduledDate: "2026-09-05", deadline: "2026-09-10", priority: 2, durationMinutes: 90 });
+  expect(index.projects()[0]).toMatchObject({ scheduledDate: "2026-09-05", endDate: "2026-09-10", deadline: undefined, priority: 2, durationMinutes: 90 });
   setProperties({});
   expect(index.projects()[0].scheduledDate).toBeUndefined();
   expect(index.projects()[0].deadline).toBeUndefined();
   expect(index.projects()[0].priority).toBeUndefined();
   expect(index.projects()[0].durationMinutes).toBeUndefined();
+});
+
+
+it("resolves parent links relative to the project note and refreshes changes", async () => {
+  const parent = Object.assign(new TFile(), { path: "Projects/Parent.md", extension: "md" });
+  const child = Object.assign(new TFile(), { path: "Projects/Child.md", extension: "md" });
+  let parentValue: unknown = ["[[Parent|Parent project]]"];
+  let changed: (file: TFile) => void = () => {};
+  const app = {
+    vault: { getMarkdownFiles: () => [parent, child], cachedRead: async () => "", on: () => ({}), offref: () => {} },
+    metadataCache: {
+      getFileCache: (file: TFile) => ({ frontmatter: { tags: ["project"], ...(file === child ? { parent: parentValue } : {}) } }),
+      getFirstLinkpathDest: (link: string, source: string) => link === "Parent" && source === child.path ? parent : null,
+      on: (_event: string, callback: (file: TFile) => void) => { changed = callback; return {}; }
+    }
+  } as unknown as App;
+  const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
+  await index.initialize();
+  expect(index.projects().find(project => project.path === child.path)?.parentPath).toBe(parent.path);
+  parentValue = null;
+  changed(child);
+  expect(index.projects().find(project => project.path === child.path)?.parentPath).toBeUndefined();
 });

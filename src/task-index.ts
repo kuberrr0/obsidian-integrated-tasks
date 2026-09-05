@@ -1,4 +1,4 @@
-import { parseProjectProperties } from "./project-properties";
+import { parseProjectProperties, parseProjectParent } from "./project-properties";
 import { scanHeadings, splitDestination, type NoteHeading } from "./structure";
 import { getAllTags, type App, type EventRef, TFile } from "obsidian";
 import { scanTasks } from "./parser";
@@ -10,7 +10,7 @@ export type IndexListener = () => void;
 export class TaskIndex {
   private readonly tasksByPath = new Map<string, Task[]>();
   private readonly headingsByPath = new Map<string, NoteHeading[]>();
-  private readonly projectProperties = new Map<string, ProjectProperties>();
+  private readonly projectProperties = new Map<string, ProjectProperties & { parent?: string }>();
   private readonly archivedPaths = new Set<string>();
   private readonly projectPaths = new Set<string>();
   private readonly listeners = new Set<IndexListener>();
@@ -94,8 +94,11 @@ export class TaskIndex {
     return [...this.projectPaths]
       .map((path) => {
         const tasks = this.tasksForPath(path);
+        const properties = this.projectProperties.get(path);
+        const parentPath = properties?.parent ? this.app.metadataCache.getFirstLinkpathDest(properties.parent, path)?.path : undefined;
         return {
-          ...this.projectProperties.get(path),
+          ...properties,
+          parentPath,
           path,
           name: path.split("/").pop()?.replace(/\.md$/i, "") ?? path,
           headings: this.headingsForPath(path),
@@ -146,7 +149,7 @@ export class TaskIndex {
     else this.archivedPaths.delete(file.path);
     if (tags?.some((tag) => tag === "#project" || tag.startsWith("#project/"))) {
       this.projectPaths.add(file.path);
-      this.projectProperties.set(file.path, parseProjectProperties(cache?.frontmatter, this.getDateFormat()));
+      this.projectProperties.set(file.path, { ...parseProjectProperties(cache?.frontmatter, this.getDateFormat()), parent: parseProjectParent(cache?.frontmatter) });
     } else {
       this.projectPaths.delete(file.path);
       this.projectProperties.delete(file.path);

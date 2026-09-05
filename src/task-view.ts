@@ -1,3 +1,7 @@
+import { updateProjectDates } from "./project-properties";
+import { renderGantt } from "./gantt-view";
+import type { GanttZoom } from "./gantt";
+import { projectHierarchy } from "./project-hierarchy";
 import { kanbanColumns } from "./kanban";
 import { splitDestination } from "./structure";
 import { ListDragController } from "./list-drag-view";
@@ -25,6 +29,9 @@ const TITLES: Record<TaskViewMode, string> = {
 export class TaskMainView extends ItemView {
   private state: TaskViewState = { mode: "today" };
   private layout: "list" | "calendar" | "kanban" = "list";
+  private projectLayout: "list" | "gantt" = "list";
+  private ganttAnchor = addDays(todayIso(), -2);
+  private ganttZoom: GanttZoom = "month";
   private calendarScope: CalendarScope = "month";
   private calendarAnchor = todayIso();
   private showCompleted = false;
@@ -51,10 +58,13 @@ export class TaskMainView extends ItemView {
     return TITLES[this.state.mode];
   }
   getIcon(): string { return this.state.mode === "projects" ? "folder-kanban" : "circle-check-big"; }
-  getState(): Record<string, unknown> { return { ...this.state, layout: this.layout, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
+  getState(): Record<string, unknown> { return { ...this.state, layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
 
   async setState(state: Record<string, unknown>): Promise<void> {
     const mode = state.mode;
+    if (state.projectLayout === "list" || state.projectLayout === "gantt") this.projectLayout = state.projectLayout;
+    if (state.ganttZoom === "week" || state.ganttZoom === "month" || state.ganttZoom === "quarter") this.ganttZoom = state.ganttZoom;
+    if (typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor)) this.ganttAnchor = state.ganttAnchor;
     if (state.layout === "list" || state.layout === "calendar" || state.layout === "kanban") this.layout = state.layout;
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
     if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
@@ -365,6 +375,12 @@ export class TaskMainView extends ItemView {
     const title = header.createDiv({ cls: "tm-title-group" }).createDiv();
     title.createEl("h1", { text: "Projects" });
     const actions = header.createDiv({ cls: "tm-header-actions" });
+    const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Projects layout" } });
+    for (const [layout, icon] of [["list", "list"], ["gantt", "chart-gantt"]] as const) {
+      const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${layout === "gantt" ? "Gantt" : "List"} projects view`, "aria-pressed": String(this.projectLayout === layout), title: `${layout === "gantt" ? "Gantt" : "List"} view` } });
+      setIcon(button, icon);
+      button.addEventListener("click", () => { this.projectLayout = layout; this.render(); });
+    }
     const toggle = actions.createEl("label", { cls: "tm-completed-toggle" });
     const checkbox = toggle.createEl("input", { type: "checkbox" });
     checkbox.checked = this.showArchivedProjects;
@@ -386,6 +402,24 @@ export class TaskMainView extends ItemView {
         : "Add #project to a note or include project in its frontmatter tags." });
       return;
     }
+    if (this.projectLayout === "gantt") {
+      renderGantt(container, {
+        projects: this.showArchivedProjects ? projects : active,
+        anchor: this.ganttAnchor, zoom: this.ganttZoom, dateFormat: this.plugin.dateFormat(),
+        navigate: (anchor, zoom) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.render(); },
+        open: project => {
+          const file = this.app.vault.getAbstractFileByPath(project.path);
+          if (file instanceof TFile) void this.app.workspace.getLeaf("tab").openFile(file);
+        },
+        update: async (project, changes) => {
+          const file = this.app.vault.getAbstractFileByPath(project.path);
+          if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
+          await this.app.fileManager.processFrontMatter(file, frontmatter => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()));
+          await this.plugin.index.refreshPath(project.path);
+        }
+      });
+      return;
+    }
     this.renderProjectGroup(container, "Active", active);
     if (this.showArchivedProjects) this.renderProjectGroup(container, "Archived", archived);
   }
@@ -396,8 +430,9 @@ export class TaskMainView extends ItemView {
     const heading = section.createEl("h2", { text: title });
     heading.createSpan({ cls: "tm-section-count", text: String(projects.length) });
     const list = section.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
-    for (const project of projects) {
+    for (const { project, depth } of projectHierarchy(projects)) {
       const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
+      row.style.setProperty("--tm-depth", String(depth));
       const icon = row.createSpan({ cls: "tm-project-icon" });
       setIcon(icon, project.archived ? "archive" : "folder");
       const content = row.createDiv({ cls: "tm-task-content" });
@@ -406,6 +441,7 @@ export class TaskMainView extends ItemView {
       button.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects", projectPath: project.path }));
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
       this.renderProperties(metadata, project);
+      if (project.endDate) this.badge(metadata, "calendar-check", `End: ${formatDate(project.endDate, this.plugin.dateFormat())}`);
       if (!metadata.childElementCount) metadata.remove();
       const total = project.openTasks + project.completedTasks;
       const percentage = total ? Math.round(project.completedTasks / total * 100) : 0;

@@ -24,9 +24,11 @@ export interface Task extends ParsedTaskMetadata {
   childIds: string[];
 }
 
-export type ProjectProperties = Pick<ParsedTaskMetadata, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority">;
+export type ProjectProperties = Pick<ParsedTaskMetadata, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority"> & { endDate?: string };
 
 export interface Project extends ProjectProperties {
+  parent?: string;
+  parentPath?: string;
   path: string;
   name: string;
   headings?: import("./structure").NoteHeading[];
