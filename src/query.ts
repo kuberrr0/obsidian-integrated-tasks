@@ -1,8 +1,10 @@
+import { matchesFilter, propertyValue, propertyLabel } from "./task-properties";
 import { actionDate, todayIso } from "./date";
 import type { Task, TaskQuery, TaskSort, TaskGrouping } from "./types";
 
 export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string, now = new Date()): boolean {
-  if (!query.showCompleted && task.completed) return false;
+  if (query.filters?.some(filter => !matchesFilter(task, filter))) return false;
+  if (!query.showCompleted && !query.filters?.some(filter => filter.property === "status") && task.completed) return false;
   if (query.sourcePath && task.path !== query.sourcePath) return false;
   if (query.projectPath && task.path !== query.projectPath) return false;
   if (query.priority && task.priority !== query.priority) return false;
@@ -33,11 +35,13 @@ export function sortTasks(tasks: Task[], sort: TaskSort = "date", descending = f
   return [...tasks].sort((left, right) => {
     const leftDate = actionDate(left) ?? "9999-12-31";
     const rightDate = actionDate(right) ?? "9999-12-31";
-    const comparison = sort === "priority" ? (left.priority ?? 4) - (right.priority ?? 4)
-      : sort === "title" ? left.title.localeCompare(right.title)
-      : sort === "source" ? left.path.localeCompare(right.path) || left.line - right.line
-      : sort === "duration" ? (left.durationMinutes ?? Number.MAX_SAFE_INTEGER) - (right.durationMinutes ?? Number.MAX_SAFE_INTEGER)
-      : leftDate.localeCompare(rightDate) || (left.priority ?? 4) - (right.priority ?? 4);
+    const leftValue = sort === "date" ? leftDate : propertyValue(left, sort);
+    const rightValue = sort === "date" ? rightDate : propertyValue(right, sort);
+    if (leftValue === undefined || leftValue === "") return rightValue === undefined || rightValue === "" ? 0 : 1;
+    if (rightValue === undefined || rightValue === "") return -1;
+    const comparison = (typeof leftValue === "number" && typeof rightValue === "number"
+      ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue)))
+      || (sort === "source" ? left.line - right.line : sort === "date" ? (left.priority ?? 4) - (right.priority ?? 4) : 0);
     return comparison * (descending ? -1 : 1) || left.path.localeCompare(right.path) || left.line - right.line;
   });
 }
@@ -58,10 +62,9 @@ export function groupByActionDate(tasks: Task[]): Map<string, Task[]> {
 export function groupTasks(tasks: Task[], grouping: Exclude<TaskGrouping, "default" | "none">): Map<string, Task[]> {
   const groups = new Map<string, Task[]>();
   for (const task of tasks) {
-    const key = grouping === "date" ? actionDate(task) ?? "No date"
-      : grouping === "priority" ? task.priority ? `P${task.priority}` : "No priority"
-      : grouping === "status" ? task.completed ? "Completed" : "Open"
-      : task.path;
+    const value = grouping === "date" ? actionDate(task) : propertyValue(task, grouping);
+    const key = value === undefined || value === "" ? `No ${grouping === "date" ? "date" : grouping === "scheduledDate" ? "scheduled date" : grouping === "scheduledTime" ? "scheduled time" : grouping === "deadlineTime" ? "deadline time" : grouping}`
+      : grouping === "date" ? String(value) : propertyLabel(grouping, value);
     const group = groups.get(key) ?? [];
     group.push(task);
     groups.set(key, group);

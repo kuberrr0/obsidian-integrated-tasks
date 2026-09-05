@@ -1,9 +1,10 @@
+import { TASK_PROPERTIES, filterOperators, propertyValue, propertyLabel } from "./task-properties";
 import { ItemView, Menu, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
 import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
-import type { Priority, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
+import type { TaskFilter, FilterOperator, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
@@ -20,9 +21,7 @@ export class TaskMainView extends ItemView {
   private showCompleted = false;
   private showArchivedProjects = false;
   private search = "";
-  private priority?: Priority;
-  private sourcePath = "";
-  private dateFilter = "";
+  private propertyFilters: TaskFilter[] = [];
   private sort: TaskSort = "date";
   private descending = false;
   private grouping: TaskGrouping = "default";
@@ -48,9 +47,7 @@ export class TaskMainView extends ItemView {
     const mode = state.mode;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath) {
       this.search = "";
-      this.priority = undefined;
-      this.sourcePath = "";
-      this.dateFilter = "";
+      this.propertyFilters = [];
       this.sort = "date";
       this.descending = false;
       this.grouping = "default";
@@ -96,14 +93,12 @@ export class TaskMainView extends ItemView {
       mode: this.pagePath ? "project" : this.state.mode,
       showCompleted: this.showCompleted,
       projectPath: this.pagePath,
-      sourcePath: this.sourcePath || undefined,
-      priority: this.priority,
-      search: this.search || undefined,
-      dateFilter: this.dateFilter ? this.dateFilter as "dated" | "undated" | "overdue" : undefined
+      filters: this.propertyFilters,
+      search: this.search || undefined
     };
     const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
     if (!tasks.length) {
-      if (this.pagePath && this.grouping === "default" && !this.search && !this.priority && !this.dateFilter) {
+      if (this.pagePath && this.grouping === "default" && !this.search && !this.propertyFilters.length) {
         this.renderProjectSections(container, this.pagePath, tasks);
       } else this.renderEmpty(container);
       return;
@@ -169,14 +164,6 @@ export class TaskMainView extends ItemView {
     heading.createEl("h1", { text: this.getDisplayText() });
 
     const actions = header.createDiv({ cls: "tm-header-actions" });
-    const completed = actions.createEl("label", { cls: "tm-completed-toggle" });
-    const checkbox = completed.createEl("input", { type: "checkbox" });
-    checkbox.checked = this.showCompleted;
-    completed.createSpan({ text: "Show completed" });
-    checkbox.addEventListener("change", () => {
-      this.showCompleted = checkbox.checked;
-      this.render();
-    });
     const add = actions.createEl("button", { cls: "mod-cta tm-add-task" });
     const icon = add.createSpan();
     setIcon(icon, "plus");
@@ -192,70 +179,109 @@ export class TaskMainView extends ItemView {
       this.search = search.value;
       this.renderTaskResults();
     });
-    const toggle = filters.createEl("button", { cls: "tm-filter-toggle", text: "Filters & sort" });
-    const controls = filters.createDiv({ cls: "tm-filter-controls" });
-    const syncToggle = (): void => {
-      const active = [this.priority, this.dateFilter, this.sourcePath, this.sort !== "date", this.descending, this.grouping !== "default"].filter(Boolean).length;
-      toggle.setText(`Filters & sort${active ? ` (${active})` : ""}`);
+    const toggle = filters.createEl("button", { cls: "tm-filter-toggle" });
+    const menu = filters.createDiv({ cls: "tm-property-menu" });
+    const sync = (): void => {
+      toggle.setText(`Filter${this.propertyFilters.length ? ` (${this.propertyFilters.length})` : ""}`);
       toggle.setAttribute("aria-expanded", String(this.filtersExpanded));
-      controls.classList.toggle("is-expanded", this.filtersExpanded);
+      menu.hidden = !this.filtersExpanded;
     };
-    toggle.addEventListener("click", () => {
-      this.filtersExpanded = !this.filtersExpanded;
-      syncToggle();
+    toggle.addEventListener("click", () => { this.filtersExpanded = !this.filtersExpanded; sync(); });
+    menu.addEventListener("keydown", event => {
+      if (event.key === "Escape") { this.filtersExpanded = false; sync(); toggle.focus(); }
     });
-    controls.addEventListener("change", syncToggle);
-    syncToggle();
-    const priority = controls.createEl("select", { attr: { "aria-label": "Filter by priority" } });
-    for (const [value, label] of [["", "Any priority"], ["1", "P1"], ["2", "P2"], ["3", "P3"]]) priority.createEl("option", { value, text: label });
-    priority.value = this.priority ? String(this.priority) : "";
-    priority.addEventListener("change", () => {
-      this.priority = priority.value ? Number(priority.value) as Priority : undefined;
-      this.renderTaskResults();
-    });
-    const date = controls.createEl("select", { attr: { "aria-label": "Filter by date" } });
-    for (const [value, label] of [["", "Any date"], ["dated", "Dated"], ["undated", "Undated"], ["overdue", "Overdue"]]) date.createEl("option", { value, text: label });
-    date.value = this.dateFilter;
-    date.addEventListener("change", () => {
-      this.dateFilter = date.value;
-      this.renderTaskResults();
-    });
-    const sort = controls.createEl("select", { attr: { "aria-label": "Sort tasks" } });
-    for (const [value, label] of [["date", "Sort: Date"], ["priority", "Sort: Priority"], ["title", "Sort: Title"], ["source", "Sort: Note order"], ["duration", "Sort: Duration"]]) {
-      sort.createEl("option", { value, text: label });
+    sync();
+    menu.createDiv({ text: "Match all property filters", cls: "tm-filter-hint" });
+    const clear = menu.createEl("button", { text: "Clear all filters" });
+    clear.addEventListener("click", () => { this.propertyFilters = []; this.render(); });
+    for (const property of TASK_PROPERTIES) {
+      const active = this.propertyFilters.find(filter => filter.property === property.key);
+      const submenu = menu.createDiv({ cls: "tm-property-submenu" });
+      const summary = submenu.createSpan({ cls: "tm-property-name", text: `${property.label}${active ? " •" : ""}` });
+      const panel = submenu.createDiv({ cls: "tm-property-conditions" });
+      const operator = panel.createEl("select", { attr: { "aria-label": `${property.label} condition` } });
+      operator.createEl("option", { value: "", text: "Any value" });
+      for (const [value, label] of filterOperators(property.kind)) operator.createEl("option", { value, text: label });
+      operator.value = active?.operator ?? "";
+      const inputs = panel.createDiv({ cls: "tm-filter-values" });
+      let values = [...(active?.values ?? [])];
+      const apply = (): void => {
+        const op = operator.value as FilterOperator;
+        const needsValue = op && op !== "has" && op !== "missing";
+        const valid = !needsValue || (values.length > 0 && values[0] !== "" && (op !== "between" || Boolean(values[1])));
+        this.propertyFilters = this.propertyFilters.filter(filter => filter.property !== property.key);
+        if (op && valid) this.propertyFilters.push({ property: property.key, operator: op, values: [...values] });
+        summary.setText(`${property.label}${op && valid ? " •" : ""}`);
+        sync();
+        this.renderTaskResults();
+      };
+      const renderValues = (): void => {
+        inputs.empty();
+        if (!operator.value || ["has", "missing"].includes(operator.value)) return;
+        if (property.kind === "choice") {
+          const choices = property.key === "priority" ? ["1", "2", "3"] : property.key === "status" ? ["Open", "Completed"]
+            : [...new Set(this.plugin.index.allTasks().map(task => propertyValue(task, property.key)).filter(value => value !== undefined && value !== "").map(String))].sort();
+          for (const value of choices) {
+            const label = inputs.createEl("label");
+            const check = label.createEl("input", { type: "checkbox" });
+            check.checked = values.includes(value);
+            label.createSpan({ text: propertyLabel(property.key, value) });
+            check.addEventListener("change", () => { values = check.checked ? [...values, value] : values.filter(item => item !== value); apply(); });
+          }
+        } else {
+          for (let i = 0; i < (operator.value === "between" ? 2 : 1); i++) {
+            const input = inputs.createEl("input", { type: property.kind === "number" ? "number" : property.kind, attr: {
+              "aria-label": `${property.label} ${i ? "upper bound" : "value"}`,
+              ...(property.kind === "number" ? { min: "0", step: "1", placeholder: "Minutes" } : {})
+            } });
+            input.value = values[i] ?? "";
+            input.addEventListener("input", () => { if (!input.validity.valid) return; values[i] = input.value; apply(); });
+          }
+          if (property.kind === "number") inputs.createSpan({ text: "Duration in minutes", cls: "tm-filter-hint" });
+        }
+      };
+      operator.addEventListener("change", () => { values = []; renderValues(); apply(); });
+      renderValues();
     }
-    sort.value = this.sort;
-    sort.addEventListener("change", () => {
-      this.sort = sort.value as TaskSort;
+    const ordering = filters.createDiv({ cls: "tm-order-controls" });
+    const iconButton = (icon: string, label: string): HTMLButtonElement => {
+      const button = ordering.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
+      setIcon(button, icon);
+      return button;
+    };
+    const sort = iconButton("list-filter", `Sort: ${this.sort}`);
+    sort.addEventListener("click", event => {
+      const options = new Menu();
+      for (const property of [{ key: "date", label: "Action date" }, ...TASK_PROPERTIES]) {
+        options.addItem(item => item.setTitle(property.label).setChecked(this.sort === property.key).onClick(() => {
+          this.sort = property.key as TaskSort;
+          sort.setAttribute("aria-label", `Sort: ${property.label}`);
+          sort.setAttribute("title", `Sort: ${property.label}`);
+          this.renderTaskResults();
+        }));
+      }
+      options.showAtMouseEvent(event);
+    });
+    const direction = iconButton(this.descending ? "arrow-down" : "arrow-up", this.descending ? "Descending" : "Ascending");
+    direction.addEventListener("click", () => {
+      this.descending = !this.descending;
+      setIcon(direction, this.descending ? "arrow-down" : "arrow-up");
+      direction.setAttribute("aria-label", this.descending ? "Descending" : "Ascending");
+      direction.setAttribute("title", this.descending ? "Descending" : "Ascending");
       this.renderTaskResults();
     });
-    const direction = controls.createEl("select", { attr: { "aria-label": "Sort direction" } });
-    direction.createEl("option", { value: "asc", text: "Ascending" });
-    direction.createEl("option", { value: "desc", text: "Descending" });
-    direction.value = this.descending ? "desc" : "asc";
-    direction.addEventListener("change", () => {
-      this.descending = direction.value === "desc";
-      this.renderTaskResults();
-    });
-    const grouping = controls.createEl("select", { attr: { "aria-label": "Group tasks" } });
-    for (const [value, label] of [["default", "Group: View default"], ["none", "No grouping"], ["date", "Group: Date"], ["priority", "Group: Priority"], ["source", "Group: Source note"], ["status", "Group: Status"]]) {
-      grouping.createEl("option", { value, text: label });
-    }
-    grouping.value = this.grouping;
-    grouping.addEventListener("change", () => {
-      this.grouping = grouping.value as TaskGrouping;
-      this.renderTaskResults();
-    });
-    if (this.pagePath || this.state.mode === "inbox") return;
-    const source = controls.createEl("select", { attr: { "aria-label": "Filter by source note" } });
-    source.createEl("option", { value: "", text: "Any note" });
-    for (const path of [...new Set(this.plugin.index.allTasks().map((task) => task.path))].sort()) {
-      source.createEl("option", { value: path, text: path });
-    }
-    source.value = this.sourcePath;
-    source.addEventListener("change", () => {
-      this.sourcePath = source.value;
-      this.renderTaskResults();
+    const grouping = iconButton("group", `Group: ${this.grouping}`);
+    grouping.addEventListener("click", event => {
+      const options = new Menu();
+      for (const property of [{ key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES]) {
+        options.addItem(item => item.setTitle(property.label).setChecked(this.grouping === property.key).onClick(() => {
+          this.grouping = property.key as TaskGrouping;
+          grouping.setAttribute("aria-label", `Group: ${property.label}`);
+          grouping.setAttribute("title", `Group: ${property.label}`);
+          this.renderTaskResults();
+        }));
+      }
+      options.showAtMouseEvent(event);
     });
   }
 
@@ -418,6 +444,6 @@ export class TaskMainView extends ItemView {
     const icon = empty.createDiv({ cls: "tm-empty-icon" });
     setIcon(icon, "circle-check-big");
     empty.createEl("h3", { text: "Nothing here" });
-    empty.createEl("p", { text: this.search || this.priority || this.sourcePath || this.dateFilter ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
+    empty.createEl("p", { text: this.search || this.propertyFilters.length ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
   }
 }

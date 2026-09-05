@@ -2,7 +2,7 @@ import { trackModalViewport } from "./mobile-layout";
 import { destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { formatDate, formatDateTime, parseDateTimeExpression, todayIso, tomorrowIso } from "./date";
-import { formatDuration, parseTaskInput, parseTaskLine, serializeTaskInput } from "./parser";
+import { formatDuration, parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
 import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from "./types";
 
 export interface TaskEditorOptions {
@@ -78,7 +78,7 @@ export class TaskEditorModal extends Modal {
     this.rawInput.setAttribute("aria-label", "Task text");
     this.rawInput.placeholder = "Task today at 9pm {tomorrow at noon} 30m p1 ~[[Project#Heading]]";
     this.rawInput.rows = 2;
-    this.rawInput.value = serializeTaskInput(this.draft, this.options.dateFormat);
+    this.rawInput.value = this.serializeDraft(this.draft);
 
     this.titleInput = contentEl.createEl("input", { type: "text", cls: "tm-editor-title" });
     this.titleInput.placeholder = "What needs to be done?";
@@ -124,7 +124,7 @@ export class TaskEditorModal extends Modal {
       const next = this.readStructured(false);
       if (next) {
         this.draft = next;
-        this.rawInput.value = serializeTaskInput(next, this.options.dateFormat);
+        this.rawInput.value = this.serializeDraft(next);
       }
     };
     const structuredInputs: Array<HTMLInputElement | HTMLSelectElement> = [
@@ -166,11 +166,12 @@ export class TaskEditorModal extends Modal {
       this.deadlineInput.value = parsed.deadline ? formatDateTime(parsed.deadline, parsed.deadlineTime, this.options.dateFormat) : "";
       this.durationInput.value = parsed.durationMinutes ? formatDuration(parsed.durationMinutes) : "";
       this.priorityInput.value = parsed.priority ? String(parsed.priority) : "";
-      if (parsed.destination) {
-        if (!Array.from(this.destinationInput.options).some((option) => option.value === parsed.destination)) {
-          this.destinationInput.createEl("option", { value: parsed.destination, text: parsed.destination });
+      const destination = parsed.destination ?? this.options.settings.inboxPath;
+      if (destination) {
+        if (!Array.from(this.destinationInput.options).some((option) => option.value === destination)) {
+          this.destinationInput.createEl("option", { value: destination, text: destination });
         }
-        this.destinationInput.value = parsed.destination;
+        this.destinationInput.value = destination;
       }
     });
 
@@ -223,13 +224,19 @@ export class TaskEditorModal extends Modal {
     this.contentEl.empty();
   }
 
+  private serializeDraft(draft: TaskDraft): string {
+    return draft.destination === this.options.settings.inboxPath
+      ? serializeTask(draft, this.options.dateFormat)
+      : serializeTaskInput(draft, this.options.dateFormat);
+  }
+
   private readRaw(): TaskDraft | undefined {
     const parsed = parseTaskInput(this.rawInput.value, new Date(), this.options.dateFormat, !this.options.task);
     if (!parsed || !parsed.title) {
       new Notice("Raw text must be one valid checklist line with a title.");
       return undefined;
     }
-    return { ...parsed, destination: parsed.destination ?? this.destinationInput.value };
+    return { ...parsed, destination: parsed.destination ?? this.options.settings.inboxPath };
   }
 
   private readStructured(notify: boolean): TaskDraft | undefined {

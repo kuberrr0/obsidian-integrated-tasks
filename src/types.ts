@@ -44,8 +44,15 @@ export interface TaskViewState {
   markdownState?: Record<string, unknown>;
 }
 
-export type TaskSort = "date" | "priority" | "title" | "source" | "duration";
-export type TaskGrouping = "default" | "none" | "date" | "priority" | "source" | "status";
+export type TaskProperty = "title" | "priority" | "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "duration" | "source" | "section" | "status";
+export type TaskSort = "date" | TaskProperty;
+export type TaskGrouping = "default" | "none" | "date" | TaskProperty;
+export type FilterOperator = "has" | "missing" | "is" | "isNot" | "contains" | "before" | "after" | "between";
+export interface TaskFilter {
+  property: TaskProperty;
+  operator: FilterOperator;
+  values: string[];
+}
 
 export interface TaskQuery {
   mode: TaskViewMode | "project";
@@ -54,6 +61,7 @@ export interface TaskQuery {
   sourcePath?: string;
   priority?: Priority;
   search?: string;
+  filters?: TaskFilter[];
   dateFilter?: "dated" | "undated" | "overdue";
 }
 
