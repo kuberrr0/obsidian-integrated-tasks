@@ -1,7 +1,7 @@
 {
   "id": "integrated-task-manager",
   "name": "Integrated Task Manager",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.7.2",
   "description": "Markdown-native Inbox, Today, Upcoming, All Tasks, and Projects views.",
   "author": "Integrated Task Manager contributors",
