@@ -6,8 +6,8 @@ const { rows } = vi.hoisted(() => ({ rows: [] as Array<{
   name: string;
   desc: string;
   heading?: boolean;
-  value?: string;
-  change?: (value: string) => Promise<void>;
+  value?: string | boolean;
+  change?: (value: string | boolean) => Promise<void>;
 }> }));
 
 vi.mock("obsidian", () => ({
@@ -18,6 +18,7 @@ vi.mock("obsidian", () => ({
     setName(name: string) { this.row.name = name; return this; }
     setDesc(desc: string) { this.row.desc = desc; return this; }
     setHeading() { this.row.heading = true; return this; }
+    addToggle(callback: (control: unknown) => void) { callback(this.control()); return this; }
     addText(callback: (control: unknown) => void) { callback(this.control()); return this; }
     addDropdown(callback: (control: unknown) => void) { callback(this.control()); return this; }
     control() {
@@ -25,7 +26,7 @@ vi.mock("obsidian", () => ({
       return {
         setPlaceholder() { return this; },
         addOption() { return this; },
-        setValue(value: string) { row.value = value; return this; },
+        setValue(value: string | boolean) { row.value = value; return this; },
         onChange(change: typeof row.change) { row.change = change; return this; }
       };
     }
@@ -38,9 +39,10 @@ import { TaskManagerSettingTab } from "../src/settings";
 function setup() {
   rows.length = 0;
   const plugin = {
-    settings: { inboxPath: "Tasks.md", newTaskPosition: "top" },
+    settings: { taskMode: false, inboxPath: "Tasks.md", newTaskPosition: "top" },
     saveSettings: vi.fn().mockResolvedValue(undefined),
-    refreshViews: vi.fn()
+    refreshViews: vi.fn(),
+    setTaskMode: vi.fn().mockResolvedValue(undefined)
   };
   const tab = new TaskManagerSettingTab({} as App, plugin as unknown as TaskManagerPlugin);
   return { plugin, tab };
@@ -50,7 +52,7 @@ describe("settings compatibility", () => {
   it("provides searchable names and descriptions without rendering or saving during indexing", () => {
     const { tab, plugin } = setup();
     const definitions = tab.getSettingDefinitions();
-    expect(definitions.map(({ name }) => name)).toEqual(["Inbox note", "New task position"]);
+    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Inbox note", "New task position"]);
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();
@@ -66,6 +68,10 @@ describe("settings compatibility", () => {
         definition.render(new Setting({} as HTMLElement).setName(definition.name).setDesc(definition.desc));
       }
     }
+    const taskMode = rows.find(({ name }) => name === "Task mode")!;
+    expect(taskMode.value).toBe(false);
+    await taskMode.change!(true);
+    expect(plugin.setTaskMode).toHaveBeenCalledWith(true);
     const inbox = rows.find(({ name }) => name === "Inbox note")!;
     const position = rows.find(({ name }) => name === "New task position")!;
     expect(inbox.value).toBe("Tasks.md");

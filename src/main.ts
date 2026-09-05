@@ -1,3 +1,4 @@
+import { TaskModeController } from "./task-mode";
 import type { TaskEditorPreset } from "./types";
 import { noteTokenEditor } from "./note-token-editor";
 import { renderNoteTokens } from "./note-token-reading";
@@ -18,9 +19,11 @@ interface OpenEditorState extends TaskViewState {
 }
 
 export default class TaskManagerPlugin extends Plugin {
-  settings: TaskManagerSettings = DEFAULT_SETTINGS;
+  settings: TaskManagerSettings = { ...DEFAULT_SETTINGS };
   index!: TaskIndex;
   store!: TaskStore;
+  private taskModeController?: TaskModeController;
+  private taskModeRibbon?: HTMLElement;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -45,17 +48,15 @@ export default class TaskManagerPlugin extends Plugin {
       this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new Notice(String(error))) });
     }
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
+    this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
 
-    this.addCommand({
-      id: "toggle-page-task-view", name: "Toggle task view for current page",
-      checkCallback: (checking) => {
-        const view = this.app.workspace.getActiveViewOfType(TaskMainView) ?? this.app.workspace.getActiveViewOfType(MarkdownView);
-        const path = view instanceof TaskMainView ? view.pagePath : view instanceof MarkdownView ? view.file?.path : undefined;
-        if (!path) return false;
-        if (!checking) void this.togglePageTaskView().catch((error) => new Notice(String(error)));
-        return true;
-      }
+    this.addCommand({ id: "toggle-task-mode", name: "Toggle task mode", callback: () => {
+      void this.setTaskMode(!this.settings.taskMode).catch(error => new Notice(String(error)));
+    } });
+    this.taskModeRibbon = this.addRibbonIcon("list-checks", "Task mode", () => {
+      void this.setTaskMode(!this.settings.taskMode).catch(error => new Notice(String(error)));
     });
+    this.updateTaskModeControls();
     this.addCommand({
       id: "convert-to-project", name: "Convert to project",
       checkCallback: (checking) => {
@@ -69,15 +70,26 @@ export default class TaskManagerPlugin extends Plugin {
     });
 
     await this.index.initialize();
-    this.app.workspace.onLayoutReady(() => void this.activateNavigation(false).catch((error) => new Notice(String(error))));
+    this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, path => this.index.isProject(path));
+    const syncTaskMode = (): void => { void this.taskModeController?.sync().catch(error => new Notice(String(error))); };
+    this.registerEvent(this.app.workspace.on("file-open", syncTaskMode));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", syncTaskMode));
+    this.registerEvent(this.app.workspace.on("layout-change", syncTaskMode));
+    this.register(this.index.subscribe(syncTaskMode));
+    this.app.workspace.onLayoutReady(() => {
+      syncTaskMode();
+      void this.activateNavigation(false).catch(error => new Notice(String(error)));
+    });
   }
 
   onunload(): void {
+    this.taskModeController?.dispose();
     this.index.destroy();
   }
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<TaskManagerSettings> | null);
+    this.settings.taskMode = this.settings.taskMode === true;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
   }
 
@@ -111,19 +123,23 @@ export default class TaskManagerPlugin extends Plugin {
     }
   }
 
-  async togglePageTaskView(): Promise<void> {
-    const view = this.app.workspace.getActiveViewOfType(TaskMainView) ?? this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view) return;
-    const leaf = view.leaf;
-    if (view instanceof TaskMainView && view.pagePath) {
-      const file = this.app.vault.getAbstractFileByPath(view.pagePath);
-      if (!(file instanceof TFile)) { new Notice("The source note no longer exists."); return; }
-      const state = view.getState();
-      await leaf.setViewState({ type: "markdown", active: true, state: { ...(state.markdownState as Record<string, unknown> ?? {}), file: file.path } });
-    } else if (view instanceof MarkdownView && view.file) {
-      await leaf.setViewState({ type: TASK_MAIN_VIEW, active: true, state: {
-        mode: "all", pagePath: view.file.path, markdownState: view.getState()
-      } });
+  async setTaskMode(enabled: boolean): Promise<void> {
+    const previous = this.settings.taskMode;
+    this.settings.taskMode = enabled;
+    try { await this.saveSettings(); }
+    catch (cause) { this.settings.taskMode = previous; throw cause; }
+    this.updateTaskModeControls();
+    await this.taskModeController?.sync();
+  }
+
+  private updateTaskModeControls(): void {
+    const enabled = this.settings.taskMode;
+    this.taskModeRibbon?.setAttribute("aria-label", `Task mode: ${enabled ? "On" : "Off"}`);
+    this.taskModeRibbon?.setAttribute("title", `Task mode: ${enabled ? "On" : "Off"}`);
+    this.taskModeRibbon?.setAttribute("aria-pressed", String(enabled));
+    this.taskModeRibbon?.classList.toggle("is-active", enabled);
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
+      if (leaf.view instanceof TaskNavigationView) leaf.view.refresh();
     }
   }
 

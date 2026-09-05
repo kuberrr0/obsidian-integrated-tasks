@@ -6,7 +6,7 @@ Requires Obsidian **1.7.2 or newer**, on desktop or mobile.
 
 The plugin enumerates Markdown files in the current vault to build its local task and project index. It reads those notes and writes task changes to their source notes. This vault-wide access supports the cross-note views; indexing happens locally and does not upload notes or task data to an external service.
 
-Use **Toggle task view for current page** from the command palette to switch any Markdown note between its editor and a task view in the same tab. No project tag is required; **Add task** saves to that note. Run the command again to return to the note.
+Enable **Task mode** in the sidebar, ribbon, settings, or with **Toggle task mode** in the command palette. All open project notes (tagged `#project`) switch to task views in their existing tabs, and newly opened projects do the same. Ordinary notes stay in Markdown. Turning task mode off restores the project tabs’ Markdown views. The setting is remembered across restarts.
 
 **Convert to project** adds the `project` tag and missing `date`, `end date`, `deadline`, `priority`, and `duration` properties to the current note. Existing tags, property values, and supported property aliases are preserved. It also works from a page or project task view.
 

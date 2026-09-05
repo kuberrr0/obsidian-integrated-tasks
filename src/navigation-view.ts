@@ -1,4 +1,4 @@
-import { ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, setIcon, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
 import type { TaskViewMode } from "./types";
 
@@ -31,6 +31,8 @@ export class TaskNavigationView extends ItemView {
     this.render();
   }
 
+  refresh(): void { this.render(); }
+
   private render(): void {
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
@@ -40,6 +42,18 @@ export class TaskNavigationView extends ItemView {
     const newButton = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "New task" } });
     setIcon(newButton, "plus");
     newButton.addEventListener("click", () => this.plugin.openEditor({ mode: this.activeMode }));
+
+    const mode = container.createEl("label", { cls: "tm-global-task-mode" });
+    const toggle = mode.createEl("input", { type: "checkbox" });
+    toggle.checked = this.plugin.settings.taskMode;
+    mode.createSpan({ text: "Task mode" });
+    toggle.addEventListener("change", () => {
+      toggle.disabled = true;
+      void this.plugin.setTaskMode(toggle.checked).catch(error => {
+        new Notice(String(error));
+        this.render();
+      });
+    });
 
     const nav = container.createDiv({ cls: "tm-nav-list" });
     for (const item of NAV_ITEMS) {

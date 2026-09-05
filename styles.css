@@ -907,3 +907,5 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-gantt-selection { position: absolute; top: 8px; height: 28px; border-radius: 6px; background: var(--interactive-accent); color: var(--text-on-accent); opacity: .8; pointer-events: none; white-space: nowrap; overflow: hidden; font-size: 11px; padding: 4px; box-sizing: border-box; }
 .tm-gantt-selection[hidden] { display: none; }
 .tm-gantt-undated[hidden] { display: none; }
+
+.tm-global-task-mode { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 8px; cursor: pointer; }
