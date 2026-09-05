@@ -144,6 +144,10 @@ export default class TaskManagerPlugin extends Plugin {
       projects: this.index.projects(),
       settings: this.settings,
       dateFormat: this.dateFormat(),
+      onDelete: state.task ? async () => {
+        await this.store.delete(state.task!);
+        await this.index.refreshPath(state.task!.path);
+      } : undefined,
       onSave: async (draft) => {
         try {
           if (state.task) await this.store.update(state.task, draft);

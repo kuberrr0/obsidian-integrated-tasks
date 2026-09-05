@@ -862,3 +862,5 @@ button.tm-list-drag-handle { touch-action: none; }
   .tm-main-view:not(.is-kanban-view) .tm-task-row:not(.tm-project-row) .tm-task-primary,
   .tm-main-view:not(.is-kanban-view) .tm-task-row:not(.tm-project-row) .tm-task-metadata { flex-basis: 100%; }
 }
+
+.tm-editor-actions button.tm-delete-task { margin-right: auto; flex: 0 0 auto; color: var(--text-error); }

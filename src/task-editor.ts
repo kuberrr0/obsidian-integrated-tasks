@@ -15,6 +15,7 @@ export interface TaskEditorOptions {
   settings: TaskManagerSettings;
   dateFormat: string;
   onSave: (draft: TaskDraft) => Promise<void>;
+  onDelete?: () => Promise<void>;
 }
 
 function initialDraft(options: TaskEditorOptions): TaskDraft {
@@ -180,6 +181,9 @@ export class TaskEditorModal extends Modal {
 
     const actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
     this.actions = actions;
+    const deleteButton = this.options.task && this.options.onDelete
+      ? actions.createEl("button", { text: "Delete task", cls: "tm-delete-task", attr: { title: this.options.task.childIds.length ? "Delete this task and its subtasks" : "Delete this task" } })
+      : undefined;
     const cancel = actions.createEl("button", { text: "Cancel" });
     cancel.addEventListener("click", () => this.close());
     const save = actions.createEl("button", { text: "Save task", cls: "mod-cta" });
@@ -191,16 +195,34 @@ export class TaskEditorModal extends Modal {
         const next = this.rawDirty ? this.readRaw() : this.readStructured(true);
         if (!next) return;
         save.disabled = true;
+        if (deleteButton) deleteButton.disabled = true;
         await this.options.onSave(next);
         this.close();
       } catch (cause) {
         save.disabled = false;
+        if (deleteButton) deleteButton.disabled = false;
         const message = cause instanceof Error ? cause.message : "Could not save the task.";
         error.setText(message);
         new Notice(message);
       }
     };
     save.addEventListener("click", () => { void saveTask(); });
+    const deleteTask = async (): Promise<void> => {
+      if (!deleteButton || deleteButton.disabled || save.disabled || !this.options.onDelete) return;
+      deleteButton.disabled = true;
+      save.disabled = true;
+      try {
+        await this.options.onDelete();
+        this.close();
+      } catch (cause) {
+        deleteButton.disabled = false;
+        save.disabled = false;
+        const message = cause instanceof Error ? cause.message : "Could not delete the task.";
+        error.setText(message);
+        new Notice(message);
+      }
+    };
+    deleteButton?.addEventListener("click", () => { void deleteTask(); });
 
     contentEl.onkeydown = (event: KeyboardEvent): void => {
       if (event.key !== "Enter" || event.isComposing) return;

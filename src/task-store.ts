@@ -23,6 +23,14 @@ export class TaskStore {
     await this.app.vault.process(file, (content) => toggleTaskInContent(content, task, completed));
   }
 
+  async delete(task: Task): Promise<void> {
+    const file = this.requireFile(task.path);
+    await this.app.vault.process(file, content => {
+      const block = liveTaskBlock(content, task, this.getDateFormat());
+      return removeTaskBlockFromContent(content, task, block.lines.length);
+    });
+  }
+
   async create(draft: TaskDraft): Promise<void> {
     const { path, heading } = splitDestination(draft.destination);
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);

@@ -55,3 +55,24 @@ it("applies the bottom setting to both creation and destination moves", async ()
   await store.update(task, { ...draft, title: "Moved" });
   expect(read()).toBe("## Plan\nIntroduction\n- [ ] Old\n  - [ ] Child\n- [ ] New\n- [ ] Moved\n  - [ ] Moved child\n## Later\n");
 });
+
+describe("task deletion", () => {
+  it("deletes a task and its subtree while keeping other tasks and headings", async () => {
+    const content = "## Plan\n- [ ] Parent\n  - [ ] Child\n    Child notes\n- [ ] Keep\n";
+    const { store, read } = setup(content);
+    await store.delete(scanTasks("Project.md", content)[0]);
+    expect(read()).toBe("## Plan\n- [ ] Keep\n");
+  });
+  it("deletes only the selected child and preserves its parent and sibling", async () => {
+    const content = "- [ ] Parent\n  - [ ] Remove\n  - [ ] Keep\n";
+    const { store, read } = setup(content);
+    await store.delete(scanTasks("Project.md", content)[1]);
+    expect(read()).toBe("- [ ] Parent\n  - [ ] Keep\n");
+  });
+  it("refuses to delete a task whose text changed", async () => {
+    const task = scanTasks("Project.md", "- [ ] Original\n")[0];
+    const { store, read } = setup("- [ ] Edited\n");
+    await expect(store.delete(task)).rejects.toThrow(/changed/);
+    expect(read()).toBe("- [ ] Edited\n");
+  });
+});
