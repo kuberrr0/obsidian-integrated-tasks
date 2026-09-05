@@ -1,3 +1,4 @@
+import { trackModalViewport } from "./mobile-layout";
 import { destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { formatDate, formatDateTime, parseDateTimeExpression, todayIso, tomorrowIso } from "./date";
@@ -40,13 +41,18 @@ function initialDraft(options: TaskEditorOptions): TaskDraft {
 
 function field(parent: HTMLElement, label: string, input: HTMLElement): void {
   const row = parent.createDiv({ cls: "tm-editor-field" });
-  row.createEl("label", { text: label });
+  const caption = row.createEl("label", { text: label });
+  input.setAttribute("aria-label", label);
+  caption.addEventListener("click", () => input.focus());
   row.appendChild(input);
 }
 
 export class TaskEditorModal extends Modal {
   private draft: TaskDraft;
   private rawDirty = false;
+  private stopViewportTracking?: () => void;
+  private actions?: HTMLElement;
+  private focusTimer?: number;
   private rawInput!: HTMLTextAreaElement;
   private titleInput!: HTMLInputElement;
   private scheduledInput!: HTMLInputElement;
@@ -168,7 +174,8 @@ export class TaskEditorModal extends Modal {
       }
     });
 
-    const actions = contentEl.createDiv({ cls: "tm-editor-actions" });
+    const actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
+    this.actions = actions;
     const cancel = actions.createEl("button", { text: "Cancel" });
     cancel.addEventListener("click", () => this.close());
     const save = actions.createEl("button", { text: "Save task", cls: "mod-cta" });
@@ -199,7 +206,8 @@ export class TaskEditorModal extends Modal {
       if (!event.repeat && !save.disabled) save.click();
     };
 
-    window.setTimeout(() => {
+    this.stopViewportTracking = trackModalViewport(this.modalEl, contentEl);
+    this.focusTimer = window.setTimeout(() => {
       this.rawInput.focus();
       const titleStart = this.rawInput.value.indexOf("] ") + 2;
       this.rawInput.setSelectionRange(titleStart, titleStart + this.draft.title.length);
@@ -207,6 +215,9 @@ export class TaskEditorModal extends Modal {
   }
 
   onClose(): void {
+    window.clearTimeout(this.focusTimer);
+    this.stopViewportTracking?.();
+    this.actions?.remove();
     this.contentEl.onkeydown = null;
     this.contentEl.empty();
   }

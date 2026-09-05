@@ -26,6 +26,7 @@ export class TaskMainView extends ItemView {
   private sort: TaskSort = "date";
   private descending = false;
   private grouping: TaskGrouping = "default";
+  private filtersExpanded = false;
   private unsubscribe?: () => void;
   private taskResults?: HTMLElement;
 
@@ -53,6 +54,7 @@ export class TaskMainView extends ItemView {
       this.sort = "date";
       this.descending = false;
       this.grouping = "default";
+      this.filtersExpanded = false;
     }
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode as TaskViewMode;
     this.state.pagePath = typeof state.pagePath === "string" ? state.pagePath : undefined;
@@ -190,21 +192,35 @@ export class TaskMainView extends ItemView {
       this.search = search.value;
       this.renderTaskResults();
     });
-    const priority = filters.createEl("select", { attr: { "aria-label": "Filter by priority" } });
+    const toggle = filters.createEl("button", { cls: "tm-filter-toggle", text: "Filters & sort" });
+    const controls = filters.createDiv({ cls: "tm-filter-controls" });
+    const syncToggle = (): void => {
+      const active = [this.priority, this.dateFilter, this.sourcePath, this.sort !== "date", this.descending, this.grouping !== "default"].filter(Boolean).length;
+      toggle.setText(`Filters & sort${active ? ` (${active})` : ""}`);
+      toggle.setAttribute("aria-expanded", String(this.filtersExpanded));
+      controls.classList.toggle("is-expanded", this.filtersExpanded);
+    };
+    toggle.addEventListener("click", () => {
+      this.filtersExpanded = !this.filtersExpanded;
+      syncToggle();
+    });
+    controls.addEventListener("change", syncToggle);
+    syncToggle();
+    const priority = controls.createEl("select", { attr: { "aria-label": "Filter by priority" } });
     for (const [value, label] of [["", "Any priority"], ["1", "P1"], ["2", "P2"], ["3", "P3"]]) priority.createEl("option", { value, text: label });
     priority.value = this.priority ? String(this.priority) : "";
     priority.addEventListener("change", () => {
       this.priority = priority.value ? Number(priority.value) as Priority : undefined;
       this.renderTaskResults();
     });
-    const date = filters.createEl("select", { attr: { "aria-label": "Filter by date" } });
+    const date = controls.createEl("select", { attr: { "aria-label": "Filter by date" } });
     for (const [value, label] of [["", "Any date"], ["dated", "Dated"], ["undated", "Undated"], ["overdue", "Overdue"]]) date.createEl("option", { value, text: label });
     date.value = this.dateFilter;
     date.addEventListener("change", () => {
       this.dateFilter = date.value;
       this.renderTaskResults();
     });
-    const sort = filters.createEl("select", { attr: { "aria-label": "Sort tasks" } });
+    const sort = controls.createEl("select", { attr: { "aria-label": "Sort tasks" } });
     for (const [value, label] of [["date", "Sort: Date"], ["priority", "Sort: Priority"], ["title", "Sort: Title"], ["source", "Sort: Note order"], ["duration", "Sort: Duration"]]) {
       sort.createEl("option", { value, text: label });
     }
@@ -213,7 +229,7 @@ export class TaskMainView extends ItemView {
       this.sort = sort.value as TaskSort;
       this.renderTaskResults();
     });
-    const direction = filters.createEl("select", { attr: { "aria-label": "Sort direction" } });
+    const direction = controls.createEl("select", { attr: { "aria-label": "Sort direction" } });
     direction.createEl("option", { value: "asc", text: "Ascending" });
     direction.createEl("option", { value: "desc", text: "Descending" });
     direction.value = this.descending ? "desc" : "asc";
@@ -221,7 +237,7 @@ export class TaskMainView extends ItemView {
       this.descending = direction.value === "desc";
       this.renderTaskResults();
     });
-    const grouping = filters.createEl("select", { attr: { "aria-label": "Group tasks" } });
+    const grouping = controls.createEl("select", { attr: { "aria-label": "Group tasks" } });
     for (const [value, label] of [["default", "Group: View default"], ["none", "No grouping"], ["date", "Group: Date"], ["priority", "Group: Priority"], ["source", "Group: Source note"], ["status", "Group: Status"]]) {
       grouping.createEl("option", { value, text: label });
     }
@@ -231,7 +247,7 @@ export class TaskMainView extends ItemView {
       this.renderTaskResults();
     });
     if (this.pagePath || this.state.mode === "inbox") return;
-    const source = filters.createEl("select", { attr: { "aria-label": "Filter by source note" } });
+    const source = controls.createEl("select", { attr: { "aria-label": "Filter by source note" } });
     source.createEl("option", { value: "", text: "Any note" });
     for (const path of [...new Set(this.plugin.index.allTasks().map((task) => task.path))].sort()) {
       source.createEl("option", { value: path, text: path });
@@ -338,7 +354,8 @@ export class TaskMainView extends ItemView {
   private renderTaskRow(list: HTMLElement, task: Task, depth: number): void {
     const row = list.createDiv({ cls: `tm-task-row${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
-    const checkbox = row.createEl("input", { type: "checkbox", cls: "tm-task-checkbox", attr: { "aria-label": `Complete ${task.title}` } });
+    const checkboxTarget = row.createEl("label", { cls: "tm-checkbox-target" });
+    const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: "tm-task-checkbox", attr: { "aria-label": `Complete ${task.title}` } });
     checkbox.checked = task.completed;
     checkbox.addEventListener("change", async () => {
       checkbox.disabled = true;

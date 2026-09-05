@@ -565,3 +565,116 @@ button.tm-source,
 /* Live Preview pills wrap native text; they never replace date links. */
 .tm-note-token-editor.tm-note-token-deadline::before { content: "Due "; }
 .tm-note-token-editor .tm-note-token-brace { display: none; }
+
+
+.tm-filter-controls { display: contents; }
+button.tm-filter-toggle { display: none; }
+.tm-checkbox-target { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.tm-checkbox-target .tm-task-checkbox { margin: 0; }
+
+/* Keep phone layouts readable without depending on hover or horizontal scrolling. */
+@media (max-width: 700px) {
+  .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view {
+    padding: 20px 12px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  .tm-view-header { gap: 12px; margin-bottom: 24px; }
+  .tm-title-group, .tm-title-group > div { min-width: 0; max-width: 100%; }
+  .tm-title-group h1 { font-size: 26px; overflow-wrap: anywhere; }
+  .tm-header-actions { gap: 8px; flex-wrap: wrap; }
+  .tm-completed-toggle { min-height: 44px; }
+  .tm-add-task, .tm-title-group .clickable-icon { min-height: 44px; min-width: 44px; }
+  .tm-filters { grid-template-columns: minmax(0, 1fr); margin-bottom: 20px; }
+  .tm-filters input, .tm-filters select { min-width: 0; min-height: 44px; font-size: 16px; }
+  button.tm-filter-toggle { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+  .tm-filter-toggle::after { content: "+"; }
+  .tm-filter-toggle[aria-expanded="true"]::after { content: "−"; }
+  .tm-filter-controls { display: none; }
+  .tm-filter-controls.is-expanded { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tm-task-row {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: start;
+    min-height: 60px;
+    padding: 6px 0 10px min(calc(var(--tm-depth) * 12px), 36px);
+  }
+  .tm-checkbox-target { width: 44px; min-height: 44px; }
+  .tm-task-content { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 0 2px; }
+  .tm-task-primary { align-items: flex-start; gap: 4px; }
+  button.tm-task-title { height: auto; min-height: 44px; white-space: normal; overflow-wrap: anywhere; line-height: 1.45; padding-block: 10px; }
+  .tm-task-primary > .tm-progress { flex-shrink: 0; margin-top: 10px; }
+  .tm-task-metadata { justify-content: flex-start; flex-wrap: wrap; max-width: 100%; overflow: visible; gap: 4px; }
+  .tm-task-metadata .tm-meta { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .tm-meta > span { min-width: 0; }
+  button.tm-source { display: inline-flex; min-height: 44px; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+  .tm-row-menu { width: 44px; height: 44px; visibility: visible; opacity: 1; }
+  .tm-project-row > .tm-project-icon { margin: 13px; }
+  .tm-project-row .tm-task-content { grid-template-columns: minmax(0, 1fr) auto; }
+  .tm-project-progress { align-self: start; min-height: 44px; }
+  .tm-project-progress-track { display: none; }
+  .tm-section h2 { overflow-wrap: anywhere; }
+  .tm-section-count { flex-shrink: 0; }
+  .tm-empty { min-height: 220px; }
+  button.tm-nav-item { min-height: 44px; }
+  .tm-editor-modal { width: calc(100vw - 16px); max-width: 520px; max-height: calc(100dvh - 16px); }
+  .tm-editor-modal .modal-content { min-height: 0; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .tm-editor-field { gap: 6px; margin-bottom: 16px; }
+  .tm-editor-field input, .tm-editor-field select, .tm-editor-raw { min-width: 0; min-height: 44px; font-size: 16px; }
+  .tm-editor-raw { min-height: 96px; line-height: 1.5; }
+  .tm-editor-actions { position: sticky; bottom: 0; background: var(--background-primary); padding-block: 12px; }
+  .tm-editor-actions button { min-height: 44px; flex: 1; justify-content: center; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .tm-row-menu { visibility: visible; opacity: 1; }
+}
+
+
+/* Reserve the mobile navigation strip even when Obsidian overlays its header. */
+body.is-mobile .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view {
+  padding-top: calc(var(--view-header-height, 44px) + var(--view-header-top-offset, env(safe-area-inset-top, 0px)) + 16px);
+}
+
+.tm-editor-modal > .tm-editor-actions { flex-shrink: 0; }
+
+/* The native keyboard inset and VisualViewport are alternate upper bounds:
+   take the smaller available height, rather than subtracting the keyboard twice. */
+body.is-mobile .modal-container.tm-editor-container {
+  position: fixed;
+  top: var(--tm-viewport-top, 0px);
+  bottom: auto;
+  height: min(var(--tm-viewport-height, 100dvh), calc(100vh - var(--keyboard-height, 0px)));
+  padding: max(8px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 8px;
+  box-sizing: border-box;
+}
+body.is-mobile .tm-editor-container .tm-editor-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  min-height: 0;
+  margin-block: 0;
+  overflow: hidden;
+}
+body.is-mobile .tm-editor-modal .modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scroll-padding-block: 12px;
+}
+body.is-mobile .tm-editor-modal > .tm-editor-actions {
+  position: static;
+  margin-top: 0;
+  padding: 12px 16px;
+  background: var(--modal-background, var(--background-primary));
+}
+@media (max-width: 700px) {
+  .modal-container.tm-editor-container {
+    position: fixed;
+    top: var(--tm-viewport-top, 0px);
+    bottom: auto;
+    height: min(var(--tm-viewport-height, 100dvh), calc(100vh - var(--keyboard-height, 0px)));
+    padding: max(8px, env(safe-area-inset-top, 0px)) 8px 8px;
+    box-sizing: border-box;
+  }
+  .tm-editor-container .tm-editor-modal { display: flex; flex-direction: column; max-height: 100%; min-height: 0; margin-block: 0; overflow: hidden; }
+  .tm-editor-modal .modal-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; scroll-padding-block: 12px; }
+  .tm-editor-modal > .tm-editor-actions { position: static; margin-top: 0; background: var(--modal-background, var(--background-primary)); }
+}
