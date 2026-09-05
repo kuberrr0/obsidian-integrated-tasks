@@ -1,19 +1,20 @@
 import { splitDestination } from "./structure";
 import { normalizePath, type App, TFile, TFolder } from "obsidian";
 import {
-  prependToDestination,
+  insertIntoDestination,
   findLiveLine,
   removeTaskBlockFromContent,
   toggleTaskInContent,
   updateTaskInContent
 } from "./markdown";
 import { serializeTask } from "./parser";
-import type { Task, TaskDraft } from "./types";
+import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
 export class TaskStore {
   constructor(
     private readonly app: App,
-    private readonly getDateFormat: () => string
+    private readonly getDateFormat: () => string,
+    private readonly getNewTaskPosition: () => TaskManagerSettings["newTaskPosition"] = () => "top"
   ) {}
 
   async toggle(task: Task, completed: boolean): Promise<void> {
@@ -26,7 +27,7 @@ export class TaskStore {
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);
     const rootDraft = { ...draft, indent: 0 };
     await this.app.vault.process(file, (content) =>
-      prependToDestination(content, [serializeTask(rootDraft, this.getDateFormat())], heading)
+      insertIntoDestination(content, [serializeTask(rootDraft, this.getDateFormat())], heading, this.getNewTaskPosition())
     );
   }
 
@@ -63,11 +64,11 @@ export class TaskStore {
 
     if (source.path === target.path) {
       await this.app.vault.process(source, (content) =>
-        prependToDestination(removeTaskBlockFromContent(content, task, block.length), block, heading)
+        insertIntoDestination(removeTaskBlockFromContent(content, task, block.length), block, heading, this.getNewTaskPosition())
       );
       return;
     }
-    await this.app.vault.process(target, (content) => prependToDestination(content, block, heading));
+    await this.app.vault.process(target, (content) => insertIntoDestination(content, block, heading, this.getNewTaskPosition()));
     await this.app.vault.process(source, (content) => removeTaskBlockFromContent(content, task, block.length));
   }
 

@@ -3,7 +3,7 @@ import { TFile, type App } from "obsidian";
 import { TaskStore } from "../src/task-store";
 import { scanTasks } from "../src/parser";
 
-function setup(content: string) {
+function setup(content: string, position: "top" | "bottom" = "top") {
   const file = Object.assign(new TFile(), { path: "Project.md" });
   let text = content;
   const app = { vault: {
@@ -11,7 +11,7 @@ function setup(content: string) {
     read: async () => text,
     process: async (_file: TFile, update: (content: string) => string) => { text = update(text); }
   } } as unknown as App;
-  return { store: new TaskStore(app, () => "YYYY-MM-DD"), read: () => text };
+  return { store: new TaskStore(app, () => "YYYY-MM-DD", () => position), read: () => text };
 }
 const draft = { title: "New", completed: false, indent: 0, destination: "Project.md#Plan" };
 
@@ -43,4 +43,15 @@ describe("task destination writes", () => {
     await expect(store.update(scanTasks("Project.md", content)[0], draft)).rejects.toThrow(/Cannot find heading/);
     expect(read()).toBe(content);
   });
+});
+
+
+it("applies the bottom setting to both creation and destination moves", async () => {
+  const content = "## Plan\nIntroduction\n- [ ] Old\n  - [ ] Child\n## Later\n- [ ] Move me\n  - [ ] Moved child\n";
+  const { store, read } = setup(content, "bottom");
+  await store.create(draft);
+  expect(read()).toContain("  - [ ] Child\n- [ ] New\n## Later");
+  const task = scanTasks("Project.md", read()).find((task) => task.title === "Move me")!;
+  await store.update(task, { ...draft, title: "Moved" });
+  expect(read()).toBe("## Plan\nIntroduction\n- [ ] Old\n  - [ ] Child\n- [ ] New\n- [ ] Moved\n  - [ ] Moved child\n## Later\n");
 });

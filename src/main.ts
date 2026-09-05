@@ -23,7 +23,7 @@ export default class TaskManagerPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat());
-    this.store = new TaskStore(this.app, () => this.dateFormat());
+    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition);
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));

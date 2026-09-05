@@ -66,9 +66,11 @@ export interface TaskDraft extends ParsedTaskMetadata {
 export interface TaskManagerSettings {
   inboxPath: string;
   tasksHeading: string;
+  newTaskPosition: "top" | "bottom";
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
   inboxPath: "Inbox.md",
-  tasksHeading: "Tasks"
+  tasksHeading: "Tasks",
+  newTaskPosition: "top"
 };

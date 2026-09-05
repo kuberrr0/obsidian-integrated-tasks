@@ -40,7 +40,7 @@ duration: 1h30m
 
 Priority accepts `1`–`3`, `p1`–`p3`, or `high`/`medium`/`low`. Duration accepts hours/minutes text or a number of minutes. Dates accept ISO dates or date links in the Daily Notes format. `start-date` and `end-date` (including space/underscore variants) are also supported. Empty properties are omitted.
 
-In the task editor, use `~[[Project]]` to insert a task at the top of a note, or `~[[Project#Heading]]` to insert it directly below an existing heading. Project headings are also available in the Destination dropdown. New tasks appear before existing content; YAML frontmatter stays at the top. The plugin does not create a Tasks heading.
+In the task editor, use `~[[Project]]` to insert a task into the first checklist before any headings in a note, or `~[[Project#Heading]]` to target the first checklist in an existing heading’s section. Project headings are also available in the Destination dropdown. The **New task position** setting chooses **Top** (default) or **Bottom** of that checklist, preserving introductory prose and keeping subtasks with their parents. It applies to added tasks and tasks moved to another destination. A file-only destination searches only before the first heading; it never uses a heading’s checklist. A heading’s scope ends at the next heading. If the scope has no checklist, tasks are inserted at its start; YAML frontmatter stays at the top. The plugin does not create a Tasks heading.
 
 ## Development
 
