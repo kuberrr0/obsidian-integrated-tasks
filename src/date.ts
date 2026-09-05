@@ -1,0 +1,86 @@
+import * as chrono from "chrono-node";
+import moment from "moment";
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export const DEFAULT_DATE_FORMAT = "YYYY-MM-DD";
+
+export function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function todayIso(now = new Date()): string {
+  return formatLocalDate(now);
+}
+
+export function tomorrowIso(now = new Date()): string {
+  const result = new Date(now);
+  result.setDate(result.getDate() + 1);
+  return formatLocalDate(result);
+}
+
+export function parseDateExpression(
+  value: string,
+  reference = new Date(),
+  dateFormat = DEFAULT_DATE_FORMAT
+): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  if (ISO_DATE.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-").map(Number);
+    const candidate = new Date(year, month - 1, day);
+    if (
+      candidate.getFullYear() === year &&
+      candidate.getMonth() === month - 1 &&
+      candidate.getDate() === day
+    ) {
+      return trimmed;
+    }
+    return undefined;
+  }
+
+  const formatted = moment(trimmed, dateFormat, true);
+  if (formatted.isValid()) return formatted.format(DEFAULT_DATE_FORMAT);
+
+  const parsed = chrono.parse(trimmed, reference, { forwardDate: true }).find((result) =>
+    result.index === 0 && result.text.length === trimmed.length
+  );
+  return parsed ? formatLocalDate(parsed.start.date()) : undefined;
+}
+
+export function formatDate(iso: string, dateFormat = DEFAULT_DATE_FORMAT): string {
+  const parsed = moment(iso, DEFAULT_DATE_FORMAT, true);
+  return parsed.isValid() ? parsed.format(dateFormat) : iso;
+}
+
+export function actionDate(task: { scheduledDate?: string; deadline?: string }): string | undefined {
+  if (task.scheduledDate && task.deadline) {
+    return task.scheduledDate < task.deadline ? task.scheduledDate : task.deadline;
+  }
+  return task.scheduledDate ?? task.deadline;
+}
+
+/** Find a date in editor prose without interpreting links or inline code as dates. */
+export function findInputDate(value: string, reference = new Date()): { index: number; text: string; date: string } | undefined {
+  const prose = value.replace(/\{[^}]*\}?|\[\[[\s\S]*?\]\]|`[^`]*`|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\b(?:\d+h(?:\d+m)?|\d+m)\b/g, (match) => " ".repeat(match.length));
+  const result = chrono.parse(prose, reference, { forwardDate: true }).find((match) =>
+    !match.end && (match.start.isCertain("day") || match.start.isCertain("weekday"))
+  );
+  return result ? { index: result.index, text: result.text, date: formatLocalDate(result.start.date()) } : undefined;
+}
+
+
+/** Curly braces route editor dates to Deadline, even in the middle of a title. */
+export function findInputDeadline(value: string, reference = new Date(), dateFormat?: string): { index: number; text: string; date: string } | undefined {
+  const prose = value.replace(/`[^`]*`|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)/g, (match) => " ".repeat(match.length));
+  const pattern = /(?:^|\s)\{([^{}\[\]]+)\}(?=\s|$)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(prose))) {
+    const date = parseDateExpression(match[1], reference, dateFormat);
+    if (date) return { index: match.index, text: match[0], date };
+  }
+  return undefined;
+}

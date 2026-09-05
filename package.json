@@ -1,0 +1,33 @@
+{
+  "name": "obsidian-task-manager",
+  "version": "0.1.0",
+  "description": "A Markdown-native task manager for Obsidian.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "obsidian",
+    "tasks",
+    "productivity"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.3",
+    "obsidian": "^1.8.7",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2",
+    "@codemirror/state": "6.5.0",
+    "@codemirror/view": "6.38.6"
+  },
+  "dependencies": {
+    "chrono-node": "^2.8.0",
+    "moment": "^2.29.4"
+  }
+}

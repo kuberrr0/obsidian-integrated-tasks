@@ -1,0 +1,9 @@
+{
+  "id": "task-manager",
+  "name": "Task Manager",
+  "version": "0.1.0",
+  "minAppVersion": "1.6.0",
+  "description": "Markdown-native Inbox, Today, Upcoming, All Tasks, and Projects views.",
+  "author": "Task Manager contributors",
+  "isDesktopOnly": false
+}
