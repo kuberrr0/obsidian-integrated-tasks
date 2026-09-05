@@ -43,4 +43,4 @@ npm test
 npm run build
 ```
 
-Copy `manifest.json`, `main.js`, and `styles.css` into `.obsidian/plugins/task-manager/` in a test vault, then enable **Integrated Task Manager** under Community plugins.
+Copy `manifest.json`, `main.js`, and `styles.css` into `.obsidian/plugins/integrated-task-manager/` in a test vault, then enable **Integrated Task Manager** under Community plugins.
