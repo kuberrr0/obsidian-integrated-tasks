@@ -108,15 +108,6 @@ button.tm-nav-item.is-active {
   letter-spacing: -0.025em;
 }
 
-.tm-view-subtitle {
-  margin-top: var(--size-4-1);
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .tm-header-actions {
   flex: 0 0 auto;
   gap: var(--size-4-4);

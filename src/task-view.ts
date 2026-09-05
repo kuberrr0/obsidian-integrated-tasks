@@ -165,7 +165,6 @@ export class TaskMainView extends ItemView {
     }
     const heading = titleGroup.createDiv();
     heading.createEl("h1", { text: this.getDisplayText() });
-    heading.createDiv({ cls: "tm-view-subtitle", text: this.subtitle() });
 
     const actions = header.createDiv({ cls: "tm-header-actions" });
     const completed = actions.createEl("label", { cls: "tm-completed-toggle" });
@@ -181,17 +180,6 @@ export class TaskMainView extends ItemView {
     setIcon(icon, "plus");
     add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
-  }
-
-  private subtitle(): string {
-    if (this.pagePath) return this.pagePath;
-    if (this.state.mode === "today") {
-      return formatDate(todayIso(), this.plugin.dateFormat());
-    }
-    if (this.state.mode === "upcoming") return "Every future task";
-    if (this.state.mode === "inbox") return this.plugin.settings.inboxPath;
-    if (this.state.mode === "all") return "Every checklist task in your vault";
-    return "";
   }
 
   private renderFilters(container: HTMLElement): void {
@@ -259,7 +247,6 @@ export class TaskMainView extends ItemView {
     const header = container.createDiv({ cls: "tm-view-header" });
     const title = header.createDiv({ cls: "tm-title-group" }).createDiv();
     title.createEl("h1", { text: "Projects" });
-    title.createDiv({ cls: "tm-view-subtitle", text: "Notes tagged #project" });
     const actions = header.createDiv({ cls: "tm-header-actions" });
     const toggle = actions.createEl("label", { cls: "tm-completed-toggle" });
     const checkbox = toggle.createEl("input", { type: "checkbox" });
