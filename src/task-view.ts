@@ -1,6 +1,8 @@
+import { renderCalendar } from "./calendar-view";
+import { rescheduledDraft, type CalendarScope } from "./calendar";
 import { TASK_PROPERTIES, filterOperators, propertyValue, propertyLabel } from "./task-properties";
 import { ItemView, Menu, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
-import { actionDate, formatDate, todayIso } from "./date";
+import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { formatDuration } from "./parser";
 import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
@@ -18,6 +20,9 @@ const TITLES: Record<TaskViewMode, string> = {
 
 export class TaskMainView extends ItemView {
   private state: TaskViewState = { mode: "today" };
+  private calendar = false;
+  private calendarScope: CalendarScope = "month";
+  private calendarAnchor = todayIso();
   private showCompleted = false;
   private showArchivedProjects = false;
   private search = "";
@@ -41,10 +46,13 @@ export class TaskMainView extends ItemView {
     return TITLES[this.state.mode];
   }
   getIcon(): string { return this.state.mode === "projects" ? "folder-kanban" : "circle-check-big"; }
-  getState(): Record<string, unknown> { return { ...this.state }; }
+  getState(): Record<string, unknown> { return { ...this.state, calendar: this.calendar, calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
 
   async setState(state: Record<string, unknown>): Promise<void> {
     const mode = state.mode;
+    if (typeof state.calendar === "boolean") this.calendar = state.calendar;
+    if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
+    if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath) {
       this.search = "";
       this.propertyFilters = [];
@@ -74,6 +82,7 @@ export class TaskMainView extends ItemView {
     container.empty();
     this.taskResults = undefined;
     container.addClass("tm-main-view");
+    container.classList.toggle("is-calendar-view", this.calendar && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "projects" && !this.pagePath) {
       this.renderProjectList(container);
       return;
@@ -90,13 +99,34 @@ export class TaskMainView extends ItemView {
     if (!container) return;
     container.empty();
     const query: TaskQuery = {
-      mode: this.pagePath ? "project" : this.state.mode,
+      mode: this.pagePath ? "project" : this.calendar && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
       showCompleted: this.showCompleted,
       projectPath: this.pagePath,
       filters: this.propertyFilters,
       search: this.search || undefined
     };
     const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
+    if (this.calendar) {
+      renderCalendar(container, {
+        anchor: this.calendarAnchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
+        navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.renderTaskResults(); },
+        create: preset => this.plugin.openEditor({ ...this.state, preset }),
+        edit: task => this.plugin.openEditor({ ...this.state, task }),
+        resize: async (task, date, time, duration) => {
+          const latest = this.plugin.index.taskById(task.id);
+          if (!latest) throw new Error("Task no longer exists. Refresh the view and try again.");
+          await this.plugin.store.update(latest, { ...rescheduledDraft(latest, date, time), durationMinutes: duration });
+          await this.plugin.index.refreshPath(latest.path);
+        },
+        move: async (task, date, time) => {
+          const latest = this.plugin.index.taskById(task.id);
+          if (!latest) throw new Error("Task no longer exists. Refresh the view and try again.");
+          await this.plugin.store.update(latest, rescheduledDraft(latest, date, time));
+          await this.plugin.index.refreshPath(latest.path);
+        }
+      });
+      return;
+    }
     if (!tasks.length) {
       if (this.pagePath && this.grouping === "default" && !this.search && !this.propertyFilters.length) {
         this.renderProjectSections(container, this.pagePath, tasks);
@@ -164,6 +194,9 @@ export class TaskMainView extends ItemView {
     heading.createEl("h1", { text: this.getDisplayText() });
 
     const actions = header.createDiv({ cls: "tm-header-actions" });
+    const calendar = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": this.calendar ? "Show task list" : "Show calendar", title: this.calendar ? "Show task list" : "Show calendar", "aria-pressed": String(this.calendar) } });
+    setIcon(calendar, this.calendar ? "list" : "calendar-days");
+    calendar.addEventListener("click", () => { this.calendar = !this.calendar; this.render(); });
     const add = actions.createEl("button", { cls: "mod-cta tm-add-task" });
     const icon = add.createSpan();
     setIcon(icon, "plus");

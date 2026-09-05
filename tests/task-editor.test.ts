@@ -31,3 +31,14 @@ describe("implicit Inbox destination", () => {
     expect(modal.readRaw().destination).toBe("Project.md");
   });
 });
+
+
+describe("calendar editor presets", () => {
+  it("prefills date, time and duration while retaining the project destination", () => {
+    const modal = new TaskEditorModal({} as App, {
+      mode: "today", projectPath: "Work.md", projects: [], settings: DEFAULT_SETTINGS, dateFormat: "DD/MM/YYYY",
+      preset: { scheduledDate: "2027-03-28", scheduledTime: "09:15", durationMinutes: 60 }, onSave: async () => {}
+    }) as unknown as { draft: TaskDraft };
+    expect(modal.draft).toMatchObject({ scheduledDate: "2027-03-28", scheduledTime: "09:15", durationMinutes: 60, destination: "Work.md" });
+  });
+});

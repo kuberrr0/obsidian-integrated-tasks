@@ -1,3 +1,4 @@
+import type { CalendarPreset } from "./calendar";
 import { trackModalViewport } from "./mobile-layout";
 import { destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
@@ -7,6 +8,7 @@ import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from
 
 export interface TaskEditorOptions {
   task?: Task;
+  preset?: CalendarPreset;
   mode: TaskViewMode;
   projectPath?: string;
   projects: Project[];
@@ -35,7 +37,8 @@ function initialDraft(options: TaskEditorOptions): TaskDraft {
     scheduledDate: options.mode === "today" ? todayIso() : options.mode === "upcoming" ? tomorrowIso() : undefined,
     completed: false,
     destination: options.projectPath ?? options.settings.inboxPath,
-    indent: 0
+    indent: 0,
+    ...options.preset
   };
 }
 

@@ -67,7 +67,7 @@ describe("page task view", () => {
       renderFilters: () => void;
       renderTaskResults: () => void;
     };
-    internals.containerEl = { children: [{}, { empty: vi.fn(), addClass: vi.fn(), createDiv: vi.fn() }] };
+    internals.containerEl = { children: [{}, { empty: vi.fn(), addClass: vi.fn(), classList: { toggle: vi.fn() }, createDiv: vi.fn() }] };
     vi.spyOn(internals, "renderHeader").mockImplementation(() => {});
     const filters = vi.spyOn(internals, "renderFilters").mockImplementation(() => {});
     vi.spyOn(internals, "renderTaskResults").mockImplementation(() => {});

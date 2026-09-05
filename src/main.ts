@@ -1,3 +1,4 @@
+import type { CalendarPreset } from "./calendar";
 import { noteTokenEditor } from "./note-token-editor";
 import { renderNoteTokens } from "./note-token-reading";
 import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from "obsidian";
@@ -12,6 +13,7 @@ import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
 
 interface OpenEditorState extends TaskViewState {
+  preset?: CalendarPreset;
   task?: Task;
 }
 
