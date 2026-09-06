@@ -8,7 +8,7 @@ The plugin enumerates Markdown files in the current vault to build its local tas
 
 Enable **Task mode** in the sidebar, ribbon, settings, or with **Toggle task mode** in the command palette. All open project notes (tagged `#project`) switch to task views in their existing tabs, and newly opened projects do the same. Ordinary notes stay in Markdown. Turning task mode off restores the project tabs’ Markdown views. The setting is remembered across restarts.
 
-**Convert to project** adds the `project` tag and missing `date`, `end date`, `deadline`, `priority`, and `duration` properties to the current note. Existing tags, property values, and supported property aliases are preserved. It also works from a page or project task view.
+**Convert to project** adds the `project` tag and missing `date`, `end date`, `deadline` and `priority` properties to the current note. Existing tags, property values, and supported property aliases are preserved. It also works from a page or project task view.
 
 Every task view—Inbox, Today, Upcoming, All Tasks, individual projects, and any page—includes search, priority/date filters, sorting by date/priority/title/note order/duration in either direction, and grouping by date/priority/source note/status or no grouping. Views spanning multiple notes also have a source-note filter. **Group: View default** retains each view's original layout, including note headings for page and project views. Visible subtasks stay beside their parents, with the selected sort applied among siblings. Controls reset when switching to a different view or page.
 
@@ -43,7 +43,6 @@ priority: p1
 date: 2026-09-05
 end date: 2026-09-10
 deadline: 2026-09-12
-duration: 1h30m
 ---
 ```
 

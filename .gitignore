@@ -1,8 +1,4 @@
 node_modules/
-main.js
 *.map
 .DS_Store
 coverage/
-/SCORECARD_FIXES.md
-/RELEASING.md
-/RELEASE_NOTES.md
