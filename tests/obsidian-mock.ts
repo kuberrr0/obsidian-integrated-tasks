@@ -8,3 +8,5 @@ export const getAllTags = (cache: { tags?: Array<{ tag: string }>; frontmatter?:
   ...(cache.tags ?? []).map((entry) => entry.tag),
   ...(cache.frontmatter?.tags ?? []).map((tag) => tag.startsWith("#") ? tag : `#${tag}`)
 ];
+
+export const Platform = { isMacOS: true };

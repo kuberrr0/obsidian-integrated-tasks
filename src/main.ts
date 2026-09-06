@@ -1,6 +1,7 @@
 import { TaskModeController } from "./task-mode";
 import type { TaskEditorPreset } from "./types";
 import { noteTokenEditor } from "./note-token-editor";
+import { noteTaskEditEditor, registerNoteTaskEdit } from "./note-task-edit";
 import { renderNoteTokens } from "./note-token-reading";
 import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from "obsidian";
 import { TaskEditorModal, type TaskEditorOptions } from "./task-editor";
@@ -33,7 +34,11 @@ export default class TaskManagerPlugin extends Plugin {
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
-    this.registerMarkdownPostProcessor((element) => renderNoteTokens(element, this.dateFormat()));
+    this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task })));
+    this.registerMarkdownPostProcessor((element, context) => {
+      renderNoteTokens(element, this.dateFormat());
+      registerNoteTaskEdit(element, context, () => this.dateFormat(), task => this.openEditor({ mode: "all", task }));
+    });
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
 
