@@ -40,3 +40,39 @@ it("does not convert in task mode or during undo", () => {
   const editor = state(line);
   expect(editor.update({ changes: { from: line.length, insert: "\n" }, selection: { anchor: line.length + 1 }, userEvent: "undo" }).newDoc.toString()).toBe(line + "\n");
 });
+
+it("orders resolved task properties and retains both times and tag order", () => {
+  const result = enter(state("  - [x] Do this #[[work]] p2 {@next week at noon} 1h @today at 9am #[[home]]"));
+  expect(result.doc.toString()).toBe("  - [x] Do this [[2026-09-08]] 09:00 1h {[[2026-09-15]] 12:00} p2 #[[work]] #[[home]]\n");
+  expect(result.selection.main.head).toBe(result.doc.length);
+});
+
+it("retains existing links, title formatting, and destination when ordering", () => {
+  expect(enter(state("\t- [ ] **Keep  this** #[[work]] ~[[Project]] P1 {[[2026-09-20]] 17:00} 45m @today", false, "MMM D, YYYY")).doc.toString())
+    .toBe("\t- [ ] **Keep  this** [[Sep 8, 2026]] ~[[Project]] 45m {[[2026-09-20]] 17:00} P1 #[[work]]\n");
+});
+
+it("reorders on Enter without an @date expression", () => {
+  const line = "- [ ] Task p1 30m [[2026-09-08]]";
+  const result = enter(state(line));
+  expect(result.doc.toString()).toBe("- [ ] Task [[2026-09-08]] 30m p1\n");
+  expect(result.selection.main.head).toBe(result.doc.length);
+});
+
+it("reorders on leaving a line but not while moving within it", () => {
+  const line = "\n- [ ] Task #[[work]] p2 45m";
+  let editor = state(line);
+  editor = editor.update({ selection: { anchor: line.length - 1 } }).state;
+  expect(editor.doc.toString()).toBe(line);
+  editor = editor.update({ selection: { anchor: 0 } }).state;
+  expect(editor.doc.toString()).toBe("\n- [ ] Task 45m p2 #[[work]]");
+  expect(editor.selection.main.head).toBe(0);
+});
+
+it("keeps reordering disabled in task mode and during undo/redo", () => {
+  const line = "- [ ] Task p1 30m";
+  expect(enter(state(line, true)).doc.toString()).toBe(line + "\n");
+  for (const userEvent of ["undo", "redo"]) {
+    expect(state(line).update({ changes: { from: line.length, insert: "\n" }, selection: { anchor: line.length + 1 }, userEvent }).newDoc.toString()).toBe(line + "\n");
+  }
+});

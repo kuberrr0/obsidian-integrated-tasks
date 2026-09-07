@@ -88,7 +88,7 @@ export class TaskEditorModal extends Modal {
     const rawField = contentEl.createDiv({ cls: "tm-editor-raw-field" });
     this.rawInput = rawField.createEl("textarea", { cls: "tm-editor-raw" });
     this.rawInput.setAttribute("aria-label", "Task text");
-    this.rawInput.placeholder = "Task today at 9pm {tomorrow at noon} 30m p1 ~[[Project#Heading]]";
+    this.rawInput.placeholder = "Task today at 9pm 30m {tomorrow at noon} p1 ~[[Project#Heading]]";
     this.rawInput.rows = this.options.task ? 2 : 5;
     rawField.createDiv({ cls: "tm-editor-raw-help", text: this.options.task
       ? "Cmd/Ctrl+Enter to save."
@@ -105,15 +105,15 @@ export class TaskEditorModal extends Modal {
     this.scheduledInput.value = this.draft.scheduledDate ? formatDateTime(this.draft.scheduledDate, this.draft.scheduledTime, this.options.dateFormat) : "";
     field(contentEl, "Scheduled date and time", this.scheduledInput);
 
-    this.deadlineInput = contentEl.createEl("input", { type: "text" });
-    this.deadlineInput.placeholder = "Tomorrow at noon";
-    this.deadlineInput.value = this.draft.deadline ? formatDateTime(this.draft.deadline, this.draft.deadlineTime, this.options.dateFormat) : "";
-    field(contentEl, "Deadline", this.deadlineInput);
-
     this.durationInput = contentEl.createEl("input", { type: "text" });
     this.durationInput.placeholder = "For example 1h30m";
     this.durationInput.value = this.draft.durationMinutes ? formatDuration(this.draft.durationMinutes) : "";
     field(contentEl, "Duration", this.durationInput);
+
+    this.deadlineInput = contentEl.createEl("input", { type: "text" });
+    this.deadlineInput.placeholder = "Tomorrow at noon";
+    this.deadlineInput.value = this.draft.deadline ? formatDateTime(this.draft.deadline, this.draft.deadlineTime, this.options.dateFormat) : "";
+    field(contentEl, "Deadline", this.deadlineInput);
 
     this.priorityInput = contentEl.createEl("select");
     for (const [value, label] of [["", "No priority"], ["1", "P1 — High"], ["2", "P2 — Medium"], ["3", "P3 — Low"]]) {
@@ -169,8 +169,8 @@ export class TaskEditorModal extends Modal {
     const structuredInputs: Array<HTMLInputElement | HTMLSelectElement> = [
       this.titleInput,
       this.scheduledInput,
-      this.deadlineInput,
       this.durationInput,
+      this.deadlineInput,
       this.priorityInput,
       this.tagsInput,
       this.destinationInput

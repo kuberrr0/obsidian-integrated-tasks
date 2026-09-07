@@ -5,13 +5,13 @@ import type { FilterOperator, Task, TaskFilter, TaskProperty } from "./types";
 export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" | "choice" | "date" | "time" | "number" }[] = [
   { key: "title", label: "Title", kind: "text" },
   { key: "status", label: "Status", kind: "choice" },
-  { key: "priority", label: "Priority", kind: "choice" },
-  { key: "tags", label: "Tags", kind: "text" },
   { key: "scheduledDate", label: "Scheduled date", kind: "date" },
   { key: "scheduledTime", label: "Scheduled time", kind: "time" },
+  { key: "duration", label: "Duration", kind: "number" },
   { key: "deadline", label: "Deadline", kind: "date" },
   { key: "deadlineTime", label: "Deadline time", kind: "time" },
-  { key: "duration", label: "Duration", kind: "number" },
+  { key: "priority", label: "Priority", kind: "choice" },
+  { key: "tags", label: "Tags", kind: "text" },
   { key: "source", label: "Source note / list", kind: "choice" },
   { key: "section", label: "Section", kind: "choice" }
 ];

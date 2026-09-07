@@ -74,7 +74,7 @@ export class BulkTaskEditorModal extends Modal {
     content.createEl("h2", { text: "Edit task properties" });
     content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
     const snapshots = this.options.tasks.map(task => bulkPropertyValues(task, this.options.dateFormat));
-    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["tags", "Tags"], ["destination", "Destination"], ["description", "Description"]] as const) {
+    for (const [key, label] of [["scheduled", "Date and time"], ["duration", "Duration"], ["deadline", "Deadline date and time"], ["priority", "Priority"], ["tags", "Tags"], ["destination", "Destination"], ["description", "Description"]] as const) {
       const common = snapshots.every(value => value[key] === snapshots[0][key]) ? snapshots[0][key] : undefined;
       this.initial.set(key, common);
       const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });

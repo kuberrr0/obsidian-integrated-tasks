@@ -1,5 +1,6 @@
 import { EditorState, type ChangeSpec } from "@codemirror/state";
-import { formatDate, parseDateExpression } from "./date";
+import { formatDate, parseDateExpression, parseDateTimeExpression } from "./date";
+import { parseTaskLine, type ParsedTokenRange } from "./parser";
 import { bodyLines } from "./structure";
 
 /** Resolve explicit @ dates while leaving links, code and ordinary prose alone. */
@@ -19,9 +20,11 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
     for (let length = candidate.length; length > 0; length--) {
       if (length < candidate.length && !/[\s.,;!?]/.test(candidate[length])) continue;
       if (braced && length !== candidate.length) break;
-      const date = parseDateExpression(candidate.slice(0, length), reference, dateFormat);
+      const expression = candidate.slice(0, length);
+      const dateTime = parseDateTimeExpression(expression, reference, dateFormat);
+      const date = dateTime?.date ?? parseDateExpression(expression, reference, dateFormat);
       if (!date) continue;
-      changes.push({ from, to: from + 1 + length, insert: `[[${formatDate(date, dateFormat)}]]` });
+      changes.push({ from, to: from + 1 + length, insert: `[[${formatDate(date, dateFormat)}]]${dateTime?.time ? ` ${dateTime.time}` : ""}` });
       pattern.lastIndex = from + 1 + length;
       break;
     }
@@ -29,7 +32,22 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
   return changes;
 }
 
-/** Commit a task's date expressions when the caret leaves its line (including Enter). */
+/** Reorder recognized token slots, retaining source spelling, spacing and destinations. */
+function orderNoteProperties(text: string, dateFormat: string, reference: Date): string {
+  const ranges: ParsedTokenRange[] = [];
+  parseTaskLine(text, reference, dateFormat, false, ranges);
+  ranges.sort((a, b) => a.from - b.from);
+  const order: ParsedTokenRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "priority", "tags"];
+  const tokens = [...ranges].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
+    .map(range => text.slice(range.from, range.to));
+  for (let index = ranges.length - 1; index >= 0; index--) {
+    const range = ranges[index];
+    text = text.slice(0, range.from) + tokens[index] + text.slice(range.to);
+  }
+  return text;
+}
+
+/** Resolve dates and order properties when the caret leaves a task line (including Enter). */
 export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boolean) {
   return EditorState.transactionFilter.of(transaction => {
     if (isTaskMode() || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
@@ -47,9 +65,14 @@ export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boo
     for (const { text, line } of bodyLines(transaction.newDoc.toString())) {
       if (!candidates.has(line + 1) || !/^\s*-\s+\[[ xX]\]\s/.test(text)) continue;
       const { from } = transaction.newDoc.line(line + 1);
-      for (const change of noteDateChanges(text, getDateFormat(), reference)) {
-        changes.push({ ...change, from: from + change.from, to: from + change.to });
+      const dateFormat = getDateFormat();
+      const resolvedDates = noteDateChanges(text, dateFormat, reference);
+      let resolved = text;
+      for (const change of resolvedDates.reverse()) {
+        resolved = resolved.slice(0, change.from) + change.insert + resolved.slice(change.to);
       }
+      const ordered = orderNoteProperties(resolved, dateFormat, reference);
+      if (ordered !== text) changes.push({ from, to: from + text.length, insert: ordered });
     }
     return changes.length ? [transaction, { changes, sequential: true }] : transaction;
   });

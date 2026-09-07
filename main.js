@@ -3422,7 +3422,7 @@ var BulkTaskEditorModal = class extends import_obsidian2.Modal {
     content.createEl("h2", { text: "Edit task properties" });
     content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
     const snapshots = this.options.tasks.map((task) => bulkPropertyValues(task, this.options.dateFormat));
-    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["tags", "Tags"], ["destination", "Destination"], ["description", "Description"]]) {
+    for (const [key, label] of [["scheduled", "Date and time"], ["duration", "Duration"], ["deadline", "Deadline date and time"], ["priority", "Priority"], ["tags", "Tags"], ["destination", "Destination"], ["description", "Description"]]) {
       const common = snapshots.every((value) => value[key] === snapshots[0][key]) ? snapshots[0][key] : void 0;
       this.initial.set(key, common);
       const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });
@@ -4022,13 +4022,13 @@ function renderGantt(container, options) {
 var TASK_PROPERTIES = [
   { key: "title", label: "Title", kind: "text" },
   { key: "status", label: "Status", kind: "choice" },
-  { key: "priority", label: "Priority", kind: "choice" },
-  { key: "tags", label: "Tags", kind: "text" },
   { key: "scheduledDate", label: "Scheduled date", kind: "date" },
   { key: "scheduledTime", label: "Scheduled time", kind: "time" },
+  { key: "duration", label: "Duration", kind: "number" },
   { key: "deadline", label: "Deadline", kind: "date" },
   { key: "deadlineTime", label: "Deadline time", kind: "time" },
-  { key: "duration", label: "Duration", kind: "number" },
+  { key: "priority", label: "Priority", kind: "choice" },
+  { key: "tags", label: "Tags", kind: "text" },
   { key: "source", label: "Source note / list", kind: "choice" },
   { key: "section", label: "Section", kind: "choice" }
 ];
@@ -5463,10 +5463,10 @@ var TaskMainView = class extends import_obsidian7.ItemView {
   renderProperties(parent, properties) {
     var _a;
     if (properties.scheduledDate) this.badge(parent, TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`);
-    if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : void 0);
     if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
-    if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) this.badge(parent, TASK_PROPERTY_ICONS.tags, tag);
+    if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : void 0);
     if (properties.priority) this.badge(parent, TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
+    if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) this.badge(parent, TASK_PROPERTY_ICONS.tags, tag);
   }
   badge(parent, iconName, text, variant) {
     const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
@@ -5550,6 +5550,7 @@ var TaskModeController = class {
 // src/note-date-input.ts
 var import_state = require("@codemirror/state");
 function noteDateChanges(text, dateFormat, reference = /* @__PURE__ */ new Date()) {
+  var _a;
   const prose = text.replace(/(`+)[\s\S]*?\1|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\{(?!@)[^}]*\}/g, (match2) => " ".repeat(match2.length));
   const changes = [];
   const pattern = /(^|\s|\{)@/g;
@@ -5564,14 +5565,28 @@ function noteDateChanges(text, dateFormat, reference = /* @__PURE__ */ new Date(
     for (let length = candidate.length; length > 0; length--) {
       if (length < candidate.length && !/[\s.,;!?]/.test(candidate[length])) continue;
       if (braced && length !== candidate.length) break;
-      const date = parseDateExpression(candidate.slice(0, length), reference, dateFormat);
+      const expression = candidate.slice(0, length);
+      const dateTime = parseDateTimeExpression(expression, reference, dateFormat);
+      const date = (_a = dateTime == null ? void 0 : dateTime.date) != null ? _a : parseDateExpression(expression, reference, dateFormat);
       if (!date) continue;
-      changes.push({ from, to: from + 1 + length, insert: `[[${formatDate(date, dateFormat)}]]` });
+      changes.push({ from, to: from + 1 + length, insert: `[[${formatDate(date, dateFormat)}]]${(dateTime == null ? void 0 : dateTime.time) ? ` ${dateTime.time}` : ""}` });
       pattern.lastIndex = from + 1 + length;
       break;
     }
   }
   return changes;
+}
+function orderNoteProperties(text, dateFormat, reference) {
+  const ranges = [];
+  parseTaskLine(text, reference, dateFormat, false, ranges);
+  ranges.sort((a, b) => a.from - b.from);
+  const order = ["scheduledDate", "durationMinutes", "deadline", "priority", "tags"];
+  const tokens = [...ranges].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind)).map((range) => text.slice(range.from, range.to));
+  for (let index = ranges.length - 1; index >= 0; index--) {
+    const range = ranges[index];
+    text = text.slice(0, range.from) + tokens[index] + text.slice(range.to);
+  }
+  return text;
 }
 function noteDateInput(getDateFormat, isTaskMode) {
   return import_state.EditorState.transactionFilter.of((transaction) => {
@@ -5589,9 +5604,14 @@ function noteDateInput(getDateFormat, isTaskMode) {
     for (const { text, line } of bodyLines(transaction.newDoc.toString())) {
       if (!candidates.has(line + 1) || !/^\s*-\s+\[[ xX]\]\s/.test(text)) continue;
       const { from } = transaction.newDoc.line(line + 1);
-      for (const change of noteDateChanges(text, getDateFormat(), reference)) {
-        changes.push({ ...change, from: from + change.from, to: from + change.to });
+      const dateFormat = getDateFormat();
+      const resolvedDates = noteDateChanges(text, dateFormat, reference);
+      let resolved = text;
+      for (const change of resolvedDates.reverse()) {
+        resolved = resolved.slice(0, change.from) + change.insert + resolved.slice(change.to);
       }
+      const ordered = orderNoteProperties(resolved, dateFormat, reference);
+      if (ordered !== text) changes.push({ from, to: from + text.length, insert: ordered });
     }
     return changes.length ? [transaction, { changes, sequential: true }] : transaction;
   });
@@ -6055,7 +6075,7 @@ var TaskEditorModal = class extends import_obsidian11.Modal {
     const rawField = contentEl.createDiv({ cls: "tm-editor-raw-field" });
     this.rawInput = rawField.createEl("textarea", { cls: "tm-editor-raw" });
     this.rawInput.setAttribute("aria-label", "Task text");
-    this.rawInput.placeholder = "Task today at 9pm {tomorrow at noon} 30m p1 ~[[Project#Heading]]";
+    this.rawInput.placeholder = "Task today at 9pm 30m {tomorrow at noon} p1 ~[[Project#Heading]]";
     this.rawInput.rows = this.options.task ? 2 : 5;
     rawField.createDiv({ cls: "tm-editor-raw-help", text: this.options.task ? "Cmd/Ctrl+Enter to save." : "One task per line. Indent subtasks; use indented bullets for descriptions. Cmd/Ctrl+Enter to save." });
     this.rawInput.value = this.serializeDraft(this.draft);
@@ -6067,14 +6087,14 @@ var TaskEditorModal = class extends import_obsidian11.Modal {
     this.scheduledInput.placeholder = `Tomorrow, next Friday, or ${formatDate(todayIso(), this.options.dateFormat)}`;
     this.scheduledInput.value = this.draft.scheduledDate ? formatDateTime(this.draft.scheduledDate, this.draft.scheduledTime, this.options.dateFormat) : "";
     field(contentEl, "Scheduled date and time", this.scheduledInput);
-    this.deadlineInput = contentEl.createEl("input", { type: "text" });
-    this.deadlineInput.placeholder = "Tomorrow at noon";
-    this.deadlineInput.value = this.draft.deadline ? formatDateTime(this.draft.deadline, this.draft.deadlineTime, this.options.dateFormat) : "";
-    field(contentEl, "Deadline", this.deadlineInput);
     this.durationInput = contentEl.createEl("input", { type: "text" });
     this.durationInput.placeholder = "For example 1h30m";
     this.durationInput.value = this.draft.durationMinutes ? formatDuration(this.draft.durationMinutes) : "";
     field(contentEl, "Duration", this.durationInput);
+    this.deadlineInput = contentEl.createEl("input", { type: "text" });
+    this.deadlineInput.placeholder = "Tomorrow at noon";
+    this.deadlineInput.value = this.draft.deadline ? formatDateTime(this.draft.deadline, this.draft.deadlineTime, this.options.dateFormat) : "";
+    field(contentEl, "Deadline", this.deadlineInput);
     this.priorityInput = contentEl.createEl("select");
     for (const [value, label] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) {
       this.priorityInput.createEl("option", { value, text: label });
@@ -6127,8 +6147,8 @@ var TaskEditorModal = class extends import_obsidian11.Modal {
     const structuredInputs = [
       this.titleInput,
       this.scheduledInput,
-      this.deadlineInput,
       this.durationInput,
+      this.deadlineInput,
       this.priorityInput,
       this.tagsInput,
       this.destinationInput
