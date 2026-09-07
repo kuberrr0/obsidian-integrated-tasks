@@ -83,3 +83,5 @@ With tasks selected, run **Edit task properties** (or use the selection toolbar)
 Drag a task directly to move it without selecting it first. Drag a selected block to move the selection together. List and Kanban drops preserve the selected blocks' displayed order and their descriptions/subtasks; dropping into a property group applies that group's property to the selected tasks. Calendar drops reschedule selected tasks to the dropped date/time. Selecting both a parent and a child never moves or deletes the child twice. Hidden or changed tasks are removed from the selection, and failed bulk writes restore earlier writes when the notes have not been edited concurrently.
 
 Opening a project from the Projects list or Gantt view opens its note in a new tab and automatically enables task mode. Turning task mode off restores the note’s Markdown view. Older project tabs also follow the toggle.
+
+Use the **+** glyph beside a task group or project heading to add a task with that group’s properties or destination prefilled. This also works for empty project headings and Kanban columns.

@@ -215,7 +215,8 @@ export class TaskMainView extends ItemView {
       for (const [path, group] of groups) {
         if (this.plugin.index.isProject(path)) {
           const project = container.createEl("section", { cls: "tm-section" });
-          project.createEl("h2", { text: path.replace(/\.md$/i, "") });
+          const heading = project.createEl("h2", { text: path.replace(/\.md$/i, "") });
+          this.renderGroupAddButton(heading, path.replace(/\.md$/i, ""), { destination: path });
           this.listDrag?.group(project, { destination: path });
           this.renderProjectSections(project, path, group);
         } else this.renderSection(container, path.replace(/\.md$/i, ""), group, undefined, { destination: path });
@@ -236,13 +237,7 @@ export class TaskMainView extends ItemView {
         ? formatDate(column.target.value, this.plugin.dateFormat()) : column.title;
       header.createEl("h2", { text: title });
       header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
-      const add = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `Add task to ${title}`, title: `Add task to ${title}` } });
-      setIcon(add, "plus");
-      add.addEventListener("click", () => {
-        const blank: Task = { id: "", path: this.pagePath ?? this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
-        const preset = draftForGroup(blank, column.target);
-        this.plugin.openEditor({ ...this.state, preset });
-      });
+      this.renderGroupAddButton(header, title, column.target);
       if (column.target) this.listDrag?.group(section, column.target);
       this.renderTaskList(section, column.tasks, column.target);
       if (!column.tasks.length) section.createDiv({ cls: "tm-kanban-empty", text: "No tasks" });
@@ -257,6 +252,7 @@ export class TaskMainView extends ItemView {
       const title = section.createEl("h2", { text: heading.name });
       title.createSpan({ cls: "tm-section-count", text: String(group.length) });
       const target = { destination: `${path}#${heading.name}` };
+      this.renderGroupAddButton(title, heading.name, target);
       this.listDrag?.group(section, target);
       this.renderTaskList(section, group, target);
     }
@@ -497,12 +493,25 @@ export class TaskMainView extends ItemView {
     }
   }
 
+  private renderGroupAddButton(parent: HTMLElement, title: string, target?: ListDropGroup): void {
+    const add = parent.createEl("button", { cls: "clickable-icon tm-group-add-task", attr: {
+      type: "button", "aria-label": `Add task to ${title}`, title: `Add task to ${title}`
+    } });
+    setIcon(add, "plus");
+    add.addEventListener("click", event => {
+      event.stopPropagation();
+      const blank: Task = { id: "", path: this.pagePath ?? this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
+      this.plugin.openEditor({ ...this.state, preset: draftForGroup(blank, target) });
+    });
+  }
+
   private renderSection(container: HTMLElement, title: string, tasks: Task[], variant?: "alert", target?: ListDropGroup): void {
     if (!tasks.length && !target) return;
     const section = container.createEl("section", { cls: `tm-section${variant ? ` is-${variant}` : ""}` });
     const heading = section.createEl("h2");
     heading.createSpan({ text: title });
     heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
+    this.renderGroupAddButton(heading, title, target);
     if (target) this.listDrag?.group(section, target);
     this.renderTaskList(section, tasks, target);
   }

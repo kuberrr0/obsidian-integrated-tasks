@@ -162,6 +162,8 @@
   font-weight: var(--font-semibold);
 }
 
+.tm-group-add-task { flex-shrink: 0; }
+
 .tm-section.is-alert h2 {
   color: var(--text-error);
 }

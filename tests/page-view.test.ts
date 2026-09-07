@@ -301,3 +301,33 @@ it("allows normal navigation from project files while keeping dashboards persist
   await view.setState({ mode: "projects" });
   expect(view.navigation).toBe(false);
 });
+
+it.each([
+  [{ property: "priority", value: 2 }, { priority: 2, destination: "Inbox.md" }],
+  [{ property: "date", value: "2026-09-10" }, { scheduledDate: "2026-09-10" }],
+  [{ destination: "Work.md#Next" }, { destination: "Work.md#Next" }],
+  [{ property: "tags", value: "#[[work]] #[[client]]" }, { tags: ["work", "client"] }]
+])("adds an empty group's task with its properties: %j", (target, expected) => {
+  const openEditor = vi.fn();
+  const view = new TaskMainView({} as WorkspaceLeaf, { settings: { inboxPath: "Inbox.md" }, openEditor } as unknown as TaskManagerPlugin);
+  let click: ((event: { stopPropagation: () => void }) => void) | undefined;
+  let buttonOptions: { text?: string; attr?: Record<string, string> } | undefined;
+  const element = {
+    createEl: (tag: string, options?: typeof buttonOptions) => {
+      if (tag === "button") buttonOptions = options;
+      return element;
+    },
+    createSpan: () => element,
+    addEventListener: (_name: string, callback: typeof click) => { click = callback; }
+  };
+  const internals = view as unknown as {
+    renderSection(parent: unknown, title: string, tasks: Task[], variant: undefined, target: unknown): void;
+    renderTaskList(): void;
+  };
+  vi.spyOn(internals, "renderTaskList").mockImplementation(() => {});
+  internals.renderSection(element, "Next", [], undefined, target);
+  expect(buttonOptions?.text).toBeUndefined();
+  expect(buttonOptions?.attr?.["aria-label"]).toBe("Add task to Next");
+  click!({ stopPropagation: vi.fn() });
+  expect(openEditor).toHaveBeenCalledWith(expect.objectContaining({ preset: expect.objectContaining(expected) }));
+});

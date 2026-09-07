@@ -4965,7 +4965,8 @@ var TaskMainView = class extends import_obsidian7.ItemView {
       for (const [path, group] of groups) {
         if (this.plugin.index.isProject(path)) {
           const project = container.createEl("section", { cls: "tm-section" });
-          project.createEl("h2", { text: path.replace(/\.md$/i, "") });
+          const heading = project.createEl("h2", { text: path.replace(/\.md$/i, "") });
+          this.renderGroupAddButton(heading, path.replace(/\.md$/i, ""), { destination: path });
           (_b = this.listDrag) == null ? void 0 : _b.group(project, { destination: path });
           this.renderProjectSections(project, path, group);
         } else this.renderSection(container, path.replace(/\.md$/i, ""), group, void 0, { destination: path });
@@ -4988,14 +4989,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
       const title = ((_a = column.target) == null ? void 0 : _a.property) && ["date", "scheduledDate", "deadline"].includes(column.target.property) && typeof column.target.value === "string" ? formatDate(column.target.value, this.plugin.dateFormat()) : column.title;
       header.createEl("h2", { text: title });
       header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
-      const add = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `Add task to ${title}`, title: `Add task to ${title}` } });
-      (0, import_obsidian7.setIcon)(add, "plus");
-      add.addEventListener("click", () => {
-        var _a2;
-        const blank = { id: "", path: (_a2 = this.pagePath) != null ? _a2 : this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
-        const preset = draftForGroup(blank, column.target);
-        this.plugin.openEditor({ ...this.state, preset });
-      });
+      this.renderGroupAddButton(header, title, column.target);
       if (column.target) (_b = this.listDrag) == null ? void 0 : _b.group(section, column.target);
       this.renderTaskList(section, column.tasks, column.target);
       if (!column.tasks.length) section.createDiv({ cls: "tm-kanban-empty", text: "No tasks" });
@@ -5010,6 +5004,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
       const title = section.createEl("h2", { text: heading.name });
       title.createSpan({ cls: "tm-section-count", text: String(group.length) });
       const target = { destination: `${path}#${heading.name}` };
+      this.renderGroupAddButton(title, heading.name, target);
       (_a = this.listDrag) == null ? void 0 : _a.group(section, target);
       this.renderTaskList(section, group, target);
     }
@@ -5277,6 +5272,20 @@ var TaskMainView = class extends import_obsidian7.ItemView {
       open.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian7.Notice(String(error))));
     }
   }
+  renderGroupAddButton(parent, title, target) {
+    const add = parent.createEl("button", { cls: "clickable-icon tm-group-add-task", attr: {
+      type: "button",
+      "aria-label": `Add task to ${title}`,
+      title: `Add task to ${title}`
+    } });
+    (0, import_obsidian7.setIcon)(add, "plus");
+    add.addEventListener("click", (event) => {
+      var _a;
+      event.stopPropagation();
+      const blank = { id: "", path: (_a = this.pagePath) != null ? _a : this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
+      this.plugin.openEditor({ ...this.state, preset: draftForGroup(blank, target) });
+    });
+  }
   renderSection(container, title, tasks, variant, target) {
     var _a;
     if (!tasks.length && !target) return;
@@ -5284,6 +5293,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
     const heading = section.createEl("h2");
     heading.createSpan({ text: title });
     heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
+    this.renderGroupAddButton(heading, title, target);
     if (target) (_a = this.listDrag) == null ? void 0 : _a.group(section, target);
     this.renderTaskList(section, tasks, target);
   }
