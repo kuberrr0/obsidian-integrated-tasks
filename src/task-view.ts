@@ -55,6 +55,7 @@ export class TaskMainView extends ItemView {
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
     super(leaf);
+    this.navigation = false;
   }
 
   get pagePath(): string | undefined { return this.state.pagePath ?? this.state.projectPath; }
@@ -89,6 +90,8 @@ export class TaskMainView extends ItemView {
     this.state.pagePath = typeof state.pagePath === "string" ? state.pagePath : undefined;
     this.state.markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState as Record<string, unknown> : undefined;
     this.state.projectPath = typeof state.projectPath === "string" ? state.projectPath : undefined;
+    // File-backed task views must participate in normal same-tab navigation.
+    this.navigation = Boolean(this.pagePath);
     this.render();
   }
 

@@ -4720,6 +4720,7 @@ var TaskMainView = class extends import_obsidian6.ItemView {
     this.visibleTasks = [];
     this.selectionRows = /* @__PURE__ */ new Map();
     this.draggedTasks = [];
+    this.navigation = false;
   }
   get pagePath() {
     var _a;
@@ -4761,6 +4762,7 @@ var TaskMainView = class extends import_obsidian6.ItemView {
     this.state.pagePath = typeof state.pagePath === "string" ? state.pagePath : void 0;
     this.state.markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState : void 0;
     this.state.projectPath = typeof state.projectPath === "string" ? state.projectPath : void 0;
+    this.navigation = Boolean(this.pagePath);
     this.render();
   }
   async onOpen() {

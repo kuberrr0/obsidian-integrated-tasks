@@ -288,3 +288,16 @@ it("keeps the pressed task selected if layout movement retargets contextmenu", (
   rows[1].contextmenu();
   expect(view.getSelectedTasks()).toEqual([tasks[1]]);
 });
+
+
+it("allows normal navigation from project files while keeping dashboards persistent", async () => {
+  const view = new TaskMainView({} as WorkspaceLeaf, {} as TaskManagerPlugin);
+  vi.spyOn(view, "render").mockImplementation(() => {});
+  expect(view.navigation).toBe(false);
+  await view.setState({ mode: "all", pagePath: "Project.md" });
+  expect(view.navigation).toBe(true);
+  await view.setState({ mode: "projects", projectPath: "Legacy.md" });
+  expect(view.navigation).toBe(true);
+  await view.setState({ mode: "projects" });
+  expect(view.navigation).toBe(false);
+});
