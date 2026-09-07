@@ -241,7 +241,8 @@ button.tm-task-title {
   white-space: nowrap;
 }
 
-button.tm-task-title:hover,
+.tm-task-row:hover button.tm-task-title,
+.tm-calendar-task:hover .tm-calendar-task-title,
 button.tm-source:hover {
   color: var(--text-accent-hover);
 }
