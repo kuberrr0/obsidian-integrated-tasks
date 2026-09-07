@@ -76,3 +76,27 @@ describe("task deletion", () => {
     expect(read()).toBe("- [ ] Edited\n");
   });
 });
+
+
+it("preserves description bullets when editing, completing, and moving a task", async () => {
+  const content = "## Plan\n- [ ] Original\n  - Detail\n    - Nested detail\n  - [ ] Child\n    - Child detail\n## Later\n";
+  const { store, read } = setup(content);
+  const tasks = () => scanTasks("Project.md", read());
+  await store.update(tasks()[0], draft);
+  await store.toggle(tasks()[0], true);
+  expect(tasks()[0]).toMatchObject({ title: "New", completed: true, description: "- Detail\n  - Nested detail" });
+  await store.update(tasks()[0], { ...draft, completed: true, destination: "Project.md#Later" });
+  expect(read()).toBe("## Plan\n## Later\n- [x] New\n  - Detail\n    - Nested detail\n  - [ ] Child\n    - Child detail\n");
+  expect(tasks()[1].description).toBe("- Child detail");
+});
+
+it.each(["top", "bottom"] as const)("creates a multiline batch together at the %s of an indented checklist", async position => {
+  const { store, read } = setup("## Plan\n  - [ ] Existing\n", position);
+  await store.create({ ...draft, additionalLines: ["  - Detail", "  - [ ] Child [[2026-09-08]]", "- [ ] Sibling"] });
+  const batch = "  - [ ] New\n    - Detail\n    - [ ] Child [[2026-09-08]]\n  - [ ] Sibling\n";
+  expect(read()).toBe(position === "top" ? `## Plan\n${batch}  - [ ] Existing\n` : `## Plan\n  - [ ] Existing\n${batch}`);
+  const tasks = scanTasks("Project.md", read());
+  const main = tasks.find(task => task.title === "New")!;
+  expect(main.description).toBe("- Detail");
+  expect(tasks.find(task => task.title === "Child")?.parentId).toBe(main.id);
+});

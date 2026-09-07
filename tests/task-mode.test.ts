@@ -52,6 +52,28 @@ describe("global task mode", () => {
     expect(leaf.setViewState).toHaveBeenLastCalledWith({ type: "markdown", state });
     expect(leaf.view).toBeInstanceOf(MarkdownView);
   });
+  it.each(["kanban", "calendar", "list"])("remembers %s layout and calendar position across repeated toggles", async layout => {
+    const { controller, add, setEnabled } = await setup();
+    const { leaf } = add("Project.md");
+    setEnabled(true); await controller.sync();
+    await (leaf.view as TaskMainView).setState({ ...leaf.view.getState(), layout, calendarScope: "week", calendarAnchor: "2026-09-07" });
+    for (let i = 0; i < 2; i++) {
+      setEnabled(false); await controller.sync();
+      setEnabled(true); await controller.sync();
+      expect(leaf.view.getState()).toMatchObject({ pagePath: "Project.md", layout, calendarScope: "week", calendarAnchor: "2026-09-07" });
+    }
+  });
+  it("remembers layouts independently for two tabs of the same project", async () => {
+    const { controller, add, setEnabled } = await setup();
+    const first = add("Project.md"); const second = add("Project.md");
+    setEnabled(true); await controller.sync();
+    await (first.leaf.view as TaskMainView).setState({ ...first.leaf.view.getState(), layout: "kanban" });
+    await (second.leaf.view as TaskMainView).setState({ ...second.leaf.view.getState(), layout: "calendar" });
+    setEnabled(false); await controller.sync();
+    setEnabled(true); await controller.sync();
+    expect(first.leaf.view.getState().layout).toBe("kanban");
+    expect(second.leaf.view.getState().layout).toBe("calendar");
+  });
   it("converts newly opened projects while enabled and leaves notes alone when disabled", async () => {
     const { controller, add, setEnabled } = await setup();
     const first = add("Project.md"); await controller.sync();

@@ -2,21 +2,21 @@ import { describe, expect, it } from "vitest";
 import { addProjectProperties, parseProjectProperties } from "../src/project-properties";
 
 describe("project note properties", () => {
-  it("reads the note's date, end date, priority and duration", () => {
+  it("reads the note's date, end date and priority without project duration", () => {
     expect(parseProjectProperties({ date: "2026-08-28", "end date": "2026-09-10", priority: "p1", duration: "1h 30m" })).toEqual({
-      scheduledDate: "2026-08-28", endDate: "2026-09-10", deadline: undefined, priority: 1, durationMinutes: 90
+      scheduledDate: "2026-08-28", endDate: "2026-09-10", deadline: undefined, priority: 1
     });
   });
 
-  it("accepts date links, property name variants and numeric minutes", () => {
+  it("accepts date links, property name variants", () => {
     expect(parseProjectProperties({ "Start-Date": ["[[05-09-2026]]"], end_date: "[[10-09-2026|Finish]]", Priority: 2, duration: 45 }, "DD-MM-YYYY")).toEqual({
-      scheduledDate: "2026-09-05", endDate: "2026-09-10", deadline: undefined, priority: 2, durationMinutes: 45
+      scheduledDate: "2026-09-05", endDate: "2026-09-10", deadline: undefined, priority: 2
     });
   });
 
   it("omits empty or malformed properties", () => {
     expect(parseProjectProperties({ date: "2026-02-30", "end date": null, priority: "critical", duration: -1 })).toEqual({
-      scheduledDate: undefined, endDate: undefined, deadline: undefined, priority: undefined, durationMinutes: undefined
+      scheduledDate: undefined, endDate: undefined, deadline: undefined, priority: undefined
     });
     expect(parseProjectProperties(undefined).priority).toBeUndefined();
   });
@@ -30,7 +30,7 @@ describe("convert to project", () => {
   it("adds a project tag and empty editable properties", () => {
     const properties = {};
     addProjectProperties(properties);
-    expect(properties).toEqual({ tags: ["project"], date: null, "end date": null, deadline: null, priority: null, duration: null });
+    expect(properties).toEqual({ tags: ["project"], date: null, "end date": null, deadline: null, priority: null });
   });
 
   it("preserves existing tags, aliases, values and unrelated properties on repeated conversion", () => {

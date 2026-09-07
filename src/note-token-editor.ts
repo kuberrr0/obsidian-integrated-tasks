@@ -1,12 +1,38 @@
-import { editorLivePreviewField } from "obsidian";
+import { editorLivePreviewField, editorInfoField, Platform } from "obsidian";
 import { type Range } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
 import { bodyLines } from "./structure";
 import { taskTokens, tokenClass, type TaskToken } from "./task-tokens";
 
 export interface NoteTokenSpan { from: number; to: number; token: TaskToken }
 
-/** Marks retain the actual link text, so Obsidian alone owns link rendering/editing. */
+/** Display-only date label; opening a link still uses its original note target. */
+export class DateLabelWidget extends WidgetType {
+  constructor(private readonly label: string, private readonly linkText?: string) { super(); }
+  eq(other: DateLabelWidget): boolean { return this.label === other.label && this.linkText === other.linkText; }
+  toDOM(view: EditorView): HTMLElement {
+    const element: HTMLElement = view.dom.ownerDocument.createElement(this.linkText ? "a" : "span");
+    element.textContent = this.label;
+    if (this.linkText) {
+      element.className = "internal-link";
+      element.setAttribute("data-href", this.linkText);
+      element.setAttribute("href", this.linkText);
+      const open = (event: MouseEvent): void => {
+        if (event.button !== 0 && event.button !== 1) return;
+        const info = view.state.field(editorInfoField, false);
+        if (!info) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void info.app.workspace.openLinkText(this.linkText!, info.file?.path ?? "", event.button === 1 || (Platform.isMacOS ? event.metaKey : event.ctrlKey));
+      };
+      element.addEventListener("click", open);
+      element.addEventListener("auxclick", open);
+    }
+    return element;
+  }
+}
+
+/** Retain native text when already formatted; reveal source text while editing. */
 export function noteTokenMarks(
   tokens: NoteTokenSpan[],
   viewport: { from: number; to: number },
@@ -21,9 +47,12 @@ export function noteTokenMarks(
       class: `${tokenClass(token)} tm-note-token-editor`,
       attributes: { title: token.description }
     }).range(from, to));
+    if (token.display) {
+      syntax.push(Decoration.replace({ widget: new DateLabelWidget(token.display.label, token.display.linkText) })
+        .range(from + token.display.from - token.from, from + token.display.to - token.from));
+    }
     if (token.kind === "deadline") {
-      // Only hide the outer braces. Native Live Preview handles the wiki-link
-      // brackets inside them; never replace or conceal the date/link text.
+      // Keep the deadline prefix outside the date label.
       syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + 1));
       syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(to - 1, to));
     }

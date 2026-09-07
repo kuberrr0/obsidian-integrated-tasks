@@ -51,7 +51,9 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
       const link = fragment.querySelector("a.internal-link");
       if (link) {
         if (token.kind === "deadline") pill.appendChild(document.createTextNode("Due "));
+        link.textContent = token.dateLabel ?? link.textContent;
         pill.appendChild(link);
+        if (token.time) pill.appendChild(document.createTextNode(` ${token.time}`));
       } else pill.textContent = token.label;
       range.insertNode(pill);
     }

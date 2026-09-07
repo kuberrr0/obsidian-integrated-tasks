@@ -11,6 +11,8 @@ export interface ParsedTaskMetadata {
 }
 
 export interface Task extends ParsedTaskMetadata {
+  /** Markdown bullets nested beneath this task, excluding child checklists. */
+  description?: string;
   id: string;
   path: string;
   line: number;
@@ -24,7 +26,7 @@ export interface Task extends ParsedTaskMetadata {
   childIds: string[];
 }
 
-export type ProjectProperties = Pick<ParsedTaskMetadata, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority"> & { endDate?: string };
+export type ProjectProperties = Pick<ParsedTaskMetadata, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "priority"> & { endDate?: string };
 
 export interface Project extends ProjectProperties {
   parent?: string;
@@ -68,6 +70,8 @@ export interface TaskQuery {
 }
 
 export interface TaskDraft extends ParsedTaskMetadata {
+  /** Additional canonical Markdown lines for a new task batch, relative to indent zero. */
+  additionalLines?: string[];
   completed: boolean;
   destination: string;
   indent: number;
@@ -75,6 +79,7 @@ export interface TaskDraft extends ParsedTaskMetadata {
 
 export interface TaskManagerSettings {
   taskMode: boolean;
+  wrapTaskTitles: boolean;
   inboxPath: string;
   tasksHeading: string;
   newTaskPosition: "top" | "bottom";
@@ -82,6 +87,7 @@ export interface TaskManagerSettings {
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
   taskMode: false,
+  wrapTaskTitles: true,
   inboxPath: "Inbox.md",
   tasksHeading: "Tasks",
   newTaskPosition: "top"

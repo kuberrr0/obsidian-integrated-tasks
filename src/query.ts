@@ -8,7 +8,7 @@ export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string
   if (query.sourcePath && task.path !== query.sourcePath) return false;
   if (query.projectPath && task.path !== query.projectPath) return false;
   if (query.priority && task.priority !== query.priority) return false;
-  if (query.search && !task.title.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
+  if (query.search && !`${task.title}\n${task.description ?? ""}`.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
 
   const today = todayIso(now);
   const date = actionDate(task);
@@ -31,12 +31,24 @@ export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string
   }
 }
 
+/** Date-only tasks precede timed tasks on the same day in ascending order. */
+function dateTimeValue(date?: string, time?: string): string | undefined {
+  return date ? `${date}T${time ?? ""}` : undefined;
+}
+
+function sortValue(task: Task, sort: TaskSort): string | number | undefined {
+  const scheduled = dateTimeValue(task.scheduledDate, task.scheduledTime);
+  const deadline = dateTimeValue(task.deadline, task.deadlineTime);
+  if (sort === "scheduledDate" || sort === "scheduledTime") return scheduled;
+  if (sort === "deadline" || sort === "deadlineTime") return deadline;
+  if (sort === "date") return scheduled && deadline ? (scheduled < deadline ? scheduled : deadline) : scheduled ?? deadline ?? "9999-12-31";
+  return propertyValue(task, sort);
+}
+
 export function sortTasks(tasks: Task[], sort: TaskSort = "date", descending = false): Task[] {
   return [...tasks].sort((left, right) => {
-    const leftDate = actionDate(left) ?? "9999-12-31";
-    const rightDate = actionDate(right) ?? "9999-12-31";
-    const leftValue = sort === "date" ? leftDate : propertyValue(left, sort);
-    const rightValue = sort === "date" ? rightDate : propertyValue(right, sort);
+    const leftValue = sortValue(left, sort);
+    const rightValue = sortValue(right, sort);
     if (leftValue === undefined || leftValue === "") return rightValue === undefined || rightValue === "" ? 0 : 1;
     if (rightValue === undefined || rightValue === "") return -1;
     const comparison = (typeof leftValue === "number" && typeof rightValue === "number"

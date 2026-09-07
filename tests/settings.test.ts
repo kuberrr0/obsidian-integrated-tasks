@@ -39,7 +39,7 @@ import { TaskManagerSettingTab } from "../src/settings";
 function setup() {
   rows.length = 0;
   const plugin = {
-    settings: { taskMode: false, inboxPath: "Tasks.md", newTaskPosition: "top" },
+    settings: { taskMode: false, wrapTaskTitles: false, inboxPath: "Tasks.md", newTaskPosition: "top" },
     saveSettings: vi.fn().mockResolvedValue(undefined),
     refreshViews: vi.fn(),
     setTaskMode: vi.fn().mockResolvedValue(undefined)
@@ -52,7 +52,7 @@ describe("settings compatibility", () => {
   it("provides searchable names and descriptions without rendering or saving during indexing", () => {
     const { tab, plugin } = setup();
     const definitions = tab.getSettingDefinitions();
-    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Inbox note", "New task position"]);
+    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Inbox note", "New task position", "Wrap task titles"]);
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();
@@ -87,5 +87,11 @@ describe("settings compatibility", () => {
     await position.change!("invalid");
     expect(plugin.settings.newTaskPosition).toBe("top");
     expect(plugin.saveSettings).toHaveBeenCalledTimes(4);
+    const wrap = rows.find(({ name }) => name === "Wrap task titles")!;
+    expect(wrap.value).toBe(false);
+    await wrap.change!(true);
+    expect(plugin.settings.wrapTaskTitles).toBe(true);
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(5);
+    expect(plugin.refreshViews).toHaveBeenCalledTimes(3);
   });
 });

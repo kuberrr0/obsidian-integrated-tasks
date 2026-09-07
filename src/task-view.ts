@@ -98,6 +98,7 @@ export class TaskMainView extends ItemView {
     container.empty();
     this.taskResults = undefined;
     container.addClass("tm-main-view");
+    container.classList.toggle("tm-wrap-task-titles", this.layout === "list" && this.plugin.settings.wrapTaskTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "projects" && !this.pagePath) {
@@ -256,6 +257,12 @@ export class TaskMainView extends ItemView {
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
   }
 
+  focusSearch(): void {
+    const input = this.containerEl.querySelector<HTMLInputElement>('.tm-filters input[type="search"]');
+    input?.focus();
+    input?.select();
+  }
+
   private renderFilters(container: HTMLElement): void {
     const filters = container.createDiv({ cls: "tm-filters" });
     const search = filters.createEl("input", { type: "search", attr: { placeholder: "Search tasks…", "aria-label": "Search tasks" } });
@@ -337,7 +344,9 @@ export class TaskMainView extends ItemView {
     const sort = iconButton("list-filter", `Sort: ${this.sort}`);
     sort.addEventListener("click", event => {
       const options = new Menu();
-      for (const property of [{ key: "date", label: "Action date" }, ...TASK_PROPERTIES]) {
+      for (const property of [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES
+        .filter(property => property.key !== "scheduledTime" && property.key !== "deadlineTime")
+        .map(property => ({ ...property, label: property.key === "scheduledDate" ? "Scheduled date and time" : property.key === "deadline" ? "Deadline date and time" : property.label }))]) {
         options.addItem(item => item.setTitle(property.label).setChecked(this.sort === property.key).onClick(() => {
           this.sort = property.key as TaskSort;
           sort.setAttribute("aria-label", `Sort: ${property.label}`);
@@ -539,12 +548,13 @@ export class TaskMainView extends ItemView {
     const content = row.createDiv({ cls: "tm-task-content" });
     const primary = content.createDiv({ cls: "tm-task-primary" });
     this.listDrag?.row(row, primary, task, target);
-    const title = primary.createEl("button", { cls: "tm-task-title", text: task.title });
+    const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
     title.addEventListener("click", () => this.plugin.openEditor({ ...this.state, task }));
     if (task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
+    if (task.description) content.createDiv({ cls: "tm-task-description", text: task.description });
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
     source.addEventListener("click", () => void this.openSource(task));
@@ -554,10 +564,10 @@ export class TaskMainView extends ItemView {
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
   }
 
-  private renderProperties(parent: HTMLElement, properties: ProjectProperties): void {
+  private renderProperties(parent: HTMLElement, properties: ProjectProperties | Task): void {
     if (properties.scheduledDate) this.badge(parent, "calendar-days", `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`);
     if (properties.deadline) this.badge(parent, "flag", `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : undefined);
-    if (properties.durationMinutes) this.badge(parent, "clock-3", formatDuration(properties.durationMinutes));
+    if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, "clock-3", formatDuration(properties.durationMinutes));
     if (properties.priority) this.badge(parent, "signal", `P${properties.priority}`, `p${properties.priority}`);
   }
 

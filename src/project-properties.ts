@@ -1,6 +1,5 @@
 import type { ProjectDateField } from "./gantt";
 import { formatDate, parseDateExpression } from "./date";
-import { durationToMinutes } from "./parser";
 import type { Priority, ProjectProperties } from "./types";
 
 /** Normalize note properties to the same display values used by tasks. */
@@ -18,17 +17,11 @@ export function parseProjectProperties(frontmatter: Record<string, unknown> | un
   };
   const rawPriority = scalar(values.get("priority"))?.toLowerCase();
   const priorities: Record<string, Priority> = { "1": 1, p1: 1, high: 1, "2": 2, p2: 2, medium: 2, "3": 3, p3: 3, low: 3 };
-  const rawDuration = scalar(values.get("duration"));
-  const minutes = rawDuration && /^\d+$/.test(rawDuration) ? Number(rawDuration) : undefined;
-  const durationMinutes = minutes !== undefined
-    ? (Number.isSafeInteger(minutes) && minutes > 0 ? minutes : undefined)
-    : durationToMinutes(rawDuration?.replace(/\s+/g, "") ?? "");
   return {
     scheduledDate: date(values.get("date") ?? values.get("startdate") ?? values.get("scheduleddate")),
     endDate: date(values.get("enddate")),
     deadline: date(values.get("deadline")),
-    priority: rawPriority && Object.prototype.hasOwnProperty.call(priorities, rawPriority) ? priorities[rawPriority] : undefined,
-    durationMinutes
+    priority: rawPriority && Object.prototype.hasOwnProperty.call(priorities, rawPriority) ? priorities[rawPriority] : undefined
   };
 }
 
@@ -43,8 +36,7 @@ export function addProjectProperties(frontmatter: Record<string, unknown>): void
     ["date", ["date", "startdate", "scheduleddate"]],
     ["end date", ["enddate"]],
     ["deadline", ["deadline"]],
-    ["priority", ["priority"]],
-    ["duration", ["duration"]]
+    ["priority", ["priority"]]
   ] as const) {
     if (!aliases.some((alias) => keys.has(alias))) frontmatter[name] = null;
   }

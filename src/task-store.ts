@@ -36,7 +36,7 @@ export class TaskStore {
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);
     const rootDraft = { ...draft, indent: 0 };
     await this.app.vault.process(file, (content) =>
-      insertIntoDestination(content, [serializeTask(rootDraft, this.getDateFormat())], heading, this.getNewTaskPosition())
+      insertIntoDestination(content, [serializeTask(rootDraft, this.getDateFormat()), ...(draft.additionalLines ?? [])], heading, this.getNewTaskPosition())
     );
   }
 

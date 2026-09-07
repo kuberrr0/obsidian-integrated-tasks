@@ -571,7 +571,7 @@ button.tm-source,
 .tm-note-token.is-p3 { color: var(--color-blue); }
 
 
-/* Live Preview pills wrap native text; they never replace date links. */
+/* Live Preview exposes the original date syntax when the caret enters a pill. */
 .tm-note-token-editor.tm-note-token-deadline::before { content: "Due "; }
 .tm-note-token-editor .tm-note-token-brace { display: none; }
 
@@ -909,3 +909,51 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-gantt-undated[hidden] { display: none; }
 
 .tm-global-task-mode { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 8px; cursor: pointer; }
+
+/* Distinguish pills from light note and card surfaces without changing their size. */
+.theme-light .tm-meta,
+.theme-light .tm-progress,
+.theme-light .tm-note-token {
+  background: color-mix(in srgb, var(--text-normal) 10%, var(--background-primary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 12%, transparent);
+}
+
+.tm-task-description {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tm-editor-description { margin-block: 8px; }
+
+.tm-editor-raw-help { margin-top: 6px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+
+/* Native buttons center flex content; block text keeps truncation at the end. */
+.tm-main-view button.tm-task-title {
+  display: block;
+  max-width: 100%;
+  text-align: left;
+}
+.tm-main-view:not(.is-kanban-view):not(.is-calendar-view) .tm-task-row:not(.tm-project-row) button.tm-task-title {
+  height: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tm-main-view.tm-wrap-task-titles:not(.is-kanban-view):not(.is-calendar-view) .tm-task-row:not(.tm-project-row) button.tm-task-title {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+/* Keep wrapped Kanban titles rectangular, independent of theme button rounding. */
+.tm-main-view .tm-kanban button.tm-task-title {
+  border-radius: 6px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  overflow: visible;
+  max-height: none;
+}

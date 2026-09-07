@@ -62,12 +62,12 @@ it("updates project property badges when note properties change or are removed",
   const { index, setProperties } = setup();
   await index.initialize();
   setProperties({ date: "2026-09-05", "end date": "2026-09-10", priority: "p2", duration: "1h30m" });
-  expect(index.projects()[0]).toMatchObject({ scheduledDate: "2026-09-05", endDate: "2026-09-10", deadline: undefined, priority: 2, durationMinutes: 90 });
+  expect(index.projects()[0]).toMatchObject({ scheduledDate: "2026-09-05", endDate: "2026-09-10", deadline: undefined, priority: 2 });
   setProperties({});
   expect(index.projects()[0].scheduledDate).toBeUndefined();
   expect(index.projects()[0].deadline).toBeUndefined();
   expect(index.projects()[0].priority).toBeUndefined();
-  expect(index.projects()[0].durationMinutes).toBeUndefined();
+  expect(index.projects()[0]).not.toHaveProperty("durationMinutes");
 });
 
 

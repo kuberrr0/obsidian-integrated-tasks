@@ -109,3 +109,46 @@ describe("shared task view controls", () => {
     expect(orderTaskTree([child, sibling])).toEqual([child, sibling]);
   });
 });
+
+
+it("searches description text case-insensitively", () => {
+  const described = task({ title: "Plan", description: "- Review the release budget" });
+  expect(taskMatchesQuery(described, { mode: "all", showCompleted: false, search: "BUDGET" }, "Inbox.md", now)).toBe(true);
+  expect(taskMatchesQuery(described, { mode: "all", showCompleted: false, search: "missing" }, "Inbox.md", now)).toBe(false);
+});
+
+
+describe("date and time sorting", () => {
+  it.each(["scheduledDate", "scheduledTime", "deadline", "deadlineTime", "date"] as const)("sorts %s by date first and then time in both directions", sort => {
+    const values = [
+      task({ id: "late", line: 0, priority: 1, scheduledDate: "2026-09-07", scheduledTime: "15:00", deadline: "2026-09-07", deadlineTime: "15:00" }),
+      task({ id: "tomorrow", line: 1, scheduledDate: "2026-09-08", scheduledTime: "01:00", deadline: "2026-09-08", deadlineTime: "01:00" }),
+      task({ id: "early", line: 2, priority: 3, scheduledDate: "2026-09-07", scheduledTime: "09:00", deadline: "2026-09-07", deadlineTime: "09:00" }),
+      task({ id: "all-day", line: 3, scheduledDate: "2026-09-07", deadline: "2026-09-07" })
+    ];
+    const expected = ["all-day", "early", "late", "tomorrow"];
+    expect(sortTasks(values, sort).map(task => task.id)).toEqual(expected);
+    expect(sortTasks(values, sort, true).map(task => task.id)).toEqual([...expected].reverse());
+  });
+  it("uses only the time belonging to the selected date property", () => {
+    const values = [
+      task({ id: "scheduled-first", scheduledDate: "2026-09-07", scheduledTime: "08:00", deadline: "2026-09-07", deadlineTime: "16:00" }),
+      task({ id: "deadline-first", scheduledDate: "2026-09-07", scheduledTime: "10:00", deadline: "2026-09-07", deadlineTime: "07:00" })
+    ];
+    expect(sortTasks(values, "scheduledDate").map(task => task.id)).toEqual(["scheduled-first", "deadline-first"]);
+    expect(sortTasks(values, "deadline").map(task => task.id)).toEqual(["deadline-first", "scheduled-first"]);
+    expect(sortTasks(values, "date").map(task => task.id)).toEqual(["deadline-first", "scheduled-first"]);
+  });
+  it("uses the earlier date's time for action sorting and groups by day", () => {
+    const values = [
+      task({ id: "later", scheduledDate: "2026-09-07", scheduledTime: "15:00", deadline: "2026-09-08", deadlineTime: "01:00" }),
+      task({ id: "earlier", scheduledDate: "2026-09-09", scheduledTime: "23:00", deadline: "2026-09-07", deadlineTime: "09:00" })
+    ];
+    expect([...groupByActionDate(values).entries()].map(([date, tasks]) => [date, tasks.map(task => task.id)])).toEqual([["2026-09-07", ["earlier", "later"]]]);
+  });
+  it.each(["scheduledDate", "deadline"] as const)("keeps missing %s values last in both directions", sort => {
+    const values = [task({ id: "missing" }), task({ id: "dated", [sort]: "2026-09-07" })];
+    expect(sortTasks(values, sort).map(task => task.id)).toEqual(["dated", "missing"]);
+    expect(sortTasks(values, sort, true).map(task => task.id)).toEqual(["dated", "missing"]);
+  });
+});

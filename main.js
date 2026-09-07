@@ -3009,6 +3009,87 @@ function formatDateTime(date, time, dateFormat) {
   return `${formatDate(date, dateFormat)}${time ? ` ${time}` : ""}`;
 }
 
+// src/project-properties.ts
+function parseProjectProperties(frontmatter, dateFormat) {
+  var _a, _b, _c;
+  const values = new Map(Object.entries(frontmatter != null ? frontmatter : {}).map(([key, value]) => [key.toLowerCase().replace(/[\s_-]/g, ""), value]));
+  const scalar = (value) => {
+    if (Array.isArray(value) && value.length === 1) value = value[0];
+    return typeof value === "string" || typeof value === "number" ? String(value).trim() : void 0;
+  };
+  const date = (value) => {
+    var _a2;
+    const text = scalar(value);
+    if (!text) return void 0;
+    const link = /^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/.exec(text);
+    return parseDateExpression((_a2 = link == null ? void 0 : link[1]) != null ? _a2 : text, /* @__PURE__ */ new Date(), dateFormat);
+  };
+  const rawPriority = (_a = scalar(values.get("priority"))) == null ? void 0 : _a.toLowerCase();
+  const priorities = { "1": 1, p1: 1, high: 1, "2": 2, p2: 2, medium: 2, "3": 3, p3: 3, low: 3 };
+  return {
+    scheduledDate: date((_c = (_b = values.get("date")) != null ? _b : values.get("startdate")) != null ? _c : values.get("scheduleddate")),
+    endDate: date(values.get("enddate")),
+    deadline: date(values.get("deadline")),
+    priority: rawPriority && Object.prototype.hasOwnProperty.call(priorities, rawPriority) ? priorities[rawPriority] : void 0
+  };
+}
+function addProjectProperties(frontmatter) {
+  const rawTags = frontmatter.tags;
+  const tags = Array.isArray(rawTags) ? [...rawTags] : typeof rawTags === "string" ? rawTags.split(/[,\s]+/).filter(Boolean) : [];
+  if (!tags.some((tag) => typeof tag === "string" && /^#?project(?:\/|$)/.test(tag))) tags.push("project");
+  frontmatter.tags = tags;
+  const keys = new Set(Object.keys(frontmatter).map((key) => key.toLowerCase().replace(/[\s_-]/g, "")));
+  for (const [name, aliases] of [
+    ["date", ["date", "startdate", "scheduleddate"]],
+    ["end date", ["enddate"]],
+    ["deadline", ["deadline"]],
+    ["priority", ["priority"]]
+  ]) {
+    if (!aliases.some((alias) => keys.has(alias))) frontmatter[name] = null;
+  }
+}
+function parseProjectParent(frontmatter) {
+  var _a, _b;
+  let value = (_a = Object.entries(frontmatter != null ? frontmatter : {}).find(([key]) => key.trim().toLowerCase() === "parent")) == null ? void 0 : _a[1];
+  if (Array.isArray(value)) value = value.length === 1 ? value[0] : void 0;
+  if (typeof value !== "string") return void 0;
+  const text = value.trim();
+  const link = /^\[\[([^\]]+)\]\]$/.exec(text);
+  const path = ((_b = link == null ? void 0 : link[1]) != null ? _b : text).split(/[|#]/, 1)[0].trim();
+  return path && !/[\r\n\[\]]/.test(path) ? path : void 0;
+}
+function updateProjectDate(frontmatter, field2, value, expected, dateFormat) {
+  var _a, _b, _c;
+  if (!parseDateExpression(value)) throw new Error("Invalid project date.");
+  const current = parseProjectProperties(frontmatter, dateFormat);
+  for (const key2 of ["scheduledDate", "endDate", "deadline"]) {
+    if (current[key2] !== expected[key2]) throw new Error("Project dates changed while dragging. Refresh and try again.");
+  }
+  const aliases = field2 === "scheduledDate" ? ["date", "startdate", "scheduleddate"] : field2 === "endDate" ? ["enddate"] : ["deadline"];
+  const keys = Object.keys(frontmatter);
+  const matches = aliases.map((alias) => keys.find((key2) => key2.toLowerCase().replace(/[\s_-]/g, "") === alias)).filter((key2) => Boolean(key2));
+  const key = (_b = (_a = matches.find((key2) => frontmatter[key2] !== null && frontmatter[key2] !== void 0)) != null ? _a : matches[0]) != null ? _b : field2 === "scheduledDate" ? "date" : field2 === "endDate" ? "end date" : "deadline";
+  const original = frontmatter[key];
+  const raw = Array.isArray(original) ? original[0] : original;
+  const link = typeof raw === "string" ? /^\[\[[^\]|]+(\|[^\]]*)?\]\]$/.exec(raw.trim()) : void 0;
+  const formatted = link ? `[[${formatDate(value, dateFormat)}${(_c = link[1]) != null ? _c : ""}]]` : value;
+  frontmatter[key] = Array.isArray(original) && original.length === 1 ? [formatted] : formatted;
+}
+function updateProjectDates(frontmatter, changes, expected, dateFormat) {
+  const next = { ...frontmatter };
+  let snapshot = expected;
+  for (const field2 of ["scheduledDate", "endDate", "deadline"]) {
+    const value = changes[field2];
+    if (value === void 0) continue;
+    updateProjectDate(next, field2, value, snapshot, dateFormat);
+    snapshot = parseProjectProperties(next, dateFormat);
+  }
+  Object.assign(frontmatter, next);
+}
+
+// src/gantt-view.ts
+var import_obsidian2 = require("obsidian");
+
 // src/structure.ts
 function bodyLines(content) {
   var _a, _b;
@@ -3064,274 +3145,6 @@ function splitDestination(value) {
 function destinationString(path, heading) {
   return `${path}${heading ? `#${heading}` : ""}`;
 }
-
-// src/parser.ts
-var CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
-var PRIORITY = /(?:^|\s)p([123])\s*$/i;
-var DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
-var SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
-var DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
-var DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
-function normalizeDestination(value) {
-  try {
-    const { path, heading } = splitDestination(value);
-    return destinationString(path, heading);
-  } catch (e) {
-    return void 0;
-  }
-}
-function indentWidth(value) {
-  return [...value].reduce((total, character) => total + (character === "	" ? 4 : 1), 0);
-}
-function durationToMinutes(value) {
-  var _a, _b;
-  if (!value || !/^((\d+)h)?((\d+)m)?$/i.test(value)) return void 0;
-  const hours = (_a = /([0-9]+)h/i.exec(value)) == null ? void 0 : _a[1];
-  const minutes = (_b = /([0-9]+)m/i.exec(value)) == null ? void 0 : _b[1];
-  const total = Number(hours != null ? hours : 0) * 60 + Number(minutes != null ? minutes : 0);
-  return total > 0 ? total : void 0;
-}
-function formatDuration(minutes) {
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return `${hours ? `${hours}h` : ""}${remainder ? `${remainder}m` : ""}`;
-}
-function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat, naturalDates = false, tokenRanges) {
-  const checkbox = CHECKBOX.exec(line);
-  if (!checkbox) return void 0;
-  let remainder = checkbox[3].trimEnd();
-  const metadata = {};
-  const consumed = /* @__PURE__ */ new Set();
-  const recordToken = (kind, match) => {
-    const offset = line.length - checkbox[3].length;
-    tokenRanges == null ? void 0 : tokenRanges.push({ kind, from: offset + match.index + match[0].search(/\S/), to: offset + remainder.trimEnd().length });
-  };
-  for (; ; ) {
-    let match;
-    let changed = false;
-    if (!consumed.has("destination") && (match = DESTINATION.exec(remainder))) {
-      const destination = normalizeDestination(match[1]);
-      if (destination) {
-        metadata.destination = destination;
-        remainder = remainder.slice(0, match.index).trimEnd();
-        consumed.add("destination");
-        changed = true;
-      }
-    } else if (!consumed.has("priority") && (match = PRIORITY.exec(remainder))) {
-      metadata.priority = Number(match[1]);
-      recordToken("priority", match);
-      remainder = remainder.slice(0, match.index).trimEnd();
-      consumed.add("priority");
-      changed = true;
-    } else if (!consumed.has("deadline") && (match = DEADLINE.exec(remainder))) {
-      const date = parseDateTimeExpression(match[1], reference, dateFormat);
-      if (date) {
-        metadata.deadline = date.date;
-        if (date.time) metadata.deadlineTime = date.time;
-        recordToken("deadline", match);
-        remainder = remainder.slice(0, match.index).trimEnd();
-        consumed.add("deadline");
-        changed = true;
-      }
-    } else if (!consumed.has("duration") && (match = DURATION.exec(remainder))) {
-      const minutes = durationToMinutes(match[1]);
-      if (minutes) {
-        metadata.durationMinutes = minutes;
-        recordToken("durationMinutes", match);
-        remainder = remainder.slice(0, match.index).trimEnd();
-        consumed.add("duration");
-        changed = true;
-      }
-    } else if (!consumed.has("scheduled") && (match = SCHEDULED.exec(remainder))) {
-      const date = parseDateTimeExpression(match[1], reference, dateFormat);
-      if (date) {
-        metadata.scheduledDate = date.date;
-        if (date.time) metadata.scheduledTime = date.time;
-        recordToken("scheduledDate", match);
-        remainder = remainder.slice(0, match.index).trimEnd();
-        consumed.add("scheduled");
-        changed = true;
-      }
-    }
-    if (!changed && naturalDates && !consumed.has("deadline")) {
-      const date = findInputDeadline(remainder, reference, dateFormat);
-      if (date) {
-        metadata.deadline = date.date;
-        if (date.time) metadata.deadlineTime = date.time;
-        remainder = `${remainder.slice(0, date.index)} ${remainder.slice(date.index + date.text.length)}`.replace(/ {2,}/g, " ").trim();
-        consumed.add("deadline");
-        changed = true;
-      }
-    }
-    if (!changed && naturalDates && !consumed.has("scheduled")) {
-      const date = findInputDate(remainder, reference);
-      if (date) {
-        metadata.scheduledDate = date.date;
-        if (date.time) metadata.scheduledTime = date.time;
-        remainder = `${remainder.slice(0, date.index)}${remainder.slice(date.index + date.text.length)}`.replace(/ {2,}/g, " ").trim();
-        consumed.add("scheduled");
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-  return {
-    title: remainder.trim(),
-    indent: indentWidth(checkbox[1]),
-    completed: checkbox[2].toLowerCase() === "x",
-    ...metadata
-  };
-}
-function parseTaskInput(input, reference = /* @__PURE__ */ new Date(), dateFormat, naturalDates = true) {
-  const normalized = /^\s*-\s+\[[ xX]\]\s+/.test(input) ? input : `- [ ] ${input}`;
-  return parseTaskLine(normalized, reference, dateFormat, naturalDates);
-}
-function serializeTask(draft, dateFormat) {
-  const indent = " ".repeat(Math.max(0, draft.indent));
-  const title = draft.title.trim();
-  const metadata = [
-    draft.scheduledDate ? `[[${formatDate(draft.scheduledDate, dateFormat)}]]${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
-    draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
-    draft.deadline ? `{[[${formatDate(draft.deadline, dateFormat)}]]${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
-    draft.priority ? `p${draft.priority}` : ""
-  ].filter(Boolean);
-  const metadataGap = metadata.length ? " " : "";
-  return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
-}
-function serializeTaskInput(draft, dateFormat) {
-  const { path, heading } = splitDestination(draft.destination);
-  const destination = destinationString(path.replace(/\.md$/i, ""), heading);
-  return `${serializeTask(draft, dateFormat)} ~[[${destination}]]`;
-}
-function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFormat) {
-  const tasks = [];
-  const stack = [];
-  const headings = new Map(scanHeadings(content).map((heading) => [heading.line, heading]));
-  let section;
-  for (const { text: line, line: lineNumber } of bodyLines(content)) {
-    const heading = headings.get(lineNumber);
-    if (heading) {
-      section = heading;
-      stack.length = 0;
-    }
-    const parsed = parseTaskLine(line, reference, dateFormat);
-    if (!parsed) continue;
-    while (stack.length && stack[stack.length - 1].indent >= parsed.indent) stack.pop();
-    const parent = stack[stack.length - 1];
-    const task = {
-      id: `${path}:${lineNumber}`,
-      path,
-      line: lineNumber,
-      endLine: lineNumber,
-      raw: line,
-      section: section == null ? void 0 : section.name,
-      sectionLine: section == null ? void 0 : section.line,
-      childIds: [],
-      parentId: parent == null ? void 0 : parent.id,
-      ...parsed
-    };
-    parent == null ? void 0 : parent.childIds.push(task.id);
-    tasks.push(task);
-    stack.push(task);
-  }
-  for (let index = 0; index < tasks.length; index += 1) {
-    const task = tasks[index];
-    let endLine = task.line;
-    for (let candidateIndex = index + 1; candidateIndex < tasks.length; candidateIndex += 1) {
-      const candidate = tasks[candidateIndex];
-      if (candidate.sectionLine !== task.sectionLine || candidate.indent <= task.indent) break;
-      endLine = candidate.line;
-    }
-    task.endLine = endLine;
-  }
-  return tasks;
-}
-
-// src/project-properties.ts
-function parseProjectProperties(frontmatter, dateFormat) {
-  var _a, _b, _c, _d;
-  const values = new Map(Object.entries(frontmatter != null ? frontmatter : {}).map(([key, value]) => [key.toLowerCase().replace(/[\s_-]/g, ""), value]));
-  const scalar = (value) => {
-    if (Array.isArray(value) && value.length === 1) value = value[0];
-    return typeof value === "string" || typeof value === "number" ? String(value).trim() : void 0;
-  };
-  const date = (value) => {
-    var _a2;
-    const text = scalar(value);
-    if (!text) return void 0;
-    const link = /^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/.exec(text);
-    return parseDateExpression((_a2 = link == null ? void 0 : link[1]) != null ? _a2 : text, /* @__PURE__ */ new Date(), dateFormat);
-  };
-  const rawPriority = (_a = scalar(values.get("priority"))) == null ? void 0 : _a.toLowerCase();
-  const priorities = { "1": 1, p1: 1, high: 1, "2": 2, p2: 2, medium: 2, "3": 3, p3: 3, low: 3 };
-  const rawDuration = scalar(values.get("duration"));
-  const minutes = rawDuration && /^\d+$/.test(rawDuration) ? Number(rawDuration) : void 0;
-  const durationMinutes = minutes !== void 0 ? Number.isSafeInteger(minutes) && minutes > 0 ? minutes : void 0 : durationToMinutes((_b = rawDuration == null ? void 0 : rawDuration.replace(/\s+/g, "")) != null ? _b : "");
-  return {
-    scheduledDate: date((_d = (_c = values.get("date")) != null ? _c : values.get("startdate")) != null ? _d : values.get("scheduleddate")),
-    endDate: date(values.get("enddate")),
-    deadline: date(values.get("deadline")),
-    priority: rawPriority && Object.prototype.hasOwnProperty.call(priorities, rawPriority) ? priorities[rawPriority] : void 0,
-    durationMinutes
-  };
-}
-function addProjectProperties(frontmatter) {
-  const rawTags = frontmatter.tags;
-  const tags = Array.isArray(rawTags) ? [...rawTags] : typeof rawTags === "string" ? rawTags.split(/[,\s]+/).filter(Boolean) : [];
-  if (!tags.some((tag) => typeof tag === "string" && /^#?project(?:\/|$)/.test(tag))) tags.push("project");
-  frontmatter.tags = tags;
-  const keys = new Set(Object.keys(frontmatter).map((key) => key.toLowerCase().replace(/[\s_-]/g, "")));
-  for (const [name, aliases] of [
-    ["date", ["date", "startdate", "scheduleddate"]],
-    ["end date", ["enddate"]],
-    ["deadline", ["deadline"]],
-    ["priority", ["priority"]],
-    ["duration", ["duration"]]
-  ]) {
-    if (!aliases.some((alias) => keys.has(alias))) frontmatter[name] = null;
-  }
-}
-function parseProjectParent(frontmatter) {
-  var _a, _b;
-  let value = (_a = Object.entries(frontmatter != null ? frontmatter : {}).find(([key]) => key.trim().toLowerCase() === "parent")) == null ? void 0 : _a[1];
-  if (Array.isArray(value)) value = value.length === 1 ? value[0] : void 0;
-  if (typeof value !== "string") return void 0;
-  const text = value.trim();
-  const link = /^\[\[([^\]]+)\]\]$/.exec(text);
-  const path = ((_b = link == null ? void 0 : link[1]) != null ? _b : text).split(/[|#]/, 1)[0].trim();
-  return path && !/[\r\n\[\]]/.test(path) ? path : void 0;
-}
-function updateProjectDate(frontmatter, field2, value, expected, dateFormat) {
-  var _a, _b, _c;
-  if (!parseDateExpression(value)) throw new Error("Invalid project date.");
-  const current = parseProjectProperties(frontmatter, dateFormat);
-  for (const key2 of ["scheduledDate", "endDate", "deadline"]) {
-    if (current[key2] !== expected[key2]) throw new Error("Project dates changed while dragging. Refresh and try again.");
-  }
-  const aliases = field2 === "scheduledDate" ? ["date", "startdate", "scheduleddate"] : field2 === "endDate" ? ["enddate"] : ["deadline"];
-  const keys = Object.keys(frontmatter);
-  const matches = aliases.map((alias) => keys.find((key2) => key2.toLowerCase().replace(/[\s_-]/g, "") === alias)).filter((key2) => Boolean(key2));
-  const key = (_b = (_a = matches.find((key2) => frontmatter[key2] !== null && frontmatter[key2] !== void 0)) != null ? _a : matches[0]) != null ? _b : field2 === "scheduledDate" ? "date" : field2 === "endDate" ? "end date" : "deadline";
-  const original = frontmatter[key];
-  const raw = Array.isArray(original) ? original[0] : original;
-  const link = typeof raw === "string" ? /^\[\[[^\]|]+(\|[^\]]*)?\]\]$/.exec(raw.trim()) : void 0;
-  const formatted = link ? `[[${formatDate(value, dateFormat)}${(_c = link[1]) != null ? _c : ""}]]` : value;
-  frontmatter[key] = Array.isArray(original) && original.length === 1 ? [formatted] : formatted;
-}
-function updateProjectDates(frontmatter, changes, expected, dateFormat) {
-  const next = { ...frontmatter };
-  let snapshot = expected;
-  for (const field2 of ["scheduledDate", "endDate", "deadline"]) {
-    const value = changes[field2];
-    if (value === void 0) continue;
-    updateProjectDate(next, field2, value, snapshot, dateFormat);
-    snapshot = parseProjectProperties(next, dateFormat);
-  }
-  Object.assign(frontmatter, next);
-}
-
-// src/gantt-view.ts
-var import_obsidian2 = require("obsidian");
 
 // src/calendar.ts
 var SLOT_MINUTES = 15;
@@ -3479,7 +3292,7 @@ function ganttSelection(first, last) {
 // src/gantt-view.ts
 function renderGantt(container, options) {
   const root = container.createDiv({ cls: "tm-gantt" });
-  const { days, width } = GANTT_ZOOMS[options.zoom];
+  const { days, width: width2 } = GANTT_ZOOMS[options.zoom];
   const start = options.anchor;
   const end = addDays(start, days - 1);
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
@@ -3502,8 +3315,8 @@ function renderGantt(container, options) {
   zoom.value = options.zoom;
   zoom.addEventListener("change", () => options.navigate(start, zoom.value));
   const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline" } });
-  scroll.style.setProperty("--tm-gantt-width", `${days * width}px`);
-  scroll.style.setProperty("--tm-gantt-day", `${width}px`);
+  scroll.style.setProperty("--tm-gantt-width", `${days * width2}px`);
+  scroll.style.setProperty("--tm-gantt-day", `${width2}px`);
   const header = scroll.createDiv({ cls: "tm-gantt-row tm-gantt-header" });
   header.createDiv({ cls: "tm-gantt-label", text: "Project" });
   const dates = header.createDiv({ cls: "tm-gantt-dates" });
@@ -3547,7 +3360,7 @@ function renderGantt(container, options) {
     const todayOffset = daysBetween(start, todayIso());
     if (todayOffset >= 0 && todayOffset < days) {
       const marker = track.createSpan({ cls: "tm-gantt-today" });
-      marker.style.left = `${todayOffset * width}px`;
+      marker.style.left = `${todayOffset * width2}px`;
     }
     const range = ganttRange(project);
     if (!range && !project.scheduledDate && !project.endDate && !project.deadline) {
@@ -3559,12 +3372,12 @@ function renderGantt(container, options) {
       let pointer;
       let first2 = "";
       let last = "";
-      const dateAt = (event) => ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width, days);
+      const dateAt = (event) => ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width2, days);
       const paintSelection = () => {
         const dates2 = ganttSelection(first2, last);
         selection.hidden = false;
-        selection.style.left = `${daysBetween(start, dates2.scheduledDate) * width + 2}px`;
-        selection.style.width = `${(daysBetween(dates2.scheduledDate, dates2.endDate) + 1) * width - 4}px`;
+        selection.style.left = `${daysBetween(start, dates2.scheduledDate) * width2 + 2}px`;
+        selection.style.width = `${(daysBetween(dates2.scheduledDate, dates2.endDate) + 1) * width2 - 4}px`;
         selection.setText(`${formatDate(dates2.scheduledDate, options.dateFormat)} \u2013 ${formatDate(dates2.endDate, options.dateFormat)}`);
       };
       const resetSelection = () => {
@@ -3613,7 +3426,7 @@ function renderGantt(container, options) {
         options.open(project);
         return;
       }
-      const clicked = ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width, days);
+      const clicked = ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width2, days);
       const date = clicked < range.start ? range.start : clicked > range.end ? range.end : clicked;
       void persist(project, { endDate: date }, true);
     });
@@ -3633,14 +3446,14 @@ function renderGantt(container, options) {
       const to = daysBetween(start, span.end) + 1;
       bar.hidden = to <= 0 || from >= days;
       jump.hidden = !bar.hidden;
-      bar.style.left = `${Math.max(0, from) * width + 2}px`;
-      bar.style.width = `${Math.max(8, (Math.min(days, to) - Math.max(0, from)) * width - 4)}px`;
+      bar.style.left = `${Math.max(0, from) * width2 + 2}px`;
+      bar.style.width = `${Math.max(8, (Math.min(days, to) - Math.max(0, from)) * width2 - 4)}px`;
       bar.setAttribute("title", `${project.name}: ${formatDate(span.start, options.dateFormat)} \u2013 ${formatDate(span.end, options.dateFormat)} (${span.finishField === "deadline" ? "deadline" : "end date"})`);
       for (const [handle, button] of handles) {
         const date = candidate[fieldFor(handle)];
         const offset = daysBetween(start, date);
         button.hidden = offset < 0 || offset >= days;
-        button.style.left = `${offset * width + (handle === "finish" ? width - 10 : handle === "end" ? width / 2 - 6 : 2)}px`;
+        button.style.left = `${offset * width2 + (handle === "finish" ? width2 - 10 : handle === "end" ? width2 / 2 - 6 : 2)}px`;
         button.setAttribute("title", `${handle === "start" ? "Start" : fieldFor(handle) === "deadline" ? "Deadline" : "End"}: ${formatDate(date, options.dateFormat)} \u2014 drag or use arrow keys`);
       }
     };
@@ -3673,7 +3486,7 @@ function renderGantt(container, options) {
       });
       button.addEventListener("pointermove", (event) => {
         if (pointer !== event.pointerId) return;
-        delta = Math.round((event.clientX - origin) / width);
+        delta = Math.round((event.clientX - origin) / width2);
         const { field: field2, value } = resizeProjectDate(project, handle, delta);
         paint({ ...project, [field2]: value });
         row.addClass("is-resizing");
@@ -3698,6 +3511,214 @@ function renderGantt(container, options) {
       });
     }
   }
+}
+
+// src/parser.ts
+var CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
+var PRIORITY = /(?:^|\s)p([123])\s*$/i;
+var DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
+var SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
+var DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
+var DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
+function normalizeDestination(value) {
+  try {
+    const { path, heading } = splitDestination(value);
+    return destinationString(path, heading);
+  } catch (e) {
+    return void 0;
+  }
+}
+function indentWidth(value) {
+  return [...value].reduce((total, character) => total + (character === "	" ? 4 : 1), 0);
+}
+function durationToMinutes(value) {
+  var _a, _b;
+  if (!value || !/^((\d+)h)?((\d+)m)?$/i.test(value)) return void 0;
+  const hours = (_a = /([0-9]+)h/i.exec(value)) == null ? void 0 : _a[1];
+  const minutes = (_b = /([0-9]+)m/i.exec(value)) == null ? void 0 : _b[1];
+  const total = Number(hours != null ? hours : 0) * 60 + Number(minutes != null ? minutes : 0);
+  return total > 0 ? total : void 0;
+}
+function formatDuration(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${hours ? `${hours}h` : ""}${remainder ? `${remainder}m` : ""}`;
+}
+function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat, naturalDates = false, tokenRanges) {
+  const checkbox = CHECKBOX.exec(line);
+  if (!checkbox) return void 0;
+  let remainder = checkbox[3].trimEnd();
+  const metadata = {};
+  const consumed = /* @__PURE__ */ new Set();
+  const recordToken = (kind, match) => {
+    const offset = line.length - checkbox[3].length;
+    tokenRanges == null ? void 0 : tokenRanges.push({ kind, from: offset + match.index + match[0].search(/\S/), to: offset + remainder.trimEnd().length });
+  };
+  for (; ; ) {
+    let match;
+    let changed = false;
+    if (!consumed.has("destination") && (match = DESTINATION.exec(remainder))) {
+      const destination = normalizeDestination(match[1]);
+      if (destination) {
+        metadata.destination = destination;
+        remainder = remainder.slice(0, match.index).trimEnd();
+        consumed.add("destination");
+        changed = true;
+      }
+    } else if (!consumed.has("priority") && (match = PRIORITY.exec(remainder))) {
+      metadata.priority = Number(match[1]);
+      recordToken("priority", match);
+      remainder = remainder.slice(0, match.index).trimEnd();
+      consumed.add("priority");
+      changed = true;
+    } else if (!consumed.has("deadline") && (match = DEADLINE.exec(remainder))) {
+      const date = parseDateTimeExpression(match[1], reference, dateFormat);
+      if (date) {
+        metadata.deadline = date.date;
+        if (date.time) metadata.deadlineTime = date.time;
+        recordToken("deadline", match);
+        remainder = remainder.slice(0, match.index).trimEnd();
+        consumed.add("deadline");
+        changed = true;
+      }
+    } else if (!consumed.has("duration") && (match = DURATION.exec(remainder))) {
+      const minutes = durationToMinutes(match[1]);
+      if (minutes) {
+        metadata.durationMinutes = minutes;
+        recordToken("durationMinutes", match);
+        remainder = remainder.slice(0, match.index).trimEnd();
+        consumed.add("duration");
+        changed = true;
+      }
+    } else if (!consumed.has("scheduled") && (match = SCHEDULED.exec(remainder))) {
+      const date = parseDateTimeExpression(match[1], reference, dateFormat);
+      if (date) {
+        metadata.scheduledDate = date.date;
+        if (date.time) metadata.scheduledTime = date.time;
+        recordToken("scheduledDate", match);
+        remainder = remainder.slice(0, match.index).trimEnd();
+        consumed.add("scheduled");
+        changed = true;
+      }
+    }
+    if (!changed && naturalDates && !consumed.has("deadline")) {
+      const date = findInputDeadline(remainder, reference, dateFormat);
+      if (date) {
+        metadata.deadline = date.date;
+        if (date.time) metadata.deadlineTime = date.time;
+        remainder = `${remainder.slice(0, date.index)} ${remainder.slice(date.index + date.text.length)}`.replace(/ {2,}/g, " ").trim();
+        consumed.add("deadline");
+        changed = true;
+      }
+    }
+    if (!changed && naturalDates && !consumed.has("scheduled")) {
+      const date = findInputDate(remainder, reference);
+      if (date) {
+        metadata.scheduledDate = date.date;
+        if (date.time) metadata.scheduledTime = date.time;
+        remainder = `${remainder.slice(0, date.index)}${remainder.slice(date.index + date.text.length)}`.replace(/ {2,}/g, " ").trim();
+        consumed.add("scheduled");
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return {
+    title: remainder.trim(),
+    indent: indentWidth(checkbox[1]),
+    completed: checkbox[2].toLowerCase() === "x",
+    ...metadata
+  };
+}
+function parseTaskInput(input, reference = /* @__PURE__ */ new Date(), dateFormat, naturalDates = true) {
+  const normalized = /^\s*-\s+\[[ xX]\]\s+/.test(input) ? input : `- [ ] ${input}`;
+  return parseTaskLine(normalized, reference, dateFormat, naturalDates);
+}
+function serializeTask(draft, dateFormat) {
+  const indent = " ".repeat(Math.max(0, draft.indent));
+  const title = draft.title.trim();
+  const metadata = [
+    draft.scheduledDate ? `[[${formatDate(draft.scheduledDate, dateFormat)}]]${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
+    draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
+    draft.deadline ? `{[[${formatDate(draft.deadline, dateFormat)}]]${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
+    draft.priority ? `p${draft.priority}` : ""
+  ].filter(Boolean);
+  const metadataGap = metadata.length ? " " : "";
+  return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
+}
+function serializeTaskInput(draft, dateFormat) {
+  const { path, heading } = splitDestination(draft.destination);
+  const destination = destinationString(path.replace(/\.md$/i, ""), heading);
+  return `${serializeTask(draft, dateFormat)} ~[[${destination}]]`;
+}
+function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFormat) {
+  var _a, _b;
+  const tasks = [];
+  const stack = [];
+  const descriptions = /* @__PURE__ */ new Map();
+  const headings = new Map(scanHeadings(content).map((heading) => [heading.line, heading]));
+  let section;
+  for (const { text: line, line: lineNumber } of bodyLines(content)) {
+    const heading = headings.get(lineNumber);
+    if (heading) {
+      section = heading;
+      stack.length = 0;
+    }
+    const parsed = parseTaskLine(line, reference, dateFormat);
+    if (!parsed) {
+      if (!line.trim()) continue;
+      const indent = indentWidth((_b = (_a = /^[ \t]*/.exec(line)) == null ? void 0 : _a[0]) != null ? _b : "");
+      while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
+      const owner = stack[stack.length - 1];
+      if (!owner) continue;
+      const marker = /^[ \t]*[-+*][ \t]+(.*)$/.exec(line);
+      if (marker && /^\[[^\]]\](?:\s|$)/.test(marker[1])) continue;
+      const bullet = Boolean(marker);
+      const description = descriptions.get(owner);
+      if (bullet || description && indent > description.bulletIndent) {
+        const entry = description != null ? description : { lines: [], bulletIndent: indent };
+        entry.lines.push(" ".repeat(indent) + line.trimStart());
+        if (bullet) entry.bulletIndent = indent;
+        descriptions.set(owner, entry);
+      }
+      continue;
+    }
+    while (stack.length && stack[stack.length - 1].indent >= parsed.indent) stack.pop();
+    const parent = stack[stack.length - 1];
+    const task = {
+      id: `${path}:${lineNumber}`,
+      path,
+      line: lineNumber,
+      endLine: lineNumber,
+      raw: line,
+      section: section == null ? void 0 : section.name,
+      sectionLine: section == null ? void 0 : section.line,
+      childIds: [],
+      parentId: parent == null ? void 0 : parent.id,
+      ...parsed
+    };
+    parent == null ? void 0 : parent.childIds.push(task.id);
+    tasks.push(task);
+    stack.push(task);
+  }
+  for (const [task, { lines }] of descriptions) {
+    const margin = Math.min(...lines.map((line) => {
+      var _a2, _b2;
+      return indentWidth((_b2 = (_a2 = /^[ ]*/.exec(line)) == null ? void 0 : _a2[0]) != null ? _b2 : "");
+    }));
+    task.description = lines.map((line) => line.slice(margin)).join("\n");
+  }
+  for (let index = 0; index < tasks.length; index += 1) {
+    const task = tasks[index];
+    let endLine = task.line;
+    for (let candidateIndex = index + 1; candidateIndex < tasks.length; candidateIndex += 1) {
+      const candidate = tasks[candidateIndex];
+      if (candidate.sectionLine !== task.sectionLine || candidate.indent <= task.indent) break;
+      endLine = candidate.line;
+    }
+    task.endLine = endLine;
+  }
+  return tasks;
 }
 
 // src/task-properties.ts
@@ -3752,13 +3773,14 @@ function matchesFilter(task, filter) {
 
 // src/query.ts
 function taskMatchesQuery(task, query, inboxPath, now2 = /* @__PURE__ */ new Date()) {
-  var _a, _b;
+  var _a, _b, _c;
   if ((_a = query.filters) == null ? void 0 : _a.some((filter) => !matchesFilter(task, filter))) return false;
   if (!query.showCompleted && !((_b = query.filters) == null ? void 0 : _b.some((filter) => filter.property === "status")) && task.completed) return false;
   if (query.sourcePath && task.path !== query.sourcePath) return false;
   if (query.projectPath && task.path !== query.projectPath) return false;
   if (query.priority && task.priority !== query.priority) return false;
-  if (query.search && !task.title.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
+  if (query.search && !`${task.title}
+${(_c = task.description) != null ? _c : ""}`.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
   const today2 = todayIso(now2);
   const date = actionDate(task);
   if (query.dateFilter === "dated" && !date) return false;
@@ -3779,16 +3801,26 @@ function taskMatchesQuery(task, query, inboxPath, now2 = /* @__PURE__ */ new Dat
       return true;
   }
 }
+function dateTimeValue(date, time) {
+  return date ? `${date}T${time != null ? time : ""}` : void 0;
+}
+function sortValue(task, sort) {
+  var _a;
+  const scheduled = dateTimeValue(task.scheduledDate, task.scheduledTime);
+  const deadline = dateTimeValue(task.deadline, task.deadlineTime);
+  if (sort === "scheduledDate" || sort === "scheduledTime") return scheduled;
+  if (sort === "deadline" || sort === "deadlineTime") return deadline;
+  if (sort === "date") return scheduled && deadline ? scheduled < deadline ? scheduled : deadline : (_a = scheduled != null ? scheduled : deadline) != null ? _a : "9999-12-31";
+  return propertyValue(task, sort);
+}
 function sortTasks(tasks, sort = "date", descending = false) {
   return [...tasks].sort((left, right) => {
-    var _a, _b, _c, _d;
-    const leftDate = (_a = actionDate(left)) != null ? _a : "9999-12-31";
-    const rightDate = (_b = actionDate(right)) != null ? _b : "9999-12-31";
-    const leftValue = sort === "date" ? leftDate : propertyValue(left, sort);
-    const rightValue = sort === "date" ? rightDate : propertyValue(right, sort);
+    var _a, _b;
+    const leftValue = sortValue(left, sort);
+    const rightValue = sortValue(right, sort);
     if (leftValue === void 0 || leftValue === "") return rightValue === void 0 || rightValue === "" ? 0 : 1;
     if (rightValue === void 0 || rightValue === "") return -1;
-    const comparison = (typeof leftValue === "number" && typeof rightValue === "number" ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue))) || (sort === "source" ? left.line - right.line : sort === "date" ? ((_c = left.priority) != null ? _c : 4) - ((_d = right.priority) != null ? _d : 4) : 0);
+    const comparison = (typeof leftValue === "number" && typeof rightValue === "number" ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue))) || (sort === "source" ? left.line - right.line : sort === "date" ? ((_a = left.priority) != null ? _a : 4) - ((_b = right.priority) != null ? _b : 4) : 0);
     return comparison * (descending ? -1 : 1) || left.path.localeCompare(right.path) || left.line - right.line;
   });
 }
@@ -4473,6 +4505,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     container.empty();
     this.taskResults = void 0;
     container.addClass("tm-main-view");
+    container.classList.toggle("tm-wrap-task-titles", this.layout === "list" && this.plugin.settings.wrapTaskTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "projects" && !this.pagePath) {
@@ -4642,6 +4675,11 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
   }
+  focusSearch() {
+    const input = this.containerEl.querySelector('.tm-filters input[type="search"]');
+    input == null ? void 0 : input.focus();
+    input == null ? void 0 : input.select();
+  }
   renderFilters(container) {
     var _a, _b;
     const filters = container.createDiv({ cls: "tm-filters" });
@@ -4745,7 +4783,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     const sort = iconButton("list-filter", `Sort: ${this.sort}`);
     sort.addEventListener("click", (event) => {
       const options = new import_obsidian5.Menu();
-      for (const property of [{ key: "date", label: "Action date" }, ...TASK_PROPERTIES]) {
+      for (const property of [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES.filter((property2) => property2.key !== "scheduledTime" && property2.key !== "deadlineTime").map((property2) => ({ ...property2, label: property2.key === "scheduledDate" ? "Scheduled date and time" : property2.key === "deadline" ? "Deadline date and time" : property2.label }))]) {
         options.addItem((item) => item.setTitle(property.label).setChecked(this.sort === property.key).onClick(() => {
           this.sort = property.key;
           sort.setAttribute("aria-label", `Sort: ${property.label}`);
@@ -4955,12 +4993,13 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     const content = row.createDiv({ cls: "tm-task-content" });
     const primary = content.createDiv({ cls: "tm-task-primary" });
     (_a = this.listDrag) == null ? void 0 : _a.row(row, primary, task, target);
-    const title = primary.createEl("button", { cls: "tm-task-title", text: task.title });
+    const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
     title.addEventListener("click", () => this.plugin.openEditor({ ...this.state, task }));
     if (task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child) => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
+    if (task.description) content.createDiv({ cls: "tm-task-description", text: task.description });
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
     source.addEventListener("click", () => void this.openSource(task));
@@ -4972,7 +5011,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
   renderProperties(parent, properties) {
     if (properties.scheduledDate) this.badge(parent, "calendar-days", `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`);
     if (properties.deadline) this.badge(parent, "flag", `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : void 0);
-    if (properties.durationMinutes) this.badge(parent, "clock-3", formatDuration(properties.durationMinutes));
+    if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, "clock-3", formatDuration(properties.durationMinutes));
     if (properties.priority) this.badge(parent, "signal", `P${properties.priority}`, `p${properties.priority}`);
   }
   badge(parent, iconName, text, variant) {
@@ -5008,6 +5047,7 @@ var TaskModeController = class {
     this.app = app;
     this.enabled = enabled;
     this.isProject = isProject;
+    this.savedViews = /* @__PURE__ */ new WeakMap();
     this.pending = false;
     this.disposed = false;
   }
@@ -5035,7 +5075,9 @@ var TaskModeController = class {
         if (view instanceof import_obsidian6.MarkdownView && view.file && this.enabled() && this.isProject(view.file.path)) {
           const path = view.file.path;
           const markdownState = view.getState();
-          await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { mode: "all", pagePath: path, markdownState } });
+          const saved = this.savedViews.get(leaf);
+          const previous = (saved == null ? void 0 : saved.pagePath) === path ? saved : {};
+          await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { ...previous, mode: "all", pagePath: path, markdownState } });
         } else if (view instanceof TaskMainView) {
           const state = view.getState();
           const path = typeof state.pagePath === "string" ? state.pagePath : void 0;
@@ -5043,6 +5085,7 @@ var TaskModeController = class {
           const file = this.app.vault.getAbstractFileByPath(path);
           if (!(file instanceof import_obsidian6.TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState : {};
+          this.savedViews.set(leaf, state);
           await leaf.setViewState({ type: "markdown", state: { ...markdownState, file: file.path } });
         }
       }
@@ -5062,12 +5105,30 @@ function taskTokens(line, dateFormat) {
   return ranges.sort((a, b) => a.from - b.from).map((range) => {
     var _a, _b;
     const source = line.slice(range.from, range.to);
-    const date = (_b = (_a = /\[\[([^\]]+)\]\]/.exec(source)) == null ? void 0 : _a[1]) != null ? _b : source.replace(/^\{|\}$/g, "").trim();
+    const link = /\[\[([^\]]+)\]\]/.exec(source);
+    if (range.kind === "scheduledDate" || range.kind === "deadline") {
+      const dateLabel = formatDate(range.kind === "scheduledDate" ? parsed.scheduledDate : parsed.deadline, dateFormat);
+      const time = range.kind === "scheduledDate" ? parsed.scheduledTime : parsed.deadlineTime;
+      const value = `${dateLabel}${time ? ` ${time}` : ""}`;
+      const original = (_a = link == null ? void 0 : link[1]) != null ? _a : source.slice(1, -1).trim();
+      const label = link ? dateLabel : value;
+      const display = original === label ? void 0 : {
+        from: range.from + ((_b = link == null ? void 0 : link.index) != null ? _b : 1),
+        to: link ? range.from + link.index + link[0].length : range.to - 1,
+        label,
+        linkText: link == null ? void 0 : link[1]
+      };
+      return {
+        ...range,
+        label: `${range.kind === "deadline" ? "Due " : ""}${value}`,
+        description: `${range.kind === "deadline" ? "Deadline" : "Scheduled"}: ${value}`,
+        dateLabel,
+        time,
+        linkText: link == null ? void 0 : link[1],
+        display
+      };
+    }
     switch (range.kind) {
-      case "scheduledDate":
-        return { ...range, label: `${date}${parsed.scheduledTime ? ` ${parsed.scheduledTime}` : ""}`, description: `Scheduled: ${date}${parsed.scheduledTime ? ` ${parsed.scheduledTime}` : ""}`, linkText: date };
-      case "deadline":
-        return { ...range, label: `Due ${date}${parsed.deadlineTime && source.includes("[[") ? ` ${parsed.deadlineTime}` : ""}`, description: `Deadline: ${date}${parsed.deadlineTime && source.includes("[[") ? ` ${parsed.deadlineTime}` : ""}`, linkText: source.includes("[[") ? date : void 0 };
       case "durationMinutes":
         return { ...range, label: formatDuration(parsed.durationMinutes), description: `Duration: ${formatDuration(parsed.durationMinutes)}` };
       case "priority":
@@ -5080,6 +5141,37 @@ function tokenClass(token) {
 }
 
 // src/note-token-editor.ts
+var DateLabelWidget = class extends import_view.WidgetType {
+  constructor(label, linkText) {
+    super();
+    this.label = label;
+    this.linkText = linkText;
+  }
+  eq(other) {
+    return this.label === other.label && this.linkText === other.linkText;
+  }
+  toDOM(view) {
+    const element = view.dom.ownerDocument.createElement(this.linkText ? "a" : "span");
+    element.textContent = this.label;
+    if (this.linkText) {
+      element.className = "internal-link";
+      element.setAttribute("data-href", this.linkText);
+      element.setAttribute("href", this.linkText);
+      const open = (event) => {
+        var _a, _b;
+        if (event.button !== 0 && event.button !== 1) return;
+        const info = view.state.field(import_obsidian7.editorInfoField, false);
+        if (!info) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void info.app.workspace.openLinkText(this.linkText, (_b = (_a = info.file) == null ? void 0 : _a.path) != null ? _b : "", event.button === 1 || (import_obsidian7.Platform.isMacOS ? event.metaKey : event.ctrlKey));
+      };
+      element.addEventListener("click", open);
+      element.addEventListener("auxclick", open);
+    }
+    return element;
+  }
+};
 function noteTokenMarks(tokens, viewport, selections) {
   const pills = [];
   const syntax = [];
@@ -5090,6 +5182,9 @@ function noteTokenMarks(tokens, viewport, selections) {
       class: `${tokenClass(token)} tm-note-token-editor`,
       attributes: { title: token.description }
     }).range(from, to));
+    if (token.display) {
+      syntax.push(import_view.Decoration.replace({ widget: new DateLabelWidget(token.display.label, token.display.linkText) }).range(from + token.display.from - token.from, from + token.display.to - token.from));
+    }
     if (token.kind === "deadline") {
       syntax.push(import_view.Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + 1));
       syntax.push(import_view.Decoration.mark({ class: "tm-note-token-brace" }).range(to - 1, to));
@@ -5264,7 +5359,7 @@ function registerNoteTaskEdit(root, context, getDateFormat, open) {
 
 // src/note-token-reading.ts
 function renderNoteTokens(root, dateFormat) {
-  var _a;
+  var _a, _b;
   const items = Array.from(root.querySelectorAll("li.task-list-item"));
   if (root.matches("li.task-list-item")) items.unshift(root);
   for (const item of items) {
@@ -5273,7 +5368,7 @@ function renderNoteTokens(root, dateFormat) {
     let source = "- [ ] ";
     const segments = [];
     const walk = (node) => {
-      var _a2, _b, _c;
+      var _a2, _b2, _c;
       const element = node.nodeType === 1 ? node : void 0;
       if (element == null ? void 0 : element.matches("ul, ol, input, button")) return;
       if (node.nodeType === 3) {
@@ -5281,7 +5376,7 @@ function renderNoteTokens(root, dateFormat) {
         segments.push({ node, from: source.length, to: source.length + text.length, atomic: false });
         source += text;
       } else if (element == null ? void 0 : element.matches("a.internal-link")) {
-        const text = `[[${(_c = (_b = element.getAttribute("data-href")) != null ? _b : element.getAttribute("href")) != null ? _c : element.textContent}]]`;
+        const text = `[[${(_c = (_b2 = element.getAttribute("data-href")) != null ? _b2 : element.getAttribute("href")) != null ? _c : element.textContent}]]`;
         segments.push({ node, from: source.length, to: source.length + text.length, atomic: true });
         source += text;
       } else if (element == null ? void 0 : element.matches("code, strong, em, del, s, mark, a, .internal-embed")) {
@@ -5311,7 +5406,9 @@ function renderNoteTokens(root, dateFormat) {
       const link = fragment.querySelector("a.internal-link");
       if (link) {
         if (token.kind === "deadline") pill.appendChild(document.createTextNode("Due "));
+        link.textContent = (_b = token.dateLabel) != null ? _b : link.textContent;
         pill.appendChild(link);
+        if (token.time) pill.appendChild(document.createTextNode(` ${token.time}`));
       } else pill.textContent = token.label;
       range.insertNode(pill);
     }
@@ -5320,6 +5417,51 @@ function renderNoteTokens(root, dateFormat) {
 
 // src/main.ts
 var import_obsidian14 = require("obsidian");
+
+// src/task-input.ts
+var width = (line) => {
+  var _a, _b;
+  return [...(_b = (_a = /^[ \t]*/.exec(line)) == null ? void 0 : _a[0]) != null ? _b : ""].reduce((total, char) => total + (char === "	" ? 4 : 1), 0);
+};
+function parseTaskTreeInput(input, destination, reference = /* @__PURE__ */ new Date(), dateFormat) {
+  var _a;
+  const lines = input.replace(/\r\n?/g, "\n").split("\n");
+  while (lines.length > 1 && !lines[lines.length - 1].trim()) lines.pop();
+  if (/^\s*[-+*]\s+\[[ xX]\]\s*$/.test(lines[0])) throw new Error("Enter a title for the main task.");
+  const first = parseTaskInput(lines[0], reference, dateFormat);
+  if (!(first == null ? void 0 : first.title)) throw new Error("Enter a title for the main task.");
+  const rootIndent = width(lines[0]);
+  const main = { ...first, indent: 0, destination: (_a = first.destination) != null ? _a : destination };
+  const additionalLines = [];
+  let descriptionIndent;
+  for (let index = 1; index < lines.length; index++) {
+    const line = lines[index];
+    if (!line.trim()) {
+      additionalLines.push("");
+      continue;
+    }
+    const indent = width(line) - rootIndent;
+    if (indent < 0) throw new Error(`Line ${index + 1} must not be less indented than the main task.`);
+    const text = line.trimStart();
+    const checkbox = /^[-+*]\s+\[[ xX]\](?:\s|$)/.test(text);
+    const bullet = /^[-+*]\s+/.test(text);
+    if (!checkbox && (bullet && indent > 0 || descriptionIndent !== void 0 && indent > descriptionIndent)) {
+      additionalLines.push(" ".repeat(indent) + text);
+      if (bullet) descriptionIndent = indent;
+      continue;
+    }
+    if (/^(?:#{1,6}\s|`{3,}|~{3,})/.test(text)) throw new Error(`Line ${index + 1}: enter a task or an indented description bullet.`);
+    const taskText = checkbox ? text.replace(/^[-+*]/, "-") : text.replace(/^[-+*]\s+/, "");
+    if (/^-\s+\[[ xX]\]\s*$/.test(taskText)) throw new Error(`Enter a task title on line ${index + 1}.`);
+    const parsed = parseTaskInput(taskText, reference, dateFormat);
+    if (!(parsed == null ? void 0 : parsed.title)) throw new Error(`Enter a task title on line ${index + 1}.`);
+    if (parsed.destination && parsed.destination !== main.destination) throw new Error(`Line ${index + 1}: tasks in this batch must use the main task's destination.`);
+    additionalLines.push(serializeTask({ ...parsed, indent, destination: main.destination }, dateFormat));
+    descriptionIndent = void 0;
+  }
+  if (additionalLines.length) main.additionalLines = additionalLines;
+  return main;
+}
 
 // src/mobile-layout.ts
 function trackModalViewport(modal, content) {
@@ -5341,10 +5483,6 @@ function trackModalViewport(modal, content) {
       if (!focused || !content.contains(focused)) return;
       const field2 = focused.getBoundingClientRect();
       const area = content.getBoundingClientRect();
-      if (focused.classList.contains("tm-editor-raw") && field2.bottom - area.top + content.scrollTop <= area.height - 12) {
-        content.scrollTop = 0;
-        return;
-      }
       if (field2.bottom > area.bottom - 12) content.scrollTop += field2.bottom - area.bottom + 12;
       else if (field2.top < area.top + 12) content.scrollTop -= area.top + 12 - field2.top;
     });
@@ -5408,7 +5546,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
     this.draft = initialDraft(options);
   }
   onOpen() {
-    var _a;
+    var _a, _b;
     this.modalEl.addClass("tm-editor-modal");
     const { contentEl } = this;
     contentEl.empty();
@@ -5418,12 +5556,18 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
     this.rawInput = rawField.createEl("textarea", { cls: "tm-editor-raw" });
     this.rawInput.setAttribute("aria-label", "Task text");
     this.rawInput.placeholder = "Task today at 9pm {tomorrow at noon} 30m p1 ~[[Project#Heading]]";
-    this.rawInput.rows = 2;
+    this.rawInput.rows = this.options.task ? 2 : 5;
+    rawField.createDiv({ cls: "tm-editor-raw-help", text: this.options.task ? "Cmd/Ctrl+Enter to save." : "One task per line. Indent subtasks; use indented bullets for descriptions. Cmd/Ctrl+Enter to save." });
     this.rawInput.value = this.serializeDraft(this.draft);
     this.titleInput = contentEl.createEl("input", { type: "text", cls: "tm-editor-title" });
     this.titleInput.placeholder = "What needs to be done?";
     this.titleInput.value = this.draft.title;
     field(contentEl, "Title", this.titleInput);
+    if ((_a = this.options.task) == null ? void 0 : _a.description) {
+      const description = contentEl.createDiv({ cls: "tm-editor-description" });
+      description.createEl("label", { text: "Description" });
+      description.createDiv({ cls: "tm-task-description", text: this.options.task.description });
+    }
     this.scheduledInput = contentEl.createEl("input", { type: "text" });
     this.scheduledInput.placeholder = `Tomorrow, next Friday, or ${formatDate(todayIso(), this.options.dateFormat)}`;
     this.scheduledInput.value = this.draft.scheduledDate ? formatDateTime(this.draft.scheduledDate, this.draft.scheduledTime, this.options.dateFormat) : "";
@@ -5446,7 +5590,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
     const destinations = /* @__PURE__ */ new Set([this.options.settings.inboxPath, this.draft.destination]);
     for (const project of this.options.projects) {
       destinations.add(project.path);
-      for (const heading of (_a = project.headings) != null ? _a : []) destinations.add(destinationString(project.path, heading.name));
+      for (const heading of (_b = project.headings) != null ? _b : []) destinations.add(destinationString(project.path, heading.name));
     }
     for (const path of [...destinations].sort()) this.destinationInput.createEl("option", { value: path, text: path });
     this.destinationInput.value = this.draft.destination;
@@ -5458,7 +5602,8 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
       const next = this.readStructured(false);
       if (next) {
         this.draft = next;
-        this.rawInput.value = this.serializeDraft(next);
+        const remaining = this.rawInput.value.split(/\r?\n/).slice(1);
+        this.rawInput.value = [this.serializeDraft(next), ...remaining].join("\n");
       }
     };
     const structuredInputs = [
@@ -5488,20 +5633,21 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
       });
     }
     this.rawInput.addEventListener("input", () => {
-      var _a2;
+      var _a2, _b2;
       this.rawDirty = true;
-      const parsed = parseTaskInput(this.rawInput.value, /* @__PURE__ */ new Date(), this.options.dateFormat, !this.options.task);
+      const parsed = parseTaskInput(this.rawInput.value.split(/\r?\n/)[0], /* @__PURE__ */ new Date(), this.options.dateFormat, true);
       if (!parsed) {
-        error.setText("Raw text must be one valid checklist line.");
+        error.setText("Enter a valid main task on the first line.");
         return;
       }
       error.empty();
+      this.draft = { ...parsed, destination: (_a2 = parsed.destination) != null ? _a2 : this.options.settings.inboxPath };
       this.titleInput.value = parsed.title;
       this.scheduledInput.value = parsed.scheduledDate ? formatDateTime(parsed.scheduledDate, parsed.scheduledTime, this.options.dateFormat) : "";
       this.deadlineInput.value = parsed.deadline ? formatDateTime(parsed.deadline, parsed.deadlineTime, this.options.dateFormat) : "";
       this.durationInput.value = parsed.durationMinutes ? formatDuration(parsed.durationMinutes) : "";
       this.priorityInput.value = parsed.priority ? String(parsed.priority) : "";
-      const destination = (_a2 = parsed.destination) != null ? _a2 : this.options.settings.inboxPath;
+      const destination = (_b2 = parsed.destination) != null ? _b2 : this.options.settings.inboxPath;
       if (destination) {
         if (!Array.from(this.destinationInput.options).some((option) => option.value === destination)) {
           this.destinationInput.createEl("option", { value: destination, text: destination });
@@ -5556,7 +5702,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
       void deleteTask();
     });
     contentEl.onkeydown = (event) => {
-      if (event.key !== "Enter" || event.isComposing) return;
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
       if (event.target instanceof HTMLButtonElement) return;
       event.preventDefault();
       event.stopPropagation();
@@ -5564,11 +5710,9 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
     };
     this.stopViewportTracking = trackModalViewport(this.modalEl, contentEl);
     this.focusTimer = window.setTimeout(() => {
-      this.rawInput.focus({ preventScroll: true });
+      this.rawInput.focus();
       const titleStart = this.rawInput.value.indexOf("] ") + 2;
       this.rawInput.setSelectionRange(titleStart, titleStart + this.draft.title.length);
-      contentEl.scrollTop = 0;
-      this.modalEl.scrollTop = 0;
     }, 0);
   }
   onClose() {
@@ -5584,7 +5728,8 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
   }
   readRaw() {
     var _a;
-    const parsed = parseTaskInput(this.rawInput.value, /* @__PURE__ */ new Date(), this.options.dateFormat, !this.options.task);
+    if (!this.options.task) return parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat);
+    const parsed = parseTaskInput(this.rawInput.value, /* @__PURE__ */ new Date(), this.options.dateFormat, true);
     if (!parsed || !parsed.title) {
       new import_obsidian9.Notice("Raw text must be one valid checklist line with a title.");
       return void 0;
@@ -5593,6 +5738,9 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
   }
   readStructured(notify) {
     var _a;
+    if (notify && this.options.task && /\n[^\n]*\S/.test(this.rawInput.value)) {
+      throw new Error("Edit one task at a time; use New task to add multiple tasks.");
+    }
     const title = this.titleInput.value.trim();
     if (!title) {
       if (notify) new import_obsidian9.Notice("Enter a task title.");
@@ -5610,7 +5758,9 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
         return void 0;
       }
     }
+    const additionalLines = notify && !this.options.task ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat).additionalLines : void 0;
     return {
+      ...additionalLines ? { additionalLines } : {},
       title,
       scheduledDate: scheduledDate == null ? void 0 : scheduledDate.date,
       scheduledTime: scheduledDate == null ? void 0 : scheduledDate.time,
@@ -5899,8 +6049,8 @@ function insertIntoDestination(content, block, heading, position = "top") {
   if (firstTask) {
     insertion = firstTask.line;
     const indent = /^[ \t]*/.exec(firstTask.text)[0];
-    const width = (value) => [...value].reduce((sum, char) => sum + (char === "	" ? 4 : 1), 0);
-    const rootWidth = width(indent);
+    const width2 = (value) => [...value].reduce((sum, char) => sum + (char === "	" ? 4 : 1), 0);
+    const rootWidth = width2(indent);
     block = block.map((line) => indent + line);
     if (position === "bottom") {
       let end = insertion + 1;
@@ -5908,7 +6058,7 @@ function insertIntoDestination(content, block, heading, position = "top") {
         const line = lines[cursor];
         if (!line.trim()) continue;
         const leading = /^[ \t]*/.exec(line)[0];
-        const depth = width(leading);
+        const depth = width2(leading);
         const listItem = /^[ \t]*(?:[-+*]|\d+[.)])\s+/.test(line);
         if (depth < rootWidth || depth === rootWidth && !listItem) break;
         end = cursor + 1;
@@ -5923,7 +6073,7 @@ function insertIntoDestination(content, block, heading, position = "top") {
 // src/task-block.ts
 var indentation = (line) => {
   var _a, _b;
-  return [...(_b = (_a = /^[ \t]*/.exec(line)) == null ? void 0 : _a[0]) != null ? _b : ""].reduce((width, char) => width + (char === "	" ? 4 : 1), 0);
+  return [...(_b = (_a = /^[ \t]*/.exec(line)) == null ? void 0 : _a[0]) != null ? _b : ""].reduce((width2, char) => width2 + (char === "	" ? 4 : 1), 0);
 };
 function liveTaskBlock(content, task, dateFormat) {
   const lines = content.split(/\r?\n/);
@@ -5984,7 +6134,10 @@ var TaskStore = class {
     const rootDraft = { ...draft, indent: 0 };
     await this.app.vault.process(
       file,
-      (content) => insertIntoDestination(content, [serializeTask(rootDraft, this.getDateFormat())], heading, this.getNewTaskPosition())
+      (content) => {
+        var _a;
+        return insertIntoDestination(content, [serializeTask(rootDraft, this.getDateFormat()), ...(_a = draft.additionalLines) != null ? _a : []], heading, this.getNewTaskPosition());
+      }
     );
   }
   async update(task, draft) {
@@ -6097,6 +6250,7 @@ var TaskStore = class {
 // src/types.ts
 var DEFAULT_SETTINGS = {
   taskMode: false,
+  wrapTaskTitles: true,
   inboxPath: "Inbox.md",
   tasksHeading: "Tasks",
   newTaskPosition: "top"
@@ -6127,6 +6281,17 @@ var TaskManagerSettingTab = class extends import_obsidian13.PluginSettingTab {
         name: "New task position",
         desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
         render: (setting) => this.renderPositionSetting(setting)
+      },
+      {
+        name: "Wrap task titles",
+        desc: "Show long task titles on multiple lines in the task view's list layout. When off, show the beginning of the title with an ellipsis.",
+        render: (setting) => {
+          setting.addToggle((toggle) => toggle.setValue(this.plugin.settings.wrapTaskTitles).onChange(async (value) => {
+            this.plugin.settings.wrapTaskTitles = value;
+            await this.plugin.saveSettings();
+            this.plugin.refreshViews();
+          }));
+        }
       }
     ];
   }
@@ -6213,6 +6378,7 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
         });
       }
     }
+    this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: (checking) => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
     this.addCommand({ id: "toggle-task-mode", name: "Toggle task mode", callback: () => {
@@ -6258,6 +6424,7 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     this.settings.taskMode = this.settings.taskMode === true;
+    this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
   }
   async saveSettings() {
@@ -6287,6 +6454,13 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
       const view = navLeaf.view;
       if (view instanceof TaskNavigationView) view.setActive(state.mode);
     }
+  }
+  focusProjectSearch(checking) {
+    if (!this.settings.taskMode) return false;
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+    if (!(view == null ? void 0 : view.pagePath) || !this.index.isProject(view.pagePath)) return false;
+    if (!checking) view.focusSearch();
+    return true;
   }
   async setTaskMode(enabled) {
     var _a;

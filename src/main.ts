@@ -73,6 +73,7 @@ export default class TaskManagerPlugin extends Plugin {
         });
       }
     }
+    this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: checking => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
 
@@ -116,6 +117,7 @@ export default class TaskManagerPlugin extends Plugin {
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<TaskManagerSettings> | null);
     this.settings.taskMode = this.settings.taskMode === true;
+    this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
   }
 
@@ -147,6 +149,14 @@ export default class TaskManagerPlugin extends Plugin {
       const view = navLeaf.view;
       if (view instanceof TaskNavigationView) view.setActive(state.mode);
     }
+  }
+
+  private focusProjectSearch(checking: boolean): boolean {
+    if (!this.settings.taskMode) return false;
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+    if (!view?.pagePath || !this.index.isProject(view.pagePath)) return false;
+    if (!checking) view.focusSearch();
+    return true;
   }
 
   async setTaskMode(enabled: boolean): Promise<void> {

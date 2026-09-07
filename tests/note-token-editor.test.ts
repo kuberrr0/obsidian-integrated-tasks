@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { RangeSet } from "@codemirror/state";
 import { Decoration, type DecorationSet } from "@codemirror/view";
-import { noteTokenMarks } from "../src/note-token-editor";
+import { DateLabelWidget, noteTokenMarks } from "../src/note-token-editor";
 import { taskTokens } from "../src/task-tokens";
 
 const scheduledTask = "   - [ ] Pay for AirBnb [[Sep 5, 2026]]";
@@ -63,4 +63,33 @@ describe("native-text note pills", () => {
     expect(visible).toContain("Sep 5, 2026");
     expect(visible).toContain("Sep 6, 2026");
   });
+});
+
+
+it("replaces only mismatched date labels and restores original syntax on selection", () => {
+  const text = "- [ ] Call [[2026-09-09]] 9pm {[[2026-09-10]]}";
+  const tokens = taskTokens(text, "MMM D, YYYY");
+  const spans = tokens.map(token => ({ from: token.from + 100, to: token.to + 100, token }));
+  const formatted = noteTokenMarks(spans, { from: 100, to: 100 + text.length }, []);
+  const replacements = ranges(formatted.syntax).filter(range => range.spec.widget);
+  expect(replacements.map(range => text.slice(range.from - 100, range.to - 100))).toEqual(["[[2026-09-09]]", "[[2026-09-10]]"]);
+  const editing = noteTokenMarks(spans, { from: 100, to: 100 + text.length }, [{ from: spans[0].from + 3, to: spans[0].from + 3 }]);
+  expect(ranges(editing.syntax).filter(range => range.spec.widget)).toHaveLength(1);
+});
+
+it("opens the original linked note from a formatted label, including Cmd-click", () => {
+  const openLinkText = vi.fn();
+  const events = new Map<string, (event: unknown) => void>();
+  const attrs = new Map<string, string>();
+  const element = { textContent: "", setAttribute: (key: string, value: string) => attrs.set(key, value), addEventListener: (name: string, callback: (event: unknown) => void) => events.set(name, callback) };
+  const view = { dom: { ownerDocument: { createElement: () => element } }, state: { field: () => ({ app: { workspace: { openLinkText } }, file: { path: "Projects/Work.md" } }) } };
+  new DateLabelWidget("Sep 9, 2026", "2026-09-09").toDOM(view as never);
+  expect(element.textContent).toBe("Sep 9, 2026");
+  expect(attrs.get("data-href")).toBe("2026-09-09");
+  for (const metaKey of [false, true]) {
+    const event = { button: 0, metaKey, preventDefault: vi.fn(), stopPropagation: vi.fn() };
+    events.get("click")!(event);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(openLinkText).toHaveBeenLastCalledWith("2026-09-09", "Projects/Work.md", metaKey);
+  }
 });

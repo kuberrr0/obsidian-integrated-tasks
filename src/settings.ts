@@ -22,6 +22,15 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         name: "New task position",
         desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
         render: (setting: Setting) => this.renderPositionSetting(setting)
+      },
+      {
+        name: "Wrap task titles",
+        desc: "Show long task titles on multiple lines in the task view's list layout. When off, show the beginning of the title with an ellipsis.",
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.wrapTaskTitles).onChange(async value => {
+          this.plugin.settings.wrapTaskTitles = value;
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+        })); }
       }
     ] satisfies SettingDefinitionRender[];
   }

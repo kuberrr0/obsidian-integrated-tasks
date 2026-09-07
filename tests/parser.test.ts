@@ -300,3 +300,36 @@ describe("task times", () => {
     expect(task?.deadlineTime).toBeUndefined();
   });
 });
+
+
+describe("task descriptions", () => {
+  it("collects nested bullets and wrapped text without parsing their metadata as tasks", () => {
+    const tasks = scanTasks("Note.md", "- [ ] Plan p1\n  - Talk to team\n    about the release\n    * Bring [[2026-09-09]] p2\n  + Review budget\n- [ ] Next");
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0].description).toBe("- Talk to team\n  about the release\n  * Bring [[2026-09-09]] p2\n+ Review budget");
+    expect(tasks[0].priority).toBe(1);
+    expect(tasks[0].scheduledDate).toBeUndefined();
+    expect(tasks[1].description).toBeUndefined();
+  });
+
+  it("assigns descriptions to their nearest parent task, keeping checklists as subtasks", () => {
+    const tasks = scanTasks("Note.md", "- [ ] Parent\n  - Parent detail\n  - [ ] Child\n    - Child detail\n  - More parent detail\n  - [x] Sibling\n    - Sibling detail");
+    expect(tasks).toHaveLength(3);
+    expect(tasks[0].description).toBe("- Parent detail\n- More parent detail");
+    expect(tasks[1].description).toBe("- Child detail");
+    expect(tasks[2].description).toBe("- Sibling detail");
+    expect(tasks[0].childIds).toEqual([tasks[1].id, tasks[2].id]);
+  });
+
+  it("normalizes tabs and CRLF while retaining nested bullet indentation", () => {
+    const [task] = scanTasks("Note.md", "\t- [ ] Task\r\n\t\t- Detail\r\n\t\t\t- Nested");
+    expect(task.description).toBe("- Detail\n    - Nested");
+  });
+
+  it("does not capture unrelated bullets, headings, fenced examples, or custom checkboxes", () => {
+    const tasks = scanTasks("Note.md", "- [ ] Task\n  - Detail\n    -  [/] In progress\n- Outside\n  - Also outside\n## Heading\n  - Heading bullet\n```md\n- [ ] Example\n  - Example detail\n```\n- [ ] Last");
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0].description).toBe("- Detail");
+    expect(tasks[1].description).toBeUndefined();
+  });
+});

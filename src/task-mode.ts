@@ -1,8 +1,9 @@
-import { MarkdownView, TFile, type App } from "obsidian";
+import { MarkdownView, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
 
 /** Reconcile every open note without changing focus or reusing another tab. */
 export class TaskModeController {
+  private readonly savedViews = new WeakMap<WorkspaceLeaf, Record<string, unknown>>();
   private pending = false;
   private running?: Promise<void>;
   private disposed = false;
@@ -30,7 +31,9 @@ export class TaskModeController {
         if (view instanceof MarkdownView && view.file && this.enabled() && this.isProject(view.file.path)) {
           const path = view.file.path;
           const markdownState = view.getState();
-          await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { mode: "all", pagePath: path, markdownState } });
+          const saved = this.savedViews.get(leaf);
+          const previous = saved?.pagePath === path ? saved : {};
+          await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { ...previous, mode: "all", pagePath: path, markdownState } });
         } else if (view instanceof TaskMainView) {
           const state = view.getState();
           // Dedicated task-manager/project dashboards remain task views. Only
@@ -40,6 +43,7 @@ export class TaskModeController {
           const file = this.app.vault.getAbstractFileByPath(path);
           if (!(file instanceof TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState as Record<string, unknown> : {};
+          this.savedViews.set(leaf, state);
           await leaf.setViewState({ type: "markdown", state: { ...markdownState, file: file.path } });
         }
       }

@@ -1,3 +1,4 @@
+import { parseTaskTreeInput } from "./task-input";
 import type { TaskEditorPreset } from "./types";
 import { trackModalViewport } from "./mobile-layout";
 import { destinationString } from "./structure";
@@ -81,13 +82,22 @@ export class TaskEditorModal extends Modal {
     this.rawInput = rawField.createEl("textarea", { cls: "tm-editor-raw" });
     this.rawInput.setAttribute("aria-label", "Task text");
     this.rawInput.placeholder = "Task today at 9pm {tomorrow at noon} 30m p1 ~[[Project#Heading]]";
-    this.rawInput.rows = 2;
+    this.rawInput.rows = this.options.task ? 2 : 5;
+    rawField.createDiv({ cls: "tm-editor-raw-help", text: this.options.task
+      ? "Cmd/Ctrl+Enter to save."
+      : "One task per line. Indent subtasks; use indented bullets for descriptions. Cmd/Ctrl+Enter to save." });
     this.rawInput.value = this.serializeDraft(this.draft);
 
     this.titleInput = contentEl.createEl("input", { type: "text", cls: "tm-editor-title" });
     this.titleInput.placeholder = "What needs to be done?";
     this.titleInput.value = this.draft.title;
     field(contentEl, "Title", this.titleInput);
+
+    if (this.options.task?.description) {
+      const description = contentEl.createDiv({ cls: "tm-editor-description" });
+      description.createEl("label", { text: "Description" });
+      description.createDiv({ cls: "tm-task-description", text: this.options.task.description });
+    }
 
     this.scheduledInput = contentEl.createEl("input", { type: "text" });
     this.scheduledInput.placeholder = `Tomorrow, next Friday, or ${formatDate(todayIso(), this.options.dateFormat)}`;
@@ -128,7 +138,8 @@ export class TaskEditorModal extends Modal {
       const next = this.readStructured(false);
       if (next) {
         this.draft = next;
-        this.rawInput.value = this.serializeDraft(next);
+        const remaining = this.rawInput.value.split(/\r?\n/).slice(1);
+        this.rawInput.value = [this.serializeDraft(next), ...remaining].join("\n");
       }
     };
     const structuredInputs: Array<HTMLInputElement | HTMLSelectElement> = [
@@ -159,12 +170,13 @@ export class TaskEditorModal extends Modal {
     }
     this.rawInput.addEventListener("input", () => {
       this.rawDirty = true;
-      const parsed = parseTaskInput(this.rawInput.value, new Date(), this.options.dateFormat, !this.options.task);
+      const parsed = parseTaskInput(this.rawInput.value.split(/\r?\n/)[0], new Date(), this.options.dateFormat, true);
       if (!parsed) {
-        error.setText("Raw text must be one valid checklist line.");
+        error.setText("Enter a valid main task on the first line.");
         return;
       }
       error.empty();
+      this.draft = { ...parsed, destination: parsed.destination ?? this.options.settings.inboxPath };
       this.titleInput.value = parsed.title;
       this.scheduledInput.value = parsed.scheduledDate ? formatDateTime(parsed.scheduledDate, parsed.scheduledTime, this.options.dateFormat) : "";
       this.deadlineInput.value = parsed.deadline ? formatDateTime(parsed.deadline, parsed.deadlineTime, this.options.dateFormat) : "";
@@ -225,7 +237,7 @@ export class TaskEditorModal extends Modal {
     deleteButton?.addEventListener("click", () => { void deleteTask(); });
 
     contentEl.onkeydown = (event: KeyboardEvent): void => {
-      if (event.key !== "Enter" || event.isComposing) return;
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
       // Keep native keyboard activation for explicit actions such as Cancel.
       if (event.target instanceof HTMLButtonElement) return;
       event.preventDefault();
@@ -256,7 +268,8 @@ export class TaskEditorModal extends Modal {
   }
 
   private readRaw(): TaskDraft | undefined {
-    const parsed = parseTaskInput(this.rawInput.value, new Date(), this.options.dateFormat, !this.options.task);
+    if (!this.options.task) return parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat);
+    const parsed = parseTaskInput(this.rawInput.value, new Date(), this.options.dateFormat, true);
     if (!parsed || !parsed.title) {
       new Notice("Raw text must be one valid checklist line with a title.");
       return undefined;
@@ -265,6 +278,9 @@ export class TaskEditorModal extends Modal {
   }
 
   private readStructured(notify: boolean): TaskDraft | undefined {
+    if (notify && this.options.task && /\n[^\n]*\S/.test(this.rawInput.value)) {
+      throw new Error("Edit one task at a time; use New task to add multiple tasks.");
+    }
     const title = this.titleInput.value.trim();
     if (!title) {
       if (notify) new Notice("Enter a task title.");
@@ -283,7 +299,11 @@ export class TaskEditorModal extends Modal {
         return undefined;
       }
     }
+    const additionalLines = notify && !this.options.task
+      ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat).additionalLines
+      : undefined;
     return {
+      ...(additionalLines ? { additionalLines } : {}),
       title,
       scheduledDate: scheduledDate?.date,
       scheduledTime: scheduledDate?.time,
