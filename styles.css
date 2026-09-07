@@ -957,3 +957,16 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
   overflow: visible;
   max-height: none;
 }
+
+.tm-main-view .tm-task-row.is-selected,
+.tm-main-view .tm-calendar button.tm-calendar-task.is-selected {
+  background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary));
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+  border-radius: 6px;
+}
+.tm-selection-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 8px; }
+.tm-selection-bar[hidden] { display: none; }
+.tm-selection-bar > span { color: var(--text-muted); margin-right: auto; }
+.tm-bulk-field { grid-template-columns: 120px minmax(0, 1fr) auto; }
+.tm-bulk-help { color: var(--text-muted); font-size: var(--font-ui-small); }
+@media (max-width: 700px) { .tm-bulk-field { grid-template-columns: minmax(0, 1fr) auto; } .tm-bulk-field > label { grid-column: 1 / -1; } }

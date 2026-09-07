@@ -12,6 +12,8 @@ export interface CalendarOptions {
   navigate: (anchor: string, scope: CalendarScope) => void;
   create: (preset: CalendarPreset) => void;
   edit: (task: Task) => void;
+  bind?: (card: HTMLElement, task: Task) => void;
+  dragStart?: (task: Task) => void;
   resize: (task: Task, date: string, time: string, duration: number) => Promise<void>;
   move: (task: Task, date: string, time?: string) => Promise<void>;
 }
@@ -71,11 +73,18 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   };
   const taskCard = (parent: HTMLElement, task: Task): HTMLButtonElement => {
     const time = calendarTime(task);
-    const card = parent.createEl("button", { cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`, text: `${time ? `${time} ` : ""}${task.title}`,
+    const card = parent.createEl("button", { cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
       attr: { title: `${task.title}${task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` } });
+    card.createSpan({ cls: "tm-calendar-task-title", text: `${time ? `${time} ` : ""}${task.title}` });
     card.draggable = true;
-    card.addEventListener("click", event => { event.stopPropagation(); options.edit(task); });
+    card.addEventListener("click", event => {
+      if (!options.bind || (event.target as HTMLElement).closest(".tm-calendar-task-title")) {
+        event.stopPropagation(); options.edit(task);
+      }
+    });
+    options.bind?.(card, task);
     card.addEventListener("dragstart", event => {
+      options.dragStart?.(task);
       dragged = task;
       event.stopPropagation();
       if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); }

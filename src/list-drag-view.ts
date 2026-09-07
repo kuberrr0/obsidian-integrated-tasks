@@ -11,7 +11,7 @@ export class ListDragController {
   private highlighted?: HTMLElement;
   private targets = new Map<HTMLElement, (point: { clientX: number; clientY: number }) => DropIntent>();
   constructor(private readonly getTask: (id: string) => Task | undefined,
-    private readonly drop: (task: Task, group?: ListDropGroup, anchor?: Task, placement?: ListPlacement) => Promise<void>, private readonly allowNesting = true) {}
+    private readonly drop: (task: Task, group?: ListDropGroup, anchor?: Task, placement?: ListPlacement) => Promise<void>, private readonly allowNesting = true, private readonly dragStart: (task: Task) => void = () => {}) {}
 
   private clear(): void {
     this.highlighted?.removeAttribute("data-drop-position");
@@ -52,6 +52,7 @@ export class ListDragController {
     row.draggable = true;
     row.addEventListener("dragstart", event => {
       if (this.busy || (event.target instanceof HTMLElement && event.target.closest("input"))) { event.preventDefault(); return; }
+      this.dragStart(task);
       this.taskId = task.id;
       this.original = task;
       event.stopPropagation();
@@ -105,6 +106,7 @@ export class ListDragController {
     handle.addEventListener("pointermove", event => {
       if (pointer !== event.pointerId) return;
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
+      if (!dragging) this.dragStart(task);
       dragging = true;
       this.taskId = task.id;
       this.original = task;

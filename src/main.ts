@@ -1,3 +1,4 @@
+import { BulkTaskEditorModal } from "./bulk-task-editor";
 import { TaskModeController } from "./task-mode";
 import type { TaskEditorPreset } from "./types";
 import { noteTokenEditor } from "./note-token-editor";
@@ -73,6 +74,7 @@ export default class TaskManagerPlugin extends Plugin {
         });
       }
     }
+    this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: checking => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
@@ -151,6 +153,13 @@ export default class TaskManagerPlugin extends Plugin {
     }
   }
 
+  private editSelectedTaskProperties(checking: boolean): boolean {
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+    if (!view?.getSelectedTasks().length) return false;
+    if (!checking) this.openBulkEditor(view);
+    return true;
+  }
+
   private focusProjectSearch(checking: boolean): boolean {
     if (!this.settings.taskMode) return false;
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
@@ -187,6 +196,20 @@ export default class TaskManagerPlugin extends Plugin {
     } catch (error) {
       new Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
     }
+  }
+
+  openBulkEditor(view: TaskMainView): void {
+    const tasks = view.getSelectedTasks();
+    if (!tasks.length) return;
+    const refresh = async (paths: string[]): Promise<void> => {
+      view.clearSelection();
+      for (const path of paths) await this.index.refreshPath(path);
+    };
+    new BulkTaskEditorModal(this.app, {
+      tasks, projects: this.index.projects(), dateFormat: this.dateFormat(), inboxPath: this.settings.inboxPath,
+      onSave: async patch => { await refresh(await this.store.bulkUpdate(tasks, patch)); },
+      onDelete: async () => { await refresh(await this.store.bulkDelete(tasks)); }
+    }).open();
   }
 
   openEditor(state: OpenEditorState): void {

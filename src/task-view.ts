@@ -1,15 +1,15 @@
+import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
 import type { GanttZoom } from "./gantt";
 import { projectHierarchy } from "./project-hierarchy";
 import { kanbanColumns } from "./kanban";
-import { splitDestination } from "./structure";
 import { ListDragController } from "./list-drag-view";
 import { draftForGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
 import { renderCalendar } from "./calendar-view";
 import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { TASK_PROPERTIES, filterOperators, propertyValue, propertyLabel } from "./task-properties";
-import { ItemView, Menu, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { formatDuration } from "./parser";
 import { groupTasks, orderTaskTree, sortTasks } from "./query";
@@ -45,6 +45,12 @@ export class TaskMainView extends ItemView {
   private unsubscribe?: () => void;
   private taskResults?: HTMLElement;
   private listDrag?: ListDragController;
+  private selection = new TaskSelection();
+  private visibleTasks: Task[] = [];
+  private selectionRows = new Map<string, HTMLElement[]>();
+  private selectionBar?: HTMLElement;
+  private selectionCount?: HTMLElement;
+  private draggedTasks: Task[] = [];
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
     super(leaf);
@@ -70,6 +76,7 @@ export class TaskMainView extends ItemView {
     if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath) {
+      this.selection.clear();
       this.search = "";
       this.propertyFilters = [];
       this.sort = "date";
@@ -97,6 +104,10 @@ export class TaskMainView extends ItemView {
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
     this.taskResults = undefined;
+    this.selectionBar = undefined;
+    this.selectionCount = undefined;
+    this.visibleTasks = [];
+    this.selectionRows.clear();
     container.addClass("tm-main-view");
     container.classList.toggle("tm-wrap-task-titles", this.layout === "list" && this.plugin.settings.wrapTaskTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
@@ -108,6 +119,7 @@ export class TaskMainView extends ItemView {
 
     this.renderHeader(container);
     this.renderFilters(container);
+    this.renderSelectionBar(container);
     this.taskResults = container.createDiv({ cls: "tm-task-results" });
     this.renderTaskResults();
   }
@@ -116,7 +128,10 @@ export class TaskMainView extends ItemView {
     const container = this.taskResults;
     if (!container) return;
     container.empty();
-    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban");
+    this.visibleTasks = [];
+    this.selectionRows.clear();
+    this.updateSelection();
+    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", task => this.prepareDrag(task));
     const query: TaskQuery = {
       mode: this.pagePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
       showCompleted: this.showCompleted || this.layout === "kanban",
@@ -125,12 +140,21 @@ export class TaskMainView extends ItemView {
       search: this.search || undefined
     };
     const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
+    this.selection.retain(tasks);
+    this.renderTaskLayouts(container, tasks);
+    this.selection.retain(this.visibleTasks);
+    this.updateSelection();
+  }
+
+  private renderTaskLayouts(container: HTMLElement, tasks: Task[]): void {
     if (this.layout === "calendar") {
       renderCalendar(container, {
         anchor: this.calendarAnchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
         navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.renderTaskResults(); },
         create: preset => this.plugin.openEditor({ ...this.state, preset }),
         edit: task => this.plugin.openEditor({ ...this.state, task }),
+        bind: (card, task) => this.bindSelection(card, task),
+        dragStart: task => this.prepareDrag(task),
         resize: async (task, date, time, duration) => {
           const latest = this.plugin.index.taskById(task.id);
           if (!latest) throw new Error("Task no longer exists. Refresh the view and try again.");
@@ -138,10 +162,10 @@ export class TaskMainView extends ItemView {
           await this.plugin.index.refreshPath(latest.path);
         },
         move: async (task, date, time) => {
-          const latest = this.plugin.index.taskById(task.id);
-          if (!latest) throw new Error("Task no longer exists. Refresh the view and try again.");
-          await this.plugin.store.update(latest, rescheduledDraft(latest, date, time));
-          await this.plugin.index.refreshPath(latest.path);
+          const selected = this.draggedTasks.length ? this.draggedTasks : [task];
+          const paths = await this.plugin.store.bulkChange(selected, original => rescheduledDraft(original, date, time));
+          this.clearSelection();
+          for (const path of paths) await this.plugin.index.refreshPath(path);
         }
       });
       return;
@@ -491,31 +515,92 @@ export class TaskMainView extends ItemView {
 
   private async dropListTask(original: Task, group?: ListDropGroup, originalAnchor?: Task, placement?: ListPlacement): Promise<void> {
     try {
-      const task = this.plugin.index.taskById(original.id);
-      if (!task || task.raw !== original.raw) throw new Error("Task changed while dragging. Refresh and try again.");
-      const draft = draftForGroup(task, group);
-      if (this.layout === "kanban" && group) {
+      const selected = this.draggedTasks.length ? this.draggedTasks : [original];
+      for (const task of selected) {
+        const current = this.plugin.index.taskById(task.id);
+        if (!current || current.raw !== task.raw) throw new Error("Task changed while dragging. Refresh and try again.");
+      }
+      if (this.layout === "kanban" && group && selected.some(task => {
         const previous = group.property ? taskGroupTarget(group.property, task) : undefined;
-        if (group.value !== previous?.value || (group.destination && group.destination !== draftForGroup(task).destination)) {
-          originalAnchor = undefined;
-          placement = undefined;
-        }
+        return group.value !== previous?.value || (group.destination && group.destination !== draftForGroup(task).destination);
+      })) {
+        originalAnchor = undefined;
+        placement = undefined;
       }
       const anchor = originalAnchor ? this.plugin.index.taskById(originalAnchor.id) : undefined;
       if (originalAnchor && (!anchor || anchor.raw !== originalAnchor.raw)) throw new Error("Drop target changed while dragging. Refresh and try again.");
-      if (anchor && placement) {
-        await this.plugin.store.relocate(task, anchor, placement, draft);
-        // Physical ordering must be visible after a manual reorder.
-        this.sort = "source";
-        this.descending = false;
-      } else await this.plugin.store.update(task, draft);
-      const destination = anchor?.path ?? splitDestination(draft.destination).path;
-      await this.plugin.index.refreshPath(task.path);
-      if (destination !== task.path) await this.plugin.index.refreshPath(destination);
+      const paths = await this.plugin.store.bulkDrop(selected, group, anchor, placement);
+      if (anchor && placement) { this.sort = "source"; this.descending = false; }
+      this.clearSelection();
+      for (const path of paths) await this.plugin.index.refreshPath(path);
       this.render();
     } catch (cause) {
-      new Notice(cause instanceof Error ? cause.message : "Could not move task.");
+      new Notice(cause instanceof Error ? cause.message : "Could not move selected tasks.");
+    } finally { this.draggedTasks = []; }
+  }
+
+  getSelectedTasks(): Task[] { return this.selection.tasks(this.visibleTasks); }
+
+  clearSelection(): void { this.selection.clear(); this.updateSelection(); }
+
+  private prepareDrag(task: Task): void {
+    if (!this.selection.has(task)) this.selection.click(task, this.visibleTasks);
+    this.draggedTasks = this.getSelectedTasks();
+    this.updateSelection();
+  }
+
+  private bindSelection(row: HTMLElement, task: Task): void {
+    if (!this.selectionRows.has(task.id)) this.visibleTasks.push(task);
+    const rows = this.selectionRows.get(task.id) ?? [];
+    rows.push(row);
+    this.selectionRows.set(task.id, rows);
+    row.setAttribute("tabindex", "0");
+    row.setAttribute("data-task-id", task.id);
+    const interactive = (target: EventTarget | null): boolean => {
+      const element = target as HTMLElement | null;
+      const control = element?.closest?.("button, input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
+      return Boolean(control && control !== row);
+    };
+    row.addEventListener("mousedown", event => {
+      if (!interactive(event.target) && (event.shiftKey || (Platform.isMacOS ? event.metaKey : event.ctrlKey))) event.preventDefault();
+    });
+    row.addEventListener("click", event => {
+      if (interactive(event.target)) return;
+      event.preventDefault(); event.stopPropagation();
+      this.selection.click(task, this.visibleTasks, event.shiftKey, Platform.isMacOS ? event.metaKey : event.ctrlKey);
+      row.focus({ preventScroll: true });
+      this.updateSelection();
+    });
+    row.addEventListener("keydown", event => {
+      if (interactive(event.target)) return;
+      if (event.key === "Escape") { event.preventDefault(); this.clearSelection(); }
+      if (event.key === " " || event.key === "Enter") {
+        event.preventDefault(); event.stopPropagation();
+        this.selection.click(task, this.visibleTasks, event.shiftKey, Platform.isMacOS ? event.metaKey : event.ctrlKey);
+        this.updateSelection();
+      }
+    });
+  }
+
+  private updateSelection(): void {
+    for (const task of this.visibleTasks) for (const row of this.selectionRows.get(task.id) ?? []) {
+      const selected = this.selection.has(task);
+      row.classList.toggle("is-selected", selected);
+      row.setAttribute("aria-label", `${task.title}${selected ? ", selected" : ""}`);
     }
+    const count = this.getSelectedTasks().length;
+    if (this.selectionBar) this.selectionBar.hidden = count === 0;
+    this.selectionCount?.setText(`${count} selected`);
+  }
+
+  private renderSelectionBar(container: HTMLElement): void {
+    this.selectionBar = container.createDiv({ cls: "tm-selection-bar" });
+    this.selectionBar.hidden = true;
+    this.selectionCount = this.selectionBar.createSpan({ attr: { role: "status", "aria-live": "polite" } });
+    const edit = this.selectionBar.createEl("button", { text: "Edit task properties" });
+    edit.addEventListener("click", () => this.plugin.openBulkEditor(this));
+    const clear = this.selectionBar.createEl("button", { text: "Clear selection" });
+    clear.addEventListener("click", () => this.clearSelection());
   }
 
   private depthWithin(task: Task, visibleIds: Set<string>): number {
@@ -531,6 +616,7 @@ export class TaskMainView extends ItemView {
   private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup): void {
     const row = list.createDiv({ cls: `tm-task-row${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
+    this.bindSelection(row, task);
     const checkboxTarget = row.createEl("label", { cls: "tm-checkbox-target" });
     const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: "tm-task-checkbox", attr: { "aria-label": `Complete ${task.title}` } });
     checkbox.checked = task.completed;

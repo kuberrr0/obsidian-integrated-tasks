@@ -69,3 +69,10 @@ Copy `manifest.json`, `main.js`, and `styles.css` into `.obsidian/plugins/integr
 [MIT](LICENSE), copyright 2026 Integrated Task Manager contributors.
 
 The **Search task in list** command is available when task mode is on and the active task view is a project. It focuses the Search tasks field and selects its existing text without changing the layout or search.
+
+
+Click a task block's background to select it; its title still opens the single-task editor. **Shift+click** selects the visible range from the last clicked task, and **Cmd/Ctrl+click** adds a task to the selection. Selection follows the current displayed order. Use **Escape** on a focused block or **Clear selection** to clear it.
+
+With tasks selected, run **Edit task properties** (or use the selection toolbar) to bulk-edit scheduled date and time, deadline date and time, duration, priority, and destination. Shared values are prefilled; differing values show **Mixed — unchanged**. Only edited fields are applied, and **Clear** explicitly removes a property. **Save task** or **Cmd/Ctrl+Enter** saves; **Cancel** leaves tasks untouched; **Delete task** deletes selected tasks and their subtrees.
+
+Drag any selected block to move the selection together. List and Kanban drops preserve the selected blocks' displayed order and their descriptions/subtasks; dropping into a property group applies that group's property to the selected tasks. Calendar drops reschedule selected tasks to the dropped date/time. Selecting both a parent and a child never moves or deletes the child twice. Hidden or changed tasks are removed from the selection, and failed bulk writes restore earlier writes when the notes have not been edited concurrently.

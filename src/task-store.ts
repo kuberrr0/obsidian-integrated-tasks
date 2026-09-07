@@ -1,3 +1,5 @@
+import { planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
+import { draftForGroup, type ListDropGroup } from "./list-drag";
 import { liveTaskBlock, rewriteBlock, placeTaskBlock } from "./task-block";
 import type { ListPlacement } from "./list-drag";
 import { splitDestination } from "./structure";
@@ -122,6 +124,55 @@ export class TaskStore {
       });
       throw cause;
     }
+  }
+
+  async bulkUpdate(tasks: Task[], patch: BulkTaskPatch): Promise<string[]> {
+    if (!Object.keys(patch).length) return [];
+    return this.bulkChange(tasks, task => ({ ...draftForGroup(task), ...patch }));
+  }
+
+  async bulkDelete(tasks: Task[]): Promise<string[]> {
+    return this.bulkChange(tasks, () => undefined, { delete: true });
+  }
+
+  async bulkDrop(tasks: Task[], group?: ListDropGroup, anchor?: Task, placement?: ListPlacement): Promise<string[]> {
+    return this.bulkChange(tasks, task => draftForGroup(task, group), { anchor, placement });
+  }
+
+  async bulkChange(tasks: Task[], draft: (task: Task) => TaskDraft | undefined, options: BulkTaskOptions = {}): Promise<string[]> {
+    const changes = tasks.map(task => ({ task, draft: draft(task) }));
+    const files = new Map<string, TFile>();
+    for (const task of tasks) files.set(task.path, this.requireFile(task.path));
+    if (options.anchor) files.set(options.anchor.path, this.requireFile(options.anchor.path));
+    for (const change of changes) if (change.draft && !options.anchor) {
+      const { path, heading } = splitDestination(change.draft.destination);
+      if (!files.has(path)) files.set(path, heading ? this.requireFile(path) : await this.ensureFile(path));
+    }
+    const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
+    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition() });
+    const written: string[] = [];
+    try {
+      for (const [path, content] of after) {
+        await this.app.vault.process(files.get(path)!, current => {
+          if (current !== before.get(path)) throw new Error("A note changed during the bulk action. Refresh and try again.");
+          return content;
+        });
+        written.push(path);
+      }
+    } catch (cause) {
+      const conflicts: string[] = [];
+      for (const path of written.reverse()) {
+        try {
+          await this.app.vault.process(files.get(path)!, current => {
+            if (current !== after.get(path)) throw new Error("Note changed");
+            return before.get(path)!;
+          });
+        } catch { conflicts.push(path); }
+      }
+      if (conflicts.length) throw new Error(`Bulk action interrupted. Could not restore changed notes: ${conflicts.join(", ")}. Review those notes before retrying.`);
+      throw cause;
+    }
+    return [...after.keys()];
   }
 
   private requireFile(path: string): TFile {

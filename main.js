@@ -25,8 +25,8 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
-// src/task-mode.ts
-var import_obsidian6 = require("obsidian");
+// src/bulk-task-editor.ts
+var import_obsidian2 = require("obsidian");
 
 // node_modules/chrono-node/dist/esm/types.js
 var Meridiem;
@@ -3009,87 +3009,6 @@ function formatDateTime(date, time, dateFormat) {
   return `${formatDate(date, dateFormat)}${time ? ` ${time}` : ""}`;
 }
 
-// src/project-properties.ts
-function parseProjectProperties(frontmatter, dateFormat) {
-  var _a, _b, _c;
-  const values = new Map(Object.entries(frontmatter != null ? frontmatter : {}).map(([key, value]) => [key.toLowerCase().replace(/[\s_-]/g, ""), value]));
-  const scalar = (value) => {
-    if (Array.isArray(value) && value.length === 1) value = value[0];
-    return typeof value === "string" || typeof value === "number" ? String(value).trim() : void 0;
-  };
-  const date = (value) => {
-    var _a2;
-    const text = scalar(value);
-    if (!text) return void 0;
-    const link = /^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/.exec(text);
-    return parseDateExpression((_a2 = link == null ? void 0 : link[1]) != null ? _a2 : text, /* @__PURE__ */ new Date(), dateFormat);
-  };
-  const rawPriority = (_a = scalar(values.get("priority"))) == null ? void 0 : _a.toLowerCase();
-  const priorities = { "1": 1, p1: 1, high: 1, "2": 2, p2: 2, medium: 2, "3": 3, p3: 3, low: 3 };
-  return {
-    scheduledDate: date((_c = (_b = values.get("date")) != null ? _b : values.get("startdate")) != null ? _c : values.get("scheduleddate")),
-    endDate: date(values.get("enddate")),
-    deadline: date(values.get("deadline")),
-    priority: rawPriority && Object.prototype.hasOwnProperty.call(priorities, rawPriority) ? priorities[rawPriority] : void 0
-  };
-}
-function addProjectProperties(frontmatter) {
-  const rawTags = frontmatter.tags;
-  const tags = Array.isArray(rawTags) ? [...rawTags] : typeof rawTags === "string" ? rawTags.split(/[,\s]+/).filter(Boolean) : [];
-  if (!tags.some((tag) => typeof tag === "string" && /^#?project(?:\/|$)/.test(tag))) tags.push("project");
-  frontmatter.tags = tags;
-  const keys = new Set(Object.keys(frontmatter).map((key) => key.toLowerCase().replace(/[\s_-]/g, "")));
-  for (const [name, aliases] of [
-    ["date", ["date", "startdate", "scheduleddate"]],
-    ["end date", ["enddate"]],
-    ["deadline", ["deadline"]],
-    ["priority", ["priority"]]
-  ]) {
-    if (!aliases.some((alias) => keys.has(alias))) frontmatter[name] = null;
-  }
-}
-function parseProjectParent(frontmatter) {
-  var _a, _b;
-  let value = (_a = Object.entries(frontmatter != null ? frontmatter : {}).find(([key]) => key.trim().toLowerCase() === "parent")) == null ? void 0 : _a[1];
-  if (Array.isArray(value)) value = value.length === 1 ? value[0] : void 0;
-  if (typeof value !== "string") return void 0;
-  const text = value.trim();
-  const link = /^\[\[([^\]]+)\]\]$/.exec(text);
-  const path = ((_b = link == null ? void 0 : link[1]) != null ? _b : text).split(/[|#]/, 1)[0].trim();
-  return path && !/[\r\n\[\]]/.test(path) ? path : void 0;
-}
-function updateProjectDate(frontmatter, field2, value, expected, dateFormat) {
-  var _a, _b, _c;
-  if (!parseDateExpression(value)) throw new Error("Invalid project date.");
-  const current = parseProjectProperties(frontmatter, dateFormat);
-  for (const key2 of ["scheduledDate", "endDate", "deadline"]) {
-    if (current[key2] !== expected[key2]) throw new Error("Project dates changed while dragging. Refresh and try again.");
-  }
-  const aliases = field2 === "scheduledDate" ? ["date", "startdate", "scheduleddate"] : field2 === "endDate" ? ["enddate"] : ["deadline"];
-  const keys = Object.keys(frontmatter);
-  const matches = aliases.map((alias) => keys.find((key2) => key2.toLowerCase().replace(/[\s_-]/g, "") === alias)).filter((key2) => Boolean(key2));
-  const key = (_b = (_a = matches.find((key2) => frontmatter[key2] !== null && frontmatter[key2] !== void 0)) != null ? _a : matches[0]) != null ? _b : field2 === "scheduledDate" ? "date" : field2 === "endDate" ? "end date" : "deadline";
-  const original = frontmatter[key];
-  const raw = Array.isArray(original) ? original[0] : original;
-  const link = typeof raw === "string" ? /^\[\[[^\]|]+(\|[^\]]*)?\]\]$/.exec(raw.trim()) : void 0;
-  const formatted = link ? `[[${formatDate(value, dateFormat)}${(_c = link[1]) != null ? _c : ""}]]` : value;
-  frontmatter[key] = Array.isArray(original) && original.length === 1 ? [formatted] : formatted;
-}
-function updateProjectDates(frontmatter, changes, expected, dateFormat) {
-  const next = { ...frontmatter };
-  let snapshot = expected;
-  for (const field2 of ["scheduledDate", "endDate", "deadline"]) {
-    const value = changes[field2];
-    if (value === void 0) continue;
-    updateProjectDate(next, field2, value, snapshot, dateFormat);
-    snapshot = parseProjectProperties(next, dateFormat);
-  }
-  Object.assign(frontmatter, next);
-}
-
-// src/gantt-view.ts
-var import_obsidian2 = require("obsidian");
-
 // src/structure.ts
 function bodyLines(content) {
   var _a, _b;
@@ -3144,373 +3063,6 @@ function splitDestination(value) {
 }
 function destinationString(path, heading) {
   return `${path}${heading ? `#${heading}` : ""}`;
-}
-
-// src/calendar.ts
-var SLOT_MINUTES = 15;
-function localDate(iso) {
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year, month - 1, day, 12);
-}
-function addDays(iso, days) {
-  const date = localDate(iso);
-  date.setDate(date.getDate() + days);
-  return formatLocalDate(date);
-}
-function calendarDate(task) {
-  var _a;
-  return (_a = task.scheduledDate) != null ? _a : task.deadline;
-}
-function calendarTime(task) {
-  return task.scheduledDate ? task.scheduledTime : task.deadlineTime;
-}
-function timeMinutes(time) {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
-}
-function minuteTime(minutes) {
-  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-}
-function selectionPreset(date, first, last) {
-  const start = Math.max(0, Math.min(95, Math.min(first, last))) * SLOT_MINUTES;
-  const end = (Math.max(0, Math.min(95, Math.max(first, last))) + 1) * SLOT_MINUTES;
-  return { scheduledDate: date, scheduledTime: minuteTime(start), durationMinutes: end - start };
-}
-function calendarDays(anchor, scope) {
-  const date = localDate(anchor);
-  if (scope === "month") date.setDate(1);
-  date.setDate(date.getDate() - (date.getDay() + 6) % 7);
-  const start = formatLocalDate(date);
-  return Array.from({ length: scope === "week" ? 7 : 42 }, (_, index) => addDays(start, index));
-}
-function shiftCalendar(anchor, scope, direction) {
-  if (scope === "day" || scope === "week") return addDays(anchor, direction * (scope === "week" ? 7 : 1));
-  const date = localDate(anchor);
-  const day = date.getDate();
-  date.setDate(1);
-  if (scope === "month") date.setMonth(date.getMonth() + direction);
-  else date.setFullYear(date.getFullYear() + direction);
-  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  date.setDate(Math.min(day, lastDay));
-  return formatLocalDate(date);
-}
-function rescheduledDraft(task, date, time) {
-  return {
-    ...task,
-    scheduledDate: date,
-    scheduledTime: time != null ? time : task.scheduledTime,
-    destination: destinationString(task.path, task.section)
-  };
-}
-function resizedRange(begin, end, edge, target) {
-  const snapped = Math.round(target / SLOT_MINUTES) * SLOT_MINUTES;
-  const start = edge === "start" ? Math.max(0, Math.min(end - SLOT_MINUTES, snapped)) : begin;
-  const finish = edge === "end" ? Math.min(1440, Math.max(begin + SLOT_MINUTES, snapped)) : end;
-  return { start, duration: finish - start };
-}
-
-// src/project-hierarchy.ts
-function projectHierarchy(projects) {
-  var _a, _b, _c;
-  const ordered = [...projects].sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
-  const visible = new Set(ordered.map((project) => project.path));
-  const parents = new Map(ordered.map((project) => [project.path, project.parentPath && visible.has(project.parentPath) ? project.parentPath : void 0]));
-  const checked = /* @__PURE__ */ new Set();
-  for (const project of ordered) {
-    const chain = [];
-    const positions = /* @__PURE__ */ new Map();
-    let path = project.path;
-    while (path && !checked.has(path)) {
-      const cycle = positions.get(path);
-      if (cycle !== void 0) {
-        for (const member of chain.slice(cycle)) parents.set(member, void 0);
-        break;
-      }
-      positions.set(path, chain.length);
-      chain.push(path);
-      path = parents.get(path);
-    }
-    for (const member of chain) checked.add(member);
-  }
-  const children = /* @__PURE__ */ new Map();
-  for (const project of ordered) {
-    const parent = parents.get(project.path);
-    const group = (_a = children.get(parent)) != null ? _a : [];
-    group.push(project);
-    children.set(parent, group);
-  }
-  const result = [];
-  const pending = ((_b = children.get(void 0)) != null ? _b : []).map((project) => ({ project, depth: 0 })).reverse();
-  while (pending.length) {
-    const entry = pending.pop();
-    result.push(entry);
-    for (const child of [...(_c = children.get(entry.project.path)) != null ? _c : []].reverse()) pending.push({ project: child, depth: entry.depth + 1 });
-  }
-  return result;
-}
-
-// src/gantt.ts
-var GANTT_ZOOMS = {
-  week: { days: 14, width: 64 },
-  month: { days: 35, width: 32 },
-  quarter: { days: 91, width: 18 }
-};
-function daysBetween(start, end) {
-  const utc = (iso) => {
-    const [y, m, d] = iso.split("-").map(Number);
-    return Date.UTC(y, m - 1, d);
-  };
-  return Math.round((utc(end) - utc(start)) / 864e5);
-}
-function ganttRange(project) {
-  var _a;
-  const start = project.scheduledDate;
-  const end = (_a = project.deadline) != null ? _a : project.endDate;
-  if (!start || !end || end < start) return void 0;
-  return { start, end, finishField: project.deadline ? "deadline" : "endDate", ...project.deadline && project.endDate ? { marker: project.endDate } : {} };
-}
-function resizeProjectDate(project, handle, delta) {
-  const range = ganttRange(project);
-  if (!range) throw new Error("Set a start date and a valid end date or deadline first.");
-  const field2 = handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : range.finishField;
-  const original = project[field2];
-  if (!original) throw new Error("This project has no end date to move.");
-  let value = addDays(original, Math.round(delta));
-  if (field2 === "scheduledDate") {
-    const limit = project.endDate && project.endDate < range.end ? project.endDate : range.end;
-    if (value > limit) value = limit;
-  } else if (value < range.start) value = range.start;
-  return { field: field2, value };
-}
-function ganttDateAt(anchor, offset, dayWidth, days) {
-  return addDays(anchor, Math.max(0, Math.min(days - 1, Math.floor(offset / dayWidth))));
-}
-function ganttSelection(first, last) {
-  return first <= last ? { scheduledDate: first, endDate: last } : { scheduledDate: last, endDate: first };
-}
-
-// src/gantt-view.ts
-function renderGantt(container, options) {
-  const root = container.createDiv({ cls: "tm-gantt" });
-  const { days, width: width2 } = GANTT_ZOOMS[options.zoom];
-  const start = options.anchor;
-  const end = addDays(start, days - 1);
-  const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
-  for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
-    const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-    (0, import_obsidian2.setIcon)(button, icon);
-    button.addEventListener("click", () => options.navigate(addDays(start, delta * days), options.zoom));
-  }
-  const today2 = toolbar.createEl("button", { text: "Today" });
-  today2.addEventListener("click", () => options.navigate(addDays(todayIso(), -2), options.zoom));
-  const first = toolbar.createEl("button", { text: "First project" });
-  const earliest = options.projects.map((project) => project.scheduledDate).filter((date) => Boolean(date)).sort()[0];
-  first.disabled = !earliest;
-  first.addEventListener("click", () => {
-    if (earliest) options.navigate(addDays(earliest, -1), options.zoom);
-  });
-  toolbar.createEl("h2", { text: `${formatDate(start, options.dateFormat)} \u2013 ${formatDate(end, options.dateFormat)}` });
-  const zoom = toolbar.createEl("select", { attr: { "aria-label": "Gantt zoom" } });
-  for (const value of ["week", "month", "quarter"]) zoom.createEl("option", { value, text: value[0].toUpperCase() + value.slice(1) });
-  zoom.value = options.zoom;
-  zoom.addEventListener("change", () => options.navigate(start, zoom.value));
-  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline" } });
-  scroll.style.setProperty("--tm-gantt-width", `${days * width2}px`);
-  scroll.style.setProperty("--tm-gantt-day", `${width2}px`);
-  const header = scroll.createDiv({ cls: "tm-gantt-row tm-gantt-header" });
-  header.createDiv({ cls: "tm-gantt-label", text: "Project" });
-  const dates = header.createDiv({ cls: "tm-gantt-dates" });
-  for (let index = 0; index < days; index++) {
-    const day = addDays(start, index);
-    const label = options.zoom === "quarter" ? String(localDate(day).getDate()) : localDate(day).toLocaleDateString(void 0, { month: "short", day: "numeric" });
-    dates.createDiv({ cls: `tm-gantt-date${day === todayIso() ? " is-today" : ""}`, text: label, attr: { title: formatDate(day, options.dateFormat) } });
-  }
-  let busy = false;
-  const persist = async (project, changes, rebuild = false) => {
-    if (busy) return;
-    busy = true;
-    root.setAttribute("aria-busy", "true");
-    try {
-      await options.update(project, changes);
-      Object.assign(project, changes);
-      if (rebuild && root.isConnected) {
-        const left = scroll.scrollLeft;
-        const top = scroll.scrollTop;
-        root.remove();
-        renderGantt(container, options);
-        const next = container.querySelector(".tm-gantt-scroll");
-        if (next) {
-          next.scrollLeft = left;
-          next.scrollTop = top;
-        }
-      }
-    } catch (cause) {
-      new import_obsidian2.Notice(cause instanceof Error ? cause.message : "Could not update project dates.");
-    } finally {
-      busy = false;
-      root.removeAttribute("aria-busy");
-    }
-  };
-  for (const { project, depth } of projectHierarchy(options.projects)) {
-    const row = scroll.createDiv({ cls: `tm-gantt-row${project.archived ? " is-archived" : ""}` });
-    const label = row.createEl("button", { cls: "tm-gantt-label", text: project.name, attr: { title: project.path, "aria-label": `Open ${project.name} project note` } });
-    label.style.paddingLeft = `${12 + depth * 16}px`;
-    label.addEventListener("click", () => options.open(project));
-    const track = row.createDiv({ cls: "tm-gantt-track" });
-    const todayOffset = daysBetween(start, todayIso());
-    if (todayOffset >= 0 && todayOffset < days) {
-      const marker = track.createSpan({ cls: "tm-gantt-today" });
-      marker.style.left = `${todayOffset * width2}px`;
-    }
-    const range = ganttRange(project);
-    if (!range && !project.scheduledDate && !project.endDate && !project.deadline) {
-      track.addClass("is-unscheduled");
-      track.setAttribute("aria-label", `Drag to schedule ${project.name}`);
-      const hint = track.createSpan({ cls: "tm-gantt-undated", text: "Drag to set dates" });
-      const selection = track.createDiv({ cls: "tm-gantt-selection" });
-      selection.hidden = true;
-      let pointer;
-      let first2 = "";
-      let last = "";
-      const dateAt = (event) => ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width2, days);
-      const paintSelection = () => {
-        const dates2 = ganttSelection(first2, last);
-        selection.hidden = false;
-        selection.style.left = `${daysBetween(start, dates2.scheduledDate) * width2 + 2}px`;
-        selection.style.width = `${(daysBetween(dates2.scheduledDate, dates2.endDate) + 1) * width2 - 4}px`;
-        selection.setText(`${formatDate(dates2.scheduledDate, options.dateFormat)} \u2013 ${formatDate(dates2.endDate, options.dateFormat)}`);
-      };
-      const resetSelection = () => {
-        pointer = void 0;
-        selection.hidden = true;
-        hint.hidden = false;
-      };
-      track.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0 || busy) return;
-        event.preventDefault();
-        pointer = event.pointerId;
-        first2 = last = dateAt(event);
-        hint.hidden = true;
-        track.setPointerCapture(event.pointerId);
-        paintSelection();
-      });
-      track.addEventListener("pointermove", (event) => {
-        if (pointer !== event.pointerId) return;
-        last = dateAt(event);
-        paintSelection();
-      });
-      track.addEventListener("pointerup", (event) => {
-        if (pointer !== event.pointerId) return;
-        last = dateAt(event);
-        const dates2 = ganttSelection(first2, last);
-        resetSelection();
-        track.releasePointerCapture(event.pointerId);
-        void persist(project, dates2, true);
-      });
-      track.addEventListener("pointercancel", resetSelection);
-      track.addEventListener("lostpointercapture", () => {
-        if (pointer !== void 0) resetSelection();
-      });
-      continue;
-    }
-    if (!range) {
-      const missing = !project.scheduledDate ? "Set start date" : !project.deadline && !project.endDate ? "Set end date or deadline" : "Finish is before start";
-      const edit = track.createEl("button", { cls: "tm-gantt-jump", text: missing });
-      edit.addEventListener("click", () => options.open(project));
-      continue;
-    }
-    const bar = track.createEl("button", { cls: "tm-gantt-bar", text: project.name });
-    bar.addEventListener("click", (event) => {
-      if (busy) return;
-      if (project.endDate || event.detail === 0) {
-        options.open(project);
-        return;
-      }
-      const clicked = ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width2, days);
-      const date = clicked < range.start ? range.start : clicked > range.end ? range.end : clicked;
-      void persist(project, { endDate: date }, true);
-    });
-    const jump = track.createEl("button", { cls: "tm-gantt-jump", text: `Show ${formatDate(range.start, options.dateFormat)}` });
-    jump.addEventListener("click", () => options.navigate(addDays(project.scheduledDate, -1), options.zoom));
-    const preview = track.createSpan({ cls: "tm-gantt-preview" });
-    preview.hidden = true;
-    const handles = /* @__PURE__ */ new Map();
-    const fieldFor = (handle) => handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : project.deadline ? "deadline" : "endDate";
-    for (const handle of ["start", "finish", ...range.marker ? ["end"] : []]) {
-      const button = track.createEl("button", { cls: `tm-gantt-handle is-${handle}`, attr: { "aria-label": `${project.name}: change ${handle === "start" ? "start date" : handle === "end" || !project.deadline ? "end date" : "deadline"}` } });
-      handles.set(handle, button);
-    }
-    const paint = (candidate) => {
-      const span = ganttRange(candidate);
-      const from = daysBetween(start, span.start);
-      const to = daysBetween(start, span.end) + 1;
-      bar.hidden = to <= 0 || from >= days;
-      jump.hidden = !bar.hidden;
-      bar.style.left = `${Math.max(0, from) * width2 + 2}px`;
-      bar.style.width = `${Math.max(8, (Math.min(days, to) - Math.max(0, from)) * width2 - 4)}px`;
-      bar.setAttribute("title", `${project.name}: ${formatDate(span.start, options.dateFormat)} \u2013 ${formatDate(span.end, options.dateFormat)} (${span.finishField === "deadline" ? "deadline" : "end date"})`);
-      for (const [handle, button] of handles) {
-        const date = candidate[fieldFor(handle)];
-        const offset = daysBetween(start, date);
-        button.hidden = offset < 0 || offset >= days;
-        button.style.left = `${offset * width2 + (handle === "finish" ? width2 - 10 : handle === "end" ? width2 / 2 - 6 : 2)}px`;
-        button.setAttribute("title", `${handle === "start" ? "Start" : fieldFor(handle) === "deadline" ? "Deadline" : "End"}: ${formatDate(date, options.dateFormat)} \u2014 drag or use arrow keys`);
-      }
-    };
-    paint(project);
-    for (const [handle, button] of handles) {
-      let pointer;
-      let origin = 0;
-      let delta = 0;
-      const reset = () => {
-        pointer = void 0;
-        delta = 0;
-        preview.hidden = true;
-        row.removeClass("is-resizing");
-        paint(project);
-      };
-      const save = async (change) => {
-        const { field: field2, value } = resizeProjectDate(project, handle, change);
-        if (value === project[field2] || busy) return;
-        await persist(project, { [field2]: value });
-        reset();
-      };
-      button.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0 || busy) return;
-        event.preventDefault();
-        event.stopPropagation();
-        pointer = event.pointerId;
-        origin = event.clientX;
-        delta = 0;
-        button.setPointerCapture(event.pointerId);
-      });
-      button.addEventListener("pointermove", (event) => {
-        if (pointer !== event.pointerId) return;
-        delta = Math.round((event.clientX - origin) / width2);
-        const { field: field2, value } = resizeProjectDate(project, handle, delta);
-        paint({ ...project, [field2]: value });
-        row.addClass("is-resizing");
-        preview.hidden = false;
-        preview.setText(`${field2 === "scheduledDate" ? "Start" : field2 === "deadline" ? "Deadline" : "End"}: ${formatDate(value, options.dateFormat)}`);
-      });
-      button.addEventListener("pointerup", (event) => {
-        if (pointer !== event.pointerId) return;
-        const change = delta;
-        reset();
-        button.releasePointerCapture(event.pointerId);
-        void save(change);
-      });
-      button.addEventListener("pointercancel", reset);
-      button.addEventListener("lostpointercapture", () => {
-        if (pointer !== void 0) reset();
-      });
-      button.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        void save(event.key === "ArrowLeft" ? -1 : 1);
-      });
-    }
-  }
 }
 
 // src/parser.ts
@@ -3719,6 +3271,678 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
     task.endLine = endLine;
   }
   return tasks;
+}
+
+// src/mobile-layout.ts
+function trackModalViewport(modal, content) {
+  const win = modal.ownerDocument.defaultView;
+  const container = modal.parentElement;
+  if (!win || !container) return () => {
+  };
+  container.classList.add("tm-editor-container");
+  const viewport = win.visualViewport;
+  let frame = 0;
+  const update = () => {
+    var _a, _b;
+    container.style.setProperty("--tm-viewport-height", `${(_a = viewport == null ? void 0 : viewport.height) != null ? _a : win.innerHeight}px`);
+    container.style.setProperty("--tm-viewport-top", `${(_b = viewport == null ? void 0 : viewport.offsetTop) != null ? _b : 0}px`);
+    win.cancelAnimationFrame(frame);
+    frame = win.requestAnimationFrame(() => {
+      if (!modal.ownerDocument.body.classList.contains("is-mobile") && !win.matchMedia("(max-width: 700px)").matches) return;
+      const focused = modal.ownerDocument.activeElement;
+      if (!focused || !content.contains(focused)) return;
+      const field2 = focused.getBoundingClientRect();
+      const area = content.getBoundingClientRect();
+      if (field2.bottom > area.bottom - 12) content.scrollTop += field2.bottom - area.bottom + 12;
+      else if (field2.top < area.top + 12) content.scrollTop -= area.top + 12 - field2.top;
+    });
+  };
+  viewport == null ? void 0 : viewport.addEventListener("resize", update);
+  viewport == null ? void 0 : viewport.addEventListener("scroll", update);
+  win.addEventListener("resize", update);
+  content.addEventListener("focusin", update);
+  update();
+  return () => {
+    win.cancelAnimationFrame(frame);
+    viewport == null ? void 0 : viewport.removeEventListener("resize", update);
+    viewport == null ? void 0 : viewport.removeEventListener("scroll", update);
+    win.removeEventListener("resize", update);
+    content.removeEventListener("focusin", update);
+    container.classList.remove("tm-editor-container");
+    container.style.removeProperty("--tm-viewport-height");
+    container.style.removeProperty("--tm-viewport-top");
+  };
+}
+
+// src/bulk-task-editor.ts
+function bulkPropertyValues(task, dateFormat) {
+  return {
+    scheduled: task.scheduledDate ? formatDateTime(task.scheduledDate, task.scheduledTime, dateFormat) : "",
+    deadline: task.deadline ? formatDateTime(task.deadline, task.deadlineTime, dateFormat) : "",
+    duration: task.durationMinutes ? formatDuration(task.durationMinutes) : "",
+    priority: task.priority ? String(task.priority) : "",
+    destination: destinationString(task.path, task.section)
+  };
+}
+function bulkPropertyPatch(values, dateFormat, reference = /* @__PURE__ */ new Date()) {
+  var _a;
+  const patch = {};
+  for (const field2 of ["scheduled", "deadline"]) {
+    if (!(field2 in values)) continue;
+    const value = values[field2].trim();
+    const parsed = value ? parseDateTimeExpression(value, reference, dateFormat) : void 0;
+    if (value && !parsed) throw new Error(`Could not understand the ${field2 === "scheduled" ? "scheduled date and time" : "deadline date and time"}.`);
+    if (field2 === "scheduled") {
+      patch.scheduledDate = parsed == null ? void 0 : parsed.date;
+      patch.scheduledTime = parsed == null ? void 0 : parsed.time;
+    } else {
+      patch.deadline = parsed == null ? void 0 : parsed.date;
+      patch.deadlineTime = parsed == null ? void 0 : parsed.time;
+    }
+  }
+  if ("duration" in values) {
+    const value = values.duration.trim();
+    const duration = durationToMinutes(value.replace(/\s+/g, ""));
+    if (value && !duration) throw new Error("Use a duration such as 45m, 2h, or 1h30m.");
+    patch.durationMinutes = duration;
+  }
+  if ("priority" in values) {
+    if (values.priority && !/^[123]$/.test(values.priority)) throw new Error("Select a valid priority.");
+    patch.priority = values.priority ? Number(values.priority) : void 0;
+  }
+  if ("destination" in values) {
+    if (!((_a = values.destination) == null ? void 0 : _a.trim())) throw new Error("Select a destination note.");
+    patch.destination = values.destination;
+  }
+  return patch;
+}
+var BulkTaskEditorModal = class extends import_obsidian2.Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+    this.inputs = /* @__PURE__ */ new Map();
+    this.initial = /* @__PURE__ */ new Map();
+    this.changed = /* @__PURE__ */ new Set();
+  }
+  onOpen() {
+    var _a;
+    this.modalEl.addClass("tm-editor-modal");
+    const content = this.contentEl;
+    content.empty();
+    content.createEl("h2", { text: "Edit task properties" });
+    content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
+    const snapshots = this.options.tasks.map((task) => bulkPropertyValues(task, this.options.dateFormat));
+    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["destination", "Destination"]]) {
+      const common = snapshots.every((value) => value[key] === snapshots[0][key]) ? snapshots[0][key] : void 0;
+      this.initial.set(key, common);
+      const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });
+      const caption = row.createEl("label", { text: label });
+      const input = key === "priority" || key === "destination" ? row.createEl("select") : row.createEl("input", { type: "text" });
+      input.setAttribute("aria-label", label);
+      caption.addEventListener("click", () => input.focus());
+      if (input.tagName === "SELECT") {
+        const select = input;
+        if (common === void 0) select.createEl("option", { value: "__mixed__", text: "Mixed \u2014 unchanged" });
+        if (key === "priority") {
+          for (const [value, text] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) select.createEl("option", { value, text });
+        } else {
+          const destinations = /* @__PURE__ */ new Set([this.options.inboxPath, ...snapshots.map((value) => value.destination)]);
+          for (const project of this.options.projects) {
+            destinations.add(project.path);
+            for (const heading of (_a = project.headings) != null ? _a : []) destinations.add(destinationString(project.path, heading.name));
+          }
+          for (const destination of [...destinations].sort()) select.createEl("option", { value: destination, text: destination });
+        }
+        input.value = common != null ? common : "__mixed__";
+      } else {
+        input.placeholder = common === void 0 ? "Mixed \u2014 unchanged" : key === "duration" ? "45m or 1h30m" : "Tomorrow at 9am";
+        input.value = common != null ? common : "";
+      }
+      this.inputs.set(key, input);
+      const update = () => {
+        if (input.value === "__mixed__" || input.value === this.initial.get(key)) this.changed.delete(key);
+        else this.changed.add(key);
+      };
+      input.addEventListener("input", update);
+      input.addEventListener("change", update);
+      if (key !== "destination") {
+        const clear = row.createEl("button", { text: "Clear", attr: { "aria-label": `Clear ${label.toLowerCase()}` } });
+        clear.addEventListener("click", () => {
+          input.value = "";
+          this.changed.add(key);
+        });
+      }
+    }
+    const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
+    this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
+    const remove = this.actions.createEl("button", { text: "Delete task", cls: "tm-delete-task" });
+    const cancel = this.actions.createEl("button", { text: "Cancel" });
+    const save = this.actions.createEl("button", { text: "Save task", cls: "mod-cta", attr: { title: "Cmd/Ctrl+Enter" } });
+    const run = async (deleting) => {
+      if (save.disabled) return;
+      try {
+        const values = Object.fromEntries([...this.changed].map((key) => [key, this.inputs.get(key).value]));
+        const patch = deleting ? {} : bulkPropertyPatch(values, this.options.dateFormat);
+        save.disabled = remove.disabled = cancel.disabled = true;
+        if (deleting) await this.options.onDelete();
+        else await this.options.onSave(patch);
+        this.close();
+      } catch (cause) {
+        save.disabled = remove.disabled = cancel.disabled = false;
+        const message = cause instanceof Error ? cause.message : "Could not update selected tasks.";
+        error.setText(message);
+        new import_obsidian2.Notice(message);
+      }
+    };
+    remove.addEventListener("click", () => {
+      void run(true);
+    });
+    save.addEventListener("click", () => {
+      void run(false);
+    });
+    cancel.addEventListener("click", () => this.close());
+    content.onkeydown = (event) => {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) void run(false);
+    };
+    this.stopViewportTracking = trackModalViewport(this.modalEl, content);
+  }
+  onClose() {
+    var _a, _b;
+    (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
+    (_b = this.actions) == null ? void 0 : _b.remove();
+    this.contentEl.onkeydown = null;
+    this.contentEl.empty();
+  }
+};
+
+// src/task-mode.ts
+var import_obsidian7 = require("obsidian");
+
+// src/task-selection.ts
+var TaskSelection = class {
+  constructor() {
+    this.selected = /* @__PURE__ */ new Map();
+  }
+  clear() {
+    this.selected.clear();
+    this.anchor = void 0;
+  }
+  has(task) {
+    var _a;
+    return ((_a = this.selected.get(task.id)) == null ? void 0 : _a.raw) === task.raw;
+  }
+  tasks(visible) {
+    return visible.filter((task) => this.has(task));
+  }
+  retain(visible) {
+    var _a, _b;
+    const current = new Map(visible.map((task) => [task.id, task]));
+    for (const [id, task] of this.selected) if (((_a = current.get(id)) == null ? void 0 : _a.raw) !== task.raw) this.selected.delete(id);
+    if (!this.selected.has((_b = this.anchor) != null ? _b : "")) this.anchor = void 0;
+  }
+  click(task, visible, shift = false, additive = false) {
+    const start = visible.findIndex((item) => item.id === this.anchor);
+    const end = visible.findIndex((item) => item.id === task.id);
+    if (shift && start >= 0 && end >= 0) {
+      if (!additive) this.selected.clear();
+      for (const item of visible.slice(Math.min(start, end), Math.max(start, end) + 1)) this.selected.set(item.id, item);
+    } else {
+      if (!additive) this.selected.clear();
+      this.selected.set(task.id, task);
+      this.anchor = task.id;
+    }
+  }
+};
+
+// src/project-properties.ts
+function parseProjectProperties(frontmatter, dateFormat) {
+  var _a, _b, _c;
+  const values = new Map(Object.entries(frontmatter != null ? frontmatter : {}).map(([key, value]) => [key.toLowerCase().replace(/[\s_-]/g, ""), value]));
+  const scalar = (value) => {
+    if (Array.isArray(value) && value.length === 1) value = value[0];
+    return typeof value === "string" || typeof value === "number" ? String(value).trim() : void 0;
+  };
+  const date = (value) => {
+    var _a2;
+    const text = scalar(value);
+    if (!text) return void 0;
+    const link = /^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/.exec(text);
+    return parseDateExpression((_a2 = link == null ? void 0 : link[1]) != null ? _a2 : text, /* @__PURE__ */ new Date(), dateFormat);
+  };
+  const rawPriority = (_a = scalar(values.get("priority"))) == null ? void 0 : _a.toLowerCase();
+  const priorities = { "1": 1, p1: 1, high: 1, "2": 2, p2: 2, medium: 2, "3": 3, p3: 3, low: 3 };
+  return {
+    scheduledDate: date((_c = (_b = values.get("date")) != null ? _b : values.get("startdate")) != null ? _c : values.get("scheduleddate")),
+    endDate: date(values.get("enddate")),
+    deadline: date(values.get("deadline")),
+    priority: rawPriority && Object.prototype.hasOwnProperty.call(priorities, rawPriority) ? priorities[rawPriority] : void 0
+  };
+}
+function addProjectProperties(frontmatter) {
+  const rawTags = frontmatter.tags;
+  const tags = Array.isArray(rawTags) ? [...rawTags] : typeof rawTags === "string" ? rawTags.split(/[,\s]+/).filter(Boolean) : [];
+  if (!tags.some((tag) => typeof tag === "string" && /^#?project(?:\/|$)/.test(tag))) tags.push("project");
+  frontmatter.tags = tags;
+  const keys = new Set(Object.keys(frontmatter).map((key) => key.toLowerCase().replace(/[\s_-]/g, "")));
+  for (const [name, aliases] of [
+    ["date", ["date", "startdate", "scheduleddate"]],
+    ["end date", ["enddate"]],
+    ["deadline", ["deadline"]],
+    ["priority", ["priority"]]
+  ]) {
+    if (!aliases.some((alias) => keys.has(alias))) frontmatter[name] = null;
+  }
+}
+function parseProjectParent(frontmatter) {
+  var _a, _b;
+  let value = (_a = Object.entries(frontmatter != null ? frontmatter : {}).find(([key]) => key.trim().toLowerCase() === "parent")) == null ? void 0 : _a[1];
+  if (Array.isArray(value)) value = value.length === 1 ? value[0] : void 0;
+  if (typeof value !== "string") return void 0;
+  const text = value.trim();
+  const link = /^\[\[([^\]]+)\]\]$/.exec(text);
+  const path = ((_b = link == null ? void 0 : link[1]) != null ? _b : text).split(/[|#]/, 1)[0].trim();
+  return path && !/[\r\n\[\]]/.test(path) ? path : void 0;
+}
+function updateProjectDate(frontmatter, field2, value, expected, dateFormat) {
+  var _a, _b, _c;
+  if (!parseDateExpression(value)) throw new Error("Invalid project date.");
+  const current = parseProjectProperties(frontmatter, dateFormat);
+  for (const key2 of ["scheduledDate", "endDate", "deadline"]) {
+    if (current[key2] !== expected[key2]) throw new Error("Project dates changed while dragging. Refresh and try again.");
+  }
+  const aliases = field2 === "scheduledDate" ? ["date", "startdate", "scheduleddate"] : field2 === "endDate" ? ["enddate"] : ["deadline"];
+  const keys = Object.keys(frontmatter);
+  const matches = aliases.map((alias) => keys.find((key2) => key2.toLowerCase().replace(/[\s_-]/g, "") === alias)).filter((key2) => Boolean(key2));
+  const key = (_b = (_a = matches.find((key2) => frontmatter[key2] !== null && frontmatter[key2] !== void 0)) != null ? _a : matches[0]) != null ? _b : field2 === "scheduledDate" ? "date" : field2 === "endDate" ? "end date" : "deadline";
+  const original = frontmatter[key];
+  const raw = Array.isArray(original) ? original[0] : original;
+  const link = typeof raw === "string" ? /^\[\[[^\]|]+(\|[^\]]*)?\]\]$/.exec(raw.trim()) : void 0;
+  const formatted = link ? `[[${formatDate(value, dateFormat)}${(_c = link[1]) != null ? _c : ""}]]` : value;
+  frontmatter[key] = Array.isArray(original) && original.length === 1 ? [formatted] : formatted;
+}
+function updateProjectDates(frontmatter, changes, expected, dateFormat) {
+  const next = { ...frontmatter };
+  let snapshot = expected;
+  for (const field2 of ["scheduledDate", "endDate", "deadline"]) {
+    const value = changes[field2];
+    if (value === void 0) continue;
+    updateProjectDate(next, field2, value, snapshot, dateFormat);
+    snapshot = parseProjectProperties(next, dateFormat);
+  }
+  Object.assign(frontmatter, next);
+}
+
+// src/gantt-view.ts
+var import_obsidian3 = require("obsidian");
+
+// src/calendar.ts
+var SLOT_MINUTES = 15;
+function localDate(iso) {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+function addDays(iso, days) {
+  const date = localDate(iso);
+  date.setDate(date.getDate() + days);
+  return formatLocalDate(date);
+}
+function calendarDate(task) {
+  var _a;
+  return (_a = task.scheduledDate) != null ? _a : task.deadline;
+}
+function calendarTime(task) {
+  return task.scheduledDate ? task.scheduledTime : task.deadlineTime;
+}
+function timeMinutes(time) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+function minuteTime(minutes) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+function selectionPreset(date, first, last) {
+  const start = Math.max(0, Math.min(95, Math.min(first, last))) * SLOT_MINUTES;
+  const end = (Math.max(0, Math.min(95, Math.max(first, last))) + 1) * SLOT_MINUTES;
+  return { scheduledDate: date, scheduledTime: minuteTime(start), durationMinutes: end - start };
+}
+function calendarDays(anchor, scope) {
+  const date = localDate(anchor);
+  if (scope === "month") date.setDate(1);
+  date.setDate(date.getDate() - (date.getDay() + 6) % 7);
+  const start = formatLocalDate(date);
+  return Array.from({ length: scope === "week" ? 7 : 42 }, (_, index) => addDays(start, index));
+}
+function shiftCalendar(anchor, scope, direction) {
+  if (scope === "day" || scope === "week") return addDays(anchor, direction * (scope === "week" ? 7 : 1));
+  const date = localDate(anchor);
+  const day = date.getDate();
+  date.setDate(1);
+  if (scope === "month") date.setMonth(date.getMonth() + direction);
+  else date.setFullYear(date.getFullYear() + direction);
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(day, lastDay));
+  return formatLocalDate(date);
+}
+function rescheduledDraft(task, date, time) {
+  return {
+    ...task,
+    scheduledDate: date,
+    scheduledTime: time != null ? time : task.scheduledTime,
+    destination: destinationString(task.path, task.section)
+  };
+}
+function resizedRange(begin, end, edge, target) {
+  const snapped = Math.round(target / SLOT_MINUTES) * SLOT_MINUTES;
+  const start = edge === "start" ? Math.max(0, Math.min(end - SLOT_MINUTES, snapped)) : begin;
+  const finish = edge === "end" ? Math.min(1440, Math.max(begin + SLOT_MINUTES, snapped)) : end;
+  return { start, duration: finish - start };
+}
+
+// src/project-hierarchy.ts
+function projectHierarchy(projects) {
+  var _a, _b, _c;
+  const ordered = [...projects].sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
+  const visible = new Set(ordered.map((project) => project.path));
+  const parents = new Map(ordered.map((project) => [project.path, project.parentPath && visible.has(project.parentPath) ? project.parentPath : void 0]));
+  const checked = /* @__PURE__ */ new Set();
+  for (const project of ordered) {
+    const chain = [];
+    const positions = /* @__PURE__ */ new Map();
+    let path = project.path;
+    while (path && !checked.has(path)) {
+      const cycle = positions.get(path);
+      if (cycle !== void 0) {
+        for (const member of chain.slice(cycle)) parents.set(member, void 0);
+        break;
+      }
+      positions.set(path, chain.length);
+      chain.push(path);
+      path = parents.get(path);
+    }
+    for (const member of chain) checked.add(member);
+  }
+  const children = /* @__PURE__ */ new Map();
+  for (const project of ordered) {
+    const parent = parents.get(project.path);
+    const group = (_a = children.get(parent)) != null ? _a : [];
+    group.push(project);
+    children.set(parent, group);
+  }
+  const result = [];
+  const pending = ((_b = children.get(void 0)) != null ? _b : []).map((project) => ({ project, depth: 0 })).reverse();
+  while (pending.length) {
+    const entry = pending.pop();
+    result.push(entry);
+    for (const child of [...(_c = children.get(entry.project.path)) != null ? _c : []].reverse()) pending.push({ project: child, depth: entry.depth + 1 });
+  }
+  return result;
+}
+
+// src/gantt.ts
+var GANTT_ZOOMS = {
+  week: { days: 14, width: 64 },
+  month: { days: 35, width: 32 },
+  quarter: { days: 91, width: 18 }
+};
+function daysBetween(start, end) {
+  const utc = (iso) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((utc(end) - utc(start)) / 864e5);
+}
+function ganttRange(project) {
+  var _a;
+  const start = project.scheduledDate;
+  const end = (_a = project.deadline) != null ? _a : project.endDate;
+  if (!start || !end || end < start) return void 0;
+  return { start, end, finishField: project.deadline ? "deadline" : "endDate", ...project.deadline && project.endDate ? { marker: project.endDate } : {} };
+}
+function resizeProjectDate(project, handle, delta) {
+  const range = ganttRange(project);
+  if (!range) throw new Error("Set a start date and a valid end date or deadline first.");
+  const field2 = handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : range.finishField;
+  const original = project[field2];
+  if (!original) throw new Error("This project has no end date to move.");
+  let value = addDays(original, Math.round(delta));
+  if (field2 === "scheduledDate") {
+    const limit = project.endDate && project.endDate < range.end ? project.endDate : range.end;
+    if (value > limit) value = limit;
+  } else if (value < range.start) value = range.start;
+  return { field: field2, value };
+}
+function ganttDateAt(anchor, offset, dayWidth, days) {
+  return addDays(anchor, Math.max(0, Math.min(days - 1, Math.floor(offset / dayWidth))));
+}
+function ganttSelection(first, last) {
+  return first <= last ? { scheduledDate: first, endDate: last } : { scheduledDate: last, endDate: first };
+}
+
+// src/gantt-view.ts
+function renderGantt(container, options) {
+  const root = container.createDiv({ cls: "tm-gantt" });
+  const { days, width: width2 } = GANTT_ZOOMS[options.zoom];
+  const start = options.anchor;
+  const end = addDays(start, days - 1);
+  const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
+  for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
+    const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
+    (0, import_obsidian3.setIcon)(button, icon);
+    button.addEventListener("click", () => options.navigate(addDays(start, delta * days), options.zoom));
+  }
+  const today2 = toolbar.createEl("button", { text: "Today" });
+  today2.addEventListener("click", () => options.navigate(addDays(todayIso(), -2), options.zoom));
+  const first = toolbar.createEl("button", { text: "First project" });
+  const earliest = options.projects.map((project) => project.scheduledDate).filter((date) => Boolean(date)).sort()[0];
+  first.disabled = !earliest;
+  first.addEventListener("click", () => {
+    if (earliest) options.navigate(addDays(earliest, -1), options.zoom);
+  });
+  toolbar.createEl("h2", { text: `${formatDate(start, options.dateFormat)} \u2013 ${formatDate(end, options.dateFormat)}` });
+  const zoom = toolbar.createEl("select", { attr: { "aria-label": "Gantt zoom" } });
+  for (const value of ["week", "month", "quarter"]) zoom.createEl("option", { value, text: value[0].toUpperCase() + value.slice(1) });
+  zoom.value = options.zoom;
+  zoom.addEventListener("change", () => options.navigate(start, zoom.value));
+  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline" } });
+  scroll.style.setProperty("--tm-gantt-width", `${days * width2}px`);
+  scroll.style.setProperty("--tm-gantt-day", `${width2}px`);
+  const header = scroll.createDiv({ cls: "tm-gantt-row tm-gantt-header" });
+  header.createDiv({ cls: "tm-gantt-label", text: "Project" });
+  const dates = header.createDiv({ cls: "tm-gantt-dates" });
+  for (let index = 0; index < days; index++) {
+    const day = addDays(start, index);
+    const label = options.zoom === "quarter" ? String(localDate(day).getDate()) : localDate(day).toLocaleDateString(void 0, { month: "short", day: "numeric" });
+    dates.createDiv({ cls: `tm-gantt-date${day === todayIso() ? " is-today" : ""}`, text: label, attr: { title: formatDate(day, options.dateFormat) } });
+  }
+  let busy = false;
+  const persist = async (project, changes, rebuild = false) => {
+    if (busy) return;
+    busy = true;
+    root.setAttribute("aria-busy", "true");
+    try {
+      await options.update(project, changes);
+      Object.assign(project, changes);
+      if (rebuild && root.isConnected) {
+        const left = scroll.scrollLeft;
+        const top = scroll.scrollTop;
+        root.remove();
+        renderGantt(container, options);
+        const next = container.querySelector(".tm-gantt-scroll");
+        if (next) {
+          next.scrollLeft = left;
+          next.scrollTop = top;
+        }
+      }
+    } catch (cause) {
+      new import_obsidian3.Notice(cause instanceof Error ? cause.message : "Could not update project dates.");
+    } finally {
+      busy = false;
+      root.removeAttribute("aria-busy");
+    }
+  };
+  for (const { project, depth } of projectHierarchy(options.projects)) {
+    const row = scroll.createDiv({ cls: `tm-gantt-row${project.archived ? " is-archived" : ""}` });
+    const label = row.createEl("button", { cls: "tm-gantt-label", text: project.name, attr: { title: project.path, "aria-label": `Open ${project.name} project note` } });
+    label.style.paddingLeft = `${12 + depth * 16}px`;
+    label.addEventListener("click", () => options.open(project));
+    const track = row.createDiv({ cls: "tm-gantt-track" });
+    const todayOffset = daysBetween(start, todayIso());
+    if (todayOffset >= 0 && todayOffset < days) {
+      const marker = track.createSpan({ cls: "tm-gantt-today" });
+      marker.style.left = `${todayOffset * width2}px`;
+    }
+    const range = ganttRange(project);
+    if (!range && !project.scheduledDate && !project.endDate && !project.deadline) {
+      track.addClass("is-unscheduled");
+      track.setAttribute("aria-label", `Drag to schedule ${project.name}`);
+      const hint = track.createSpan({ cls: "tm-gantt-undated", text: "Drag to set dates" });
+      const selection = track.createDiv({ cls: "tm-gantt-selection" });
+      selection.hidden = true;
+      let pointer;
+      let first2 = "";
+      let last = "";
+      const dateAt = (event) => ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width2, days);
+      const paintSelection = () => {
+        const dates2 = ganttSelection(first2, last);
+        selection.hidden = false;
+        selection.style.left = `${daysBetween(start, dates2.scheduledDate) * width2 + 2}px`;
+        selection.style.width = `${(daysBetween(dates2.scheduledDate, dates2.endDate) + 1) * width2 - 4}px`;
+        selection.setText(`${formatDate(dates2.scheduledDate, options.dateFormat)} \u2013 ${formatDate(dates2.endDate, options.dateFormat)}`);
+      };
+      const resetSelection = () => {
+        pointer = void 0;
+        selection.hidden = true;
+        hint.hidden = false;
+      };
+      track.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || busy) return;
+        event.preventDefault();
+        pointer = event.pointerId;
+        first2 = last = dateAt(event);
+        hint.hidden = true;
+        track.setPointerCapture(event.pointerId);
+        paintSelection();
+      });
+      track.addEventListener("pointermove", (event) => {
+        if (pointer !== event.pointerId) return;
+        last = dateAt(event);
+        paintSelection();
+      });
+      track.addEventListener("pointerup", (event) => {
+        if (pointer !== event.pointerId) return;
+        last = dateAt(event);
+        const dates2 = ganttSelection(first2, last);
+        resetSelection();
+        track.releasePointerCapture(event.pointerId);
+        void persist(project, dates2, true);
+      });
+      track.addEventListener("pointercancel", resetSelection);
+      track.addEventListener("lostpointercapture", () => {
+        if (pointer !== void 0) resetSelection();
+      });
+      continue;
+    }
+    if (!range) {
+      const missing = !project.scheduledDate ? "Set start date" : !project.deadline && !project.endDate ? "Set end date or deadline" : "Finish is before start";
+      const edit = track.createEl("button", { cls: "tm-gantt-jump", text: missing });
+      edit.addEventListener("click", () => options.open(project));
+      continue;
+    }
+    const bar = track.createEl("button", { cls: "tm-gantt-bar", text: project.name });
+    bar.addEventListener("click", (event) => {
+      if (busy) return;
+      if (project.endDate || event.detail === 0) {
+        options.open(project);
+        return;
+      }
+      const clicked = ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width2, days);
+      const date = clicked < range.start ? range.start : clicked > range.end ? range.end : clicked;
+      void persist(project, { endDate: date }, true);
+    });
+    const jump = track.createEl("button", { cls: "tm-gantt-jump", text: `Show ${formatDate(range.start, options.dateFormat)}` });
+    jump.addEventListener("click", () => options.navigate(addDays(project.scheduledDate, -1), options.zoom));
+    const preview = track.createSpan({ cls: "tm-gantt-preview" });
+    preview.hidden = true;
+    const handles = /* @__PURE__ */ new Map();
+    const fieldFor = (handle) => handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : project.deadline ? "deadline" : "endDate";
+    for (const handle of ["start", "finish", ...range.marker ? ["end"] : []]) {
+      const button = track.createEl("button", { cls: `tm-gantt-handle is-${handle}`, attr: { "aria-label": `${project.name}: change ${handle === "start" ? "start date" : handle === "end" || !project.deadline ? "end date" : "deadline"}` } });
+      handles.set(handle, button);
+    }
+    const paint = (candidate) => {
+      const span = ganttRange(candidate);
+      const from = daysBetween(start, span.start);
+      const to = daysBetween(start, span.end) + 1;
+      bar.hidden = to <= 0 || from >= days;
+      jump.hidden = !bar.hidden;
+      bar.style.left = `${Math.max(0, from) * width2 + 2}px`;
+      bar.style.width = `${Math.max(8, (Math.min(days, to) - Math.max(0, from)) * width2 - 4)}px`;
+      bar.setAttribute("title", `${project.name}: ${formatDate(span.start, options.dateFormat)} \u2013 ${formatDate(span.end, options.dateFormat)} (${span.finishField === "deadline" ? "deadline" : "end date"})`);
+      for (const [handle, button] of handles) {
+        const date = candidate[fieldFor(handle)];
+        const offset = daysBetween(start, date);
+        button.hidden = offset < 0 || offset >= days;
+        button.style.left = `${offset * width2 + (handle === "finish" ? width2 - 10 : handle === "end" ? width2 / 2 - 6 : 2)}px`;
+        button.setAttribute("title", `${handle === "start" ? "Start" : fieldFor(handle) === "deadline" ? "Deadline" : "End"}: ${formatDate(date, options.dateFormat)} \u2014 drag or use arrow keys`);
+      }
+    };
+    paint(project);
+    for (const [handle, button] of handles) {
+      let pointer;
+      let origin = 0;
+      let delta = 0;
+      const reset = () => {
+        pointer = void 0;
+        delta = 0;
+        preview.hidden = true;
+        row.removeClass("is-resizing");
+        paint(project);
+      };
+      const save = async (change) => {
+        const { field: field2, value } = resizeProjectDate(project, handle, change);
+        if (value === project[field2] || busy) return;
+        await persist(project, { [field2]: value });
+        reset();
+      };
+      button.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || busy) return;
+        event.preventDefault();
+        event.stopPropagation();
+        pointer = event.pointerId;
+        origin = event.clientX;
+        delta = 0;
+        button.setPointerCapture(event.pointerId);
+      });
+      button.addEventListener("pointermove", (event) => {
+        if (pointer !== event.pointerId) return;
+        delta = Math.round((event.clientX - origin) / width2);
+        const { field: field2, value } = resizeProjectDate(project, handle, delta);
+        paint({ ...project, [field2]: value });
+        row.addClass("is-resizing");
+        preview.hidden = false;
+        preview.setText(`${field2 === "scheduledDate" ? "Start" : field2 === "deadline" ? "Deadline" : "End"}: ${formatDate(value, options.dateFormat)}`);
+      });
+      button.addEventListener("pointerup", (event) => {
+        if (pointer !== event.pointerId) return;
+        const change = delta;
+        reset();
+        button.releasePointerCapture(event.pointerId);
+        void save(change);
+      });
+      button.addEventListener("pointercancel", reset);
+      button.addEventListener("lostpointercapture", () => {
+        if (pointer !== void 0) reset();
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        void save(event.key === "ArrowLeft" ? -1 : 1);
+      });
+    }
+  }
 }
 
 // src/task-properties.ts
@@ -3937,12 +4161,14 @@ function kanbanColumns(tasks, grouping) {
 }
 
 // src/list-drag-view.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 var ListDragController = class {
-  constructor(getTask, drop, allowNesting = true) {
+  constructor(getTask, drop, allowNesting = true, dragStart = () => {
+  }) {
     this.getTask = getTask;
     this.drop = drop;
     this.allowNesting = allowNesting;
+    this.dragStart = dragStart;
     this.busy = false;
     this.targets = /* @__PURE__ */ new Map();
   }
@@ -3987,7 +4213,7 @@ var ListDragController = class {
   }
   row(row, primary, task, group) {
     const handle = primary.createEl("button", { cls: "clickable-icon tm-list-drag-handle", attr: { "aria-label": `Drag ${task.title}`, title: "Drag to reorder; drop to the right to nest, or to the left to outdent" } });
-    (0, import_obsidian3.setIcon)(handle, "grip-vertical");
+    (0, import_obsidian4.setIcon)(handle, "grip-vertical");
     primary.prepend(handle);
     row.draggable = true;
     row.addEventListener("dragstart", (event) => {
@@ -3995,6 +4221,7 @@ var ListDragController = class {
         event.preventDefault();
         return;
       }
+      this.dragStart(task);
       this.taskId = task.id;
       this.original = task;
       event.stopPropagation();
@@ -4054,6 +4281,7 @@ var ListDragController = class {
     handle.addEventListener("pointermove", (event) => {
       if (pointer !== event.pointerId) return;
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
+      if (!dragging) this.dragStart(task);
       dragging = true;
       this.taskId = task.id;
       this.original = task;
@@ -4103,7 +4331,7 @@ var ListDragController = class {
 };
 
 // src/calendar-view.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 function renderCalendar(container, options) {
   var _a, _b, _c, _d, _e;
   const root = container.createDiv({ cls: "tm-calendar" });
@@ -4119,7 +4347,7 @@ function renderCalendar(container, options) {
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
     const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-    (0, import_obsidian4.setIcon)(button, icon);
+    (0, import_obsidian5.setIcon)(button, icon);
     button.addEventListener("click", () => options.navigate(shiftCalendar(options.anchor, options.scope, delta), options.scope));
   }
   const today2 = toolbar.createEl("button", { text: "Today" });
@@ -4150,25 +4378,31 @@ function renderCalendar(container, options) {
       dragged = void 0;
       moving = true;
       void options.move(task, targetDate, getTime == null ? void 0 : getTime(event)).catch((cause) => {
-        new import_obsidian4.Notice(cause instanceof Error ? cause.message : "Could not reschedule task.");
+        new import_obsidian5.Notice(cause instanceof Error ? cause.message : "Could not reschedule task.");
       }).finally(() => {
         moving = false;
       });
     });
   };
   const taskCard = (parent, task) => {
+    var _a2;
     const time = calendarTime(task);
     const card = parent.createEl("button", {
       cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
-      text: `${time ? `${time} ` : ""}${task.title}`,
       attr: { title: `${task.title}${task.durationMinutes ? ` \xB7 ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` }
     });
+    card.createSpan({ cls: "tm-calendar-task-title", text: `${time ? `${time} ` : ""}${task.title}` });
     card.draggable = true;
     card.addEventListener("click", (event) => {
-      event.stopPropagation();
-      options.edit(task);
+      if (!options.bind || event.target.closest(".tm-calendar-task-title")) {
+        event.stopPropagation();
+        options.edit(task);
+      }
     });
+    (_a2 = options.bind) == null ? void 0 : _a2.call(options, card, task);
     card.addEventListener("dragstart", (event) => {
+      var _a3;
+      (_a3 = options.dragStart) == null ? void 0 : _a3.call(options, task);
       dragged = task;
       event.stopPropagation();
       if (event.dataTransfer) {
@@ -4310,7 +4544,7 @@ function renderCalendar(container, options) {
           card.setAttribute("aria-busy", "true");
           void options.resize(task, day, minuteTime(range.start), range.duration).catch((cause) => {
             restore();
-            new import_obsidian4.Notice(cause instanceof Error ? cause.message : "Could not resize task.");
+            new import_obsidian5.Notice(cause instanceof Error ? cause.message : "Could not resize task.");
           }).finally(() => {
             moving = false;
             card.removeAttribute("aria-busy");
@@ -4422,7 +4656,7 @@ function renderCalendar(container, options) {
 }
 
 // src/task-view.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 var TASK_MAIN_VIEW = "task-manager-main";
 var TITLES = {
   inbox: "Inbox",
@@ -4431,7 +4665,7 @@ var TITLES = {
   all: "All Tasks",
   projects: "Projects"
 };
-var TaskMainView = class extends import_obsidian5.ItemView {
+var TaskMainView = class extends import_obsidian6.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -4450,6 +4684,10 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     this.descending = false;
     this.grouping = "default";
     this.filtersExpanded = false;
+    this.selection = new TaskSelection();
+    this.visibleTasks = [];
+    this.selectionRows = /* @__PURE__ */ new Map();
+    this.draggedTasks = [];
   }
   get pagePath() {
     var _a;
@@ -4479,6 +4717,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath) {
+      this.selection.clear();
       this.search = "";
       this.propertyFilters = [];
       this.sort = "date";
@@ -4504,6 +4743,10 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     const container = this.containerEl.children[1];
     container.empty();
     this.taskResults = void 0;
+    this.selectionBar = void 0;
+    this.selectionCount = void 0;
+    this.visibleTasks = [];
+    this.selectionRows.clear();
     container.addClass("tm-main-view");
     container.classList.toggle("tm-wrap-task-titles", this.layout === "list" && this.plugin.settings.wrapTaskTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
@@ -4514,15 +4757,18 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     }
     this.renderHeader(container);
     this.renderFilters(container);
+    this.renderSelectionBar(container);
     this.taskResults = container.createDiv({ cls: "tm-task-results" });
     this.renderTaskResults();
   }
   renderTaskResults() {
-    var _a, _b;
     const container = this.taskResults;
     if (!container) return;
     container.empty();
-    this.listDrag = new ListDragController((id) => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban");
+    this.visibleTasks = [];
+    this.selectionRows.clear();
+    this.updateSelection();
+    this.listDrag = new ListDragController((id) => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", (task) => this.prepareDrag(task));
     const query = {
       mode: this.pagePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
       showCompleted: this.showCompleted || this.layout === "kanban",
@@ -4531,6 +4777,13 @@ var TaskMainView = class extends import_obsidian5.ItemView {
       search: this.search || void 0
     };
     const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
+    this.selection.retain(tasks);
+    this.renderTaskLayouts(container, tasks);
+    this.selection.retain(this.visibleTasks);
+    this.updateSelection();
+  }
+  renderTaskLayouts(container, tasks) {
+    var _a, _b;
     if (this.layout === "calendar") {
       renderCalendar(container, {
         anchor: this.calendarAnchor,
@@ -4544,6 +4797,8 @@ var TaskMainView = class extends import_obsidian5.ItemView {
         },
         create: (preset) => this.plugin.openEditor({ ...this.state, preset }),
         edit: (task) => this.plugin.openEditor({ ...this.state, task }),
+        bind: (card, task) => this.bindSelection(card, task),
+        dragStart: (task) => this.prepareDrag(task),
         resize: async (task, date, time, duration) => {
           const latest = this.plugin.index.taskById(task.id);
           if (!latest) throw new Error("Task no longer exists. Refresh the view and try again.");
@@ -4551,10 +4806,10 @@ var TaskMainView = class extends import_obsidian5.ItemView {
           await this.plugin.index.refreshPath(latest.path);
         },
         move: async (task, date, time) => {
-          const latest = this.plugin.index.taskById(task.id);
-          if (!latest) throw new Error("Task no longer exists. Refresh the view and try again.");
-          await this.plugin.store.update(latest, rescheduledDraft(latest, date, time));
-          await this.plugin.index.refreshPath(latest.path);
+          const selected = this.draggedTasks.length ? this.draggedTasks : [task];
+          const paths = await this.plugin.store.bulkChange(selected, (original) => rescheduledDraft(original, date, time));
+          this.clearSelection();
+          for (const path of paths) await this.plugin.index.refreshPath(path);
         }
       });
       return;
@@ -4623,7 +4878,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
       header.createEl("h2", { text: title });
       header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
       const add = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `Add task to ${title}`, title: `Add task to ${title}` } });
-      (0, import_obsidian5.setIcon)(add, "plus");
+      (0, import_obsidian6.setIcon)(add, "plus");
       add.addEventListener("click", () => {
         var _a2;
         const blank = { id: "", path: (_a2 = this.pagePath) != null ? _a2 : this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
@@ -4654,7 +4909,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     const titleGroup = header.createDiv({ cls: "tm-title-group" });
     if (this.state.projectPath && !this.state.pagePath) {
       const back = titleGroup.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Back to projects" } });
-      (0, import_obsidian5.setIcon)(back, "arrow-left");
+      (0, import_obsidian6.setIcon)(back, "arrow-left");
       back.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects" }));
     }
     const heading = titleGroup.createDiv();
@@ -4663,7 +4918,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Task view layout" } });
     for (const [layout, icon2, label] of [["list", "list", "List"], ["calendar", "calendar-days", "Calendar"], ["kanban", "columns-3", "Kanban"]]) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${label} view`, title: `${label} view`, "aria-pressed": String(this.layout === layout) } });
-      (0, import_obsidian5.setIcon)(button, icon2);
+      (0, import_obsidian6.setIcon)(button, icon2);
       button.addEventListener("click", () => {
         this.layout = layout;
         this.render();
@@ -4671,7 +4926,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     }
     const add = actions.createEl("button", { cls: "mod-cta tm-add-task" });
     const icon = add.createSpan();
-    (0, import_obsidian5.setIcon)(icon, "plus");
+    (0, import_obsidian6.setIcon)(icon, "plus");
     add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
   }
@@ -4777,12 +5032,12 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     const ordering = filters.createDiv({ cls: "tm-order-controls" });
     const iconButton = (icon, label) => {
       const button = ordering.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-      (0, import_obsidian5.setIcon)(button, icon);
+      (0, import_obsidian6.setIcon)(button, icon);
       return button;
     };
     const sort = iconButton("list-filter", `Sort: ${this.sort}`);
     sort.addEventListener("click", (event) => {
-      const options = new import_obsidian5.Menu();
+      const options = new import_obsidian6.Menu();
       for (const property of [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES.filter((property2) => property2.key !== "scheduledTime" && property2.key !== "deadlineTime").map((property2) => ({ ...property2, label: property2.key === "scheduledDate" ? "Scheduled date and time" : property2.key === "deadline" ? "Deadline date and time" : property2.label }))]) {
         options.addItem((item) => item.setTitle(property.label).setChecked(this.sort === property.key).onClick(() => {
           this.sort = property.key;
@@ -4796,14 +5051,14 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     const direction = iconButton(this.descending ? "arrow-down" : "arrow-up", this.descending ? "Descending" : "Ascending");
     direction.addEventListener("click", () => {
       this.descending = !this.descending;
-      (0, import_obsidian5.setIcon)(direction, this.descending ? "arrow-down" : "arrow-up");
+      (0, import_obsidian6.setIcon)(direction, this.descending ? "arrow-down" : "arrow-up");
       direction.setAttribute("aria-label", this.descending ? "Descending" : "Ascending");
       direction.setAttribute("title", this.descending ? "Descending" : "Ascending");
       this.renderTaskResults();
     });
     const grouping = iconButton("group", `Group: ${this.grouping}`);
     grouping.addEventListener("click", (event) => {
-      const options = new import_obsidian5.Menu();
+      const options = new import_obsidian6.Menu();
       for (const property of [{ key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES]) {
         options.addItem((item) => item.setTitle(property.label).setChecked(this.grouping === property.key).onClick(() => {
           this.grouping = property.key;
@@ -4823,7 +5078,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Projects layout" } });
     for (const [layout, icon] of [["list", "list"], ["gantt", "chart-gantt"]]) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${layout === "gantt" ? "Gantt" : "List"} projects view`, "aria-pressed": String(this.projectLayout === layout), title: `${layout === "gantt" ? "Gantt" : "List"} view` } });
-      (0, import_obsidian5.setIcon)(button, icon);
+      (0, import_obsidian6.setIcon)(button, icon);
       button.addEventListener("click", () => {
         this.projectLayout = layout;
         this.render();
@@ -4843,7 +5098,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     if (!active.length && (!this.showArchivedProjects || !archived.length)) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
-      (0, import_obsidian5.setIcon)(icon, "folder-kanban");
+      (0, import_obsidian6.setIcon)(icon, "folder-kanban");
       empty.createEl("h3", { text: archived.length ? "No active projects" : "No projects yet" });
       empty.createEl("p", { text: archived.length ? "Enable Show archived projects to see your archived projects." : "Add #project to a note or include project in its frontmatter tags." });
       return;
@@ -4861,11 +5116,11 @@ var TaskMainView = class extends import_obsidian5.ItemView {
         },
         open: (project) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
-          if (file instanceof import_obsidian5.TFile) void this.app.workspace.getLeaf("tab").openFile(file);
+          if (file instanceof import_obsidian6.TFile) void this.app.workspace.getLeaf("tab").openFile(file);
         },
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
-          if (!(file instanceof import_obsidian5.TFile)) throw new Error("Project note no longer exists.");
+          if (!(file instanceof import_obsidian6.TFile)) throw new Error("Project note no longer exists.");
           await this.app.fileManager.processFrontMatter(file, (frontmatter) => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()));
           await this.plugin.index.refreshPath(project.path);
         }
@@ -4885,7 +5140,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
       const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
       row.style.setProperty("--tm-depth", String(depth));
       const icon = row.createSpan({ cls: "tm-project-icon" });
-      (0, import_obsidian5.setIcon)(icon, project.archived ? "archive" : "folder");
+      (0, import_obsidian6.setIcon)(icon, project.archived ? "archive" : "folder");
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
@@ -4908,7 +5163,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
       track.createSpan({ cls: "tm-project-progress-fill" }).style.width = `${percentage}%`;
       progress.createSpan({ cls: "tm-project-percentage", text: `${percentage}%` });
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
-      (0, import_obsidian5.setIcon)(open, "chevron-right");
+      (0, import_obsidian6.setIcon)(open, "chevron-right");
       open.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects", projectPath: project.path }));
     }
   }
@@ -4933,32 +5188,105 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     }
   }
   async dropListTask(original, group, originalAnchor, placement) {
-    var _a;
     try {
-      const task = this.plugin.index.taskById(original.id);
-      if (!task || task.raw !== original.raw) throw new Error("Task changed while dragging. Refresh and try again.");
-      const draft = draftForGroup(task, group);
-      if (this.layout === "kanban" && group) {
+      const selected = this.draggedTasks.length ? this.draggedTasks : [original];
+      for (const task of selected) {
+        const current = this.plugin.index.taskById(task.id);
+        if (!current || current.raw !== task.raw) throw new Error("Task changed while dragging. Refresh and try again.");
+      }
+      if (this.layout === "kanban" && group && selected.some((task) => {
         const previous = group.property ? taskGroupTarget(group.property, task) : void 0;
-        if (group.value !== (previous == null ? void 0 : previous.value) || group.destination && group.destination !== draftForGroup(task).destination) {
-          originalAnchor = void 0;
-          placement = void 0;
-        }
+        return group.value !== (previous == null ? void 0 : previous.value) || group.destination && group.destination !== draftForGroup(task).destination;
+      })) {
+        originalAnchor = void 0;
+        placement = void 0;
       }
       const anchor = originalAnchor ? this.plugin.index.taskById(originalAnchor.id) : void 0;
       if (originalAnchor && (!anchor || anchor.raw !== originalAnchor.raw)) throw new Error("Drop target changed while dragging. Refresh and try again.");
+      const paths = await this.plugin.store.bulkDrop(selected, group, anchor, placement);
       if (anchor && placement) {
-        await this.plugin.store.relocate(task, anchor, placement, draft);
         this.sort = "source";
         this.descending = false;
-      } else await this.plugin.store.update(task, draft);
-      const destination = (_a = anchor == null ? void 0 : anchor.path) != null ? _a : splitDestination(draft.destination).path;
-      await this.plugin.index.refreshPath(task.path);
-      if (destination !== task.path) await this.plugin.index.refreshPath(destination);
+      }
+      this.clearSelection();
+      for (const path of paths) await this.plugin.index.refreshPath(path);
       this.render();
     } catch (cause) {
-      new import_obsidian5.Notice(cause instanceof Error ? cause.message : "Could not move task.");
+      new import_obsidian6.Notice(cause instanceof Error ? cause.message : "Could not move selected tasks.");
+    } finally {
+      this.draggedTasks = [];
     }
+  }
+  getSelectedTasks() {
+    return this.selection.tasks(this.visibleTasks);
+  }
+  clearSelection() {
+    this.selection.clear();
+    this.updateSelection();
+  }
+  prepareDrag(task) {
+    if (!this.selection.has(task)) this.selection.click(task, this.visibleTasks);
+    this.draggedTasks = this.getSelectedTasks();
+    this.updateSelection();
+  }
+  bindSelection(row, task) {
+    var _a;
+    if (!this.selectionRows.has(task.id)) this.visibleTasks.push(task);
+    const rows = (_a = this.selectionRows.get(task.id)) != null ? _a : [];
+    rows.push(row);
+    this.selectionRows.set(task.id, rows);
+    row.setAttribute("tabindex", "0");
+    row.setAttribute("data-task-id", task.id);
+    const interactive = (target) => {
+      var _a2;
+      const element = target;
+      const control = (_a2 = element == null ? void 0 : element.closest) == null ? void 0 : _a2.call(element, "button, input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
+      return Boolean(control && control !== row);
+    };
+    row.addEventListener("mousedown", (event) => {
+      if (!interactive(event.target) && (event.shiftKey || (import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey))) event.preventDefault();
+    });
+    row.addEventListener("click", (event) => {
+      if (interactive(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.selection.click(task, this.visibleTasks, event.shiftKey, import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey);
+      row.focus({ preventScroll: true });
+      this.updateSelection();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (interactive(event.target)) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.clearSelection();
+      }
+      if (event.key === " " || event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        this.selection.click(task, this.visibleTasks, event.shiftKey, import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey);
+        this.updateSelection();
+      }
+    });
+  }
+  updateSelection() {
+    var _a, _b;
+    for (const task of this.visibleTasks) for (const row of (_a = this.selectionRows.get(task.id)) != null ? _a : []) {
+      const selected = this.selection.has(task);
+      row.classList.toggle("is-selected", selected);
+      row.setAttribute("aria-label", `${task.title}${selected ? ", selected" : ""}`);
+    }
+    const count = this.getSelectedTasks().length;
+    if (this.selectionBar) this.selectionBar.hidden = count === 0;
+    (_b = this.selectionCount) == null ? void 0 : _b.setText(`${count} selected`);
+  }
+  renderSelectionBar(container) {
+    this.selectionBar = container.createDiv({ cls: "tm-selection-bar" });
+    this.selectionBar.hidden = true;
+    this.selectionCount = this.selectionBar.createSpan({ attr: { role: "status", "aria-live": "polite" } });
+    const edit = this.selectionBar.createEl("button", { text: "Edit task properties" });
+    edit.addEventListener("click", () => this.plugin.openBulkEditor(this));
+    const clear = this.selectionBar.createEl("button", { text: "Clear selection" });
+    clear.addEventListener("click", () => this.clearSelection());
   }
   depthWithin(task, visibleIds) {
     var _a;
@@ -4974,6 +5302,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     var _a;
     const row = list.createDiv({ cls: `tm-task-row${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
+    this.bindSelection(row, task);
     const checkboxTarget = row.createEl("label", { cls: "tm-checkbox-target" });
     const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: "tm-task-checkbox", attr: { "aria-label": `Complete ${task.title}` } });
     checkbox.checked = task.completed;
@@ -4984,7 +5313,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
       } catch (cause) {
         checkbox.checked = !checkbox.checked;
         checkbox.disabled = false;
-        new import_obsidian5.Notice(cause instanceof Error ? cause.message : "Could not update the task.");
+        new import_obsidian6.Notice(cause instanceof Error ? cause.message : "Could not update the task.");
       }
     };
     checkbox.addEventListener("change", () => {
@@ -5005,7 +5334,7 @@ var TaskMainView = class extends import_obsidian5.ItemView {
     source.addEventListener("click", () => void this.openSource(task));
     this.renderProperties(metadata, task);
     const menuButton = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": "Task actions" } });
-    (0, import_obsidian5.setIcon)(menuButton, "more-horizontal");
+    (0, import_obsidian6.setIcon)(menuButton, "more-horizontal");
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
   }
   renderProperties(parent, properties) {
@@ -5017,25 +5346,25 @@ var TaskMainView = class extends import_obsidian5.ItemView {
   badge(parent, iconName, text, variant) {
     const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
     const icon = badge.createSpan();
-    (0, import_obsidian5.setIcon)(icon, iconName);
+    (0, import_obsidian6.setIcon)(icon, iconName);
     badge.createSpan({ text });
   }
   openMenu(event, task) {
-    const menu = new import_obsidian5.Menu();
+    const menu = new import_obsidian6.Menu();
     menu.addItem((item) => item.setTitle("Edit task").setIcon("pencil").onClick(() => this.plugin.openEditor({ ...this.state, task })));
     menu.addItem((item) => item.setTitle("Open source note").setIcon("file-text").onClick(() => void this.openSource(task)));
     menu.showAtMouseEvent(event);
   }
   async openSource(task) {
     const file = this.app.vault.getAbstractFileByPath(task.path);
-    if (file instanceof import_obsidian5.TFile) {
+    if (file instanceof import_obsidian6.TFile) {
       await this.app.workspace.getLeaf("tab").openFile(file, { eState: { line: task.line } });
     }
   }
   renderEmpty(container) {
     const empty = container.createDiv({ cls: "tm-empty" });
     const icon = empty.createDiv({ cls: "tm-empty-icon" });
-    (0, import_obsidian5.setIcon)(icon, "circle-check-big");
+    (0, import_obsidian6.setIcon)(icon, "circle-check-big");
     empty.createEl("h3", { text: "Nothing here" });
     empty.createEl("p", { text: this.search || this.propertyFilters.length ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
   }
@@ -5072,7 +5401,7 @@ var TaskModeController = class {
       for (const leaf of leaves) {
         if (this.disposed) return;
         const view = leaf.view;
-        if (view instanceof import_obsidian6.MarkdownView && view.file && this.enabled() && this.isProject(view.file.path)) {
+        if (view instanceof import_obsidian7.MarkdownView && view.file && this.enabled() && this.isProject(view.file.path)) {
           const path = view.file.path;
           const markdownState = view.getState();
           const saved = this.savedViews.get(leaf);
@@ -5083,7 +5412,7 @@ var TaskModeController = class {
           const path = typeof state.pagePath === "string" ? state.pagePath : void 0;
           if (!path || this.enabled() && this.isProject(path)) continue;
           const file = this.app.vault.getAbstractFileByPath(path);
-          if (!(file instanceof import_obsidian6.TFile)) continue;
+          if (!(file instanceof import_obsidian7.TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState : {};
           this.savedViews.set(leaf, state);
           await leaf.setViewState({ type: "markdown", state: { ...markdownState, file: file.path } });
@@ -5094,7 +5423,7 @@ var TaskModeController = class {
 };
 
 // src/note-token-editor.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 var import_view = require("@codemirror/view");
 
 // src/task-tokens.ts
@@ -5160,11 +5489,11 @@ var DateLabelWidget = class extends import_view.WidgetType {
       const open = (event) => {
         var _a, _b;
         if (event.button !== 0 && event.button !== 1) return;
-        const info = view.state.field(import_obsidian7.editorInfoField, false);
+        const info = view.state.field(import_obsidian8.editorInfoField, false);
         if (!info) return;
         event.preventDefault();
         event.stopPropagation();
-        void info.app.workspace.openLinkText(this.linkText, (_b = (_a = info.file) == null ? void 0 : _a.path) != null ? _b : "", event.button === 1 || (import_obsidian7.Platform.isMacOS ? event.metaKey : event.ctrlKey));
+        void info.app.workspace.openLinkText(this.linkText, (_b = (_a = info.file) == null ? void 0 : _a.path) != null ? _b : "", event.button === 1 || (import_obsidian8.Platform.isMacOS ? event.metaKey : event.ctrlKey));
       };
       element.addEventListener("click", open);
       element.addEventListener("auxclick", open);
@@ -5217,7 +5546,7 @@ function noteTokenEditor(getDateFormat) {
       }
     }
     decorate(view) {
-      if (!view.state.field(import_obsidian7.editorLivePreviewField, false)) {
+      if (!view.state.field(import_obsidian8.editorLivePreviewField, false)) {
         this.pills = this.syntax = import_view.Decoration.none;
         return;
       }
@@ -5236,11 +5565,11 @@ function noteTokenEditor(getDateFormat) {
 }
 
 // src/note-task-edit.ts
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 var import_view2 = require("@codemirror/view");
 function handleTaskEditClick(event, resolve, open) {
   var _a;
-  if (!(import_obsidian8.Platform.isMacOS ? event.metaKey : event.ctrlKey) || event.button !== 0) return;
+  if (!(import_obsidian9.Platform.isMacOS ? event.metaKey : event.ctrlKey) || event.button !== 0) return;
   const target = event.target;
   const checkbox = (_a = target == null ? void 0 : target.closest) == null ? void 0 : _a.call(target, 'input[type="checkbox"]');
   if (!checkbox) return;
@@ -5330,7 +5659,7 @@ function noteTaskEditEditor(getDateFormat, open) {
       this.view = view;
       this.resolve = (checkbox) => {
         var _a, _b;
-        const path = (_b = (_a = this.view.state.field(import_obsidian8.editorInfoField, false)) == null ? void 0 : _a.file) == null ? void 0 : _b.path;
+        const path = (_b = (_a = this.view.state.field(import_obsidian9.editorInfoField, false)) == null ? void 0 : _a.file) == null ? void 0 : _b.path;
         if (!path) return;
         const line = this.view.state.doc.lineAt(this.view.posAtDOM(checkbox)).number - 1;
         return scanTasks(path, this.view.state.doc.toString(), /* @__PURE__ */ new Date(), getDateFormat()).find((task) => task.line === line);
@@ -5343,7 +5672,7 @@ function noteTaskEditEditor(getDateFormat, open) {
   });
 }
 function registerNoteTaskEdit(root, context, getDateFormat, open) {
-  const child = new import_obsidian8.MarkdownRenderChild(root);
+  const child = new import_obsidian9.MarkdownRenderChild(root);
   context.addChild(child);
   child.register(bindNoteTaskEdit(root, (checkbox) => {
     const item = checkbox.closest("li.task-list-item");
@@ -5416,7 +5745,7 @@ function renderNoteTokens(root, dateFormat) {
 }
 
 // src/main.ts
-var import_obsidian14 = require("obsidian");
+var import_obsidian15 = require("obsidian");
 
 // src/task-input.ts
 var width = (line) => {
@@ -5463,49 +5792,8 @@ function parseTaskTreeInput(input, destination, reference = /* @__PURE__ */ new 
   return main;
 }
 
-// src/mobile-layout.ts
-function trackModalViewport(modal, content) {
-  const win = modal.ownerDocument.defaultView;
-  const container = modal.parentElement;
-  if (!win || !container) return () => {
-  };
-  container.classList.add("tm-editor-container");
-  const viewport = win.visualViewport;
-  let frame = 0;
-  const update = () => {
-    var _a, _b;
-    container.style.setProperty("--tm-viewport-height", `${(_a = viewport == null ? void 0 : viewport.height) != null ? _a : win.innerHeight}px`);
-    container.style.setProperty("--tm-viewport-top", `${(_b = viewport == null ? void 0 : viewport.offsetTop) != null ? _b : 0}px`);
-    win.cancelAnimationFrame(frame);
-    frame = win.requestAnimationFrame(() => {
-      if (!modal.ownerDocument.body.classList.contains("is-mobile") && !win.matchMedia("(max-width: 700px)").matches) return;
-      const focused = modal.ownerDocument.activeElement;
-      if (!focused || !content.contains(focused)) return;
-      const field2 = focused.getBoundingClientRect();
-      const area = content.getBoundingClientRect();
-      if (field2.bottom > area.bottom - 12) content.scrollTop += field2.bottom - area.bottom + 12;
-      else if (field2.top < area.top + 12) content.scrollTop -= area.top + 12 - field2.top;
-    });
-  };
-  viewport == null ? void 0 : viewport.addEventListener("resize", update);
-  viewport == null ? void 0 : viewport.addEventListener("scroll", update);
-  win.addEventListener("resize", update);
-  content.addEventListener("focusin", update);
-  update();
-  return () => {
-    win.cancelAnimationFrame(frame);
-    viewport == null ? void 0 : viewport.removeEventListener("resize", update);
-    viewport == null ? void 0 : viewport.removeEventListener("scroll", update);
-    win.removeEventListener("resize", update);
-    content.removeEventListener("focusin", update);
-    container.classList.remove("tm-editor-container");
-    container.style.removeProperty("--tm-viewport-height");
-    container.style.removeProperty("--tm-viewport-top");
-  };
-}
-
 // src/task-editor.ts
-var import_obsidian9 = require("obsidian");
+var import_obsidian10 = require("obsidian");
 function initialDraft(options) {
   var _a;
   if (options.task) {
@@ -5538,7 +5826,7 @@ function field(parent, label, input) {
   caption.addEventListener("click", () => input.focus());
   row.appendChild(input);
 }
-var TaskEditorModal = class extends import_obsidian9.Modal {
+var TaskEditorModal = class extends import_obsidian10.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -5662,7 +5950,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
     cancel.addEventListener("click", () => this.close());
     const save = actions.createEl("button", { text: "Save task", cls: "mod-cta" });
     const saveIcon = save.createSpan({ cls: "tm-button-icon" });
-    (0, import_obsidian9.setIcon)(saveIcon, "check");
+    (0, import_obsidian10.setIcon)(saveIcon, "check");
     const saveTask = async () => {
       if (save.disabled) return;
       try {
@@ -5677,7 +5965,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
         if (deleteButton) deleteButton.disabled = false;
         const message = cause instanceof Error ? cause.message : "Could not save the task.";
         error.setText(message);
-        new import_obsidian9.Notice(message);
+        new import_obsidian10.Notice(message);
       }
     };
     save.addEventListener("click", () => {
@@ -5695,7 +5983,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
         save.disabled = false;
         const message = cause instanceof Error ? cause.message : "Could not delete the task.";
         error.setText(message);
-        new import_obsidian9.Notice(message);
+        new import_obsidian10.Notice(message);
       }
     };
     deleteButton == null ? void 0 : deleteButton.addEventListener("click", () => {
@@ -5731,7 +6019,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
     if (!this.options.task) return parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat);
     const parsed = parseTaskInput(this.rawInput.value, /* @__PURE__ */ new Date(), this.options.dateFormat, true);
     if (!parsed || !parsed.title) {
-      new import_obsidian9.Notice("Raw text must be one valid checklist line with a title.");
+      new import_obsidian10.Notice("Raw text must be one valid checklist line with a title.");
       return void 0;
     }
     return { ...parsed, destination: (_a = parsed.destination) != null ? _a : this.options.settings.inboxPath };
@@ -5743,7 +6031,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
     }
     const title = this.titleInput.value.trim();
     if (!title) {
-      if (notify) new import_obsidian9.Notice("Enter a task title.");
+      if (notify) new import_obsidian10.Notice("Enter a task title.");
       return void 0;
     }
     const scheduledDate = this.readDate(this.scheduledInput.value, "scheduled date", notify);
@@ -5754,7 +6042,7 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
     if (this.durationInput.value.trim()) {
       durationMinutes = (_a = parseTaskLine(`- [ ] Task ${this.durationInput.value.trim()}`, /* @__PURE__ */ new Date(), this.options.dateFormat)) == null ? void 0 : _a.durationMinutes;
       if (!durationMinutes) {
-        if (notify) new import_obsidian9.Notice("Use a duration such as 45m, 2h, or 1h30m.");
+        if (notify) new import_obsidian10.Notice("Use a duration such as 45m, 2h, or 1h30m.");
         return void 0;
       }
     }
@@ -5776,13 +6064,13 @@ var TaskEditorModal = class extends import_obsidian9.Modal {
   readDate(value, label, notify) {
     if (!value.trim()) return void 0;
     const parsed = parseDateTimeExpression(value, /* @__PURE__ */ new Date(), this.options.dateFormat);
-    if (!parsed && notify) new import_obsidian9.Notice(`Could not understand the ${label}.`);
+    if (!parsed && notify) new import_obsidian10.Notice(`Could not understand the ${label}.`);
     return parsed;
   }
 };
 
 // src/task-index.ts
-var import_obsidian10 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 var TaskIndex = class {
   constructor(app, getSettings, getDateFormat) {
     this.app = app;
@@ -5801,13 +6089,13 @@ var TaskIndex = class {
     this.refreshProjects();
     this.eventRefs.push(
       this.app.vault.on("create", (file) => {
-        if (file instanceof import_obsidian10.TFile && file.extension === "md") void this.refreshFile(file);
+        if (file instanceof import_obsidian11.TFile && file.extension === "md") void this.refreshFile(file);
       }),
       this.app.vault.on("modify", (file) => {
-        if (file instanceof import_obsidian10.TFile && file.extension === "md") void this.refreshFile(file);
+        if (file instanceof import_obsidian11.TFile && file.extension === "md") void this.refreshFile(file);
       }),
       this.app.vault.on("delete", (file) => {
-        if (file instanceof import_obsidian10.TFile && file.extension === "md") {
+        if (file instanceof import_obsidian11.TFile && file.extension === "md") {
           this.tasksByPath.delete(file.path);
           this.headingsByPath.delete(file.path);
           this.projectPaths.delete(file.path);
@@ -5817,7 +6105,7 @@ var TaskIndex = class {
         }
       }),
       this.app.vault.on("rename", (file, oldPath) => {
-        if (file instanceof import_obsidian10.TFile && file.extension === "md") {
+        if (file instanceof import_obsidian11.TFile && file.extension === "md") {
           this.tasksByPath.delete(oldPath);
           this.headingsByPath.delete(oldPath);
           this.projectPaths.delete(oldPath);
@@ -5885,7 +6173,7 @@ var TaskIndex = class {
   }
   async refreshPath(path) {
     const file = this.app.vault.getAbstractFileByPath(splitDestination(path).path);
-    if (file instanceof import_obsidian10.TFile) await this.refreshFile(file);
+    if (file instanceof import_obsidian11.TFile) await this.refreshFile(file);
   }
   async refreshFile(file) {
     await this.scanFile(file);
@@ -5905,7 +6193,7 @@ var TaskIndex = class {
   }
   updateProjectStatus(file) {
     const cache = this.app.metadataCache.getFileCache(file);
-    const tags = cache ? (0, import_obsidian10.getAllTags)(cache) : null;
+    const tags = cache ? (0, import_obsidian11.getAllTags)(cache) : null;
     if (tags == null ? void 0 : tags.includes("#archived")) this.archivedPaths.add(file.path);
     else this.archivedPaths.delete(file.path);
     if (tags == null ? void 0 : tags.some((tag) => tag === "#project" || tag.startsWith("#project/"))) {
@@ -5922,7 +6210,7 @@ var TaskIndex = class {
 };
 
 // src/navigation-view.ts
-var import_obsidian11 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 var TASK_NAV_VIEW = "task-manager-navigation";
 var NAV_ITEMS = [
   { mode: "inbox", label: "Inbox", icon: "inbox" },
@@ -5931,7 +6219,7 @@ var NAV_ITEMS = [
   { mode: "all", label: "All Tasks", icon: "list-checks" },
   { mode: "projects", label: "Projects", icon: "folder-kanban" }
 ];
-var TaskNavigationView = class extends import_obsidian11.ItemView {
+var TaskNavigationView = class extends import_obsidian12.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -5963,7 +6251,7 @@ var TaskNavigationView = class extends import_obsidian11.ItemView {
     const header = container.createDiv({ cls: "tm-nav-header" });
     header.createEl("h3", { text: "Tasks" });
     const newButton = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "New task" } });
-    (0, import_obsidian11.setIcon)(newButton, "plus");
+    (0, import_obsidian12.setIcon)(newButton, "plus");
     newButton.addEventListener("click", () => this.plugin.openEditor({ mode: this.activeMode }));
     const mode = container.createEl("label", { cls: "tm-global-task-mode" });
     const toggle = mode.createEl("input", { type: "checkbox" });
@@ -5972,7 +6260,7 @@ var TaskNavigationView = class extends import_obsidian11.ItemView {
     toggle.addEventListener("change", () => {
       toggle.disabled = true;
       void this.plugin.setTaskMode(toggle.checked).catch((error) => {
-        new import_obsidian11.Notice(String(error));
+        new import_obsidian12.Notice(String(error));
         this.render();
       });
     });
@@ -5983,7 +6271,7 @@ var TaskNavigationView = class extends import_obsidian11.ItemView {
         attr: { "aria-current": item.mode === this.activeMode ? "page" : "false" }
       });
       const icon = button.createSpan({ cls: "tm-nav-icon" });
-      (0, import_obsidian11.setIcon)(icon, item.icon);
+      (0, import_obsidian12.setIcon)(icon, item.icon);
       button.createSpan({ text: item.label });
       button.addEventListener("click", () => void this.plugin.openTaskView({ mode: item.mode }));
     }
@@ -6109,8 +6397,76 @@ function placeTaskBlock(content, task, anchor, placement, block, dateFormat) {
   return lines.join(lineEnding(content));
 }
 
+// src/bulk-tasks.ts
+function planBulkTasks(contents, changes, options = {}) {
+  var _a, _b;
+  const get = (path) => {
+    const content = contents.get(path);
+    if (content === void 0) throw new Error(`Cannot find note: ${path}`);
+    return content;
+  };
+  const seen = /* @__PURE__ */ new Set();
+  const entries = changes.map((change) => {
+    const block = liveTaskBlock(get(change.task.path), change.task, options.dateFormat);
+    const key = `${change.task.path}:${block.start}`;
+    if (seen.has(key)) throw new Error("Selection changed. Select the tasks again.");
+    seen.add(key);
+    return { ...change, block };
+  });
+  const contains = (parent, child) => parent !== child && parent.task.path === child.task.path && parent.block.start <= child.block.start && parent.block.end > child.block.start;
+  const moving = entries.filter((entry) => {
+    if (options.delete || options.anchor) return true;
+    if (!entry.draft) return false;
+    const destination = splitDestination(entry.draft.destination);
+    return destination.path !== entry.task.path || destination.heading !== entry.task.section;
+  });
+  const roots = moving.filter((entry) => !moving.some((parent) => contains(parent, entry)));
+  const anchor = options.anchor ? liveTaskBlock(get(options.anchor.path), options.anchor, options.dateFormat) : void 0;
+  if (anchor && roots.some((entry) => entry.task.path === options.anchor.path && anchor.start >= entry.block.start && anchor.start < entry.block.end)) {
+    throw new Error("Tasks cannot be moved into themselves or their subtasks.");
+  }
+  const lines = new Map([...contents].map(([path, content]) => [path, content.split(/\r?\n/)]));
+  if (!options.delete) for (const entry of entries) {
+    if (entry.draft) lines.get(entry.task.path)[entry.block.start] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat);
+  }
+  const payloads = roots.map((entry) => ({
+    entry,
+    lines: options.delete ? [] : rewriteBlock(
+      { ...entry.block, lines: lines.get(entry.task.path).slice(entry.block.start, entry.block.end) },
+      entry.draft,
+      anchor ? anchor.indent + (options.placement === "child" ? 2 : 0) : 0,
+      options.dateFormat
+    )
+  }));
+  for (const [path, fileLines] of lines) {
+    for (const entry of roots.filter((item) => item.task.path === path).sort((a, b) => b.block.start - a.block.start)) {
+      fileLines.splice(entry.block.start, entry.block.end - entry.block.start);
+    }
+  }
+  if (anchor && options.anchor && !options.delete) {
+    let insertion = options.placement === "before" ? anchor.start : anchor.end;
+    insertion -= roots.filter((entry) => entry.task.path === options.anchor.path && entry.block.end <= insertion).reduce((count, entry) => count + entry.block.end - entry.block.start, 0);
+    lines.get(options.anchor.path).splice(insertion, 0, ...payloads.flatMap((payload) => payload.lines));
+  }
+  const result = new Map([...lines].map(([path, fileLines]) => [path, fileLines.join(lineEnding(get(path)))]));
+  if (!anchor && !options.delete) {
+    const destinations = /* @__PURE__ */ new Map();
+    for (const payload of payloads) {
+      const destination = payload.entry.draft.destination;
+      const block = (_a = destinations.get(destination)) != null ? _a : [];
+      block.push(...payload.lines);
+      destinations.set(destination, block);
+    }
+    for (const [destination, block] of destinations) {
+      const { path, heading } = splitDestination(destination);
+      result.set(path, insertIntoDestination((_b = result.get(path)) != null ? _b : get(path), block, heading, options.position));
+    }
+  }
+  return new Map([...result].filter(([path, content]) => content !== get(path)));
+}
+
 // src/task-store.ts
-var import_obsidian12 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 var TaskStore = class {
   constructor(app, getDateFormat, getNewTaskPosition = () => "top") {
     this.app = app;
@@ -6142,7 +6498,7 @@ var TaskStore = class {
   }
   async update(task, draft) {
     const destination = splitDestination(draft.destination);
-    if ((0, import_obsidian12.normalizePath)(destination.path) !== task.path || destination.heading !== task.section) {
+    if ((0, import_obsidian13.normalizePath)(destination.path) !== task.path || destination.heading !== task.section) {
       await this.move(task, draft);
       return;
     }
@@ -6224,15 +6580,62 @@ var TaskStore = class {
       throw cause;
     }
   }
+  async bulkUpdate(tasks, patch) {
+    if (!Object.keys(patch).length) return [];
+    return this.bulkChange(tasks, (task) => ({ ...draftForGroup(task), ...patch }));
+  }
+  async bulkDelete(tasks) {
+    return this.bulkChange(tasks, () => void 0, { delete: true });
+  }
+  async bulkDrop(tasks, group, anchor, placement) {
+    return this.bulkChange(tasks, (task) => draftForGroup(task, group), { anchor, placement });
+  }
+  async bulkChange(tasks, draft, options = {}) {
+    const changes = tasks.map((task) => ({ task, draft: draft(task) }));
+    const files = /* @__PURE__ */ new Map();
+    for (const task of tasks) files.set(task.path, this.requireFile(task.path));
+    if (options.anchor) files.set(options.anchor.path, this.requireFile(options.anchor.path));
+    for (const change of changes) if (change.draft && !options.anchor) {
+      const { path, heading } = splitDestination(change.draft.destination);
+      if (!files.has(path)) files.set(path, heading ? this.requireFile(path) : await this.ensureFile(path));
+    }
+    const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)])));
+    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition() });
+    const written = [];
+    try {
+      for (const [path, content] of after) {
+        await this.app.vault.process(files.get(path), (current) => {
+          if (current !== before.get(path)) throw new Error("A note changed during the bulk action. Refresh and try again.");
+          return content;
+        });
+        written.push(path);
+      }
+    } catch (cause) {
+      const conflicts = [];
+      for (const path of written.reverse()) {
+        try {
+          await this.app.vault.process(files.get(path), (current) => {
+            if (current !== after.get(path)) throw new Error("Note changed");
+            return before.get(path);
+          });
+        } catch (e) {
+          conflicts.push(path);
+        }
+      }
+      if (conflicts.length) throw new Error(`Bulk action interrupted. Could not restore changed notes: ${conflicts.join(", ")}. Review those notes before retrying.`);
+      throw cause;
+    }
+    return [...after.keys()];
+  }
   requireFile(path) {
-    const file = this.app.vault.getAbstractFileByPath((0, import_obsidian12.normalizePath)(path));
-    if (!(file instanceof import_obsidian12.TFile)) throw new Error(`Cannot find note: ${path}`);
+    const file = this.app.vault.getAbstractFileByPath((0, import_obsidian13.normalizePath)(path));
+    if (!(file instanceof import_obsidian13.TFile)) throw new Error(`Cannot find note: ${path}`);
     return file;
   }
   async ensureFile(path) {
-    const normalized = (0, import_obsidian12.normalizePath)(path.endsWith(".md") ? path : `${path}.md`);
+    const normalized = (0, import_obsidian13.normalizePath)(path.endsWith(".md") ? path : `${path}.md`);
     const existing = this.app.vault.getAbstractFileByPath(normalized);
-    if (existing instanceof import_obsidian12.TFile) return existing;
+    if (existing instanceof import_obsidian13.TFile) return existing;
     if (existing) throw new Error(`${normalized} is not a Markdown file.`);
     const parts = normalized.split("/");
     parts.pop();
@@ -6241,7 +6644,7 @@ var TaskStore = class {
       current = current ? `${current}/${part}` : part;
       const folder = this.app.vault.getAbstractFileByPath(current);
       if (!folder) await this.app.vault.createFolder(current);
-      else if (!(folder instanceof import_obsidian12.TFolder)) throw new Error(`${current} is not a folder.`);
+      else if (!(folder instanceof import_obsidian13.TFolder)) throw new Error(`${current} is not a folder.`);
     }
     return this.app.vault.create(normalized, "");
   }
@@ -6257,8 +6660,8 @@ var DEFAULT_SETTINGS = {
 };
 
 // src/settings.ts
-var import_obsidian13 = require("obsidian");
-var TaskManagerSettingTab = class extends import_obsidian13.PluginSettingTab {
+var import_obsidian14 = require("obsidian");
+var TaskManagerSettingTab = class extends import_obsidian14.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -6300,9 +6703,9 @@ var TaskManagerSettingTab = class extends import_obsidian13.PluginSettingTab {
     var _a;
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian13.Setting(containerEl).setName("Task defaults").setHeading();
+    new import_obsidian14.Setting(containerEl).setName("Task defaults").setHeading();
     for (const definition of this.getSettingDefinitions()) {
-      const setting = new import_obsidian13.Setting(containerEl).setName(definition.name).setDesc((_a = definition.desc) != null ? _a : "");
+      const setting = new import_obsidian14.Setting(containerEl).setName(definition.name).setDesc((_a = definition.desc) != null ? _a : "");
       definition.render(setting);
     }
   }
@@ -6330,7 +6733,7 @@ function dailyNoteDateFormat(app) {
 }
 
 // src/main.ts
-var TaskManagerPlugin = class extends import_obsidian14.Plugin {
+var TaskManagerPlugin = class extends import_obsidian15.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -6348,7 +6751,7 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
       registerNoteTaskEdit(element, context, () => this.dateFormat(), (task) => this.openEditor({ mode: "all", task }));
     });
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
-    this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new import_obsidian14.Notice(String(error))));
+    this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new import_obsidian15.Notice(String(error))));
     const commands = [
       ["inbox", "Open Inbox", "open-inbox"],
       ["today", "Open Today", "open-today"],
@@ -6357,7 +6760,7 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
       ["projects", "Open Projects", "open-projects"]
     ];
     for (const [mode, name, id] of commands) {
-      this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new import_obsidian14.Notice(String(error))) });
+      this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new import_obsidian15.Notice(String(error))) });
     }
     for (const [scope, layouts] of [["task", ["list", "calendar", "kanban"]], ["projects", ["list", "gantt"]]]) {
       for (const layout of layouts) {
@@ -6371,21 +6774,22 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
             const isProjects = state.mode === "projects" && !view.pagePath;
             if (isProjects !== (scope === "projects")) return false;
             if (!checking) {
-              void view.setState({ ...state, [isProjects ? "projectLayout" : "layout"]: layout }).then(() => this.app.workspace.requestSaveLayout()).catch((error) => new import_obsidian14.Notice(String(error)));
+              void view.setState({ ...state, [isProjects ? "projectLayout" : "layout"]: layout }).then(() => this.app.workspace.requestSaveLayout()).catch((error) => new import_obsidian15.Notice(String(error)));
             }
             return true;
           }
         });
       }
     }
+    this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: (checking) => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: (checking) => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
     this.addCommand({ id: "toggle-task-mode", name: "Toggle task mode", callback: () => {
-      void this.setTaskMode(!this.settings.taskMode).catch((error) => new import_obsidian14.Notice(String(error)));
+      void this.setTaskMode(!this.settings.taskMode).catch((error) => new import_obsidian15.Notice(String(error)));
     } });
     this.taskModeRibbon = this.addRibbonIcon("list-checks", "Task mode", () => {
-      void this.setTaskMode(!this.settings.taskMode).catch((error) => new import_obsidian14.Notice(String(error)));
+      void this.setTaskMode(!this.settings.taskMode).catch((error) => new import_obsidian15.Notice(String(error)));
     });
     this.updateTaskModeControls();
     this.addCommand({
@@ -6393,10 +6797,10 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
       name: "Convert to project",
       checkCallback: (checking) => {
         var _a, _b;
-        const view = (_a = this.app.workspace.getActiveViewOfType(TaskMainView)) != null ? _a : this.app.workspace.getActiveViewOfType(import_obsidian14.MarkdownView);
-        const path = view instanceof TaskMainView ? view.pagePath : view instanceof import_obsidian14.MarkdownView ? (_b = view.file) == null ? void 0 : _b.path : void 0;
+        const view = (_a = this.app.workspace.getActiveViewOfType(TaskMainView)) != null ? _a : this.app.workspace.getActiveViewOfType(import_obsidian15.MarkdownView);
+        const path = view instanceof TaskMainView ? view.pagePath : view instanceof import_obsidian15.MarkdownView ? (_b = view.file) == null ? void 0 : _b.path : void 0;
         const file = path ? this.app.vault.getAbstractFileByPath(path) : void 0;
-        if (!(file instanceof import_obsidian14.TFile) || file.extension !== "md") return false;
+        if (!(file instanceof import_obsidian15.TFile) || file.extension !== "md") return false;
         if (!checking) void this.convertToProject(file);
         return true;
       }
@@ -6405,7 +6809,7 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
     this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, (path) => this.index.isProject(path));
     const syncTaskMode = () => {
       var _a;
-      void ((_a = this.taskModeController) == null ? void 0 : _a.sync().catch((error) => new import_obsidian14.Notice(String(error))));
+      void ((_a = this.taskModeController) == null ? void 0 : _a.sync().catch((error) => new import_obsidian15.Notice(String(error))));
     };
     this.registerEvent(this.app.workspace.on("file-open", syncTaskMode));
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncTaskMode));
@@ -6413,7 +6817,7 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
     this.register(this.index.subscribe(syncTaskMode));
     this.app.workspace.onLayoutReady(() => {
       syncTaskMode();
-      void this.activateNavigation(false).catch((error) => new import_obsidian14.Notice(String(error)));
+      void this.activateNavigation(false).catch((error) => new import_obsidian15.Notice(String(error)));
     });
   }
   onunload() {
@@ -6455,6 +6859,12 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
       if (view instanceof TaskNavigationView) view.setActive(state.mode);
     }
   }
+  editSelectedTaskProperties(checking) {
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+    if (!(view == null ? void 0 : view.getSelectedTasks().length)) return false;
+    if (!checking) this.openBulkEditor(view);
+    return true;
+  }
   focusProjectSearch(checking) {
     if (!this.settings.taskMode) return false;
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
@@ -6490,10 +6900,30 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
     try {
       await this.app.fileManager.processFrontMatter(file, addProjectProperties);
       await this.index.refreshPath(file.path);
-      new import_obsidian14.Notice(`Converted ${file.basename} to a project.`);
+      new import_obsidian15.Notice(`Converted ${file.basename} to a project.`);
     } catch (error) {
-      new import_obsidian14.Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
+      new import_obsidian15.Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
     }
+  }
+  openBulkEditor(view) {
+    const tasks = view.getSelectedTasks();
+    if (!tasks.length) return;
+    const refresh = async (paths) => {
+      view.clearSelection();
+      for (const path of paths) await this.index.refreshPath(path);
+    };
+    new BulkTaskEditorModal(this.app, {
+      tasks,
+      projects: this.index.projects(),
+      dateFormat: this.dateFormat(),
+      inboxPath: this.settings.inboxPath,
+      onSave: async (patch) => {
+        await refresh(await this.store.bulkUpdate(tasks, patch));
+      },
+      onDelete: async () => {
+        await refresh(await this.store.bulkDelete(tasks));
+      }
+    }).open();
   }
   openEditor(state) {
     var _a;
@@ -6515,7 +6945,7 @@ var TaskManagerPlugin = class extends import_obsidian14.Plugin {
           if (state.task && state.task.path !== draft.destination) await this.index.refreshPath(state.task.path);
         } catch (cause) {
           const message = cause instanceof Error ? cause.message : "Could not save the task.";
-          new import_obsidian14.Notice(message);
+          new import_obsidian15.Notice(message);
           throw cause;
         }
       }
