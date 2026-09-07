@@ -95,8 +95,8 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   const dateCell = (parent: HTMLElement, day: string, compact = false, outside = false): void => {
     const cell = parent.createDiv({ cls: `tm-calendar-cell${day === todayIso() ? " is-today" : ""}${outside ? " is-outside" : ""}` });
     const tasks = byDate.get(day) ?? [];
-    const button = cell.createEl("button", { cls: "tm-calendar-date", text: String(localDate(day).getDate()), attr: { "aria-label": `New task on ${formatDate(day, options.dateFormat)}` } });
-    button.addEventListener("click", () => options.create({ scheduledDate: day }));
+    const button = cell.createEl("button", { cls: "tm-calendar-date", text: String(localDate(day).getDate()), attr: { "aria-label": `Open day view for ${formatDate(day, options.dateFormat)}` } });
+    button.addEventListener("click", () => options.navigate(day, "day"));
     cell.addEventListener("click", event => { if (event.target === cell) options.create({ scheduledDate: day }); });
     dropTarget(cell, day);
     if (compact) {

@@ -3064,6 +3064,11 @@ function splitDestination(value) {
 function destinationString(path, heading) {
   return `${path}${heading ? `#${heading}` : ""}`;
 }
+function destinationLabel(destination) {
+  const separator = destination.indexOf("#");
+  const path = separator < 0 ? destination : destination.slice(0, separator);
+  return path.replace(/\.md$/i, "") + (separator < 0 ? "" : destination.slice(separator));
+}
 
 // src/parser.ts
 var CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
@@ -3391,7 +3396,7 @@ var BulkTaskEditorModal = class extends import_obsidian2.Modal {
             destinations.add(project.path);
             for (const heading of (_a = project.headings) != null ? _a : []) destinations.add(destinationString(project.path, heading.name));
           }
-          for (const destination of [...destinations].sort()) select.createEl("option", { value: destination, text: destination });
+          for (const destination of [...destinations].sort()) select.createEl("option", { value: destination, text: destinationLabel(destination) });
         }
         input.value = common != null ? common : "__mixed__";
       } else {
@@ -4420,8 +4425,8 @@ function renderCalendar(container, options) {
     var _a2;
     const cell = parent.createDiv({ cls: `tm-calendar-cell${day === todayIso() ? " is-today" : ""}${outside ? " is-outside" : ""}` });
     const tasks = (_a2 = byDate.get(day)) != null ? _a2 : [];
-    const button = cell.createEl("button", { cls: "tm-calendar-date", text: String(localDate(day).getDate()), attr: { "aria-label": `New task on ${formatDate(day, options.dateFormat)}` } });
-    button.addEventListener("click", () => options.create({ scheduledDate: day }));
+    const button = cell.createEl("button", { cls: "tm-calendar-date", text: String(localDate(day).getDate()), attr: { "aria-label": `Open day view for ${formatDate(day, options.dateFormat)}` } });
+    button.addEventListener("click", () => options.navigate(day, "day"));
     cell.addEventListener("click", (event) => {
       if (event.target === cell) options.create({ scheduledDate: day });
     });
@@ -4748,7 +4753,8 @@ var TaskMainView = class extends import_obsidian6.ItemView {
     this.visibleTasks = [];
     this.selectionRows.clear();
     container.addClass("tm-main-view");
-    container.classList.toggle("tm-wrap-task-titles", this.layout === "list" && this.plugin.settings.wrapTaskTitles);
+    const wrapTitles = this.layout === "calendar" ? this.plugin.settings.wrapCalendarTaskTitles : this.layout === "kanban" ? this.plugin.settings.wrapKanbanTaskTitles : this.plugin.settings.wrapTaskTitles;
+    container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "projects" && !this.pagePath) {
@@ -5243,6 +5249,14 @@ var TaskMainView = class extends import_obsidian6.ItemView {
       const control = (_a2 = element == null ? void 0 : element.closest) == null ? void 0 : _a2.call(element, "button, input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
       return Boolean(control && control !== row);
     };
+    row.addEventListener("contextmenu", (event) => {
+      const additive = import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey;
+      if (!this.selection.has(task) || event.shiftKey || additive) {
+        this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
+      }
+      row.focus({ preventScroll: true });
+      this.updateSelection();
+    });
     row.addEventListener("mousedown", (event) => {
       if (!interactive(event.target) && (event.shiftKey || (import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey))) event.preventDefault();
     });
@@ -5880,7 +5894,7 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
       destinations.add(project.path);
       for (const heading of (_b = project.headings) != null ? _b : []) destinations.add(destinationString(project.path, heading.name));
     }
-    for (const path of [...destinations].sort()) this.destinationInput.createEl("option", { value: path, text: path });
+    for (const path of [...destinations].sort()) this.destinationInput.createEl("option", { value: path, text: destinationLabel(path) });
     this.destinationInput.value = this.draft.destination;
     field(contentEl, "Destination", this.destinationInput);
     const error = contentEl.createDiv({ cls: "tm-editor-error" });
@@ -5938,7 +5952,7 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
       const destination = (_b2 = parsed.destination) != null ? _b2 : this.options.settings.inboxPath;
       if (destination) {
         if (!Array.from(this.destinationInput.options).some((option) => option.value === destination)) {
-          this.destinationInput.createEl("option", { value: destination, text: destination });
+          this.destinationInput.createEl("option", { value: destination, text: destinationLabel(destination) });
         }
         this.destinationInput.value = destination;
       }
@@ -6654,6 +6668,8 @@ var TaskStore = class {
 var DEFAULT_SETTINGS = {
   taskMode: false,
   wrapTaskTitles: true,
+  wrapCalendarTaskTitles: true,
+  wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
   tasksHeading: "Tasks",
   newTaskPosition: "top"
@@ -6685,17 +6701,21 @@ var TaskManagerSettingTab = class extends import_obsidian14.PluginSettingTab {
         desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
         render: (setting) => this.renderPositionSetting(setting)
       },
-      {
-        name: "Wrap task titles",
-        desc: "Show long task titles on multiple lines in the task view's list layout. When off, show the beginning of the title with an ellipsis.",
+      ...[
+        ["wrapTaskTitles", "List"],
+        ["wrapCalendarTaskTitles", "Calendar"],
+        ["wrapKanbanTaskTitles", "Kanban"]
+      ].map(([key, layout]) => ({
+        name: `Wrap task titles \u2014 ${layout}`,
+        desc: `Show long task titles on multiple lines in ${layout.toLowerCase()} layout. When off, show the beginning of the title with an ellipsis.`,
         render: (setting) => {
-          setting.addToggle((toggle) => toggle.setValue(this.plugin.settings.wrapTaskTitles).onChange(async (value) => {
-            this.plugin.settings.wrapTaskTitles = value;
+          setting.addToggle((toggle) => toggle.setValue(this.plugin.settings[key]).onChange(async (value) => {
+            this.plugin.settings[key] = value;
             await this.plugin.saveSettings();
             this.plugin.refreshViews();
           }));
         }
-      }
+      }))
     ];
   }
   // Obsidian versions before 1.13 use this imperative settings page.
@@ -6829,6 +6849,8 @@ var TaskManagerPlugin = class extends import_obsidian15.Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     this.settings.taskMode = this.settings.taskMode === true;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
+    this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles !== false;
+    this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
   }
   async saveSettings() {

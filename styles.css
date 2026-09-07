@@ -970,3 +970,18 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-bulk-field { grid-template-columns: 120px minmax(0, 1fr) auto; }
 .tm-bulk-help { color: var(--text-muted); font-size: var(--font-ui-small); }
 @media (max-width: 700px) { .tm-bulk-field { grid-template-columns: minmax(0, 1fr) auto; } .tm-bulk-field > label { grid-column: 1 / -1; } }
+
+/* Per-layout wrapping keeps clipping confined to the title, not card controls. */
+.tm-main-view:not(.tm-wrap-task-titles) .tm-kanban button.tm-task-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tm-main-view .tm-calendar button.tm-calendar-task { max-width: 100%; }
+.tm-main-view:not(.tm-wrap-task-titles) .tm-calendar .tm-calendar-task-title {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

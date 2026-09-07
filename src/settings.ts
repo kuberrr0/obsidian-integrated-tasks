@@ -23,15 +23,19 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
         render: (setting: Setting) => this.renderPositionSetting(setting)
       },
-      {
-        name: "Wrap task titles",
-        desc: "Show long task titles on multiple lines in the task view's list layout. When off, show the beginning of the title with an ellipsis.",
-        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.wrapTaskTitles).onChange(async value => {
-          this.plugin.settings.wrapTaskTitles = value;
+      ...([
+        ["wrapTaskTitles", "List"],
+        ["wrapCalendarTaskTitles", "Calendar"],
+        ["wrapKanbanTaskTitles", "Kanban"]
+      ] as const).map(([key, layout]) => ({
+        name: `Wrap task titles — ${layout}`,
+        desc: `Show long task titles on multiple lines in ${layout.toLowerCase()} layout. When off, show the beginning of the title with an ellipsis.`,
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
+          this.plugin.settings[key] = value;
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
         })); }
-      }
+      }))
     ] satisfies SettingDefinitionRender[];
   }
 

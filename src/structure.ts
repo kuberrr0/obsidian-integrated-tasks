@@ -59,3 +59,10 @@ export function splitDestination(value: string): { path: string; heading?: strin
 export function destinationString(path: string, heading?: string): string {
   return `${path}${heading ? `#${heading}` : ""}`;
 }
+
+/** Hide the note extension in UI labels without changing stored paths or headings. */
+export function destinationLabel(destination: string): string {
+  const separator = destination.indexOf("#");
+  const path = separator < 0 ? destination : destination.slice(0, separator);
+  return path.replace(/\.md$/i, "") + (separator < 0 ? "" : destination.slice(separator));
+}

@@ -80,6 +80,8 @@ export interface TaskDraft extends ParsedTaskMetadata {
 export interface TaskManagerSettings {
   taskMode: boolean;
   wrapTaskTitles: boolean;
+  wrapCalendarTaskTitles: boolean;
+  wrapKanbanTaskTitles: boolean;
   inboxPath: string;
   tasksHeading: string;
   newTaskPosition: "top" | "bottom";
@@ -88,6 +90,8 @@ export interface TaskManagerSettings {
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
   taskMode: false,
   wrapTaskTitles: true,
+  wrapCalendarTaskTitles: true,
+  wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
   tasksHeading: "Tasks",
   newTaskPosition: "top"

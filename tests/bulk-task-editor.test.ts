@@ -77,6 +77,8 @@ describe("bulk modal interactions", () => {
     expect(input("Priority").value).toBe("__mixed__");
     expect(input("Duration").value).toBe("1h");
     expect(input("Destination").children.map(option => option.value)).toContain("Inbox.md");
+    expect(input("Destination").children.find(option => option.value === "Inbox.md")?.text).toBe("Inbox");
+    expect(input("Destination").children.find(option => option.value === "Work.md")?.text).toBe("Work");
     input("Priority").value = "3";
     input("Priority").dispatchEvent(new Event("change"));
     button("Save task").click();

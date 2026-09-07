@@ -120,6 +120,8 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<TaskManagerSettings> | null);
     this.settings.taskMode = this.settings.taskMode === true;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
+    this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles !== false;
+    this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
   }
 

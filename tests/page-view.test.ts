@@ -67,6 +67,8 @@ it("defaults wrapping on while preserving a saved choice to turn it off", async 
     plugin.loadData = vi.fn().mockResolvedValue(saved);
     await plugin.loadSettings();
     expect(plugin.settings.wrapTaskTitles).toBe(expected);
+    expect(plugin.settings.wrapCalendarTaskTitles).toBe(true);
+    expect(plugin.settings.wrapKanbanTaskTitles).toBe(true);
   }
 });
 
@@ -128,7 +130,12 @@ function selectionView() {
       handlers.get("click")!(event);
       return event;
     };
-    return { row, classes, click };
+    const contextmenu = (target: unknown = row) => {
+      const event = { target, preventDefault: vi.fn() };
+      handlers.get("contextmenu")!(event);
+      return event;
+    };
+    return { row, classes, click, contextmenu };
   });
   return { view, internals, tasks, rows, bulkDrop };
 }
@@ -174,4 +181,23 @@ it("offers Edit task properties only for an active view with selected tasks", ()
   expect(open).toHaveBeenCalledExactlyOnceWith(active);
   active = undefined;
   expect(check(false)).toBe(false);
+});
+
+
+it("loads independent wrapping preferences for all layouts", async () => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  plugin.loadData = vi.fn().mockResolvedValue({ wrapTaskTitles: true, wrapCalendarTaskTitles: false, wrapKanbanTaskTitles: false });
+  await plugin.loadSettings();
+  expect(plugin.settings).toMatchObject({ wrapTaskTitles: true, wrapCalendarTaskTitles: false, wrapKanbanTaskTitles: false });
+});
+
+
+it("right-click selects titles and other controls, retaining an existing multi-selection", () => {
+  const { view, rows } = selectionView();
+  rows[0].click(); rows[2].click({ metaKey: true });
+  const title = { closest: () => ({ tagName: "BUTTON" }) };
+  expect(rows[2].contextmenu(title).preventDefault).not.toHaveBeenCalled();
+  expect(view.getSelectedTasks().map(task => task.title)).toEqual(["A", "C"]);
+  rows[1].contextmenu(title);
+  expect(view.getSelectedTasks().map(task => task.title)).toEqual(["B"]);
 });

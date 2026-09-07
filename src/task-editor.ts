@@ -1,7 +1,7 @@
 import { parseTaskTreeInput } from "./task-input";
 import type { TaskEditorPreset } from "./types";
 import { trackModalViewport } from "./mobile-layout";
-import { destinationString } from "./structure";
+import { destinationLabel, destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { formatDate, formatDateTime, parseDateTimeExpression, todayIso, tomorrowIso } from "./date";
 import { formatDuration, parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
@@ -127,7 +127,7 @@ export class TaskEditorModal extends Modal {
       destinations.add(project.path);
       for (const heading of project.headings ?? []) destinations.add(destinationString(project.path, heading.name));
     }
-    for (const path of [...destinations].sort()) this.destinationInput.createEl("option", { value: path, text: path });
+    for (const path of [...destinations].sort()) this.destinationInput.createEl("option", { value: path, text: destinationLabel(path) });
     this.destinationInput.value = this.draft.destination;
     field(contentEl, "Destination", this.destinationInput);
 
@@ -185,7 +185,7 @@ export class TaskEditorModal extends Modal {
       const destination = parsed.destination ?? this.options.settings.inboxPath;
       if (destination) {
         if (!Array.from(this.destinationInput.options).some((option) => option.value === destination)) {
-          this.destinationInput.createEl("option", { value: destination, text: destination });
+          this.destinationInput.createEl("option", { value: destination, text: destinationLabel(destination) });
         }
         this.destinationInput.value = destination;
       }

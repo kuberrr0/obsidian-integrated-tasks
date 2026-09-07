@@ -12,7 +12,7 @@ Enable **Task mode** in the sidebar, ribbon, settings, or with **Toggle task mod
 
 Every task view—Inbox, Today, Upcoming, All Tasks, individual projects, and any page—includes search, priority/date filters, sorting by date/priority/title/note order/duration in either direction, and grouping by date/priority/source note/status or no grouping. Views spanning multiple notes also have a source-note filter. **Group: View default** retains each view's original layout, including note headings for page and project views. Visible subtasks stay beside their parents, with the selected sort applied among siblings. Controls reset when switching to a different view or page.
 
-Date sorting compares the date first, then the time on the same day, for both scheduled dates and deadlines. Action date sorting uses the earlier scheduled/deadline date and time. Date-only tasks come before timed tasks on the same day in ascending order. **Wrap task titles** is enabled by default and shows full titles across multiple lines in list layout; when disabled, long titles show their beginning followed by an ellipsis.
+Date sorting compares the date first, then the time on the same day, for both scheduled dates and deadlines. Action date sorting uses the earlier scheduled/deadline date and time. Date-only tasks come before timed tasks on the same day in ascending order. **Wrap task titles** has independent **List**, **Calendar**, and **Kanban** toggles, all enabled by default. Turning a layout’s toggle off shows the beginning of long titles followed by an ellipsis. Existing list-wrapping preferences are preserved; timed calendar cards remain limited to their scheduled duration.
 
 ## Task syntax
 

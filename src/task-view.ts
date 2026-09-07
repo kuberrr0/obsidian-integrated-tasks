@@ -109,7 +109,9 @@ export class TaskMainView extends ItemView {
     this.visibleTasks = [];
     this.selectionRows.clear();
     container.addClass("tm-main-view");
-    container.classList.toggle("tm-wrap-task-titles", this.layout === "list" && this.plugin.settings.wrapTaskTitles);
+    const wrapTitles = this.layout === "calendar" ? this.plugin.settings.wrapCalendarTaskTitles
+      : this.layout === "kanban" ? this.plugin.settings.wrapKanbanTaskTitles : this.plugin.settings.wrapTaskTitles;
+    container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "projects" && !this.pagePath) {
@@ -561,6 +563,14 @@ export class TaskMainView extends ItemView {
       const control = element?.closest?.("button, input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
       return Boolean(control && control !== row);
     };
+    row.addEventListener("contextmenu", event => {
+      const additive = Platform.isMacOS ? event.metaKey : event.ctrlKey;
+      if (!this.selection.has(task) || event.shiftKey || additive) {
+        this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
+      }
+      row.focus({ preventScroll: true });
+      this.updateSelection();
+    });
     row.addEventListener("mousedown", event => {
       if (!interactive(event.target) && (event.shiftKey || (Platform.isMacOS ? event.metaKey : event.ctrlKey))) event.preventDefault();
     });

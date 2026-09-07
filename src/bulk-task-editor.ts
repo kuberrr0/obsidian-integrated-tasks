@@ -1,7 +1,7 @@
 import { Modal, Notice, type App } from "obsidian";
 import { formatDateTime, parseDateTimeExpression } from "./date";
 import { durationToMinutes, formatDuration } from "./parser";
-import { destinationString } from "./structure";
+import { destinationLabel, destinationString } from "./structure";
 import { trackModalViewport } from "./mobile-layout";
 import type { BulkTaskPatch } from "./bulk-tasks";
 import type { Project, Task } from "./types";
@@ -88,7 +88,7 @@ export class BulkTaskEditorModal extends Modal {
             destinations.add(project.path);
             for (const heading of project.headings ?? []) destinations.add(destinationString(project.path, heading.name));
           }
-          for (const destination of [...destinations].sort()) select.createEl("option", { value: destination, text: destination });
+          for (const destination of [...destinations].sort()) select.createEl("option", { value: destination, text: destinationLabel(destination) });
         }
         input.value = common ?? "__mixed__";
       } else {

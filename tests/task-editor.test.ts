@@ -85,7 +85,7 @@ function openModal(edit = false) {
   });
   const fields = modal as unknown as {
     modalEl: EditorElement; contentEl: EditorElement; close: () => void;
-    rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement;
+    rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement; destinationInput: EditorElement;
   };
   fields.modalEl = new EditorElement();
   fields.contentEl = new EditorElement();
@@ -136,4 +136,14 @@ it("parses natural scheduled dates and deadlines in the edit modal raw text", as
   key({ metaKey: true });
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Call", scheduledDate: tomorrowIso(), scheduledTime: "21:00", deadline: tomorrowIso(), deadlineTime: "12:00" });
+});
+
+
+it.each([false, true])("hides destination extensions in new/edit modal labels (editing: %s)", edit => {
+  const { fields } = openModal(edit);
+  expect(fields.destinationInput.options.find(option => option.value === "Inbox.md")?.text).toBe("Inbox");
+  fields.rawInput.value = "- [ ] Task ~[[Projects/Work#Plan]]";
+  fields.rawInput.dispatchEvent(new Event("input"));
+  expect(fields.destinationInput.options.find(option => option.value === "Projects/Work.md#Plan")?.text).toBe("Projects/Work#Plan");
+  expect(fields.destinationInput.value).toBe("Projects/Work.md#Plan");
 });
