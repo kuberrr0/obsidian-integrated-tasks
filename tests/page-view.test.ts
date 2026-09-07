@@ -109,7 +109,8 @@ it("focuses and selects the task search field without changing its value", () =>
 function selectionView() {
   const tasks = scanTasks("Work.md", "- [ ] A\n- [ ] B\n- [ ] C");
   const bulkDrop = vi.fn().mockResolvedValue([]);
-  const plugin = { store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
+  const openEditor = vi.fn();
+  const plugin = { openEditor, store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
   const view = new TaskMainView({} as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   const internals = view as unknown as {
@@ -130,40 +131,48 @@ function selectionView() {
       handlers.get("click")!(event);
       return event;
     };
-    const contextmenu = (target: unknown = row) => {
-      const event = { target, preventDefault: vi.fn() };
+    const contextmenu = (target: unknown = row, options: Record<string, unknown> = {}) => {
+      const event = { target, preventDefault: vi.fn(), ...options };
       handlers.get("contextmenu")!(event);
       return event;
     };
-    return { row, classes, click, contextmenu };
+    const pointerdown = (options: Record<string, unknown> = {}) => {
+      const event = { target: row, button: 2, preventDefault: vi.fn(), ...options };
+      handlers.get("pointerdown")!(event);
+      return event;
+    };
+    return { row, classes, click, contextmenu, pointerdown };
   });
-  return { view, internals, tasks, rows, bulkDrop };
+  return { view, internals, tasks, rows, bulkDrop, openEditor };
 }
 
-it("selects block backgrounds and ranges without intercepting title or checkbox clicks", () => {
-  const { view, rows } = selectionView();
+it("left-click opens the editor without changing right-click selection", () => {
+  const { view, rows, tasks, openEditor } = selectionView();
   rows[0].click();
-  rows[2].click({ shiftKey: true });
-  expect(view.getSelectedTasks().map(task => task.title)).toEqual(["A", "B", "C"]);
-  for (const row of rows) expect(row.classes.get("is-selected")).toBe(true);
-  const title = { closest: () => ({ tagName: "BUTTON" }) };
-  expect(rows[1].click({ target: title }).preventDefault).not.toHaveBeenCalled();
+  rows[2].click({ shiftKey: true, metaKey: true });
+  expect(view.getSelectedTasks()).toEqual([]);
+  expect(openEditor).toHaveBeenCalledTimes(2);
+  expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task: tasks[2] }));
+  rows[0].contextmenu(); rows[2].contextmenu(undefined, { shiftKey: true });
   expect(view.getSelectedTasks()).toHaveLength(3);
   rows[1].click();
-  rows[2].click({ metaKey: true });
-  expect(view.getSelectedTasks().map(task => task.title)).toEqual(["B", "C"]);
+  expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task: tasks[1] }));
+  expect(view.getSelectedTasks()).toHaveLength(3);
+  const title = { closest: () => ({ tagName: "BUTTON" }) };
+  expect(rows[1].click({ target: title }).preventDefault).not.toHaveBeenCalled();
 });
 
-it("drags the selected set as one operation and starts a new selection when dragging an unselected task", async () => {
+it("drags the selected set together and drags an unselected task without selecting it", async () => {
   const { view, internals, rows, tasks, bulkDrop } = selectionView();
-  rows[0].click(); rows[2].click({ metaKey: true });
+  rows[0].contextmenu(); rows[2].contextmenu(undefined, { metaKey: true });
   internals.prepareDrag(tasks[2]);
   await internals.dropListTask(tasks[2], undefined, tasks[1], "after");
   expect(bulkDrop).toHaveBeenCalledExactlyOnceWith([tasks[0], tasks[2]], undefined, tasks[1], "after");
   expect(view.getSelectedTasks()).toEqual([]);
-  rows[0].click();
   internals.prepareDrag(tasks[1]);
-  expect(view.getSelectedTasks()).toEqual([tasks[1]]);
+  expect(view.getSelectedTasks()).toEqual([]);
+  await internals.dropListTask(tasks[1], undefined, tasks[2], "before");
+  expect(bulkDrop).toHaveBeenLastCalledWith([tasks[1]], undefined, tasks[2], "before");
 });
 
 it("offers Edit task properties only for an active view with selected tasks", () => {
@@ -194,7 +203,7 @@ it("loads independent wrapping preferences for all layouts", async () => {
 
 it("right-click selects titles and other controls, retaining an existing multi-selection", () => {
   const { view, rows } = selectionView();
-  rows[0].click(); rows[2].click({ metaKey: true });
+  rows[0].contextmenu(); rows[2].contextmenu(undefined, { metaKey: true });
   const title = { closest: () => ({ tagName: "BUTTON" }) };
   expect(rows[2].contextmenu(title).preventDefault).not.toHaveBeenCalled();
   expect(view.getSelectedTasks().map(task => task.title)).toEqual(["A", "C"]);
@@ -239,4 +248,43 @@ it("does not enable task mode if the project file cannot be opened", async () =>
   plugin.app = { vault: { getAbstractFileByPath: () => file }, workspace: { getLeaf: () => ({ openFile: async () => { throw new Error("Open failed"); } }) } } as unknown as App;
   await expect(plugin.openProject("Project.md")).rejects.toThrow("Open failed");
   expect(mode).not.toHaveBeenCalled();
+});
+
+
+it("selects on right-button press before contextmenu, including range and additive selection", () => {
+  const { view, rows, tasks, openEditor } = selectionView();
+  rows[0].pointerdown({ button: 0 });
+  expect(view.getSelectedTasks()).toEqual([]);
+  rows[0].pointerdown();
+  expect(view.getSelectedTasks()).toEqual([tasks[0]]);
+  expect(rows[0].classes.get("is-selected")).toBe(true);
+  rows[2].pointerdown({ shiftKey: true });
+  expect(view.getSelectedTasks()).toEqual(tasks);
+  rows[2].contextmenu(undefined, { shiftKey: true });
+  expect(view.getSelectedTasks()).toEqual(tasks);
+  view.clearSelection();
+  rows[0].pointerdown();
+  rows[2].pointerdown({ metaKey: true });
+  expect(view.getSelectedTasks()).toEqual([tasks[0], tasks[2]]);
+  rows[2].contextmenu(undefined, { metaKey: true });
+  expect(view.getSelectedTasks()).toEqual([tasks[0], tasks[2]]);
+  expect(openEditor).not.toHaveBeenCalled();
+});
+
+it("selects immediately on macOS control-click, including task titles", () => {
+  const { view, rows, tasks } = selectionView();
+  const title = { closest: () => ({ tagName: "BUTTON" }) };
+  rows[1].pointerdown({ button: 0, ctrlKey: true, target: title });
+  expect(view.getSelectedTasks()).toEqual([tasks[1]]);
+});
+
+
+it("keeps the pressed task selected if layout movement retargets contextmenu", () => {
+  const { view, rows, tasks } = selectionView();
+  rows[0].contextmenu();
+  rows[2].pointerdown();
+  rows[0].contextmenu();
+  expect(view.getSelectedTasks()).toEqual([tasks[2]]);
+  rows[1].contextmenu();
+  expect(view.getSelectedTasks()).toEqual([tasks[1]]);
 });

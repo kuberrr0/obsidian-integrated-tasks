@@ -46,6 +46,7 @@ export class TaskMainView extends ItemView {
   private taskResults?: HTMLElement;
   private listDrag?: ListDragController;
   private selection = new TaskSelection();
+  private contextSelectionOnPress = false;
   private visibleTasks: Task[] = [];
   private selectionRows = new Map<string, HTMLElement[]>();
   private selectionBar?: HTMLElement;
@@ -543,9 +544,7 @@ export class TaskMainView extends ItemView {
   clearSelection(): void { this.selection.clear(); this.updateSelection(); }
 
   private prepareDrag(task: Task): void {
-    if (!this.selection.has(task)) this.selection.click(task, this.visibleTasks);
-    this.draggedTasks = this.getSelectedTasks();
-    this.updateSelection();
+    this.draggedTasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
   }
 
   private bindSelection(row: HTMLElement, task: Task): void {
@@ -560,31 +559,41 @@ export class TaskMainView extends ItemView {
       const control = element?.closest?.("button, input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
       return Boolean(control && control !== row);
     };
-    row.addEventListener("contextmenu", event => {
+    const selectForContextMenu = (event: MouseEvent): void => {
       const additive = Platform.isMacOS ? event.metaKey : event.ctrlKey;
       if (!this.selection.has(task) || event.shiftKey || additive) {
         this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
       }
       row.focus({ preventScroll: true });
       this.updateSelection();
+    };
+    // Select on press: contextmenu may wait for release or the native menu gesture.
+    row.addEventListener("pointerdown", event => {
+      this.contextSelectionOnPress = event.button === 2 || (Platform.isMacOS && event.button === 0 && event.ctrlKey);
+      if (this.contextSelectionOnPress) {
+        selectForContextMenu(event);
+      }
     });
-    row.addEventListener("mousedown", event => {
-      if (!interactive(event.target) && (event.shiftKey || (Platform.isMacOS ? event.metaKey : event.ctrlKey))) event.preventDefault();
+    // Also support keyboard context-menu requests and other non-pointer input.
+    row.addEventListener("contextmenu", event => {
+      // The selection toolbar can move rows beneath the pointer after press.
+      // Consume the gesture across the view, even if its menu targets another row.
+      if (!this.contextSelectionOnPress) selectForContextMenu(event);
+      this.contextSelectionOnPress = false;
     });
+    row.addEventListener("pointercancel", () => { this.contextSelectionOnPress = false; });
     row.addEventListener("click", event => {
       if (interactive(event.target)) return;
       event.preventDefault(); event.stopPropagation();
-      this.selection.click(task, this.visibleTasks, event.shiftKey, Platform.isMacOS ? event.metaKey : event.ctrlKey);
-      row.focus({ preventScroll: true });
-      this.updateSelection();
+      this.plugin.openEditor({ ...this.state, task });
     });
     row.addEventListener("keydown", event => {
+      this.contextSelectionOnPress = false;
       if (interactive(event.target)) return;
       if (event.key === "Escape") { event.preventDefault(); this.clearSelection(); }
       if (event.key === " " || event.key === "Enter") {
         event.preventDefault(); event.stopPropagation();
-        this.selection.click(task, this.visibleTasks, event.shiftKey, Platform.isMacOS ? event.metaKey : event.ctrlKey);
-        this.updateSelection();
+        this.plugin.openEditor({ ...this.state, task });
       }
     });
   }

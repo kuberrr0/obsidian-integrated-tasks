@@ -4234,6 +4234,13 @@ var ListDragController = class {
     (0, import_obsidian4.setIcon)(handle, "grip-vertical");
     primary.prepend(handle);
     row.draggable = true;
+    let suppressClickUntil = 0;
+    row.addEventListener("click", (event) => {
+      if (Date.now() > suppressClickUntil) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      suppressClickUntil = 0;
+    }, true);
     row.addEventListener("dragstart", (event) => {
       if (this.busy || event.target instanceof HTMLElement && event.target.closest("input")) {
         event.preventDefault();
@@ -4250,6 +4257,7 @@ var ListDragController = class {
       row.addClass("is-dragging");
     });
     row.addEventListener("dragend", () => {
+      suppressClickUntil = Date.now() + 250;
       this.taskId = void 0;
       row.removeClass("is-dragging");
       this.clear();
@@ -4286,19 +4294,21 @@ var ListDragController = class {
       }
       return void 0;
     };
-    handle.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || this.busy) return;
-      event.preventDefault();
+    row.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || import_obsidian4.Platform.isMacOS && event.ctrlKey || this.busy) return;
+      const target = event.target;
+      if (target.closest("input, label, select, textarea, a, button") && !target.closest(".tm-task-title, .tm-list-drag-handle")) return;
       event.stopPropagation();
       pointer = event.pointerId;
       origin = { x: event.clientX, y: event.clientY };
       dragging = false;
       row.draggable = false;
-      handle.setPointerCapture(event.pointerId);
+      row.setPointerCapture(event.pointerId);
     });
-    handle.addEventListener("pointermove", (event) => {
+    row.addEventListener("pointermove", (event) => {
       if (pointer !== event.pointerId) return;
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
+      event.preventDefault();
       if (!dragging) this.dragStart(task);
       dragging = true;
       this.taskId = task.id;
@@ -4316,17 +4326,20 @@ var ListDragController = class {
       this.taskId = void 0;
       this.clear();
     };
-    handle.addEventListener("pointerup", (event) => {
+    row.addEventListener("pointerup", (event) => {
       if (pointer !== event.pointerId) return;
-      event.preventDefault();
-      event.stopPropagation();
+      if (dragging) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
       const found = dragging ? hit(event) : void 0;
+      if (dragging) suppressClickUntil = Date.now() + 250;
       if (found) this.commit(found.target.group, found.target.anchor, found.target.placement);
       reset();
-      handle.releasePointerCapture(event.pointerId);
+      row.releasePointerCapture(event.pointerId);
     });
-    handle.addEventListener("pointercancel", reset);
-    handle.addEventListener("lostpointercapture", reset);
+    row.addEventListener("pointercancel", reset);
+    row.addEventListener("lostpointercapture", reset);
     row.addEventListener("dragover", (event) => {
       if (!this.taskId || this.busy) return;
       event.preventDefault();
@@ -4703,6 +4716,7 @@ var TaskMainView = class extends import_obsidian6.ItemView {
     this.grouping = "default";
     this.filtersExpanded = false;
     this.selection = new TaskSelection();
+    this.contextSelectionOnPress = false;
     this.visibleTasks = [];
     this.selectionRows = /* @__PURE__ */ new Map();
     this.draggedTasks = [];
@@ -5243,9 +5257,7 @@ var TaskMainView = class extends import_obsidian6.ItemView {
     this.updateSelection();
   }
   prepareDrag(task) {
-    if (!this.selection.has(task)) this.selection.click(task, this.visibleTasks);
-    this.draggedTasks = this.getSelectedTasks();
-    this.updateSelection();
+    this.draggedTasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
   }
   bindSelection(row, task) {
     var _a;
@@ -5261,26 +5273,35 @@ var TaskMainView = class extends import_obsidian6.ItemView {
       const control = (_a2 = element == null ? void 0 : element.closest) == null ? void 0 : _a2.call(element, "button, input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
       return Boolean(control && control !== row);
     };
-    row.addEventListener("contextmenu", (event) => {
+    const selectForContextMenu = (event) => {
       const additive = import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey;
       if (!this.selection.has(task) || event.shiftKey || additive) {
         this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
       }
       row.focus({ preventScroll: true });
       this.updateSelection();
+    };
+    row.addEventListener("pointerdown", (event) => {
+      this.contextSelectionOnPress = event.button === 2 || import_obsidian6.Platform.isMacOS && event.button === 0 && event.ctrlKey;
+      if (this.contextSelectionOnPress) {
+        selectForContextMenu(event);
+      }
     });
-    row.addEventListener("mousedown", (event) => {
-      if (!interactive(event.target) && (event.shiftKey || (import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey))) event.preventDefault();
+    row.addEventListener("contextmenu", (event) => {
+      if (!this.contextSelectionOnPress) selectForContextMenu(event);
+      this.contextSelectionOnPress = false;
+    });
+    row.addEventListener("pointercancel", () => {
+      this.contextSelectionOnPress = false;
     });
     row.addEventListener("click", (event) => {
       if (interactive(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
-      this.selection.click(task, this.visibleTasks, event.shiftKey, import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey);
-      row.focus({ preventScroll: true });
-      this.updateSelection();
+      this.plugin.openEditor({ ...this.state, task });
     });
     row.addEventListener("keydown", (event) => {
+      this.contextSelectionOnPress = false;
       if (interactive(event.target)) return;
       if (event.key === "Escape") {
         event.preventDefault();
@@ -5289,8 +5310,7 @@ var TaskMainView = class extends import_obsidian6.ItemView {
       if (event.key === " " || event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        this.selection.click(task, this.visibleTasks, event.shiftKey, import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey);
-        this.updateSelection();
+        this.plugin.openEditor({ ...this.state, task });
       }
     });
   }

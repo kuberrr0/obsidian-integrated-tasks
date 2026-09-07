@@ -1,4 +1,4 @@
-import { setIcon } from "obsidian";
+import { Platform, setIcon } from "obsidian";
 import type { Task } from "./types";
 import type { ListDropGroup, ListPlacement } from "./list-drag";
 
@@ -50,6 +50,12 @@ export class ListDragController {
     setIcon(handle, "grip-vertical");
     primary.prepend(handle);
     row.draggable = true;
+    let suppressClickUntil = 0;
+    row.addEventListener("click", event => {
+      if (Date.now() > suppressClickUntil) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      suppressClickUntil = 0;
+    }, true);
     row.addEventListener("dragstart", event => {
       if (this.busy || (event.target instanceof HTMLElement && event.target.closest("input"))) { event.preventDefault(); return; }
       this.dragStart(task);
@@ -59,7 +65,7 @@ export class ListDragController {
       if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); }
       row.addClass("is-dragging");
     });
-    row.addEventListener("dragend", () => { this.taskId = undefined; row.removeClass("is-dragging"); this.clear(); });
+    row.addEventListener("dragend", () => { suppressClickUntil = Date.now() + 250; this.taskId = undefined; row.removeClass("is-dragging"); this.clear(); });
     const intent = (event: { clientX: number; clientY: number }): { anchor: Task; placement: ListPlacement } => {
       const rect = row.getBoundingClientRect();
       const left = primary.getBoundingClientRect().left;
@@ -80,8 +86,8 @@ export class ListDragController {
       const result = intent(point);
       return { ...result, group, indicator: result.anchor.id !== task.id ? "outdent" : result.placement };
     });
-    // Pointer dragging on the grip works with mouse, pen and touch, including
-    // browsers that do not initiate native HTML dragging from buttons.
+    // Use the same pointer drag on the title and body; native dragging is
+    // unreliable on nested controls and can compete with text selection.
     let pointer: number | undefined;
     let origin = { x: 0, y: 0 };
     let dragging = false;
@@ -94,18 +100,22 @@ export class ListDragController {
       }
       return undefined;
     };
-    handle.addEventListener("pointerdown", event => {
-      if (event.button !== 0 || this.busy) return;
-      event.preventDefault(); event.stopPropagation();
+    row.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || this.busy) return;
+      const target = event.target as HTMLElement;
+      if (target.closest("input, label, select, textarea, a, button") &&
+          !target.closest(".tm-task-title, .tm-list-drag-handle")) return;
+      event.stopPropagation();
       pointer = event.pointerId;
       origin = { x: event.clientX, y: event.clientY };
       dragging = false;
       row.draggable = false;
-      handle.setPointerCapture(event.pointerId);
+      row.setPointerCapture(event.pointerId);
     });
-    handle.addEventListener("pointermove", event => {
+    row.addEventListener("pointermove", event => {
       if (pointer !== event.pointerId) return;
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
+      event.preventDefault();
       if (!dragging) this.dragStart(task);
       dragging = true;
       this.taskId = task.id;
@@ -116,16 +126,17 @@ export class ListDragController {
       else this.clear();
     });
     const reset = (): void => { pointer = undefined; dragging = false; row.draggable = true; row.removeClass("is-dragging"); this.taskId = undefined; this.clear(); };
-    handle.addEventListener("pointerup", event => {
+    row.addEventListener("pointerup", event => {
       if (pointer !== event.pointerId) return;
-      event.preventDefault(); event.stopPropagation();
+      if (dragging) { event.preventDefault(); event.stopPropagation(); }
       const found = dragging ? hit(event) : undefined;
+      if (dragging) suppressClickUntil = Date.now() + 250;
       if (found) this.commit(found.target.group, found.target.anchor, found.target.placement);
       reset();
-      handle.releasePointerCapture(event.pointerId);
+      row.releasePointerCapture(event.pointerId);
     });
-    handle.addEventListener("pointercancel", reset);
-    handle.addEventListener("lostpointercapture", reset);
+    row.addEventListener("pointercancel", reset);
+    row.addEventListener("lostpointercapture", reset);
     row.addEventListener("dragover", event => {
       if (!this.taskId || this.busy) return;
       event.preventDefault(); event.stopPropagation();
