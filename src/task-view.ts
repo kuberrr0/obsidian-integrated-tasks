@@ -672,6 +672,7 @@ export class TaskMainView extends ItemView {
     if (properties.scheduledDate) this.badge(parent, "calendar-days", `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`);
     if (properties.deadline) this.badge(parent, "flag", `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : undefined);
     if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, "clock-3", formatDuration(properties.durationMinutes));
+    if ("tags" in properties) for (const tag of properties.tags ?? []) this.badge(parent, "tag", tag);
     if (properties.priority) this.badge(parent, "signal", `P${properties.priority}`, `p${properties.priority}`);
   }
 

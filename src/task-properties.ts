@@ -1,3 +1,4 @@
+import { formatTags } from "./task-tags";
 import { formatDuration } from "./parser";
 import type { FilterOperator, Task, TaskFilter, TaskProperty } from "./types";
 
@@ -5,6 +6,7 @@ export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" |
   { key: "title", label: "Title", kind: "text" },
   { key: "status", label: "Status", kind: "choice" },
   { key: "priority", label: "Priority", kind: "choice" },
+  { key: "tags", label: "Tags", kind: "text" },
   { key: "scheduledDate", label: "Scheduled date", kind: "date" },
   { key: "scheduledTime", label: "Scheduled time", kind: "time" },
   { key: "deadline", label: "Deadline", kind: "date" },
@@ -15,6 +17,7 @@ export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" |
 ];
 
 export function propertyValue(task: Task, property: TaskProperty): string | number | undefined {
+  if (property === "tags") return task.tags?.length ? formatTags([...task.tags].sort()) : undefined;
   if (property === "status") return task.completed ? "Completed" : "Open";
   if (property === "source") return task.path;
   if (property === "duration") return task.durationMinutes;
@@ -33,6 +36,17 @@ export function filterOperators(kind: string): [FilterOperator, string][] {
 }
 
 export function matchesFilter(task: Task, filter: TaskFilter): boolean {
+  if (filter.property === "tags") {
+    const tags = (task.tags ?? []).map(tag => tag.toLocaleLowerCase());
+    const values = filter.values.map(value => value.replace(/^#\[\[|\]\]$/g, "").trim().toLocaleLowerCase());
+    if (filter.operator === "has") return tags.length > 0;
+    if (filter.operator === "missing") return tags.length === 0;
+    if (!tags.length) return false;
+    if (filter.operator === "is") return tags.some(tag => values.includes(tag));
+    if (filter.operator === "isNot") return tags.every(tag => !values.includes(tag));
+    if (filter.operator === "contains") return tags.some(tag => tag.includes(values[0] ?? ""));
+    return false;
+  }
   const value = propertyValue(task, filter.property);
   const present = value !== undefined && value !== "";
   if (filter.operator === "has") return present;

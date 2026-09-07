@@ -6,7 +6,7 @@ import { splitDestination } from "./structure";
 import type { ListPlacement } from "./list-drag";
 import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
-export type BulkTaskPatch = Partial<Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority" | "destination" | "description">>;
+export type BulkTaskPatch = Partial<Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority" | "tags" | "destination" | "description">>;
 export interface BulkTaskChange { task: Task; draft?: TaskDraft }
 export interface BulkTaskOptions {
   delete?: boolean;

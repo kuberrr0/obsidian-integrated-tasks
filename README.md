@@ -20,6 +20,7 @@ Date sorting compares the date first, then the time on the same day, for both sc
 - [ ] Draft launch notes [[05-09-2026]] 9pm 1h30m {[[07-09-2026]] noon} p1
 ```
 
+- `#[[work]] #[[client notes]]` — multiple task tags (tag names can contain spaces)
 - `[[05-09-2026]]` — scheduled date
 - `9pm` — scheduled time (also accepts `21:00`, `9:30 pm`, `noon`, or `midnight`)
 - `1h30m` — estimated duration
@@ -27,6 +28,8 @@ Date sorting compares the date first, then the time on the same day, for both sc
 - `p1`, `p2`, or `p3` — priority
 
 Date links use the format configured in Obsidian's Daily Notes settings (the example uses `DD-MM-YYYY`). ISO-formatted tasks remain supported, and the plugin falls back to `YYYY-MM-DD` when Daily Notes has no configured format. Metadata is parsed from the end of a checklist line. When creating or editing a task, type natural dates directly in the raw task text, such as `Call today`, `Review tomorrow`, or `Plan next Friday`; no brackets are needed. The detected date appears in Scheduled date and is saved as a date link. Use braces for a deadline, for example `Submit today {tomorrow}` or `Submit {2026-09-10}`. Braced dates fill Deadline independently of Scheduled date and are saved as `{[[date]]}` links. Explicit date links remain supported. Times can follow date links or appear in natural input: `Call tomorrow at 9pm {next Friday at noon}`. Scheduled and deadline times are independent, appear in task badges, and are saved in 24-hour `HH:mm` format. The editor’s scheduled and deadline fields accept dates with times. A time alone in new-task input, such as `Call at 9pm`, uses the next occurrence of that time. Date-only tasks keep no time.
+
+Add tags after the task title alongside other trailing properties, for example `- [ ] Write report p1 #[[work]] #[[client notes]]`. The **Tags** field in task and bulk editors uses the same syntax; clearing it removes all tags. Tags appear as metadata, are searchable, and support Tags filters (Is matches any complete tag). Sorting and grouping by Tags use the complete tag set. Duplicate tags are saved once.
 
 With **Task mode off**, type explicit `@` dates in Markdown checklist lines, for example `- [ ] do this task @today {@next week}`. Press Enter or move the caret to another line to convert them to `[[date]]` and `{[[date]]}` using your Daily Notes date format. Multiword dates stay editable until you leave the line; unrecognized expressions remain unchanged.
 

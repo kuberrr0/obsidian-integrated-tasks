@@ -25,6 +25,27 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
+// src/task-tags.ts
+function normalizeTags(tags = []) {
+  const normalized = tags.map((tag) => tag.trim());
+  if (normalized.some((tag) => !tag || /[\[\]\r\n|]/.test(tag))) {
+    throw new Error("Use nonempty tag names without brackets, newlines, or aliases.");
+  }
+  return [...new Set(normalized)];
+}
+function formatTags(tags = []) {
+  return normalizeTags(tags).map((tag) => `#[[${tag}]]`).join(" ");
+}
+function parseTags(value) {
+  const tags = [];
+  const remaining = value.replace(/#\[\[([^\[\]\r\n|]+)\]\]/g, (_match, tag) => {
+    tags.push(tag);
+    return "";
+  });
+  if (remaining.trim()) throw new Error("Use tags such as #[[work]] #[[client notes]].");
+  return normalizeTags(tags);
+}
+
 // src/bulk-task-editor.ts
 var import_obsidian2 = require("obsidian");
 
@@ -3072,6 +3093,7 @@ function destinationLabel(destination) {
 
 // src/parser.ts
 var CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
+var TAG = /(?:^|\s)#\[\[([^\[\]\r\n|]+)\]\]\s*$/;
 var PRIORITY = /(?:^|\s)p([123])\s*$/i;
 var DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 var SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
@@ -3102,6 +3124,7 @@ function formatDuration(minutes) {
   return `${hours ? `${hours}h` : ""}${remainder ? `${remainder}m` : ""}`;
 }
 function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat, naturalDates = false, tokenRanges) {
+  var _a;
   const checkbox = CHECKBOX.exec(line);
   if (!checkbox) return void 0;
   let remainder = checkbox[3].trimEnd();
@@ -3114,7 +3137,12 @@ function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat,
   for (; ; ) {
     let match;
     let changed = false;
-    if (!consumed.has("destination") && (match = DESTINATION.exec(remainder))) {
+    if ((match = TAG.exec(remainder)) && match[1].trim()) {
+      metadata.tags = [match[1].trim(), ...(_a = metadata.tags) != null ? _a : []];
+      recordToken("tags", match);
+      remainder = remainder.slice(0, match.index).trimEnd();
+      changed = true;
+    } else if (!consumed.has("destination") && (match = DESTINATION.exec(remainder))) {
       const destination = normalizeDestination(match[1]);
       if (destination) {
         metadata.destination = destination;
@@ -3180,6 +3208,7 @@ function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat,
     }
     if (!changed) break;
   }
+  if (metadata.tags) metadata.tags = [...new Set(metadata.tags)];
   return {
     title: remainder.trim(),
     indent: indentWidth(checkbox[1]),
@@ -3198,7 +3227,8 @@ function serializeTask(draft, dateFormat) {
     draft.scheduledDate ? `[[${formatDate(draft.scheduledDate, dateFormat)}]]${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
     draft.deadline ? `{[[${formatDate(draft.deadline, dateFormat)}]]${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
-    draft.priority ? `p${draft.priority}` : ""
+    draft.priority ? `p${draft.priority}` : "",
+    formatTags(draft.tags)
   ].filter(Boolean);
   const metadataGap = metadata.length ? " " : "";
   return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
@@ -3336,13 +3366,14 @@ function bulkPropertyValues(task, dateFormat) {
     scheduled: task.scheduledDate ? formatDateTime(task.scheduledDate, task.scheduledTime, dateFormat) : "",
     deadline: task.deadline ? formatDateTime(task.deadline, task.deadlineTime, dateFormat) : "",
     duration: task.durationMinutes ? formatDuration(task.durationMinutes) : "",
+    tags: formatTags(task.tags),
     priority: task.priority ? String(task.priority) : "",
     description: (_a = task.description) != null ? _a : "",
     destination: destinationString(task.path, task.section)
   };
 }
 function bulkPropertyPatch(values, dateFormat, reference = /* @__PURE__ */ new Date()) {
-  var _a, _b;
+  var _a, _b, _c;
   const patch = {};
   for (const field2 of ["scheduled", "deadline"]) {
     if (!(field2 in values)) continue;
@@ -3371,7 +3402,8 @@ function bulkPropertyPatch(values, dateFormat, reference = /* @__PURE__ */ new D
     if (!((_a = values.destination) == null ? void 0 : _a.trim())) throw new Error("Select a destination note.");
     patch.destination = values.destination;
   }
-  if ("description" in values) patch.description = (_b = values.description) != null ? _b : "";
+  if ("tags" in values) patch.tags = parseTags((_b = values.tags) != null ? _b : "");
+  if ("description" in values) patch.description = (_c = values.description) != null ? _c : "";
   return patch;
 }
 var BulkTaskEditorModal = class extends import_obsidian2.Modal {
@@ -3390,7 +3422,7 @@ var BulkTaskEditorModal = class extends import_obsidian2.Modal {
     content.createEl("h2", { text: "Edit task properties" });
     content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
     const snapshots = this.options.tasks.map((task) => bulkPropertyValues(task, this.options.dateFormat));
-    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["destination", "Destination"], ["description", "Description"]]) {
+    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["tags", "Tags"], ["destination", "Destination"], ["description", "Description"]]) {
       const common = snapshots.every((value) => value[key] === snapshots[0][key]) ? snapshots[0][key] : void 0;
       this.initial.set(key, common);
       const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });
@@ -3413,7 +3445,7 @@ var BulkTaskEditorModal = class extends import_obsidian2.Modal {
         }
         input.value = common != null ? common : "__mixed__";
       } else {
-        input.placeholder = common === void 0 ? "Mixed \u2014 unchanged" : key === "duration" ? "45m or 1h30m" : key === "description" ? "Add a description\u2026" : "Tomorrow at 9am";
+        input.placeholder = common === void 0 ? "Mixed \u2014 unchanged" : key === "tags" ? "#[[work]] #[[client notes]]" : key === "duration" ? "45m or 1h30m" : key === "description" ? "Add a description\u2026" : "Tomorrow at 9am";
         input.value = common != null ? common : "";
       }
       this.inputs.set(key, input);
@@ -3968,6 +4000,7 @@ var TASK_PROPERTIES = [
   { key: "title", label: "Title", kind: "text" },
   { key: "status", label: "Status", kind: "choice" },
   { key: "priority", label: "Priority", kind: "choice" },
+  { key: "tags", label: "Tags", kind: "text" },
   { key: "scheduledDate", label: "Scheduled date", kind: "date" },
   { key: "scheduledTime", label: "Scheduled time", kind: "time" },
   { key: "deadline", label: "Deadline", kind: "date" },
@@ -3977,6 +4010,8 @@ var TASK_PROPERTIES = [
   { key: "section", label: "Section", kind: "choice" }
 ];
 function propertyValue(task, property) {
+  var _a;
+  if (property === "tags") return ((_a = task.tags) == null ? void 0 : _a.length) ? formatTags([...task.tags].sort()) : void 0;
   if (property === "status") return task.completed ? "Completed" : "Open";
   if (property === "source") return task.path;
   if (property === "duration") return task.durationMinutes;
@@ -3992,7 +4027,21 @@ function filterOperators(kind) {
   return common;
 }
 function matchesFilter(task, filter) {
-  var _a;
+  var _a, _b;
+  if (filter.property === "tags") {
+    const tags = ((_a = task.tags) != null ? _a : []).map((tag) => tag.toLocaleLowerCase());
+    const values2 = filter.values.map((value2) => value2.replace(/^#\[\[|\]\]$/g, "").trim().toLocaleLowerCase());
+    if (filter.operator === "has") return tags.length > 0;
+    if (filter.operator === "missing") return tags.length === 0;
+    if (!tags.length) return false;
+    if (filter.operator === "is") return tags.some((tag) => values2.includes(tag));
+    if (filter.operator === "isNot") return tags.every((tag) => !values2.includes(tag));
+    if (filter.operator === "contains") return tags.some((tag) => {
+      var _a2;
+      return tag.includes((_a2 = values2[0]) != null ? _a2 : "");
+    });
+    return false;
+  }
   const value = propertyValue(task, filter.property);
   const present = value !== void 0 && value !== "";
   if (filter.operator === "has") return present;
@@ -4002,7 +4051,7 @@ function matchesFilter(task, filter) {
   const values = filter.values.map((item) => item.toLocaleLowerCase());
   if (filter.operator === "is") return values.includes(normalized);
   if (filter.operator === "isNot") return !values.includes(normalized);
-  if (filter.operator === "contains") return normalized.includes((_a = values[0]) != null ? _a : "");
+  if (filter.operator === "contains") return normalized.includes((_b = values[0]) != null ? _b : "");
   const numeric = filter.property === "duration";
   const actual = numeric ? Number(value) : normalized;
   const lower = numeric ? Number(values[0]) : values[0];
@@ -4015,14 +4064,15 @@ function matchesFilter(task, filter) {
 
 // src/query.ts
 function taskMatchesQuery(task, query, inboxPath, now2 = /* @__PURE__ */ new Date()) {
-  var _a, _b, _c;
+  var _a, _b, _c, _d;
   if ((_a = query.filters) == null ? void 0 : _a.some((filter) => !matchesFilter(task, filter))) return false;
   if (!query.showCompleted && !((_b = query.filters) == null ? void 0 : _b.some((filter) => filter.property === "status")) && task.completed) return false;
   if (query.sourcePath && task.path !== query.sourcePath) return false;
   if (query.projectPath && task.path !== query.projectPath) return false;
   if (query.priority && task.priority !== query.priority) return false;
   if (query.search && !`${task.title}
-${(_c = task.description) != null ? _c : ""}`.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
+${(_c = task.description) != null ? _c : ""}
+${((_d = task.tags) != null ? _d : []).join("\n")}`.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
   const today2 = todayIso(now2);
   const date = actionDate(task);
   if (query.dateFilter === "dated" && !date) return false;
@@ -4144,6 +4194,9 @@ function draftForGroup(task, group) {
     case "deadlineTime":
       draft.deadlineTime = value;
       if (value && !draft.deadline) draft.deadline = group.deadline;
+      break;
+    case "tags":
+      draft.tags = parseTags(String(value != null ? value : ""));
       break;
     case "priority":
       draft.priority = value;
@@ -5385,9 +5438,11 @@ var TaskMainView = class extends import_obsidian6.ItemView {
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
   }
   renderProperties(parent, properties) {
+    var _a;
     if (properties.scheduledDate) this.badge(parent, "calendar-days", `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`);
     if (properties.deadline) this.badge(parent, "flag", `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : void 0);
     if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, "clock-3", formatDuration(properties.durationMinutes));
+    if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) this.badge(parent, "tag", tag);
     if (properties.priority) this.badge(parent, "signal", `P${properties.priority}`, `p${properties.priority}`);
   }
   badge(parent, iconName, text, variant) {
@@ -5555,6 +5610,8 @@ function taskTokens(line, dateFormat) {
       };
     }
     switch (range.kind) {
+      case "tags":
+        return { ...range, label: `#${link[1].trim()}`, description: `Tag: ${link[1].trim()}`, linkText: link[1] };
       case "durationMinutes":
         return { ...range, label: formatDuration(parsed.durationMinutes), description: `Duration: ${formatDuration(parsed.durationMinutes)}` };
       case "priority":
@@ -5831,6 +5888,7 @@ function renderNoteTokens(root, dateFormat) {
       });
       const link = fragment.querySelector("a.internal-link");
       if (link) {
+        if (token.kind === "tags") pill.appendChild(document.createTextNode("#"));
         if (token.kind === "deadline") pill.appendChild(document.createTextNode("Due "));
         link.textContent = (_b = token.dateLabel) != null ? _b : link.textContent;
         pill.appendChild(link);
@@ -5932,6 +5990,7 @@ function initialDraft(options) {
       deadlineTime: options.task.deadlineTime,
       durationMinutes: options.task.durationMinutes,
       priority: options.task.priority,
+      tags: options.task.tags,
       completed: options.task.completed,
       destination: destinationString(options.task.path, options.task.section),
       indent: options.task.indent
@@ -5998,6 +6057,10 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
     }
     this.priorityInput.value = this.draft.priority ? String(this.draft.priority) : "";
     field(contentEl, "Priority", this.priorityInput);
+    this.tagsInput = contentEl.createEl("input", { type: "text" });
+    this.tagsInput.placeholder = "#[[work]] #[[client notes]]";
+    this.tagsInput.value = formatTags(this.draft.tags);
+    field(contentEl, "Tags", this.tagsInput);
     this.destinationInput = contentEl.createEl("select");
     const destinations = /* @__PURE__ */ new Set([this.options.settings.inboxPath, this.draft.destination]);
     for (const project of this.options.projects) {
@@ -6043,6 +6106,7 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
       this.deadlineInput,
       this.durationInput,
       this.priorityInput,
+      this.tagsInput,
       this.destinationInput
     ];
     for (const input of structuredInputs) {
@@ -6090,6 +6154,7 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
       this.deadlineInput.value = parsed.deadline ? formatDateTime(parsed.deadline, parsed.deadlineTime, this.options.dateFormat) : "";
       this.durationInput.value = parsed.durationMinutes ? formatDuration(parsed.durationMinutes) : "";
       this.priorityInput.value = parsed.priority ? String(parsed.priority) : "";
+      this.tagsInput.value = formatTags(parsed.tags);
       const destination = (_d2 = parsed.destination) != null ? _d2 : this.options.settings.inboxPath;
       if (destination) {
         if (!Array.from(this.destinationInput.options).some((option) => option.value === destination)) {
@@ -6201,6 +6266,13 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
         return void 0;
       }
     }
+    let tags;
+    try {
+      tags = parseTags(this.tagsInput.value);
+    } catch (cause) {
+      if (notify) new import_obsidian10.Notice(cause instanceof Error ? cause.message : "Invalid tags.");
+      return void 0;
+    }
     const additionalLines = notify && !this.options.task ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat).additionalLines : void 0;
     return {
       ...additionalLines ? { additionalLines } : {},
@@ -6211,6 +6283,7 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
       deadline: deadline == null ? void 0 : deadline.date,
       deadlineTime: deadline == null ? void 0 : deadline.time,
       durationMinutes,
+      tags,
       priority: this.priorityInput.value ? Number(this.priorityInput.value) : void 0,
       completed: this.draft.completed,
       destination: this.destinationInput.value,

@@ -8,6 +8,7 @@ export interface ParsedTaskMetadata {
   deadlineTime?: string;
   durationMinutes?: number;
   priority?: Priority;
+  tags?: string[];
 }
 
 export interface Task extends ParsedTaskMetadata {
@@ -49,7 +50,7 @@ export interface TaskViewState {
   markdownState?: Record<string, unknown>;
 }
 
-export type TaskProperty = "title" | "priority" | "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "duration" | "source" | "section" | "status";
+export type TaskProperty = "tags" | "title" | "priority" | "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "duration" | "source" | "section" | "status";
 export type TaskSort = "date" | TaskProperty;
 export type TaskGrouping = "default" | "none" | "date" | TaskProperty;
 export type FilterOperator = "has" | "missing" | "is" | "isNot" | "contains" | "before" | "after" | "between";

@@ -8,7 +8,7 @@ export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string
   if (query.sourcePath && task.path !== query.sourcePath) return false;
   if (query.projectPath && task.path !== query.projectPath) return false;
   if (query.priority && task.priority !== query.priority) return false;
-  if (query.search && !`${task.title}\n${task.description ?? ""}`.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
+  if (query.search && !`${task.title}\n${task.description ?? ""}\n${(task.tags ?? []).join("\n")}`.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
 
   const today = todayIso(now);
   const date = actionDate(task);

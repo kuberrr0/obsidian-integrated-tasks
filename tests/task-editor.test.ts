@@ -85,7 +85,7 @@ function openModal(edit = false) {
   });
   const fields = modal as unknown as {
     modalEl: EditorElement; contentEl: EditorElement; close: () => void;
-    rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement; descriptionInput: EditorElement; destinationInput: EditorElement;
+    tagsInput: EditorElement; rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement; descriptionInput: EditorElement; destinationInput: EditorElement;
   };
   fields.modalEl = new EditorElement();
   fields.contentEl = new EditorElement();
@@ -174,4 +174,30 @@ it("keeps the new task description field in sync with raw bullets and preserves 
   key({ metaKey: true });
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   expect(onSave.mock.calls[0][0].description).toBe("Replacement");
+});
+
+
+it("syncs multiple tags between raw and structured inputs and saves clearing them", async () => {
+  const { fields, onSave, key } = openModal(true);
+  fields.rawInput.value = "- [ ] Existing #[[work]] #[[client notes]]";
+  fields.rawInput.dispatchEvent(new Event("input"));
+  expect(fields.tagsInput.value).toBe("#[[work]] #[[client notes]]");
+  fields.titleInput.value = "Renamed";
+  fields.titleInput.dispatchEvent(new Event("input"));
+  expect(fields.rawInput.value).toBe("- [ ] Renamed #[[work]] #[[client notes]]");
+  fields.tagsInput.value = "";
+  fields.tagsInput.dispatchEvent(new Event("input"));
+  expect(fields.rawInput.value).toBe("- [ ] Renamed");
+  key({ metaKey: true });
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  expect(onSave.mock.calls[0][0].tags).toEqual([]);
+});
+
+it("saves tags added in the structured field", async () => {
+  const { fields, onSave, key } = openModal(true);
+  fields.tagsInput.value = "#[[work]] #[[client notes]]";
+  fields.tagsInput.dispatchEvent(new Event("input"));
+  key({ metaKey: true });
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  expect(onSave.mock.calls[0][0].tags).toEqual(["work", "client notes"]);
 });

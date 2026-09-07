@@ -1,3 +1,4 @@
+import { parseTags } from "./task-tags";
 import { actionDate } from "./date";
 import { destinationString } from "./structure";
 import { propertyValue } from "./task-properties";
@@ -43,6 +44,7 @@ export function draftForGroup(task: Task, group?: ListDropGroup): TaskDraft {
     case "deadline": draft.deadline = value as string | undefined; if (!value) draft.deadlineTime = undefined; break;
     case "scheduledTime": draft.scheduledTime = value as string | undefined; if (value && !draft.scheduledDate) draft.scheduledDate = group.scheduledDate; break;
     case "deadlineTime": draft.deadlineTime = value as string | undefined; if (value && !draft.deadline) draft.deadline = group.deadline; break;
+    case "tags": draft.tags = parseTags(String(value ?? "")); break;
     case "priority": draft.priority = value as Task["priority"]; break;
     case "duration": draft.durationMinutes = value as number | undefined; break;
     case "status": draft.completed = value === "Completed"; break;

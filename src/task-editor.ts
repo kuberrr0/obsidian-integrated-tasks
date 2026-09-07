@@ -1,3 +1,4 @@
+import { formatTags, parseTags } from "./task-tags";
 import { newTaskLines } from "./task-description";
 import { parseTaskTreeInput } from "./task-input";
 import type { TaskEditorPreset } from "./types";
@@ -30,6 +31,7 @@ function initialDraft(options: TaskEditorOptions): TaskDraft {
       deadlineTime: options.task.deadlineTime,
       durationMinutes: options.task.durationMinutes,
       priority: options.task.priority,
+      tags: options.task.tags,
       completed: options.task.completed,
       destination: destinationString(options.task.path, options.task.section),
       indent: options.task.indent
@@ -67,6 +69,7 @@ export class TaskEditorModal extends Modal {
   private scheduledInput!: HTMLInputElement;
   private deadlineInput!: HTMLInputElement;
   private durationInput!: HTMLInputElement;
+  private tagsInput!: HTMLInputElement;
   private priorityInput!: HTMLSelectElement;
   private destinationInput!: HTMLSelectElement;
 
@@ -119,6 +122,11 @@ export class TaskEditorModal extends Modal {
     this.priorityInput.value = this.draft.priority ? String(this.draft.priority) : "";
     field(contentEl, "Priority", this.priorityInput);
 
+    this.tagsInput = contentEl.createEl("input", { type: "text" });
+    this.tagsInput.placeholder = "#[[work]] #[[client notes]]";
+    this.tagsInput.value = formatTags(this.draft.tags);
+    field(contentEl, "Tags", this.tagsInput);
+
     this.destinationInput = contentEl.createEl("select");
     const destinations = new Set([this.options.settings.inboxPath, this.draft.destination]);
     for (const project of this.options.projects) {
@@ -164,6 +172,7 @@ export class TaskEditorModal extends Modal {
       this.deadlineInput,
       this.durationInput,
       this.priorityInput,
+      this.tagsInput,
       this.destinationInput
     ];
     for (const input of structuredInputs) {
@@ -209,6 +218,7 @@ export class TaskEditorModal extends Modal {
       this.deadlineInput.value = parsed.deadline ? formatDateTime(parsed.deadline, parsed.deadlineTime, this.options.dateFormat) : "";
       this.durationInput.value = parsed.durationMinutes ? formatDuration(parsed.durationMinutes) : "";
       this.priorityInput.value = parsed.priority ? String(parsed.priority) : "";
+      this.tagsInput.value = formatTags(parsed.tags);
       const destination = parsed.destination ?? this.options.settings.inboxPath;
       if (destination) {
         if (!Array.from(this.destinationInput.options).some((option) => option.value === destination)) {
@@ -326,6 +336,12 @@ export class TaskEditorModal extends Modal {
         return undefined;
       }
     }
+    let tags: string[];
+    try { tags = parseTags(this.tagsInput.value); }
+    catch (cause) {
+      if (notify) new Notice(cause instanceof Error ? cause.message : "Invalid tags.");
+      return undefined;
+    }
     const additionalLines = notify && !this.options.task
       ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat).additionalLines
       : undefined;
@@ -338,6 +354,7 @@ export class TaskEditorModal extends Modal {
       deadline: deadline?.date,
       deadlineTime: deadline?.time,
       durationMinutes,
+      tags,
       priority: this.priorityInput.value ? Number(this.priorityInput.value) as 1 | 2 | 3 : undefined,
       completed: this.draft.completed,
       destination: this.destinationInput.value,

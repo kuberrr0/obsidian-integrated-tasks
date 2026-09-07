@@ -3,7 +3,7 @@ import { TASK_PROPERTIES, matchesFilter } from "../src/task-properties";
 import { groupTasks, sortTasks, taskMatchesQuery } from "../src/query";
 import type { Task, TaskFilter } from "../src/types";
 
-const task: Task = { id: "a", path: "Work.md", line: 0, endLine: 0, raw: "", indent: 0, completed: false, title: "Write report", childIds: [], priority: 2, scheduledDate: "2026-09-01", scheduledTime: "09:00", deadline: "2026-09-10", deadlineTime: "17:00", durationMinutes: 45, section: "Work" };
+const task: Task = { id: "a", path: "Work.md", line: 0, endLine: 0, raw: "", indent: 0, completed: false, title: "Write report", childIds: [], priority: 2, scheduledDate: "2026-09-01", scheduledTime: "09:00", deadline: "2026-09-10", deadlineTime: "17:00", durationMinutes: 45, section: "Work", tags: ["work", "client notes"] };
 const filter = (property: TaskFilter["property"], operator: TaskFilter["operator"], values: string[] = []): TaskFilter => ({ property, operator, values });
 
 describe("property filters", () => {

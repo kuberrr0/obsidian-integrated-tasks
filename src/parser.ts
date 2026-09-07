@@ -1,8 +1,10 @@
+import { formatTags } from "./task-tags";
 import { bodyLines, scanHeadings, splitDestination, destinationString } from "./structure";
 import { findInputDate, findInputDeadline, formatDate, parseDateTimeExpression } from "./date";
 import type { ParsedTaskMetadata, Priority, Task, TaskDraft } from "./types";
 
 const CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
+const TAG = /(?:^|\s)#\[\[([^\[\]\r\n|]+)\]\]\s*$/;
 const PRIORITY = /(?:^|\s)p([123])\s*$/i;
 const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
@@ -10,7 +12,7 @@ const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 const DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
 
 export interface ParsedTokenRange {
-  kind: "scheduledDate" | "deadline" | "durationMinutes" | "priority";
+  kind: "tags" | "scheduledDate" | "deadline" | "durationMinutes" | "priority";
   from: number;
   to: number;
 }
@@ -68,7 +70,12 @@ export function parseTaskLine(
     let match: RegExpExecArray | null;
     let changed = false;
 
-    if (!consumed.has("destination") && (match = DESTINATION.exec(remainder))) {
+    if ((match = TAG.exec(remainder)) && match[1].trim()) {
+      metadata.tags = [match[1].trim(), ...(metadata.tags ?? [])];
+      recordToken("tags", match);
+      remainder = remainder.slice(0, match.index).trimEnd();
+      changed = true;
+    } else if (!consumed.has("destination") && (match = DESTINATION.exec(remainder))) {
       const destination = normalizeDestination(match[1]);
       if (destination) {
         metadata.destination = destination;
@@ -137,6 +144,7 @@ export function parseTaskLine(
     if (!changed) break;
   }
 
+  if (metadata.tags) metadata.tags = [...new Set(metadata.tags)];
   return {
     title: remainder.trim(),
     indent: indentWidth(checkbox[1]),
@@ -162,7 +170,8 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string): string {
     draft.scheduledDate ? `[[${formatDate(draft.scheduledDate, dateFormat)}]]${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
     draft.deadline ? `{[[${formatDate(draft.deadline, dateFormat)}]]${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
-    draft.priority ? `p${draft.priority}` : ""
+    draft.priority ? `p${draft.priority}` : "",
+    formatTags(draft.tags)
   ].filter(Boolean);
   const metadataGap = metadata.length ? " " : "";
   return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
