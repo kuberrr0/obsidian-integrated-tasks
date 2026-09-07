@@ -125,3 +125,15 @@ describe("bulk modal interactions", () => {
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({ durationMinutes: 120 }));
   });
 });
+
+
+it("always shows description last in the bulk modal and applies only that edited property", async () => {
+  const { input, button, onSave, contentEl } = open();
+  const description = input("Description");
+  expect(description.tagName).toBe("TEXTAREA");
+  expect(contentEl.children[contentEl.children.length - 2].children).toContain(description);
+  description.value = "Shared detail";
+  description.dispatchEvent(new Event("input"));
+  button("Save task").click();
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({ description: "Shared detail" }));
+});

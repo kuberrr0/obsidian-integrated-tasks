@@ -139,3 +139,21 @@ describe("bulk write recovery", () => {
     expect(files["Work.md"]).toBe("External edit");
   });
 });
+
+
+it("bulk-edits descriptions while moving overlapping subtrees without offset drift", async () => {
+  const files = { "Work.md": content };
+  const tasks = originalTasks();
+  await setup(files).bulkUpdate([tasks[0], tasks[1], tasks[3]], { description: "Shared\nSecond detail", destination: "Work.md#Later" });
+  const updated = scanTasks("Work.md", files["Work.md"]);
+  expect(updated.map(task => task.title)).toEqual(["Last", "Parent", "Child", "Unselected", "Other"]);
+  for (const title of ["Parent", "Child", "Other"]) expect(updated.find(task => task.title === title)?.description).toBe("- Shared\n- Second detail");
+  expect(updated[2].parentId).toBe(updated[1].id);
+  expect(updated[3].parentId).toBe(updated[1].id);
+});
+
+it("preserves concurrent description edits instead of overwriting them", async () => {
+  const files = { "Work.md": content.replace("Parent notes", "Changed elsewhere") };
+  await expect(setup(files).bulkUpdate([originalTasks()[0]], { description: "Replacement" })).rejects.toThrow(/description changed/);
+  expect(files["Work.md"]).toContain("Changed elsewhere");
+});

@@ -1,10 +1,11 @@
+import { newTaskLines } from "./task-description";
 import { parseTaskTreeInput } from "./task-input";
 import type { TaskEditorPreset } from "./types";
 import { trackModalViewport } from "./mobile-layout";
 import { destinationLabel, destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { formatDate, formatDateTime, parseDateTimeExpression, todayIso, tomorrowIso } from "./date";
-import { formatDuration, parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
+import { formatDuration, scanTasks, parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
 import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from "./types";
 
 export interface TaskEditorOptions {
@@ -55,6 +56,9 @@ function field(parent: HTMLElement, label: string, input: HTMLElement): void {
 export class TaskEditorModal extends Modal {
   private draft: TaskDraft;
   private rawDirty = false;
+  private descriptionDirty = false;
+  private lastRawDescription = "";
+  private descriptionInput!: HTMLTextAreaElement;
   private stopViewportTracking?: () => void;
   private actions?: HTMLElement;
   private focusTimer?: number;
@@ -93,12 +97,6 @@ export class TaskEditorModal extends Modal {
     this.titleInput.value = this.draft.title;
     field(contentEl, "Title", this.titleInput);
 
-    if (this.options.task?.description) {
-      const description = contentEl.createDiv({ cls: "tm-editor-description" });
-      description.createEl("label", { text: "Description" });
-      description.createDiv({ cls: "tm-task-description", text: this.options.task.description });
-    }
-
     this.scheduledInput = contentEl.createEl("input", { type: "text" });
     this.scheduledInput.placeholder = `Tomorrow, next Friday, or ${formatDate(todayIso(), this.options.dateFormat)}`;
     this.scheduledInput.value = this.draft.scheduledDate ? formatDateTime(this.draft.scheduledDate, this.draft.scheduledTime, this.options.dateFormat) : "";
@@ -130,6 +128,24 @@ export class TaskEditorModal extends Modal {
     for (const path of [...destinations].sort()) this.destinationInput.createEl("option", { value: path, text: destinationLabel(path) });
     this.destinationInput.value = this.draft.destination;
     field(contentEl, "Destination", this.destinationInput);
+
+    const description = contentEl.createDiv({ cls: "tm-description-field" });
+    const descriptionLabel = description.createEl("label", { text: "Description" });
+    this.descriptionInput = description.createEl("textarea", { cls: "tm-description-input", attr: { "aria-label": "Description", placeholder: "Add a description…" } });
+    this.descriptionInput.rows = 4;
+    this.descriptionInput.value = this.options.task?.description ?? this.draft.description ?? "";
+    descriptionLabel.addEventListener("click", () => this.descriptionInput.focus());
+    this.descriptionInput.addEventListener("input", () => {
+      this.descriptionDirty = true;
+      if (this.options.task) return;
+      try {
+        const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat);
+        const lines = newTaskLines({ ...draft, description: this.descriptionInput.value }, this.options.dateFormat);
+        this.rawInput.value = [this.serializeDraft(draft), ...lines.slice(1)].join("\n");
+        this.lastRawDescription = scanTasks("", lines.join("\n"), new Date(), this.options.dateFormat)[0]?.description ?? "";
+        this.rawDirty = true;
+      } catch { /* Keep the description while the main task title is incomplete. */ }
+    });
 
     const error = contentEl.createDiv({ cls: "tm-editor-error" });
     const syncFromStructured = (): void => {
@@ -176,6 +192,17 @@ export class TaskEditorModal extends Modal {
         return;
       }
       error.empty();
+      if (!this.options.task) {
+        try {
+          const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat);
+          const description = scanTasks("", newTaskLines(draft, this.options.dateFormat).join("\n"), new Date(), this.options.dateFormat)[0]?.description ?? "";
+          if (!this.descriptionDirty || description !== this.lastRawDescription) {
+            this.descriptionInput.value = description;
+            this.descriptionDirty = false;
+          }
+          this.lastRawDescription = description;
+        } catch { /* Incomplete task lines should not discard description edits. */ }
+      }
       this.draft = { ...parsed, destination: parsed.destination ?? this.options.settings.inboxPath };
       this.titleInput.value = parsed.title;
       this.scheduledInput.value = parsed.scheduledDate ? formatDateTime(parsed.scheduledDate, parsed.scheduledTime, this.options.dateFormat) : "";
@@ -268,13 +295,13 @@ export class TaskEditorModal extends Modal {
   }
 
   private readRaw(): TaskDraft | undefined {
-    if (!this.options.task) return parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat);
-    const parsed = parseTaskInput(this.rawInput.value, new Date(), this.options.dateFormat, true);
+    if (!this.options.task) return { ...parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat), ...this.descriptionPatch() };
+    const parsed = parseTaskInput(this.rawInput.value.trimEnd(), new Date(), this.options.dateFormat, true);
     if (!parsed || !parsed.title) {
       new Notice("Raw text must be one valid checklist line with a title.");
       return undefined;
     }
-    return { ...parsed, destination: parsed.destination ?? this.options.settings.inboxPath };
+    return { ...parsed, destination: parsed.destination ?? this.options.settings.inboxPath, ...this.descriptionPatch() };
   }
 
   private readStructured(notify: boolean): TaskDraft | undefined {
@@ -304,6 +331,7 @@ export class TaskEditorModal extends Modal {
       : undefined;
     return {
       ...(additionalLines ? { additionalLines } : {}),
+      ...this.descriptionPatch(),
       title,
       scheduledDate: scheduledDate?.date,
       scheduledTime: scheduledDate?.time,
@@ -315,6 +343,10 @@ export class TaskEditorModal extends Modal {
       destination: this.destinationInput.value,
       indent: this.draft.indent
     };
+  }
+
+  private descriptionPatch(): Partial<TaskDraft> {
+    return this.descriptionDirty ? { description: this.descriptionInput.value } : {};
   }
 
   private readDate(value: string, label: string, notify: boolean): { date: string; time?: string } | undefined {

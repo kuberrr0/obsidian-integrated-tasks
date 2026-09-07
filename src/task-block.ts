@@ -6,7 +6,7 @@ import type { ListPlacement } from "./list-drag";
 const indentation = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((width, char) => width + (char === "\t" ? 4 : 1), 0);
 
 /** Re-read structure at write time; include nested tasks and their indented notes. */
-export function liveTaskBlock(content: string, task: Task, dateFormat?: string): { start: number; end: number; indent: number; lines: string[] } {
+export function liveTaskBlock(content: string, task: Task, dateFormat?: string): { start: number; end: number; indent: number; lines: string[]; description?: string; descriptionLines?: number[] } {
   const lines = content.split(/\r?\n/);
   const start = findLiveLine(lines, task);
   const live = scanTasks(task.path, content, new Date(), dateFormat).find(candidate => candidate.line === start);
@@ -18,7 +18,7 @@ export function liveTaskBlock(content: string, task: Task, dateFormat?: string):
     end = cursor + 1;
   }
   if (live.endLine >= end) throw new Error("Task structure changed. Check its indentation in the note before moving it.");
-  return { start, end, indent: live.indent, lines: lines.slice(start, end) };
+  return { start, end, indent: live.indent, lines: lines.slice(start, end), description: live.description, descriptionLines: live.descriptionLines };
 }
 export function rewriteBlock(block: ReturnType<typeof liveTaskBlock>, draft: TaskDraft, indent: number, dateFormat?: string): string[] {
   return [serializeTask({ ...draft, indent }, dateFormat), ...block.lines.slice(1).map(line => {

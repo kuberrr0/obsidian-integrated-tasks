@@ -442,10 +442,7 @@ export class TaskMainView extends ItemView {
         projects: this.showArchivedProjects ? projects : active,
         anchor: this.ganttAnchor, zoom: this.ganttZoom, dateFormat: this.plugin.dateFormat(),
         navigate: (anchor, zoom) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.render(); },
-        open: project => {
-          const file = this.app.vault.getAbstractFileByPath(project.path);
-          if (file instanceof TFile) void this.app.workspace.getLeaf("tab").openFile(file);
-        },
+        open: project => { void this.plugin.openProject(project.path).catch(error => new Notice(String(error))); },
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
           if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
@@ -473,7 +470,7 @@ export class TaskMainView extends ItemView {
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
-      button.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects", projectPath: project.path }));
+      button.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
       this.renderProperties(metadata, project);
       if (project.endDate) this.badge(metadata, "calendar-check", `End: ${formatDate(project.endDate, this.plugin.dateFormat())}`);
@@ -491,7 +488,7 @@ export class TaskMainView extends ItemView {
       progress.createSpan({ cls: "tm-project-percentage", text: `${percentage}%` });
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
       setIcon(open, "chevron-right");
-      open.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects", projectPath: project.path }));
+      open.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
     }
   }
 
@@ -650,7 +647,6 @@ export class TaskMainView extends ItemView {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
-    if (task.description) content.createDiv({ cls: "tm-task-description", text: task.description });
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
     source.addEventListener("click", () => void this.openSource(task));

@@ -100,3 +100,21 @@ it.each(["top", "bottom"] as const)("creates a multiline batch together at the %
   expect(main.description).toBe("- Detail");
   expect(tasks.find(task => task.title === "Child")?.parentId).toBe(main.id);
 });
+
+
+it("creates descriptions without duplicating raw bullets or changing subtask descriptions", async () => {
+  const { store, read } = setup("## Plan\n");
+  await store.create({ ...draft, description: "New detail\n\nMore detail", additionalLines: ["  - Old detail", "  - [ ] Child", "    - Child detail"] });
+  const tasks = scanTasks("Project.md", read());
+  expect(tasks[0].description).toBe("- New detail\n\n- More detail");
+  expect(tasks[1].description).toBe("- Child detail");
+  expect(read()).not.toContain("Old detail");
+});
+
+it("edits and clears a parent's description without removing its children or their notes", async () => {
+  const { store, read } = setup("## Plan\n- [ ] Main\n  - Before\n  - [ ] Child\n    - Child note\n  - After\n- [ ] Keep\n");
+  await store.update(scanTasks("Project.md", read())[0], { ...draft, description: "Changed\nSecond line" });
+  expect(read()).toBe("## Plan\n- [ ] New\n  - Changed\n  - Second line\n  - [ ] Child\n    - Child note\n- [ ] Keep\n");
+  await store.update(scanTasks("Project.md", read())[0], { ...draft, description: "" });
+  expect(read()).toBe("## Plan\n- [ ] New\n  - [ ] Child\n    - Child note\n- [ ] Keep\n");
+});

@@ -140,6 +140,7 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   async openTaskView(state: TaskViewState): Promise<void> {
+    if (state.projectPath && !state.pagePath) return this.openProject(state.projectPath);
     await this.activateNavigation(false);
     let leaf: WorkspaceLeaf | undefined = this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW).find((candidate) => !candidate.view.getState().pagePath);
     const existingView = leaf?.view;
@@ -153,6 +154,16 @@ export default class TaskManagerPlugin extends Plugin {
       const view = navLeaf.view;
       if (view instanceof TaskNavigationView) view.setActive(state.mode);
     }
+  }
+
+  async openProject(path: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.openFile(file);
+    if (!this.settings.taskMode) await this.setTaskMode(true);
+    else await this.taskModeController?.sync();
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   private editSelectedTaskProperties(checking: boolean): boolean {

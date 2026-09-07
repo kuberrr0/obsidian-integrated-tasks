@@ -6,7 +6,7 @@ import { trackModalViewport } from "./mobile-layout";
 import type { BulkTaskPatch } from "./bulk-tasks";
 import type { Project, Task } from "./types";
 
-type Field = "scheduled" | "deadline" | "duration" | "priority" | "destination";
+type Field = "scheduled" | "deadline" | "duration" | "priority" | "destination" | "description";
 interface BulkEditorOptions {
   tasks: Task[];
   projects: Project[];
@@ -22,6 +22,7 @@ export function bulkPropertyValues(task: Task, dateFormat: string): Record<Field
     deadline: task.deadline ? formatDateTime(task.deadline, task.deadlineTime, dateFormat) : "",
     duration: task.durationMinutes ? formatDuration(task.durationMinutes) : "",
     priority: task.priority ? String(task.priority) : "",
+    description: task.description ?? "",
     destination: destinationString(task.path, task.section)
   };
 }
@@ -51,11 +52,12 @@ export function bulkPropertyPatch(values: Partial<Record<Field, string>>, dateFo
     if (!values.destination?.trim()) throw new Error("Select a destination note.");
     patch.destination = values.destination;
   }
+  if ("description" in values) patch.description = values.description ?? "";
   return patch;
 }
 
 export class BulkTaskEditorModal extends Modal {
-  private inputs = new Map<Field, HTMLInputElement | HTMLSelectElement>();
+  private inputs = new Map<Field, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
   private initial = new Map<Field, string | undefined>();
   private changed = new Set<Field>();
   private actions?: HTMLElement;
@@ -69,12 +71,12 @@ export class BulkTaskEditorModal extends Modal {
     content.createEl("h2", { text: "Edit task properties" });
     content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
     const snapshots = this.options.tasks.map(task => bulkPropertyValues(task, this.options.dateFormat));
-    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["destination", "Destination"]] as const) {
+    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["destination", "Destination"], ["description", "Description"]] as const) {
       const common = snapshots.every(value => value[key] === snapshots[0][key]) ? snapshots[0][key] : undefined;
       this.initial.set(key, common);
       const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });
       const caption = row.createEl("label", { text: label });
-      const input = key === "priority" || key === "destination" ? row.createEl("select") : row.createEl("input", { type: "text" });
+      const input = key === "description" ? row.createEl("textarea", { cls: "tm-description-input", attr: { rows: "4" } }) : key === "priority" || key === "destination" ? row.createEl("select") : row.createEl("input", { type: "text" });
       input.setAttribute("aria-label", label);
       caption.addEventListener("click", () => input.focus());
       if (input.tagName === "SELECT") {
@@ -92,7 +94,7 @@ export class BulkTaskEditorModal extends Modal {
         }
         input.value = common ?? "__mixed__";
       } else {
-        (input as HTMLInputElement).placeholder = common === undefined ? "Mixed — unchanged" : key === "duration" ? "45m or 1h30m" : "Tomorrow at 9am";
+        (input as HTMLInputElement).placeholder = common === undefined ? "Mixed — unchanged" : key === "duration" ? "45m or 1h30m" : key === "description" ? "Add a description…" : "Tomorrow at 9am";
         input.value = common ?? "";
       }
       this.inputs.set(key, input);

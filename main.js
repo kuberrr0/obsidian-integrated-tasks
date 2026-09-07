@@ -3212,6 +3212,7 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
   var _a, _b;
   const tasks = [];
   const stack = [];
+  const sourceLines = content.split(/\r?\n/);
   const descriptions = /* @__PURE__ */ new Map();
   const headings = new Map(scanHeadings(content).map((heading) => [heading.line, heading]));
   let section;
@@ -3233,7 +3234,15 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
       const bullet = Boolean(marker);
       const description = descriptions.get(owner);
       if (bullet || description && indent > description.bulletIndent) {
-        const entry = description != null ? description : { lines: [], bulletIndent: indent };
+        const entry = description != null ? description : { lines: [], lineNumbers: [], bulletIndent: indent };
+        const previous = entry.lineNumbers[entry.lineNumbers.length - 1];
+        if (previous !== void 0 && sourceLines.slice(previous + 1, lineNumber).every((text) => !text.trim())) {
+          for (let blank = previous + 1; blank < lineNumber; blank++) {
+            entry.lines.push("");
+            entry.lineNumbers.push(blank);
+          }
+        }
+        entry.lineNumbers.push(lineNumber);
         entry.lines.push(" ".repeat(indent) + line.trimStart());
         if (bullet) entry.bulletIndent = indent;
         descriptions.set(owner, entry);
@@ -3258,11 +3267,12 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
     tasks.push(task);
     stack.push(task);
   }
-  for (const [task, { lines }] of descriptions) {
-    const margin = Math.min(...lines.map((line) => {
+  for (const [task, { lines, lineNumbers }] of descriptions) {
+    const margin = Math.min(...lines.filter((line) => line.trim()).map((line) => {
       var _a2, _b2;
       return indentWidth((_b2 = (_a2 = /^[ ]*/.exec(line)) == null ? void 0 : _a2[0]) != null ? _b2 : "");
     }));
+    task.descriptionLines = lineNumbers;
     task.description = lines.map((line) => line.slice(margin)).join("\n");
   }
   for (let index = 0; index < tasks.length; index += 1) {
@@ -3321,16 +3331,18 @@ function trackModalViewport(modal, content) {
 
 // src/bulk-task-editor.ts
 function bulkPropertyValues(task, dateFormat) {
+  var _a;
   return {
     scheduled: task.scheduledDate ? formatDateTime(task.scheduledDate, task.scheduledTime, dateFormat) : "",
     deadline: task.deadline ? formatDateTime(task.deadline, task.deadlineTime, dateFormat) : "",
     duration: task.durationMinutes ? formatDuration(task.durationMinutes) : "",
     priority: task.priority ? String(task.priority) : "",
+    description: (_a = task.description) != null ? _a : "",
     destination: destinationString(task.path, task.section)
   };
 }
 function bulkPropertyPatch(values, dateFormat, reference = /* @__PURE__ */ new Date()) {
-  var _a;
+  var _a, _b;
   const patch = {};
   for (const field2 of ["scheduled", "deadline"]) {
     if (!(field2 in values)) continue;
@@ -3359,6 +3371,7 @@ function bulkPropertyPatch(values, dateFormat, reference = /* @__PURE__ */ new D
     if (!((_a = values.destination) == null ? void 0 : _a.trim())) throw new Error("Select a destination note.");
     patch.destination = values.destination;
   }
+  if ("description" in values) patch.description = (_b = values.description) != null ? _b : "";
   return patch;
 }
 var BulkTaskEditorModal = class extends import_obsidian2.Modal {
@@ -3377,12 +3390,12 @@ var BulkTaskEditorModal = class extends import_obsidian2.Modal {
     content.createEl("h2", { text: "Edit task properties" });
     content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
     const snapshots = this.options.tasks.map((task) => bulkPropertyValues(task, this.options.dateFormat));
-    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["destination", "Destination"]]) {
+    for (const [key, label] of [["scheduled", "Date and time"], ["deadline", "Deadline date and time"], ["duration", "Duration"], ["priority", "Priority"], ["destination", "Destination"], ["description", "Description"]]) {
       const common = snapshots.every((value) => value[key] === snapshots[0][key]) ? snapshots[0][key] : void 0;
       this.initial.set(key, common);
       const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });
       const caption = row.createEl("label", { text: label });
-      const input = key === "priority" || key === "destination" ? row.createEl("select") : row.createEl("input", { type: "text" });
+      const input = key === "description" ? row.createEl("textarea", { cls: "tm-description-input", attr: { rows: "4" } }) : key === "priority" || key === "destination" ? row.createEl("select") : row.createEl("input", { type: "text" });
       input.setAttribute("aria-label", label);
       caption.addEventListener("click", () => input.focus());
       if (input.tagName === "SELECT") {
@@ -3400,7 +3413,7 @@ var BulkTaskEditorModal = class extends import_obsidian2.Modal {
         }
         input.value = common != null ? common : "__mixed__";
       } else {
-        input.placeholder = common === void 0 ? "Mixed \u2014 unchanged" : key === "duration" ? "45m or 1h30m" : "Tomorrow at 9am";
+        input.placeholder = common === void 0 ? "Mixed \u2014 unchanged" : key === "duration" ? "45m or 1h30m" : key === "description" ? "Add a description\u2026" : "Tomorrow at 9am";
         input.value = common != null ? common : "";
       }
       this.inputs.set(key, input);
@@ -5121,8 +5134,7 @@ var TaskMainView = class extends import_obsidian6.ItemView {
           this.render();
         },
         open: (project) => {
-          const file = this.app.vault.getAbstractFileByPath(project.path);
-          if (file instanceof import_obsidian6.TFile) void this.app.workspace.getLeaf("tab").openFile(file);
+          void this.plugin.openProject(project.path).catch((error) => new import_obsidian6.Notice(String(error)));
         },
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
@@ -5150,7 +5162,7 @@ var TaskMainView = class extends import_obsidian6.ItemView {
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
-      button.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects", projectPath: project.path }));
+      button.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian6.Notice(String(error))));
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
       this.renderProperties(metadata, project);
       if (project.endDate) this.badge(metadata, "calendar-check", `End: ${formatDate(project.endDate, this.plugin.dateFormat())}`);
@@ -5170,7 +5182,7 @@ var TaskMainView = class extends import_obsidian6.ItemView {
       progress.createSpan({ cls: "tm-project-percentage", text: `${percentage}%` });
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
       (0, import_obsidian6.setIcon)(open, "chevron-right");
-      open.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects", projectPath: project.path }));
+      open.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian6.Notice(String(error))));
     }
   }
   renderSection(container, title, tasks, variant, target) {
@@ -5342,7 +5354,6 @@ var TaskMainView = class extends import_obsidian6.ItemView {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child) => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
-    if (task.description) content.createDiv({ cls: "tm-task-description", text: task.description });
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
     source.addEventListener("click", () => void this.openSource(task));
@@ -5423,12 +5434,12 @@ var TaskModeController = class {
           await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { ...previous, mode: "all", pagePath: path, markdownState } });
         } else if (view instanceof TaskMainView) {
           const state = view.getState();
-          const path = typeof state.pagePath === "string" ? state.pagePath : void 0;
+          const path = typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : void 0;
           if (!path || this.enabled() && this.isProject(path)) continue;
           const file = this.app.vault.getAbstractFileByPath(path);
           if (!(file instanceof import_obsidian7.TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState : {};
-          this.savedViews.set(leaf, state);
+          this.savedViews.set(leaf, { ...state, pagePath: path, projectPath: void 0 });
           await leaf.setViewState({ type: "markdown", state: { ...markdownState, file: file.path } });
         }
       }
@@ -5761,6 +5772,36 @@ function renderNoteTokens(root, dateFormat) {
 // src/main.ts
 var import_obsidian15 = require("obsidian");
 
+// src/task-description.ts
+function descriptionLines(text, indent) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const expanded = lines.map((line) => line.replace(/^\s*/, (spaces) => spaces.replace(/\t/g, "    ")));
+  const margin = Math.min(...expanded.filter((line) => line.trim()).map((line) => /^ */.exec(line)[0].length));
+  return expanded.map((source) => {
+    const line = source.slice(Number.isFinite(margin) ? margin : 0);
+    if (!line.trim()) return "";
+    const bullet = /^\s*[-+*]\s+/.test(line);
+    const checkbox = /^\s*[-+*]\s+\[[ xX]\](?:\s|$)/.test(line);
+    const value = (bullet || /^\s+\S/.test(line)) && !checkbox ? line : `- ${line}`;
+    return " ".repeat(indent + 2) + value;
+  });
+}
+function replaceDescription(slots, line, ownedLines, text, indent) {
+  for (const owned of ownedLines) slots[owned] = [];
+  slots[line].push(...descriptionLines(text, indent));
+}
+function newTaskLines(draft, dateFormat) {
+  var _a, _b;
+  const lines = [serializeTask({ ...draft, indent: 0 }, dateFormat), ...(_a = draft.additionalLines) != null ? _a : []];
+  if (draft.description === void 0) return lines;
+  const task = scanTasks("", lines.join("\n"), /* @__PURE__ */ new Date(), dateFormat)[0];
+  const slots = lines.map((line) => [line]);
+  replaceDescription(slots, 0, (_b = task == null ? void 0 : task.descriptionLines) != null ? _b : [], draft.description, 0);
+  return slots.flat();
+}
+
 // src/task-input.ts
 var width = (line) => {
   var _a, _b;
@@ -5845,10 +5886,12 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
     super(app);
     this.options = options;
     this.rawDirty = false;
+    this.descriptionDirty = false;
+    this.lastRawDescription = "";
     this.draft = initialDraft(options);
   }
   onOpen() {
-    var _a, _b;
+    var _a, _b, _c, _d;
     this.modalEl.addClass("tm-editor-modal");
     const { contentEl } = this;
     contentEl.empty();
@@ -5865,11 +5908,6 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
     this.titleInput.placeholder = "What needs to be done?";
     this.titleInput.value = this.draft.title;
     field(contentEl, "Title", this.titleInput);
-    if ((_a = this.options.task) == null ? void 0 : _a.description) {
-      const description = contentEl.createDiv({ cls: "tm-editor-description" });
-      description.createEl("label", { text: "Description" });
-      description.createDiv({ cls: "tm-task-description", text: this.options.task.description });
-    }
     this.scheduledInput = contentEl.createEl("input", { type: "text" });
     this.scheduledInput.placeholder = `Tomorrow, next Friday, or ${formatDate(todayIso(), this.options.dateFormat)}`;
     this.scheduledInput.value = this.draft.scheduledDate ? formatDateTime(this.draft.scheduledDate, this.draft.scheduledTime, this.options.dateFormat) : "";
@@ -5892,11 +5930,30 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
     const destinations = /* @__PURE__ */ new Set([this.options.settings.inboxPath, this.draft.destination]);
     for (const project of this.options.projects) {
       destinations.add(project.path);
-      for (const heading of (_b = project.headings) != null ? _b : []) destinations.add(destinationString(project.path, heading.name));
+      for (const heading of (_a = project.headings) != null ? _a : []) destinations.add(destinationString(project.path, heading.name));
     }
     for (const path of [...destinations].sort()) this.destinationInput.createEl("option", { value: path, text: destinationLabel(path) });
     this.destinationInput.value = this.draft.destination;
     field(contentEl, "Destination", this.destinationInput);
+    const description = contentEl.createDiv({ cls: "tm-description-field" });
+    const descriptionLabel = description.createEl("label", { text: "Description" });
+    this.descriptionInput = description.createEl("textarea", { cls: "tm-description-input", attr: { "aria-label": "Description", placeholder: "Add a description\u2026" } });
+    this.descriptionInput.rows = 4;
+    this.descriptionInput.value = (_d = (_c = (_b = this.options.task) == null ? void 0 : _b.description) != null ? _c : this.draft.description) != null ? _d : "";
+    descriptionLabel.addEventListener("click", () => this.descriptionInput.focus());
+    this.descriptionInput.addEventListener("input", () => {
+      var _a2, _b2;
+      this.descriptionDirty = true;
+      if (this.options.task) return;
+      try {
+        const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat);
+        const lines = newTaskLines({ ...draft, description: this.descriptionInput.value }, this.options.dateFormat);
+        this.rawInput.value = [this.serializeDraft(draft), ...lines.slice(1)].join("\n");
+        this.lastRawDescription = (_b2 = (_a2 = scanTasks("", lines.join("\n"), /* @__PURE__ */ new Date(), this.options.dateFormat)[0]) == null ? void 0 : _a2.description) != null ? _b2 : "";
+        this.rawDirty = true;
+      } catch (e) {
+      }
+    });
     const error = contentEl.createDiv({ cls: "tm-editor-error" });
     const syncFromStructured = () => {
       this.rawDirty = false;
@@ -5935,7 +5992,7 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
       });
     }
     this.rawInput.addEventListener("input", () => {
-      var _a2, _b2;
+      var _a2, _b2, _c2, _d2;
       this.rawDirty = true;
       const parsed = parseTaskInput(this.rawInput.value.split(/\r?\n/)[0], /* @__PURE__ */ new Date(), this.options.dateFormat, true);
       if (!parsed) {
@@ -5943,13 +6000,25 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
         return;
       }
       error.empty();
-      this.draft = { ...parsed, destination: (_a2 = parsed.destination) != null ? _a2 : this.options.settings.inboxPath };
+      if (!this.options.task) {
+        try {
+          const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat);
+          const description2 = (_b2 = (_a2 = scanTasks("", newTaskLines(draft, this.options.dateFormat).join("\n"), /* @__PURE__ */ new Date(), this.options.dateFormat)[0]) == null ? void 0 : _a2.description) != null ? _b2 : "";
+          if (!this.descriptionDirty || description2 !== this.lastRawDescription) {
+            this.descriptionInput.value = description2;
+            this.descriptionDirty = false;
+          }
+          this.lastRawDescription = description2;
+        } catch (e) {
+        }
+      }
+      this.draft = { ...parsed, destination: (_c2 = parsed.destination) != null ? _c2 : this.options.settings.inboxPath };
       this.titleInput.value = parsed.title;
       this.scheduledInput.value = parsed.scheduledDate ? formatDateTime(parsed.scheduledDate, parsed.scheduledTime, this.options.dateFormat) : "";
       this.deadlineInput.value = parsed.deadline ? formatDateTime(parsed.deadline, parsed.deadlineTime, this.options.dateFormat) : "";
       this.durationInput.value = parsed.durationMinutes ? formatDuration(parsed.durationMinutes) : "";
       this.priorityInput.value = parsed.priority ? String(parsed.priority) : "";
-      const destination = (_b2 = parsed.destination) != null ? _b2 : this.options.settings.inboxPath;
+      const destination = (_d2 = parsed.destination) != null ? _d2 : this.options.settings.inboxPath;
       if (destination) {
         if (!Array.from(this.destinationInput.options).some((option) => option.value === destination)) {
           this.destinationInput.createEl("option", { value: destination, text: destinationLabel(destination) });
@@ -6030,13 +6099,13 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
   }
   readRaw() {
     var _a;
-    if (!this.options.task) return parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat);
-    const parsed = parseTaskInput(this.rawInput.value, /* @__PURE__ */ new Date(), this.options.dateFormat, true);
+    if (!this.options.task) return { ...parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat), ...this.descriptionPatch() };
+    const parsed = parseTaskInput(this.rawInput.value.trimEnd(), /* @__PURE__ */ new Date(), this.options.dateFormat, true);
     if (!parsed || !parsed.title) {
       new import_obsidian10.Notice("Raw text must be one valid checklist line with a title.");
       return void 0;
     }
-    return { ...parsed, destination: (_a = parsed.destination) != null ? _a : this.options.settings.inboxPath };
+    return { ...parsed, destination: (_a = parsed.destination) != null ? _a : this.options.settings.inboxPath, ...this.descriptionPatch() };
   }
   readStructured(notify) {
     var _a;
@@ -6063,6 +6132,7 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
     const additionalLines = notify && !this.options.task ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat).additionalLines : void 0;
     return {
       ...additionalLines ? { additionalLines } : {},
+      ...this.descriptionPatch(),
       title,
       scheduledDate: scheduledDate == null ? void 0 : scheduledDate.date,
       scheduledTime: scheduledDate == null ? void 0 : scheduledDate.time,
@@ -6074,6 +6144,9 @@ var TaskEditorModal = class extends import_obsidian10.Modal {
       destination: this.destinationInput.value,
       indent: this.draft.indent
     };
+  }
+  descriptionPatch() {
+    return this.descriptionDirty ? { description: this.descriptionInput.value } : {};
   }
   readDate(value, label, notify) {
     if (!value.trim()) return void 0;
@@ -6389,7 +6462,7 @@ function liveTaskBlock(content, task, dateFormat) {
     end = cursor + 1;
   }
   if (live.endLine >= end) throw new Error("Task structure changed. Check its indentation in the note before moving it.");
-  return { start, end, indent: live.indent, lines: lines.slice(start, end) };
+  return { start, end, indent: live.indent, lines: lines.slice(start, end), description: live.description, descriptionLines: live.descriptionLines };
 }
 function rewriteBlock(block, draft, indent, dateFormat) {
   return [serializeTask({ ...draft, indent }, dateFormat), ...block.lines.slice(1).map((line) => {
@@ -6413,7 +6486,7 @@ function placeTaskBlock(content, task, anchor, placement, block, dateFormat) {
 
 // src/bulk-tasks.ts
 function planBulkTasks(contents, changes, options = {}) {
-  var _a, _b;
+  var _a, _b, _c, _d, _e, _f, _g;
   const get = (path) => {
     const content = contents.get(path);
     if (content === void 0) throw new Error(`Cannot find note: ${path}`);
@@ -6439,14 +6512,18 @@ function planBulkTasks(contents, changes, options = {}) {
   if (anchor && roots.some((entry) => entry.task.path === options.anchor.path && anchor.start >= entry.block.start && anchor.start < entry.block.end)) {
     throw new Error("Tasks cannot be moved into themselves or their subtasks.");
   }
-  const lines = new Map([...contents].map(([path, content]) => [path, content.split(/\r?\n/)]));
+  const lines = new Map([...contents].map(([path, content]) => [path, content.split(/\r?\n/).map((line) => [line])]));
   if (!options.delete) for (const entry of entries) {
-    if (entry.draft) lines.get(entry.task.path)[entry.block.start] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat);
+    if (entry.draft) lines.get(entry.task.path)[entry.block.start][0] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat);
+    if (((_a = entry.draft) == null ? void 0 : _a.description) !== void 0 && entry.draft.description !== ((_b = entry.task.description) != null ? _b : "")) {
+      if (((_c = entry.block.description) != null ? _c : "") !== ((_d = entry.task.description) != null ? _d : "")) throw new Error("Task description changed. Refresh and try again.");
+      replaceDescription(lines.get(entry.task.path), entry.block.start, (_e = entry.block.descriptionLines) != null ? _e : [], entry.draft.description, entry.block.indent);
+    }
   }
   const payloads = roots.map((entry) => ({
     entry,
     lines: options.delete ? [] : rewriteBlock(
-      { ...entry.block, lines: lines.get(entry.task.path).slice(entry.block.start, entry.block.end) },
+      { ...entry.block, lines: lines.get(entry.task.path).slice(entry.block.start, entry.block.end).flat() },
       entry.draft,
       anchor ? anchor.indent + (options.placement === "child" ? 2 : 0) : 0,
       options.dateFormat
@@ -6460,20 +6537,20 @@ function planBulkTasks(contents, changes, options = {}) {
   if (anchor && options.anchor && !options.delete) {
     let insertion = options.placement === "before" ? anchor.start : anchor.end;
     insertion -= roots.filter((entry) => entry.task.path === options.anchor.path && entry.block.end <= insertion).reduce((count, entry) => count + entry.block.end - entry.block.start, 0);
-    lines.get(options.anchor.path).splice(insertion, 0, ...payloads.flatMap((payload) => payload.lines));
+    lines.get(options.anchor.path).splice(insertion, 0, ...payloads.flatMap((payload) => payload.lines).map((line) => [line]));
   }
-  const result = new Map([...lines].map(([path, fileLines]) => [path, fileLines.join(lineEnding(get(path)))]));
+  const result = new Map([...lines].map(([path, fileLines]) => [path, fileLines.flat().join(lineEnding(get(path)))]));
   if (!anchor && !options.delete) {
     const destinations = /* @__PURE__ */ new Map();
     for (const payload of payloads) {
       const destination = payload.entry.draft.destination;
-      const block = (_a = destinations.get(destination)) != null ? _a : [];
+      const block = (_f = destinations.get(destination)) != null ? _f : [];
       block.push(...payload.lines);
       destinations.set(destination, block);
     }
     for (const [destination, block] of destinations) {
       const { path, heading } = splitDestination(destination);
-      result.set(path, insertIntoDestination((_b = result.get(path)) != null ? _b : get(path), block, heading, options.position));
+      result.set(path, insertIntoDestination((_g = result.get(path)) != null ? _g : get(path), block, heading, options.position));
     }
   }
   return new Map([...result].filter(([path, content]) => content !== get(path)));
@@ -6501,16 +6578,17 @@ var TaskStore = class {
   async create(draft) {
     const { path, heading } = splitDestination(draft.destination);
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);
-    const rootDraft = { ...draft, indent: 0 };
     await this.app.vault.process(
       file,
-      (content) => {
-        var _a;
-        return insertIntoDestination(content, [serializeTask(rootDraft, this.getDateFormat()), ...(_a = draft.additionalLines) != null ? _a : []], heading, this.getNewTaskPosition());
-      }
+      (content) => insertIntoDestination(content, newTaskLines(draft, this.getDateFormat()), heading, this.getNewTaskPosition())
     );
   }
   async update(task, draft) {
+    var _a;
+    if (draft.description !== void 0 && draft.description !== ((_a = task.description) != null ? _a : "")) {
+      await this.bulkChange([task], () => draft);
+      return;
+    }
     const destination = splitDestination(draft.destination);
     if ((0, import_obsidian13.normalizePath)(destination.path) !== task.path || destination.heading !== task.section) {
       await this.move(task, draft);
@@ -6867,6 +6945,7 @@ var TaskManagerPlugin = class extends import_obsidian15.Plugin {
     if (reveal) await this.app.workspace.revealLeaf(leaf);
   }
   async openTaskView(state) {
+    if (state.projectPath && !state.pagePath) return this.openProject(state.projectPath);
     await this.activateNavigation(false);
     let leaf = this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW).find((candidate) => !candidate.view.getState().pagePath);
     const existingView = leaf == null ? void 0 : leaf.view;
@@ -6880,6 +6959,16 @@ var TaskManagerPlugin = class extends import_obsidian15.Plugin {
       const view = navLeaf.view;
       if (view instanceof TaskNavigationView) view.setActive(state.mode);
     }
+  }
+  async openProject(path) {
+    var _a;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof import_obsidian15.TFile)) throw new Error("Project note no longer exists.");
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.openFile(file);
+    if (!this.settings.taskMode) await this.setTaskMode(true);
+    else await ((_a = this.taskModeController) == null ? void 0 : _a.sync());
+    await this.app.workspace.revealLeaf(leaf);
   }
   editSelectedTaskProperties(checking) {
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);

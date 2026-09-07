@@ -85,7 +85,7 @@ function openModal(edit = false) {
   });
   const fields = modal as unknown as {
     modalEl: EditorElement; contentEl: EditorElement; close: () => void;
-    rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement; destinationInput: EditorElement;
+    rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement; descriptionInput: EditorElement; destinationInput: EditorElement;
   };
   fields.modalEl = new EditorElement();
   fields.contentEl = new EditorElement();
@@ -146,4 +146,32 @@ it.each([false, true])("hides destination extensions in new/edit modal labels (e
   fields.rawInput.dispatchEvent(new Event("input"));
   expect(fields.destinationInput.options.find(option => option.value === "Projects/Work.md#Plan")?.text).toBe("Projects/Work#Plan");
   expect(fields.destinationInput.value).toBe("Projects/Work.md#Plan");
+});
+
+
+it.each([false, true])("always shows an editable description last and saves it (editing: %s)", async edit => {
+  const { fields, key, onSave } = openModal(edit);
+  expect(fields.descriptionInput.value).toBe("");
+  expect(fields.contentEl.children[fields.contentEl.children.length - 2].children).toContain(fields.descriptionInput);
+  fields.rawInput.value = "- [ ] Main\n";
+  fields.rawInput.dispatchEvent(new Event("input"));
+  fields.descriptionInput.value = "First detail\nSecond detail";
+  fields.descriptionInput.dispatchEvent(new Event("input"));
+  if (!edit) expect(fields.rawInput.value).toContain("  - First detail\n  - Second detail");
+  key({ metaKey: true });
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  expect(onSave.mock.calls[0][0].description).toBe("First detail\nSecond detail");
+});
+
+it("keeps the new task description field in sync with raw bullets and preserves child descriptions", async () => {
+  const { fields, key, onSave } = openModal();
+  fields.rawInput.value = "- [ ] Parent\n  - Original\n  - [ ] Child\n    - Child description";
+  fields.rawInput.dispatchEvent(new Event("input"));
+  expect(fields.descriptionInput.value).toBe("- Original");
+  fields.descriptionInput.value = "Replacement";
+  fields.descriptionInput.dispatchEvent(new Event("input"));
+  expect(fields.rawInput.value).toBe("- [ ] Parent\n  - Replacement\n  - [ ] Child\n    - Child description");
+  key({ metaKey: true });
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  expect(onSave.mock.calls[0][0].description).toBe("Replacement");
 });

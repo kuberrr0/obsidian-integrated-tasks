@@ -177,7 +177,8 @@ export function serializeTaskInput(draft: TaskDraft, dateFormat?: string): strin
 export function scanTasks(path: string, content: string, reference = new Date(), dateFormat?: string): Task[] {
   const tasks: Task[] = [];
   const stack: Task[] = [];
-  const descriptions = new Map<Task, { lines: string[]; bulletIndent: number }>();
+  const sourceLines = content.split(/\r?\n/);
+  const descriptions = new Map<Task, { lines: string[]; lineNumbers: number[]; bulletIndent: number }>();
   const headings = new Map(scanHeadings(content).map((heading) => [heading.line, heading]));
   let section: ReturnType<typeof scanHeadings>[number] | undefined;
 
@@ -196,7 +197,12 @@ export function scanTasks(path: string, content: string, reference = new Date(),
       const bullet = Boolean(marker);
       const description = descriptions.get(owner);
       if (bullet || (description && indent > description.bulletIndent)) {
-        const entry = description ?? { lines: [], bulletIndent: indent };
+        const entry = description ?? { lines: [], lineNumbers: [], bulletIndent: indent };
+        const previous = entry.lineNumbers[entry.lineNumbers.length - 1];
+        if (previous !== undefined && sourceLines.slice(previous + 1, lineNumber).every(text => !text.trim())) {
+          for (let blank = previous + 1; blank < lineNumber; blank++) { entry.lines.push(""); entry.lineNumbers.push(blank); }
+        }
+        entry.lineNumbers.push(lineNumber);
         entry.lines.push(" ".repeat(indent) + line.trimStart());
         if (bullet) entry.bulletIndent = indent;
         descriptions.set(owner, entry);
@@ -223,8 +229,9 @@ export function scanTasks(path: string, content: string, reference = new Date(),
     stack.push(task);
   }
 
-  for (const [task, { lines }] of descriptions) {
-    const margin = Math.min(...lines.map(line => indentWidth(/^[ ]*/.exec(line)?.[0] ?? "")));
+  for (const [task, { lines, lineNumbers }] of descriptions) {
+    const margin = Math.min(...lines.filter(line => line.trim()).map(line => indentWidth(/^[ ]*/.exec(line)?.[0] ?? "")));
+    task.descriptionLines = lineNumbers;
     task.description = lines.map(line => line.slice(margin)).join("\n");
   }
 

@@ -1,3 +1,4 @@
+import { replaceDescription } from "./task-description";
 import { insertIntoDestination, lineEnding } from "./markdown";
 import { liveTaskBlock, rewriteBlock } from "./task-block";
 import { serializeTask } from "./parser";
@@ -5,7 +6,7 @@ import { splitDestination } from "./structure";
 import type { ListPlacement } from "./list-drag";
 import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
-export type BulkTaskPatch = Partial<Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority" | "destination">>;
+export type BulkTaskPatch = Partial<Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority" | "destination" | "description">>;
 export interface BulkTaskChange { task: Task; draft?: TaskDraft }
 export interface BulkTaskOptions {
   delete?: boolean;
@@ -43,14 +44,18 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
   if (anchor && roots.some(entry => entry.task.path === options.anchor!.path && anchor.start >= entry.block.start && anchor.start < entry.block.end)) {
     throw new Error("Tasks cannot be moved into themselves or their subtasks.");
   }
-  const lines = new Map([...contents].map(([path, content]) => [path, content.split(/\r?\n/)]));
+  const lines = new Map([...contents].map(([path, content]) => [path, content.split(/\r?\n/).map(line => [line])]));
   // Apply properties to every explicitly selected task, including selected children.
   if (!options.delete) for (const entry of entries) {
-    if (entry.draft) lines.get(entry.task.path)![entry.block.start] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat);
+    if (entry.draft) lines.get(entry.task.path)![entry.block.start][0] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat);
+    if (entry.draft?.description !== undefined && entry.draft.description !== (entry.task.description ?? "")) {
+      if ((entry.block.description ?? "") !== (entry.task.description ?? "")) throw new Error("Task description changed. Refresh and try again.");
+      replaceDescription(lines.get(entry.task.path)!, entry.block.start, entry.block.descriptionLines ?? [], entry.draft.description, entry.block.indent);
+    }
   }
   const payloads = roots.map(entry => ({
     entry,
-    lines: options.delete ? [] : rewriteBlock({ ...entry.block, lines: lines.get(entry.task.path)!.slice(entry.block.start, entry.block.end) },
+    lines: options.delete ? [] : rewriteBlock({ ...entry.block, lines: lines.get(entry.task.path)!.slice(entry.block.start, entry.block.end).flat() },
       entry.draft!, anchor ? anchor.indent + (options.placement === "child" ? 2 : 0) : 0, options.dateFormat)
   }));
   for (const [path, fileLines] of lines) {
@@ -62,9 +67,9 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
     let insertion = options.placement === "before" ? anchor.start : anchor.end;
     insertion -= roots.filter(entry => entry.task.path === options.anchor!.path && entry.block.end <= insertion)
       .reduce((count, entry) => count + entry.block.end - entry.block.start, 0);
-    lines.get(options.anchor.path)!.splice(insertion, 0, ...payloads.flatMap(payload => payload.lines));
+    lines.get(options.anchor.path)!.splice(insertion, 0, ...payloads.flatMap(payload => payload.lines).map(line => [line]));
   }
-  const result = new Map([...lines].map(([path, fileLines]) => [path, fileLines.join(lineEnding(get(path)))]));
+  const result = new Map([...lines].map(([path, fileLines]) => [path, fileLines.flat().join(lineEnding(get(path)))]));
   if (!anchor && !options.delete) {
     const destinations = new Map<string, string[]>();
     for (const payload of payloads) {

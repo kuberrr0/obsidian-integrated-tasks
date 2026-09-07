@@ -36,14 +36,14 @@ export class TaskModeController {
           await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { ...previous, mode: "all", pagePath: path, markdownState } });
         } else if (view instanceof TaskMainView) {
           const state = view.getState();
-          // Dedicated task-manager/project dashboards remain task views. Only
-          // file-backed views have pagePath and an editor state to restore.
-          const path = typeof state.pagePath === "string" ? state.pagePath : undefined;
+          // Dashboards have no file path. Accept projectPath as well so tabs
+          // restored from older versions also follow the task-mode toggle.
+          const path = typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : undefined;
           if (!path || (this.enabled() && this.isProject(path))) continue;
           const file = this.app.vault.getAbstractFileByPath(path);
           if (!(file instanceof TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState as Record<string, unknown> : {};
-          this.savedViews.set(leaf, state);
+          this.savedViews.set(leaf, { ...state, pagePath: path, projectPath: undefined });
           await leaf.setViewState({ type: "markdown", state: { ...markdownState, file: file.path } });
         }
       }

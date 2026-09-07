@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { App, WorkspaceLeaf } from "obsidian";
+import { TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 vi.mock("obsidian", async (importOriginal) => ({
   ...await importOriginal<typeof import("./obsidian-mock")>(),
@@ -200,4 +200,43 @@ it("right-click selects titles and other controls, retaining an existing multi-s
   expect(view.getSelectedTasks().map(task => task.title)).toEqual(["A", "C"]);
   rows[1].contextmenu(title);
   expect(view.getSelectedTasks().map(task => task.title)).toEqual(["B"]);
+});
+
+
+it.each([false, true])("opens a real project file and reconciles task mode (already enabled: %s)", async enabled => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  const file = Object.assign(new TFile(), { path: "Project.md" });
+  const leaf = { openFile: vi.fn().mockResolvedValue(undefined) };
+  const sync = vi.fn().mockResolvedValue(undefined);
+  const revealLeaf = vi.fn().mockResolvedValue(undefined);
+  plugin.app = { vault: { getAbstractFileByPath: () => file }, workspace: { getLeaf: vi.fn(() => leaf), revealLeaf } } as unknown as App;
+  plugin.settings.taskMode = enabled;
+  const mode = vi.spyOn(plugin, "setTaskMode").mockImplementation(async value => { plugin.settings.taskMode = value; await sync(); });
+  (plugin as unknown as { taskModeController: unknown }).taskModeController = { sync };
+  await plugin.openProject(file.path);
+  expect(leaf.openFile).toHaveBeenCalledExactlyOnceWith(file);
+  expect(plugin.settings.taskMode).toBe(true);
+  expect(mode).toHaveBeenCalledTimes(enabled ? 0 : 1);
+  expect(sync).toHaveBeenCalledOnce();
+  expect(sync.mock.invocationCallOrder[0]).toBeGreaterThan(leaf.openFile.mock.invocationCallOrder[0]);
+  expect(revealLeaf).toHaveBeenCalledExactlyOnceWith(leaf);
+});
+
+it("routes legacy project navigation through file opening", async () => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  const open = vi.spyOn(plugin, "openProject").mockResolvedValue(undefined);
+  await plugin.openTaskView({ mode: "projects", projectPath: "Project.md" });
+  expect(open).toHaveBeenCalledExactlyOnceWith("Project.md");
+});
+
+it("does not enable task mode if the project file cannot be opened", async () => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  const mode = vi.spyOn(plugin, "setTaskMode").mockResolvedValue(undefined);
+  plugin.app = { vault: { getAbstractFileByPath: () => undefined } } as unknown as App;
+  await expect(plugin.openProject("Missing.md")).rejects.toThrow("Project note no longer exists");
+  expect(mode).not.toHaveBeenCalled();
+  const file = new TFile();
+  plugin.app = { vault: { getAbstractFileByPath: () => file }, workspace: { getLeaf: () => ({ openFile: async () => { throw new Error("Open failed"); } }) } } as unknown as App;
+  await expect(plugin.openProject("Project.md")).rejects.toThrow("Open failed");
+  expect(mode).not.toHaveBeenCalled();
 });

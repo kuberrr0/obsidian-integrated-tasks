@@ -13,6 +13,7 @@ export interface ParsedTaskMetadata {
 export interface Task extends ParsedTaskMetadata {
   /** Markdown bullets nested beneath this task, excluding child checklists. */
   description?: string;
+  descriptionLines?: number[];
   id: string;
   path: string;
   line: number;
@@ -70,6 +71,8 @@ export interface TaskQuery {
 }
 
 export interface TaskDraft extends ParsedTaskMetadata {
+  /** Undefined leaves an existing description unchanged; an empty string clears it. */
+  description?: string;
   /** Additional canonical Markdown lines for a new task batch, relative to indent zero. */
   additionalLines?: string[];
   completed: boolean;

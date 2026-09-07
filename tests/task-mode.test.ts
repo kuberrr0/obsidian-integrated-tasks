@@ -97,3 +97,26 @@ describe("global task mode", () => {
     expect(leaf.setViewState).toHaveBeenCalledOnce();
   });
 });
+
+
+it("restores legacy project tabs to Markdown and remembers their layout on re-entry", async () => {
+  const { controller, add, setEnabled } = await setup();
+  const { leaf } = add("Project.md");
+  await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { mode: "projects", projectPath: "Project.md", layout: "kanban" } });
+  await controller.sync();
+  expect(leaf.view).toBeInstanceOf(MarkdownView);
+  expect(leaf.view.getState()).toEqual({ file: "Project.md" });
+  setEnabled(true); await controller.sync();
+  expect(leaf.view.getState()).toMatchObject({ pagePath: "Project.md", layout: "kanban" });
+  setEnabled(false); await controller.sync();
+  expect(leaf.view).toBeInstanceOf(MarkdownView);
+});
+
+it("keeps the Projects dashboard open when task mode is turned off", async () => {
+  const { controller, add } = await setup();
+  const { leaf } = add("Project.md");
+  await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { mode: "projects" } });
+  await controller.sync();
+  expect(leaf.view).toBeInstanceOf(TaskMainView);
+  expect(leaf.view.getState().mode).toBe("projects");
+});

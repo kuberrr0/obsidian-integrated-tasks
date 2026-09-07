@@ -1,3 +1,4 @@
+import { newTaskLines } from "./task-description";
 import { planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
 import { liveTaskBlock, rewriteBlock, placeTaskBlock } from "./task-block";
@@ -10,7 +11,6 @@ import {
   toggleTaskInContent,
   updateTaskInContent
 } from "./markdown";
-import { serializeTask } from "./parser";
 import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
 export class TaskStore {
@@ -36,13 +36,16 @@ export class TaskStore {
   async create(draft: TaskDraft): Promise<void> {
     const { path, heading } = splitDestination(draft.destination);
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);
-    const rootDraft = { ...draft, indent: 0 };
     await this.app.vault.process(file, (content) =>
-      insertIntoDestination(content, [serializeTask(rootDraft, this.getDateFormat()), ...(draft.additionalLines ?? [])], heading, this.getNewTaskPosition())
+      insertIntoDestination(content, newTaskLines(draft, this.getDateFormat()), heading, this.getNewTaskPosition())
     );
   }
 
   async update(task: Task, draft: TaskDraft): Promise<void> {
+    if (draft.description !== undefined && draft.description !== (task.description ?? "")) {
+      await this.bulkChange([task], () => draft);
+      return;
+    }
     const destination = splitDestination(draft.destination);
     if (normalizePath(destination.path) !== task.path || destination.heading !== task.section) {
       await this.move(task, draft);
