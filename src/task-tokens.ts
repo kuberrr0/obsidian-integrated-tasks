@@ -36,7 +36,7 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
         dateLabel, time, linkText: link?.[1], display };
     }
     switch (range.kind) {
-      case "tags": return { ...range, label: `#${link![1].trim()}`, description: `Tag: ${link![1].trim()}`, linkText: link![1] };
+      case "tags": return { ...range, label: link![1].trim(), description: `Tag: ${link![1].trim()}`, linkText: link![1] };
       case "durationMinutes": return { ...range, label: formatDuration(parsed.durationMinutes!), description: `Duration: ${formatDuration(parsed.durationMinutes!)}` };
       case "priority": return { ...range, label: `P${parsed.priority}`, description: `Priority ${parsed.priority}`, priority: parsed.priority };
     }

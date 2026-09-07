@@ -41,7 +41,7 @@ it("returns a separate linked token for each tag", () => {
   const line = "- [ ] Task #[[work]] #[[client notes]]";
   const tokens = taskTokens(line);
   expect(tokens.map(token => [line.slice(token.from, token.to), token.kind, token.label, token.linkText])).toEqual([
-    ["#[[work]]", "tags", "#work", "work"], ["#[[client notes]]", "tags", "#client notes", "client notes"]
+    ["#[[work]]", "tags", "work", "work"], ["#[[client notes]]", "tags", "client notes", "client notes"]
   ]);
 });
 

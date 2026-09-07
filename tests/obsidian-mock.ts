@@ -10,3 +10,9 @@ export const getAllTags = (cache: { tags?: Array<{ tag: string }>; frontmatter?:
 ];
 
 export const Platform = { isMacOS: true };
+
+// Minimal SVG shape for note-pill decoration styles in the Node test host.
+export const getIcon = (name: string) => ({
+  setAttribute: () => {},
+  outerHTML: `<svg xmlns="http://www.w3.org/2000/svg" data-icon="${name}" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>`
+});

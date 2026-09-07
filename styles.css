@@ -566,6 +566,7 @@ button.tm-source,
 .cm-editor .tm-note-token { cursor: text; }
 .tm-note-token a.internal-link { color: inherit; text-decoration: none; }
 .tm-note-token a.internal-link:hover { color: var(--text-accent-hover); }
+.tm-note-token-priority { text-transform: uppercase; }
 .tm-note-token-deadline { color: var(--text-accent); }
 .tm-note-token.is-p1 { color: var(--text-error); }
 .tm-note-token.is-p2 { color: var(--color-orange); }
@@ -573,8 +574,21 @@ button.tm-source,
 
 
 /* Live Preview exposes the original date syntax when the caret enters a pill. */
-.tm-note-token-editor.tm-note-token-deadline::before { content: "Due "; }
-.tm-note-token-editor .tm-note-token-brace { display: none; }
+/* Reuse Obsidian's SVGs as masks so glyphs inherit each pill's color. */
+.tm-note-token::before {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-inline-end: 4px;
+  vertical-align: -0.15em;
+  background-color: currentColor;
+  -webkit-mask: var(--tm-note-token-icon) center / contain no-repeat;
+  mask: var(--tm-note-token-icon) center / contain no-repeat;
+  pointer-events: none;
+}
+.tm-note-token-editor .tm-note-token-brace,
+.tm-note-token-editor .tm-note-token-tag-prefix { display: none; }
 
 
 /* Keep a real controls box for browser and accessibility compatibility. */

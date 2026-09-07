@@ -1,3 +1,4 @@
+import { notePropertyIconStyle } from "./task-property-icons";
 import { editorLivePreviewField, editorInfoField, Platform } from "obsidian";
 import { type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
@@ -45,11 +46,14 @@ export function noteTokenMarks(
     if (selections.some((range) => range.from <= to && range.to >= from)) continue;
     pills.push(Decoration.mark({
       class: `${tokenClass(token)} tm-note-token-editor`,
-      attributes: { title: token.description }
+      attributes: { title: token.description, style: notePropertyIconStyle(token.kind) }
     }).range(from, to));
     if (token.display) {
       syntax.push(Decoration.replace({ widget: new DateLabelWidget(token.display.label, token.display.linkText) })
         .range(from + token.display.from - token.from, from + token.display.to - token.from));
+    }
+    if (token.kind === "tags") {
+      syntax.push(Decoration.mark({ class: "tm-note-token-tag-prefix" }).range(from, from + 1));
     }
     if (token.kind === "deadline") {
       // Keep the deadline prefix outside the date label.

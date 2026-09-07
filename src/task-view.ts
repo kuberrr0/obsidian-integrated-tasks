@@ -1,3 +1,4 @@
+import { TASK_PROPERTY_ICONS } from "./task-property-icons";
 import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
@@ -669,11 +670,11 @@ export class TaskMainView extends ItemView {
   }
 
   private renderProperties(parent: HTMLElement, properties: ProjectProperties | Task): void {
-    if (properties.scheduledDate) this.badge(parent, "calendar-days", `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`);
-    if (properties.deadline) this.badge(parent, "flag", `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : undefined);
-    if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, "clock-3", formatDuration(properties.durationMinutes));
-    if ("tags" in properties) for (const tag of properties.tags ?? []) this.badge(parent, "tag", tag);
-    if (properties.priority) this.badge(parent, "signal", `P${properties.priority}`, `p${properties.priority}`);
+    if (properties.scheduledDate) this.badge(parent, TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`);
+    if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : undefined);
+    if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
+    if ("tags" in properties) for (const tag of properties.tags ?? []) this.badge(parent, TASK_PROPERTY_ICONS.tags, tag);
+    if (properties.priority) this.badge(parent, TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
   }
 
   private badge(parent: HTMLElement, iconName: string, text: string, variant?: string): void {
