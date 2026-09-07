@@ -5469,6 +5469,56 @@ var TaskModeController = class {
   }
 };
 
+// src/note-date-input.ts
+var import_state = require("@codemirror/state");
+function noteDateChanges(text, dateFormat, reference = /* @__PURE__ */ new Date()) {
+  const prose = text.replace(/(`+)[\s\S]*?\1|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\{(?!@)[^}]*\}/g, (match2) => " ".repeat(match2.length));
+  const changes = [];
+  const pattern = /(^|\s|\{)@/g;
+  let match;
+  while (match = pattern.exec(prose)) {
+    const from = match.index + match[1].length;
+    const braced = match[1] === "{";
+    const rest = prose.slice(from + 1);
+    const end = rest.search(braced ? /[{}]/ : /[@{}]/);
+    const candidate = rest.slice(0, end < 0 ? rest.length : end).trimEnd();
+    if (braced && (end < 0 || rest[end] !== "}")) continue;
+    for (let length = candidate.length; length > 0; length--) {
+      if (length < candidate.length && !/[\s.,;!?]/.test(candidate[length])) continue;
+      if (braced && length !== candidate.length) break;
+      const date = parseDateExpression(candidate.slice(0, length), reference, dateFormat);
+      if (!date) continue;
+      changes.push({ from, to: from + 1 + length, insert: `[[${formatDate(date, dateFormat)}]]` });
+      pattern.lastIndex = from + 1 + length;
+      break;
+    }
+  }
+  return changes;
+}
+function noteDateInput(getDateFormat, isTaskMode) {
+  return import_state.EditorState.transactionFilter.of((transaction) => {
+    if (isTaskMode() || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
+    if (!transaction.selection && !transaction.docChanged) return transaction;
+    const candidates = new Set(transaction.startState.selection.ranges.map((range) => transaction.newDoc.lineAt(transaction.changes.mapPos(transaction.startState.doc.lineAt(range.head).from, -1)).number));
+    const selections = transaction.newSelection.ranges;
+    for (const number of candidates) {
+      const { from, to } = transaction.newDoc.line(number);
+      if (selections.some((range) => range.from <= to && range.to >= from)) candidates.delete(number);
+    }
+    if (!candidates.size) return transaction;
+    const changes = [];
+    const reference = /* @__PURE__ */ new Date();
+    for (const { text, line } of bodyLines(transaction.newDoc.toString())) {
+      if (!candidates.has(line + 1) || !/^\s*-\s+\[[ xX]\]\s/.test(text)) continue;
+      const { from } = transaction.newDoc.line(line + 1);
+      for (const change of noteDateChanges(text, getDateFormat(), reference)) {
+        changes.push({ ...change, from: from + change.from, to: from + change.to });
+      }
+    }
+    return changes.length ? [transaction, { changes, sequential: true }] : transaction;
+  });
+}
+
 // src/note-token-editor.ts
 var import_obsidian8 = require("obsidian");
 var import_view = require("@codemirror/view");
@@ -6864,6 +6914,7 @@ var TaskManagerPlugin = class extends import_obsidian15.Plugin {
     this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition);
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
+    this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), (task) => this.openEditor({ mode: "all", task })));
     this.registerMarkdownPostProcessor((element, context) => {

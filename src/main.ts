@@ -1,6 +1,7 @@
 import { BulkTaskEditorModal } from "./bulk-task-editor";
 import { TaskModeController } from "./task-mode";
 import type { TaskEditorPreset } from "./types";
+import { noteDateInput } from "./note-date-input";
 import { noteTokenEditor } from "./note-token-editor";
 import { noteTaskEditEditor, registerNoteTaskEdit } from "./note-task-edit";
 import { renderNoteTokens } from "./note-token-reading";
@@ -34,6 +35,7 @@ export default class TaskManagerPlugin extends Plugin {
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
+    this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task })));
     this.registerMarkdownPostProcessor((element, context) => {
