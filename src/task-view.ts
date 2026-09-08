@@ -670,9 +670,12 @@ export class TaskMainView extends ItemView {
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
-    const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
-    source.addEventListener("click", () => void this.openSource(task));
+    if (task.path !== this.pagePath) {
+      const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
+      source.addEventListener("click", () => void this.openSource(task));
+    }
     this.renderProperties(metadata, task);
+    if (!metadata.childElementCount) metadata.remove();
     const menuButton = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": "Task actions" } });
     setIcon(menuButton, "more-horizontal");
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
