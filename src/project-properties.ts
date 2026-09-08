@@ -50,7 +50,7 @@ export function parseProjectParent(frontmatter?: Record<string, unknown>): strin
   const text = value.trim();
   const link = /^\[\[([^\]]+)\]\]$/.exec(text);
   const path = (link?.[1] ?? text).split(/[|#]/, 1)[0].trim();
-  return path && !/[\r\n\[\]]/.test(path) ? path : undefined;
+  return path && !/[\r\n[\]]/.test(path) ? path : undefined;
 }
 
 
@@ -66,7 +66,7 @@ export function updateProjectDate(frontmatter: Record<string, unknown>, field: P
   const matches = aliases.map(alias => keys.find(key => key.toLowerCase().replace(/[\s_-]/g, "") === alias)).filter((key): key is string => Boolean(key));
   const key = matches.find(key => frontmatter[key] !== null && frontmatter[key] !== undefined) ?? matches[0] ?? (field === "scheduledDate" ? "date" : field === "endDate" ? "end date" : "deadline");
   const original = frontmatter[key];
-  const raw = Array.isArray(original) ? original[0] : original;
+  const raw: unknown = Array.isArray(original) ? original[0] : original;
   const link = typeof raw === "string" ? /^\[\[[^\]|]+(\|[^\]]*)?\]\]$/.exec(raw.trim()) : undefined;
   const formatted = link ? `[[${formatDate(value, dateFormat)}${link[1] ?? ""}]]` : value;
   frontmatter[key] = Array.isArray(original) && original.length === 1 ? [formatted] : formatted;

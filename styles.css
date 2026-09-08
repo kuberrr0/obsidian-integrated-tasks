@@ -579,9 +579,9 @@ button.tm-source,
 .tm-note-token a.internal-link:hover { color: var(--text-accent-hover); }
 .tm-note-token-priority { text-transform: uppercase; }
 /* Native Live Preview link spans and Reading view anchors use the pill color. */
-.tm-note-token:is(.tm-note-token-scheduledDate, .tm-note-token-deadline) * {
-  color: inherit !important;
-  text-decoration: none !important;
+:is(.markdown-source-view.mod-cm6 .cm-editor, .markdown-reading-view) .tm-note-token:is(.tm-note-token-scheduledDate, .tm-note-token-deadline) * {
+  color: inherit;
+  text-decoration: none;
 }
 .tm-note-token.is-danger { color: var(--text-error); }
 .tm-note-token.is-p1 { color: var(--text-error); }
@@ -844,8 +844,8 @@ button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var
   box-shadow: 0 6px 20px rgb(0 0 0 / 20%);
   transition: none;
 }
-.tm-drag-preview,
-.tm-drag-preview * { pointer-events: none !important; }
+.tm-main-view .tm-task-row.tm-drag-preview,
+.tm-main-view .tm-task-row.tm-drag-preview * { pointer-events: none; }
 .tm-task-row[data-drop-position] { position: relative; }
 .tm-task-row[data-drop-position="before"] { box-shadow: inset 0 2px var(--interactive-accent); }
 .tm-task-row[data-drop-position="after"], .tm-task-row[data-drop-position="outdent"] { box-shadow: inset 0 -2px var(--interactive-accent); }

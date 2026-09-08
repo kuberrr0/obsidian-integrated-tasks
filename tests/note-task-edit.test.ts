@@ -59,7 +59,7 @@ describe("long press task editing in notes", () => {
   function setup() {
     vi.useFakeTimers();
     const document = new EventTarget();
-    const root = Object.assign(new EventTarget(), { ownerDocument: document });
+    const root = Object.assign(new EventTarget(), { ownerDocument: document, win: { setTimeout, clearTimeout } });
     const checkbox = { isConnected: true, closest: () => checkbox };
     const open = vi.fn();
     const dispose = bindNoteTaskEdit(root as unknown as HTMLElement, () => task, open);

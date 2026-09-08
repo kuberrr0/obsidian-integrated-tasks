@@ -82,7 +82,7 @@ it("opens the original linked note from a formatted label, including Cmd-click",
   const events = new Map<string, (event: unknown) => void>();
   const attrs = new Map<string, string>();
   const element = { textContent: "", setAttribute: (key: string, value: string) => attrs.set(key, value), addEventListener: (name: string, callback: (event: unknown) => void) => events.set(name, callback) };
-  const view = { dom: { ownerDocument: { createElement: () => element } }, state: { field: () => ({ app: { workspace: { openLinkText } }, file: { path: "Projects/Work.md" } }) } };
+  const view = { dom: { ownerDocument: { createDocumentFragment: () => ({ createEl: () => element }) } }, state: { field: () => ({ app: { workspace: { openLinkText } }, file: { path: "Projects/Work.md" } }) } };
   new DateLabelWidget("Sep 9, 2026", "2026-09-09").toDOM(view as never);
   expect(element.textContent).toBe("Sep 9, 2026");
   expect(attrs.get("data-href")).toBe("2026-09-09");

@@ -447,7 +447,7 @@ export class TaskMainView extends ItemView {
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
           if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
-          await this.app.fileManager.processFrontMatter(file, frontmatter => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()));
+          await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()));
           await this.plugin.index.refreshPath(project.path);
         }
       });

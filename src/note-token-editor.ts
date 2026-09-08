@@ -12,7 +12,7 @@ export class DateLabelWidget extends WidgetType {
   constructor(private readonly label: string, private readonly linkText?: string) { super(); }
   eq(other: DateLabelWidget): boolean { return this.label === other.label && this.linkText === other.linkText; }
   toDOM(view: EditorView): HTMLElement {
-    const element: HTMLElement = view.dom.ownerDocument.createElement(this.linkText ? "a" : "span");
+    const element: HTMLElement = view.dom.ownerDocument.createDocumentFragment().createEl(this.linkText ? "a" : "span");
     element.textContent = this.label;
     if (this.linkText) {
       element.className = "internal-link";

@@ -20,12 +20,13 @@ export function handleTaskEditClick(event: MouseEvent, resolve: (checkbox: HTMLE
 
 /** Share gesture handling between Live Preview and Reading view. */
 export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElement) => Task | undefined, open: OpenTask): () => void {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const window = root.win;
+  let timer: number | undefined;
   let press: { checkbox: HTMLElement; id: number; x: number; y: number } | undefined;
   let held: HTMLElement | undefined;
   let suppressUntil = 0;
   const cancel = (): void => {
-    clearTimeout(timer);
+    window.clearTimeout(timer);
     timer = undefined;
     press = undefined;
   };
@@ -41,7 +42,7 @@ export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElem
     if (!checkbox || !resolve(checkbox)) return;
     const touch = event.touches[0];
     press = { checkbox, id: touch.identifier, x: touch.clientX, y: touch.clientY };
-    timer = setTimeout(() => {
+    timer = window.setTimeout(() => {
       if (!press || !checkbox.isConnected) return;
       const task = resolve(checkbox);
       if (!task) return;

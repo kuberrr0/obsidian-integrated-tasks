@@ -4,7 +4,7 @@ import { findInputDate, findInputDeadline, formatDate, parseDateTimeExpression }
 import type { ParsedTaskMetadata, Priority, Task, TaskDraft } from "./types";
 
 const CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
-const TAG = /(?:^|\s)#\[\[([^\[\]\r\n|]+)\]\]\s*$/;
+const TAG = /(?:^|\s)#\[\[([^[\]\r\n|]+)\]\]\s*$/;
 const PRIORITY = /(?:^|\s)p([123])\s*$/i;
 const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
@@ -17,7 +17,7 @@ function plainScheduled(text: string, reference: Date, dateFormat?: string): Reg
   let start: RegExpExecArray | null;
   while ((start = starts.exec(text))) {
     const value = text.slice(start.index).trim();
-    if (/[\[\]{}]/.test(value)) continue;
+    if (/[[\]{}]/.test(value)) continue;
     const parsed = parseDateTimeExpression(value, reference, dateFormat);
     if (!parsed) continue;
     const time = parsed.time ? ` ${parsed.time}` : "";

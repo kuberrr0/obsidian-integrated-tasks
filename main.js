@@ -28,7 +28,7 @@ module.exports = __toCommonJS(main_exports);
 // src/task-tags.ts
 function normalizeTags(tags = []) {
   const normalized = tags.map((tag) => tag.trim());
-  if (normalized.some((tag) => !tag || /[\[\]\r\n|]/.test(tag))) {
+  if (normalized.some((tag) => !tag || /[[\]\r\n|]/.test(tag))) {
     throw new Error("Use nonempty tag names without brackets, newlines, or aliases.");
   }
   return [...new Set(normalized)];
@@ -38,7 +38,7 @@ function formatTags(tags = []) {
 }
 function parseTags(value) {
   const tags = [];
-  const remaining = value.replace(/#\[\[([^\[\]\r\n|]+)\]\]/g, (_match, tag) => {
+  const remaining = value.replace(/#\[\[([^[\]\r\n|]+)\]\]/g, (_match, tag) => {
     tags.push(tag);
     return "";
   });
@@ -3096,7 +3096,7 @@ function destinationLabel(destination) {
 
 // src/parser.ts
 var CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
-var TAG = /(?:^|\s)#\[\[([^\[\]\r\n|]+)\]\]\s*$/;
+var TAG = /(?:^|\s)#\[\[([^[\]\r\n|]+)\]\]\s*$/;
 var PRIORITY = /(?:^|\s)p([123])\s*$/i;
 var DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 var SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
@@ -3107,7 +3107,7 @@ function plainScheduled(text, reference, dateFormat) {
   let start;
   while (start = starts.exec(text)) {
     const value = text.slice(start.index).trim();
-    if (/[\[\]{}]/.test(value)) continue;
+    if (/[[\]{}]/.test(value)) continue;
     const parsed = parseDateTimeExpression(value, reference, dateFormat);
     if (!parsed) continue;
     const time = parsed.time ? ` ${parsed.time}` : "";
@@ -3636,7 +3636,7 @@ function parseProjectParent(frontmatter) {
   const text = value.trim();
   const link = /^\[\[([^\]]+)\]\]$/.exec(text);
   const path = ((_b = link == null ? void 0 : link[1]) != null ? _b : text).split(/[|#]/, 1)[0].trim();
-  return path && !/[\r\n\[\]]/.test(path) ? path : void 0;
+  return path && !/[\r\n[\]]/.test(path) ? path : void 0;
 }
 function updateProjectDate(frontmatter, field2, value, expected, dateFormat) {
   var _a, _b, _c;
@@ -5741,7 +5741,7 @@ var DateLabelWidget = class extends import_view.WidgetType {
     return this.label === other.label && this.linkText === other.linkText;
   }
   toDOM(view) {
-    const element = view.dom.ownerDocument.createElement(this.linkText ? "a" : "span");
+    const element = view.dom.ownerDocument.createDocumentFragment().createEl(this.linkText ? "a" : "span");
     element.textContent = this.label;
     if (this.linkText) {
       element.className = "internal-link";
@@ -5844,12 +5844,13 @@ function handleTaskEditClick(event, resolve, open) {
   open(task);
 }
 function bindNoteTaskEdit(root, resolve, open) {
+  const window2 = root.win;
   let timer;
   let press;
   let held;
   let suppressUntil = 0;
   const cancel = () => {
-    clearTimeout(timer);
+    window2.clearTimeout(timer);
     timer = void 0;
     press = void 0;
   };
@@ -5866,7 +5867,7 @@ function bindNoteTaskEdit(root, resolve, open) {
     if (!checkbox || !resolve(checkbox)) return;
     const touch = event.touches[0];
     press = { checkbox, id: touch.identifier, x: touch.clientX, y: touch.clientY };
-    timer = setTimeout(() => {
+    timer = window2.setTimeout(() => {
       if (!press || !checkbox.isConnected) return;
       const task = resolve(checkbox);
       if (!task) return;
