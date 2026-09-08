@@ -91,6 +91,8 @@ export class ListDragController {
     let pointer: number | undefined;
     let origin = { x: 0, y: 0 };
     let dragging = false;
+    let preview: HTMLElement | undefined;
+    let previewOffset = { x: 0, y: 0 };
     const hit = (event: PointerEvent): { element: HTMLElement; target: DropIntent } | undefined => {
       let element = row.ownerDocument.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
       while (element) {
@@ -116,7 +118,33 @@ export class ListDragController {
       if (pointer !== event.pointerId) return;
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
       event.preventDefault();
-      if (!dragging) this.dragStart(task);
+      if (!dragging) {
+        this.dragStart(task);
+        const rect = row.getBoundingClientRect();
+        previewOffset = { x: origin.x - rect.left, y: origin.y - rect.top };
+        preview = row.cloneNode(true) as HTMLElement;
+        preview.removeAttribute("data-drop-position");
+        preview.removeClass("is-dragging");
+        preview.addClass("tm-drag-preview");
+        preview.setAttribute("aria-hidden", "true");
+        preview.inert = true;
+        preview.draggable = false;
+        preview.style.width = `${rect.width}px`;
+        preview.style.height = `${rect.height}px`;
+        // Keep the layout's ancestor styles, including kanban card formatting.
+        row.parentElement?.appendChild(preview);
+      }
+      if (preview) {
+        const left = event.clientX - previewOffset.x;
+        const top = event.clientY - previewOffset.y;
+        preview.style.left = `${left}px`;
+        preview.style.top = `${top}px`;
+        // Obsidian panes can establish a containing block for fixed children.
+        // Correct its viewport displacement while retaining the card's styles.
+        const bounds = preview.getBoundingClientRect();
+        preview.style.left = `${left + (left - bounds.left)}px`;
+        preview.style.top = `${top + (top - bounds.top)}px`;
+      }
       dragging = true;
       this.taskId = task.id;
       this.original = task;
@@ -125,7 +153,11 @@ export class ListDragController {
       if (found) this.mark(found.element, found.target.indicator);
       else this.clear();
     });
-    const reset = (): void => { pointer = undefined; dragging = false; row.draggable = true; row.removeClass("is-dragging"); this.taskId = undefined; this.clear(); };
+    const reset = (): void => {
+      preview?.remove();
+      preview = undefined;
+      pointer = undefined; dragging = false; row.draggable = true; row.removeClass("is-dragging"); this.taskId = undefined; this.clear();
+    };
     row.addEventListener("pointerup", event => {
       if (pointer !== event.pointerId) return;
       if (dragging) { event.preventDefault(); event.stopPropagation(); }

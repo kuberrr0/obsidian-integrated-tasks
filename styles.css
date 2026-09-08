@@ -820,6 +820,18 @@ button.tm-calendar-task.is-timed { position: absolute; margin: 0; min-height: 12
 
 button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var(--text-faint); cursor: grab; }
 .tm-task-row.is-dragging { opacity: .45; }
+.tm-main-view .tm-task-row.tm-drag-preview {
+  position: fixed;
+  z-index: 10000;
+  margin: 0;
+  box-sizing: border-box;
+  opacity: .85;
+  background: var(--background-primary);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 20%);
+  transition: none;
+}
+.tm-drag-preview,
+.tm-drag-preview * { pointer-events: none !important; }
 .tm-task-row[data-drop-position] { position: relative; }
 .tm-task-row[data-drop-position="before"] { box-shadow: inset 0 2px var(--interactive-accent); }
 .tm-task-row[data-drop-position="after"], .tm-task-row[data-drop-position="outdent"] { box-shadow: inset 0 -2px var(--interactive-accent); }

@@ -4361,6 +4361,8 @@ var ListDragController = class {
     let pointer;
     let origin = { x: 0, y: 0 };
     let dragging = false;
+    let preview;
+    let previewOffset = { x: 0, y: 0 };
     const hit = (event) => {
       let element = row.ownerDocument.elementFromPoint(event.clientX, event.clientY);
       while (element) {
@@ -4382,10 +4384,34 @@ var ListDragController = class {
       row.setPointerCapture(event.pointerId);
     });
     row.addEventListener("pointermove", (event) => {
+      var _a;
       if (pointer !== event.pointerId) return;
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
       event.preventDefault();
-      if (!dragging) this.dragStart(task);
+      if (!dragging) {
+        this.dragStart(task);
+        const rect = row.getBoundingClientRect();
+        previewOffset = { x: origin.x - rect.left, y: origin.y - rect.top };
+        preview = row.cloneNode(true);
+        preview.removeAttribute("data-drop-position");
+        preview.removeClass("is-dragging");
+        preview.addClass("tm-drag-preview");
+        preview.setAttribute("aria-hidden", "true");
+        preview.inert = true;
+        preview.draggable = false;
+        preview.style.width = `${rect.width}px`;
+        preview.style.height = `${rect.height}px`;
+        (_a = row.parentElement) == null ? void 0 : _a.appendChild(preview);
+      }
+      if (preview) {
+        const left = event.clientX - previewOffset.x;
+        const top = event.clientY - previewOffset.y;
+        preview.style.left = `${left}px`;
+        preview.style.top = `${top}px`;
+        const bounds = preview.getBoundingClientRect();
+        preview.style.left = `${left + (left - bounds.left)}px`;
+        preview.style.top = `${top + (top - bounds.top)}px`;
+      }
       dragging = true;
       this.taskId = task.id;
       this.original = task;
@@ -4395,6 +4421,8 @@ var ListDragController = class {
       else this.clear();
     });
     const reset = () => {
+      preview == null ? void 0 : preview.remove();
+      preview = void 0;
       pointer = void 0;
       dragging = false;
       row.draggable = true;
