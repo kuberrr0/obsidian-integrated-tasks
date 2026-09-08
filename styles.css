@@ -552,12 +552,12 @@ button.tm-source,
 }
 
 /* Note pills are presentation only; the stored checklist syntax is unchanged. */
-/* A non-wrapping inline box keeps the entire pill background and rounded edges. */
+/* A non-wrapping inline box keeps the entire pill outline and rounded edges. */
 .tm-note-token {
   display: inline-block;
   padding: 2px 7px;
   border-radius: 999px;
-  background: var(--background-secondary-alt);
+  background: transparent;
   color: var(--text-muted);
   font-family: var(--font-interface);
   font-size: 0.85em;
@@ -927,10 +927,15 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 
 .tm-global-task-mode { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 8px; cursor: pointer; }
 
-/* Distinguish pills from light note and card surfaces without changing their size. */
-.theme-light .tm-meta,
-.theme-light .tm-progress,
-.theme-light .tm-note-token {
+/* Hollow metadata pills in task views, Reading view, and Live Preview. */
+.tm-meta,
+.tm-note-token {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent);
+}
+
+/* Distinguish progress badges from light card surfaces without changing their size. */
+.theme-light .tm-progress {
   background: color-mix(in srgb, var(--text-normal) 10%, var(--background-primary));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 12%, transparent);
 }
