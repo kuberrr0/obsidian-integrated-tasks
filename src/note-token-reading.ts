@@ -10,7 +10,8 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
   for (const item of items) {
     const content = Array.from(item.children).find((child) => child.tagName === "P") ?? item;
     if (Array.from(content.querySelectorAll(".tm-note-token")).some((pill) => pill.closest("li") === item)) continue;
-    let source = "- [ ] ";
+    const completed = item.getAttribute("data-task")?.toLowerCase() === "x" || item.classList.contains("is-checked");
+    let source = completed ? "- [x] " : "- [ ] ";
     const segments: Segment[] = [];
     const walk = (node: Node): void => {
       const element = node.nodeType === 1 ? node as HTMLElement : undefined;

@@ -5503,9 +5503,10 @@ var TaskMainView = class extends import_obsidian7.ItemView {
   }
   renderProperties(parent, properties) {
     var _a;
-    if (properties.scheduledDate) this.badge(parent, TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`);
+    const incompleteTask = "completed" in properties && !properties.completed;
+    if (properties.scheduledDate) this.badge(parent, TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : void 0);
     if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
-    if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, properties.deadline < todayIso() ? "danger" : void 0);
+    if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : void 0);
     if (properties.priority) this.badge(parent, TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
     if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) this.badge(parent, TASK_PROPERTY_ICONS.tags, tag);
   }
@@ -5690,7 +5691,8 @@ function taskTokens(line, dateFormat) {
         dateLabel,
         time,
         linkText: link == null ? void 0 : link[1],
-        display
+        display,
+        overdue: !parsed.completed && (range.kind === "scheduledDate" ? parsed.scheduledDate : parsed.deadline) < todayIso()
       };
     }
     switch (range.kind) {
@@ -5704,7 +5706,7 @@ function taskTokens(line, dateFormat) {
   });
 }
 function tokenClass(token) {
-  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}`;
+  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}`;
 }
 
 // src/note-token-editor.ts
@@ -5929,16 +5931,17 @@ function registerNoteTaskEdit(root, context, getDateFormat, open) {
 
 // src/note-token-reading.ts
 function renderNoteTokens(root, dateFormat) {
-  var _a, _b;
+  var _a, _b, _c;
   const items = Array.from(root.querySelectorAll("li.task-list-item"));
   if (root.matches("li.task-list-item")) items.unshift(root);
   for (const item of items) {
     const content = (_a = Array.from(item.children).find((child) => child.tagName === "P")) != null ? _a : item;
     if (Array.from(content.querySelectorAll(".tm-note-token")).some((pill) => pill.closest("li") === item)) continue;
-    let source = "- [ ] ";
+    const completed = ((_b = item.getAttribute("data-task")) == null ? void 0 : _b.toLowerCase()) === "x" || item.classList.contains("is-checked");
+    let source = completed ? "- [x] " : "- [ ] ";
     const segments = [];
     const walk = (node) => {
-      var _a2, _b2, _c;
+      var _a2, _b2, _c2;
       const element = node.nodeType === 1 ? node : void 0;
       if (element == null ? void 0 : element.matches("ul, ol, input, button")) return;
       if (node.nodeType === 3) {
@@ -5946,7 +5949,7 @@ function renderNoteTokens(root, dateFormat) {
         segments.push({ node, from: source.length, to: source.length + text.length, atomic: false });
         source += text;
       } else if (element == null ? void 0 : element.matches("a.internal-link")) {
-        const text = `[[${(_c = (_b2 = element.getAttribute("data-href")) != null ? _b2 : element.getAttribute("href")) != null ? _c : element.textContent}]]`;
+        const text = `[[${(_c2 = (_b2 = element.getAttribute("data-href")) != null ? _b2 : element.getAttribute("href")) != null ? _c2 : element.textContent}]]`;
         segments.push({ node, from: source.length, to: source.length + text.length, atomic: true });
         source += text;
       } else if (element == null ? void 0 : element.matches("code, strong, em, del, s, mark, a, .internal-embed")) {
@@ -5975,7 +5978,7 @@ function renderNoteTokens(root, dateFormat) {
       });
       const link = fragment.querySelector("a.internal-link");
       if (link) {
-        link.textContent = (_b = token.dateLabel) != null ? _b : link.textContent;
+        link.textContent = (_c = token.dateLabel) != null ? _c : link.textContent;
         pill.appendChild(link);
         if (token.time) pill.appendChild(document.createTextNode(` ${token.time}`));
       } else pill.textContent = token.kind === "deadline" ? token.label.replace(/^Due /, "") : token.label;

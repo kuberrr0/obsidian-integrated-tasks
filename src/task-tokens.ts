@@ -1,4 +1,4 @@
-import { formatDate } from "./date";
+import { formatDate, todayIso } from "./date";
 import { formatDuration, parseTaskLine, type ParsedTokenRange } from "./parser";
 
 export interface TaskToken extends ParsedTokenRange {
@@ -8,6 +8,7 @@ export interface TaskToken extends ParsedTokenRange {
   priority?: number;
   dateLabel?: string;
   time?: string;
+  overdue?: boolean;
   display?: { from: number; to: number; label: string; linkText?: string };
 }
 
@@ -33,7 +34,8 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
       };
       return { ...range, label: `${range.kind === "deadline" ? "Due " : ""}${value}`,
         description: `${range.kind === "deadline" ? "Deadline" : "Scheduled"}: ${value}`,
-        dateLabel, time, linkText: link?.[1], display };
+        dateLabel, time, linkText: link?.[1], display,
+        overdue: !parsed.completed && (range.kind === "scheduledDate" ? parsed.scheduledDate! : parsed.deadline!) < todayIso() };
     }
     switch (range.kind) {
       case "tags": return { ...range, label: link![1].trim(), description: `Tag: ${link![1].trim()}`, linkText: link![1] };
@@ -44,5 +46,5 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
 }
 
 export function tokenClass(token: TaskToken): string {
-  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}`;
+  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}`;
 }

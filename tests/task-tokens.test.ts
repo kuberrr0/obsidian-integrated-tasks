@@ -1,8 +1,24 @@
-import { describe, expect, it } from "vitest";
-import { taskTokens } from "../src/task-tokens";
+import { describe, expect, it, vi } from "vitest";
+import { taskTokens, tokenClass } from "../src/task-tokens";
 import { serializeTask, parseTaskLine } from "../src/parser";
 
 describe("note token pills", () => {
+  it("marks only past dates on incomplete tasks as overdue", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 8, 12));
+    try {
+      for (const checkbox of [" ", "x", "X"]) {
+        for (const [date, past] of [["2026-09-07", true], ["2026-09-08", false], ["2026-09-09", false]] as const) {
+          const tokens = taskTokens(`- [${checkbox}] Task [[${date}]] {${date}}`);
+          expect(tokens).toHaveLength(2);
+          for (const token of tokens) {
+            expect(token.overdue).toBe(checkbox === " " && past);
+            expect(tokenClass(token).includes("is-danger")).toBe(checkbox === " " && past);
+          }
+        }
+      }
+    } finally { vi.useRealTimers(); }
+  });
   it("identifies exact source ranges and labels without changing stored text", () => {
     const line = "- [ ] do this [[Sep 5, 2026]] 1h45m {[[Sep 12, 2026]]} p1";
     const tokens = taskTokens(line, "MMM D, YYYY");
