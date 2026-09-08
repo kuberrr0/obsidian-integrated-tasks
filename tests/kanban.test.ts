@@ -5,9 +5,17 @@ import { scanTasks } from "../src/parser";
 
 const tasks = scanTasks("Work.md", "- [ ] Open task p2\n- [x] Done task p1\n- [ ] Scheduled [[2027-03-28]]\n");
 describe("Kanban columns", () => {
-  it("defaults to open and completed and retains empty drop targets", () => {
-    expect(kanbanColumns([], "default").map(column => column.title)).toEqual(["Open", "Completed"]);
-    const columns = kanbanColumns(tasks, "default");
+  it("defaults to sections from note headings", () => {
+    const sectionTasks = scanTasks("Work.md", "- [ ] Unsectioned\n# Planning\n- [ ] Plan\n- [x] Planned\n## Doing\n- [ ] Build\n");
+    const columns = kanbanColumns(sectionTasks, "default");
+    expect(columns.map(column => column.title)).toEqual(["No section", "Planning", "Doing"]);
+    expect(columns.map(column => column.tasks.length)).toEqual([1, 2, 1]);
+    expect(columns).toEqual(kanbanColumns(sectionTasks, "section"));
+    expect(draftForGroup(sectionTasks[0], columns[1].target).destination).toBe("Work.md#Planning");
+  });
+  it("retains empty drop targets when grouped by status", () => {
+    expect(kanbanColumns([], "status").map(column => column.title)).toEqual(["Open", "Completed"]);
+    const columns = kanbanColumns(tasks, "status");
     expect(columns.map(column => column.tasks.length)).toEqual([2, 1]);
     expect(draftForGroup(tasks[0], columns[1].target).completed).toBe(true);
     expect(draftForGroup(tasks[1], columns[0].target).completed).toBe(false);

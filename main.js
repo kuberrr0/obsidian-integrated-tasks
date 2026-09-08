@@ -4256,7 +4256,7 @@ function draftForGroup(task, group) {
 // src/kanban.ts
 function kanbanColumns(tasks, grouping) {
   if (grouping === "none") return [{ title: "Tasks", tasks }];
-  const property = grouping === "default" ? "status" : grouping;
+  const property = grouping === "default" ? "section" : grouping;
   const groups = groupTasks(tasks, property);
   if (property === "status") return ["Open", "Completed"].map((title) => {
     var _a;
