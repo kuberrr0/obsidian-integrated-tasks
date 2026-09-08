@@ -14,6 +14,14 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.taskMode).onChange(value => this.plugin.setTaskMode(value))); }
       },
       {
+        name: "Link dates",
+        desc: "Write scheduled and deadline dates as [[date]] links. When off, write plain dates. Applies when creating or editing tasks; existing notes are not rewritten automatically.",
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.linkDates).onChange(async value => {
+          this.plugin.settings.linkDates = value;
+          await this.plugin.saveSettings();
+        })); }
+      },
+      {
         name: "Inbox note",
         desc: "Quick-created tasks are inserted into this Markdown note’s checklist.",
         render: (setting: Setting) => this.renderInboxSetting(setting)

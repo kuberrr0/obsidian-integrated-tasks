@@ -4,7 +4,7 @@ import type { TaskDraft } from "./types";
 const width = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((total, char) => total + (char === "\t" ? 4 : 1), 0);
 
 /** Parse a new task batch, retaining description bullets and relative indentation. */
-export function parseTaskTreeInput(input: string, destination: string, reference = new Date(), dateFormat?: string): TaskDraft {
+export function parseTaskTreeInput(input: string, destination: string, reference = new Date(), dateFormat?: string, linkDates = true): TaskDraft {
   const lines = input.replace(/\r\n?/g, "\n").split("\n");
   while (lines.length > 1 && !lines[lines.length - 1].trim()) lines.pop();
   if (/^\s*[-+*]\s+\[[ xX]\]\s*$/.test(lines[0])) throw new Error("Enter a title for the main task.");
@@ -33,7 +33,7 @@ export function parseTaskTreeInput(input: string, destination: string, reference
     const parsed = parseTaskInput(taskText, reference, dateFormat);
     if (!parsed?.title) throw new Error(`Enter a task title on line ${index + 1}.`);
     if (parsed.destination && parsed.destination !== main.destination) throw new Error(`Line ${index + 1}: tasks in this batch must use the main task's destination.`);
-    additionalLines.push(serializeTask({ ...parsed, indent, destination: main.destination }, dateFormat));
+    additionalLines.push(serializeTask({ ...parsed, indent, destination: main.destination }, dateFormat, linkDates));
     descriptionIndent = undefined;
   }
   if (additionalLines.length) main.additionalLines = additionalLines;

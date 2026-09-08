@@ -11,6 +11,23 @@ const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
 const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 const DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
 
+/** Plain metadata must exactly match the configured date format (or ISO). */
+function plainScheduled(text: string, reference: Date, dateFormat?: string): RegExpExecArray | null {
+  const starts = /(?:^|\s)\S+/g;
+  let start: RegExpExecArray | null;
+  while ((start = starts.exec(text))) {
+    const value = text.slice(start.index).trim();
+    if (/[\[\]{}]/.test(value)) continue;
+    const parsed = parseDateTimeExpression(value, reference, dateFormat);
+    if (!parsed) continue;
+    const time = parsed.time ? ` ${parsed.time}` : "";
+    if (value !== `${formatDate(parsed.date, dateFormat)}${time}` && value !== `${parsed.date}${time}`) continue;
+    const match: RegExpExecArray = Object.assign([text.slice(start.index), value] as [string, string], { index: start.index, input: text });
+    return match;
+  }
+  return null;
+}
+
 export interface ParsedTokenRange {
   kind: "tags" | "scheduledDate" | "deadline" | "durationMinutes" | "priority";
   from: number;
@@ -108,7 +125,7 @@ export function parseTaskLine(
         consumed.add("duration");
         changed = true;
       }
-    } else if (!consumed.has("scheduled") && (match = SCHEDULED.exec(remainder))) {
+    } else if (!consumed.has("scheduled") && (match = SCHEDULED.exec(remainder) ?? plainScheduled(remainder, reference, dateFormat))) {
       const date = parseDateTimeExpression(match[1], reference, dateFormat);
       if (date) {
         metadata.scheduledDate = date.date;
@@ -163,13 +180,14 @@ export function parseTaskInput(
   return parseTaskLine(normalized, reference, dateFormat, naturalDates);
 }
 
-export function serializeTask(draft: TaskDraft, dateFormat?: string): string {
+export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates = true): string {
   const indent = " ".repeat(Math.max(0, draft.indent));
   const title = draft.title.trim();
+  const dateText = (date: string): string => linkDates ? `[[${formatDate(date, dateFormat)}]]` : formatDate(date, dateFormat);
   const metadata = [
-    draft.scheduledDate ? `[[${formatDate(draft.scheduledDate, dateFormat)}]]${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
+    draft.scheduledDate ? `${dateText(draft.scheduledDate)}${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
-    draft.deadline ? `{[[${formatDate(draft.deadline, dateFormat)}]]${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
+    draft.deadline ? `{${dateText(draft.deadline)}${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
     draft.priority ? `p${draft.priority}` : "",
     formatTags(draft.tags)
   ].filter(Boolean);
@@ -177,10 +195,10 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string): string {
   return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
 }
 
-export function serializeTaskInput(draft: TaskDraft, dateFormat?: string): string {
+export function serializeTaskInput(draft: TaskDraft, dateFormat?: string, linkDates = true): string {
   const { path, heading } = splitDestination(draft.destination);
   const destination = destinationString(path.replace(/\.md$/i, ""), heading);
-  return `${serializeTask(draft, dateFormat)} ~[[${destination}]]`;
+  return `${serializeTask(draft, dateFormat, linkDates)} ~[[${destination}]]`;
 }
 
 export function scanTasks(path: string, content: string, reference = new Date(), dateFormat?: string): Task[] {

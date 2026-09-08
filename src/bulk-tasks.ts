@@ -14,6 +14,7 @@ export interface BulkTaskOptions {
   placement?: ListPlacement;
   position?: TaskManagerSettings["newTaskPosition"];
   dateFormat?: string;
+  linkDates?: boolean;
 }
 
 /** Plan every write before touching the vault, using original offsets throughout. */
@@ -47,7 +48,7 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
   const lines = new Map([...contents].map(([path, content]) => [path, content.split(/\r?\n/).map(line => [line])]));
   // Apply properties to every explicitly selected task, including selected children.
   if (!options.delete) for (const entry of entries) {
-    if (entry.draft) lines.get(entry.task.path)![entry.block.start][0] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat);
+    if (entry.draft) lines.get(entry.task.path)![entry.block.start][0] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat, options.linkDates);
     if (entry.draft?.description !== undefined && entry.draft.description !== (entry.task.description ?? "")) {
       if ((entry.block.description ?? "") !== (entry.task.description ?? "")) throw new Error("Task description changed. Refresh and try again.");
       replaceDescription(lines.get(entry.task.path)!, entry.block.start, entry.block.descriptionLines ?? [], entry.draft.description, entry.block.indent);
@@ -56,7 +57,7 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
   const payloads = roots.map(entry => ({
     entry,
     lines: options.delete ? [] : rewriteBlock({ ...entry.block, lines: lines.get(entry.task.path)!.slice(entry.block.start, entry.block.end).flat() },
-      entry.draft!, anchor ? anchor.indent + (options.placement === "child" ? 2 : 0) : 0, options.dateFormat)
+      entry.draft!, anchor ? anchor.indent + (options.placement === "child" ? 2 : 0) : 0, options.dateFormat, options.linkDates)
   }));
   for (const [path, fileLines] of lines) {
     for (const entry of roots.filter(item => item.task.path === path).sort((a, b) => b.block.start - a.block.start)) {

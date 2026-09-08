@@ -3099,6 +3099,21 @@ var DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 var SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
 var DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 var DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
+function plainScheduled(text, reference, dateFormat) {
+  const starts = /(?:^|\s)\S+/g;
+  let start;
+  while (start = starts.exec(text)) {
+    const value = text.slice(start.index).trim();
+    if (/[\[\]{}]/.test(value)) continue;
+    const parsed = parseDateTimeExpression(value, reference, dateFormat);
+    if (!parsed) continue;
+    const time = parsed.time ? ` ${parsed.time}` : "";
+    if (value !== `${formatDate(parsed.date, dateFormat)}${time}` && value !== `${parsed.date}${time}`) continue;
+    const match = Object.assign([text.slice(start.index), value], { index: start.index, input: text });
+    return match;
+  }
+  return null;
+}
 function normalizeDestination(value) {
   try {
     const { path, heading } = splitDestination(value);
@@ -3124,7 +3139,7 @@ function formatDuration(minutes) {
   return `${hours ? `${hours}h` : ""}${remainder ? `${remainder}m` : ""}`;
 }
 function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat, naturalDates = false, tokenRanges) {
-  var _a;
+  var _a, _b;
   const checkbox = CHECKBOX.exec(line);
   if (!checkbox) return void 0;
   let remainder = checkbox[3].trimEnd();
@@ -3175,7 +3190,7 @@ function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat,
         consumed.add("duration");
         changed = true;
       }
-    } else if (!consumed.has("scheduled") && (match = SCHEDULED.exec(remainder))) {
+    } else if (!consumed.has("scheduled") && (match = (_b = SCHEDULED.exec(remainder)) != null ? _b : plainScheduled(remainder, reference, dateFormat))) {
       const date = parseDateTimeExpression(match[1], reference, dateFormat);
       if (date) {
         metadata.scheduledDate = date.date;
@@ -3220,23 +3235,24 @@ function parseTaskInput(input, reference = /* @__PURE__ */ new Date(), dateForma
   const normalized = /^\s*-\s+\[[ xX]\]\s+/.test(input) ? input : `- [ ] ${input}`;
   return parseTaskLine(normalized, reference, dateFormat, naturalDates);
 }
-function serializeTask(draft, dateFormat) {
+function serializeTask(draft, dateFormat, linkDates = true) {
   const indent = " ".repeat(Math.max(0, draft.indent));
   const title = draft.title.trim();
+  const dateText = (date) => linkDates ? `[[${formatDate(date, dateFormat)}]]` : formatDate(date, dateFormat);
   const metadata = [
-    draft.scheduledDate ? `[[${formatDate(draft.scheduledDate, dateFormat)}]]${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
+    draft.scheduledDate ? `${dateText(draft.scheduledDate)}${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
-    draft.deadline ? `{[[${formatDate(draft.deadline, dateFormat)}]]${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
+    draft.deadline ? `{${dateText(draft.deadline)}${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
     draft.priority ? `p${draft.priority}` : "",
     formatTags(draft.tags)
   ].filter(Boolean);
   const metadataGap = metadata.length ? " " : "";
   return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
 }
-function serializeTaskInput(draft, dateFormat) {
+function serializeTaskInput(draft, dateFormat, linkDates = true) {
   const { path, heading } = splitDestination(draft.destination);
   const destination = destinationString(path.replace(/\.md$/i, ""), heading);
-  return `${serializeTask(draft, dateFormat)} ~[[${destination}]]`;
+  return `${serializeTask(draft, dateFormat, linkDates)} ~[[${destination}]]`;
 }
 function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFormat) {
   var _a, _b;
@@ -5591,7 +5607,7 @@ var TaskModeController = class {
 
 // src/note-date-input.ts
 var import_state = require("@codemirror/state");
-function noteDateChanges(text, dateFormat, reference = /* @__PURE__ */ new Date()) {
+function noteDateChanges(text, dateFormat, reference = /* @__PURE__ */ new Date(), linkDates = true) {
   var _a;
   const prose = text.replace(/(`+)[\s\S]*?\1|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\{(?!@)[^}]*\}/g, (match2) => " ".repeat(match2.length));
   const changes = [];
@@ -5611,7 +5627,8 @@ function noteDateChanges(text, dateFormat, reference = /* @__PURE__ */ new Date(
       const dateTime = parseDateTimeExpression(expression, reference, dateFormat);
       const date = (_a = dateTime == null ? void 0 : dateTime.date) != null ? _a : parseDateExpression(expression, reference, dateFormat);
       if (!date) continue;
-      changes.push({ from, to: from + 1 + length, insert: `[[${formatDate(date, dateFormat)}]]${(dateTime == null ? void 0 : dateTime.time) ? ` ${dateTime.time}` : ""}` });
+      const label = formatDate(date, dateFormat);
+      changes.push({ from, to: from + 1 + length, insert: `${linkDates ? `[[${label}]]` : label}${(dateTime == null ? void 0 : dateTime.time) ? ` ${dateTime.time}` : ""}` });
       pattern.lastIndex = from + 1 + length;
       break;
     }
@@ -5630,7 +5647,7 @@ function orderNoteProperties(text, dateFormat, reference) {
   }
   return text;
 }
-function noteDateInput(getDateFormat, isTaskMode) {
+function noteDateInput(getDateFormat, isTaskMode, getLinkDates = () => true) {
   return import_state.EditorState.transactionFilter.of((transaction) => {
     if (isTaskMode() || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
     if (!transaction.selection && !transaction.docChanged) return transaction;
@@ -5647,7 +5664,7 @@ function noteDateInput(getDateFormat, isTaskMode) {
       if (!candidates.has(line + 1) || !/^\s*-\s+\[[ xX]\]\s/.test(text)) continue;
       const { from } = transaction.newDoc.line(line + 1);
       const dateFormat = getDateFormat();
-      const resolvedDates = noteDateChanges(text, dateFormat, reference);
+      const resolvedDates = noteDateChanges(text, dateFormat, reference, getLinkDates());
       let resolved = text;
       for (const change of resolvedDates.reverse()) {
         resolved = resolved.slice(0, change.from) + change.insert + resolved.slice(change.to);
@@ -5676,11 +5693,12 @@ function taskTokens(line, dateFormat) {
       const dateLabel = formatDate(range.kind === "scheduledDate" ? parsed.scheduledDate : parsed.deadline, dateFormat);
       const time = range.kind === "scheduledDate" ? parsed.scheduledTime : parsed.deadlineTime;
       const value = `${dateLabel}${time ? ` ${time}` : ""}`;
-      const original = (_a = link == null ? void 0 : link[1]) != null ? _a : source.slice(1, -1).trim();
+      const braced = range.kind === "deadline";
+      const original = (_a = link == null ? void 0 : link[1]) != null ? _a : braced ? source.slice(1, -1).trim() : source;
       const label = link ? dateLabel : value;
       const display = original === label ? void 0 : {
-        from: range.from + ((_b = link == null ? void 0 : link.index) != null ? _b : 1),
-        to: link ? range.from + link.index + link[0].length : range.to - 1,
+        from: range.from + ((_b = link == null ? void 0 : link.index) != null ? _b : braced ? 1 : 0),
+        to: link ? range.from + link.index + link[0].length : range.to - (braced ? 1 : 0),
         label,
         linkText: link == null ? void 0 : link[1]
       };
@@ -6010,9 +6028,9 @@ function replaceDescription(slots, line, ownedLines, text, indent) {
   for (const owned of ownedLines) slots[owned] = [];
   slots[line].push(...descriptionLines(text, indent));
 }
-function newTaskLines(draft, dateFormat) {
+function newTaskLines(draft, dateFormat, linkDates = true) {
   var _a, _b;
-  const lines = [serializeTask({ ...draft, indent: 0 }, dateFormat), ...(_a = draft.additionalLines) != null ? _a : []];
+  const lines = [serializeTask({ ...draft, indent: 0 }, dateFormat, linkDates), ...(_a = draft.additionalLines) != null ? _a : []];
   if (draft.description === void 0) return lines;
   const task = scanTasks("", lines.join("\n"), /* @__PURE__ */ new Date(), dateFormat)[0];
   const slots = lines.map((line) => [line]);
@@ -6025,7 +6043,7 @@ var width = (line) => {
   var _a, _b;
   return [...(_b = (_a = /^[ \t]*/.exec(line)) == null ? void 0 : _a[0]) != null ? _b : ""].reduce((total, char) => total + (char === "	" ? 4 : 1), 0);
 };
-function parseTaskTreeInput(input, destination, reference = /* @__PURE__ */ new Date(), dateFormat) {
+function parseTaskTreeInput(input, destination, reference = /* @__PURE__ */ new Date(), dateFormat, linkDates = true) {
   var _a;
   const lines = input.replace(/\r\n?/g, "\n").split("\n");
   while (lines.length > 1 && !lines[lines.length - 1].trim()) lines.pop();
@@ -6058,7 +6076,7 @@ function parseTaskTreeInput(input, destination, reference = /* @__PURE__ */ new 
     const parsed = parseTaskInput(taskText, reference, dateFormat);
     if (!(parsed == null ? void 0 : parsed.title)) throw new Error(`Enter a task title on line ${index + 1}.`);
     if (parsed.destination && parsed.destination !== main.destination) throw new Error(`Line ${index + 1}: tasks in this batch must use the main task's destination.`);
-    additionalLines.push(serializeTask({ ...parsed, indent, destination: main.destination }, dateFormat));
+    additionalLines.push(serializeTask({ ...parsed, indent, destination: main.destination }, dateFormat, linkDates));
     descriptionIndent = void 0;
   }
   if (additionalLines.length) main.additionalLines = additionalLines;
@@ -6169,8 +6187,8 @@ var TaskEditorModal = class extends import_obsidian11.Modal {
       this.descriptionDirty = true;
       if (this.options.task) return;
       try {
-        const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat);
-        const lines = newTaskLines({ ...draft, description: this.descriptionInput.value }, this.options.dateFormat);
+        const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates);
+        const lines = newTaskLines({ ...draft, description: this.descriptionInput.value }, this.options.dateFormat, this.options.settings.linkDates);
         this.rawInput.value = [this.serializeDraft(draft), ...lines.slice(1)].join("\n");
         this.lastRawDescription = (_b2 = (_a2 = scanTasks("", lines.join("\n"), /* @__PURE__ */ new Date(), this.options.dateFormat)[0]) == null ? void 0 : _a2.description) != null ? _b2 : "";
         this.rawDirty = true;
@@ -6226,8 +6244,8 @@ var TaskEditorModal = class extends import_obsidian11.Modal {
       error.empty();
       if (!this.options.task) {
         try {
-          const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat);
-          const description2 = (_b2 = (_a2 = scanTasks("", newTaskLines(draft, this.options.dateFormat).join("\n"), /* @__PURE__ */ new Date(), this.options.dateFormat)[0]) == null ? void 0 : _a2.description) != null ? _b2 : "";
+          const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates);
+          const description2 = (_b2 = (_a2 = scanTasks("", newTaskLines(draft, this.options.dateFormat, this.options.settings.linkDates).join("\n"), /* @__PURE__ */ new Date(), this.options.dateFormat)[0]) == null ? void 0 : _a2.description) != null ? _b2 : "";
           if (!this.descriptionDirty || description2 !== this.lastRawDescription) {
             this.descriptionInput.value = description2;
             this.descriptionDirty = false;
@@ -6320,11 +6338,11 @@ var TaskEditorModal = class extends import_obsidian11.Modal {
     this.contentEl.empty();
   }
   serializeDraft(draft) {
-    return draft.destination === this.options.settings.inboxPath ? serializeTask(draft, this.options.dateFormat) : serializeTaskInput(draft, this.options.dateFormat);
+    return draft.destination === this.options.settings.inboxPath ? serializeTask(draft, this.options.dateFormat, this.options.settings.linkDates) : serializeTaskInput(draft, this.options.dateFormat, this.options.settings.linkDates);
   }
   readRaw() {
     var _a;
-    if (!this.options.task) return { ...parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat), ...this.descriptionPatch() };
+    if (!this.options.task) return { ...parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates), ...this.descriptionPatch() };
     const parsed = parseTaskInput(this.rawInput.value.trimEnd(), /* @__PURE__ */ new Date(), this.options.dateFormat, true);
     if (!parsed || !parsed.title) {
       new import_obsidian11.Notice("Raw text must be one valid checklist line with a title.");
@@ -6361,7 +6379,7 @@ var TaskEditorModal = class extends import_obsidian11.Modal {
       if (notify) new import_obsidian11.Notice(cause instanceof Error ? cause.message : "Invalid tags.");
       return void 0;
     }
-    const additionalLines = notify && !this.options.task ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat).additionalLines : void 0;
+    const additionalLines = notify && !this.options.task ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates).additionalLines : void 0;
     return {
       ...additionalLines ? { additionalLines } : {},
       ...this.descriptionPatch(),
@@ -6620,11 +6638,11 @@ function toggleTaskInContent(content, task, completed) {
   lines[liveLine] = lines[liveLine].replace(/^(\s*-\s+\[)[ xX](\])/, `$1${completed ? "x" : " "}$2`);
   return lines.join(eol);
 }
-function updateTaskInContent(content, task, draft, dateFormat) {
+function updateTaskInContent(content, task, draft, dateFormat, linkDates = true) {
   const eol = lineEnding(content);
   const lines = content.split(/\r?\n/);
   const liveLine = findLiveLine(lines, task);
-  lines[liveLine] = serializeTask({ ...draft, indent: task.indent }, dateFormat);
+  lines[liveLine] = serializeTask({ ...draft, indent: task.indent }, dateFormat, linkDates);
   return lines.join(eol);
 }
 function removeTaskBlockFromContent(content, task, blockLength) {
@@ -6697,8 +6715,8 @@ function liveTaskBlock(content, task, dateFormat) {
   if (live.endLine >= end) throw new Error("Task structure changed. Check its indentation in the note before moving it.");
   return { start, end, indent: live.indent, lines: lines.slice(start, end), description: live.description, descriptionLines: live.descriptionLines };
 }
-function rewriteBlock(block, draft, indent, dateFormat) {
-  return [serializeTask({ ...draft, indent }, dateFormat), ...block.lines.slice(1).map((line) => {
+function rewriteBlock(block, draft, indent, dateFormat, linkDates = true) {
+  return [serializeTask({ ...draft, indent }, dateFormat, linkDates), ...block.lines.slice(1).map((line) => {
     if (!line.trim()) return line;
     return " ".repeat(Math.max(0, indentation(line) - block.indent + indent)) + line.replace(/^[ \t]*/, "");
   })];
@@ -6747,7 +6765,7 @@ function planBulkTasks(contents, changes, options = {}) {
   }
   const lines = new Map([...contents].map(([path, content]) => [path, content.split(/\r?\n/).map((line) => [line])]));
   if (!options.delete) for (const entry of entries) {
-    if (entry.draft) lines.get(entry.task.path)[entry.block.start][0] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat);
+    if (entry.draft) lines.get(entry.task.path)[entry.block.start][0] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat, options.linkDates);
     if (((_a = entry.draft) == null ? void 0 : _a.description) !== void 0 && entry.draft.description !== ((_b = entry.task.description) != null ? _b : "")) {
       if (((_c = entry.block.description) != null ? _c : "") !== ((_d = entry.task.description) != null ? _d : "")) throw new Error("Task description changed. Refresh and try again.");
       replaceDescription(lines.get(entry.task.path), entry.block.start, (_e = entry.block.descriptionLines) != null ? _e : [], entry.draft.description, entry.block.indent);
@@ -6759,7 +6777,8 @@ function planBulkTasks(contents, changes, options = {}) {
       { ...entry.block, lines: lines.get(entry.task.path).slice(entry.block.start, entry.block.end).flat() },
       entry.draft,
       anchor ? anchor.indent + (options.placement === "child" ? 2 : 0) : 0,
-      options.dateFormat
+      options.dateFormat,
+      options.linkDates
     )
   }));
   for (const [path, fileLines] of lines) {
@@ -6792,10 +6811,11 @@ function planBulkTasks(contents, changes, options = {}) {
 // src/task-store.ts
 var import_obsidian14 = require("obsidian");
 var TaskStore = class {
-  constructor(app, getDateFormat, getNewTaskPosition = () => "top") {
+  constructor(app, getDateFormat, getNewTaskPosition = () => "top", getLinkDates = () => true) {
     this.app = app;
     this.getDateFormat = getDateFormat;
     this.getNewTaskPosition = getNewTaskPosition;
+    this.getLinkDates = getLinkDates;
   }
   async toggle(task, completed) {
     const file = this.requireFile(task.path);
@@ -6813,7 +6833,7 @@ var TaskStore = class {
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);
     await this.app.vault.process(
       file,
-      (content) => insertIntoDestination(content, newTaskLines(draft, this.getDateFormat()), heading, this.getNewTaskPosition())
+      (content) => insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition())
     );
   }
   async update(task, draft) {
@@ -6828,7 +6848,7 @@ var TaskStore = class {
       return;
     }
     const file = this.requireFile(task.path);
-    await this.app.vault.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat()));
+    await this.app.vault.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates()));
   }
   async relocate(task, anchor, placement, draft) {
     const source = this.requireFile(task.path);
@@ -6838,7 +6858,7 @@ var TaskStore = class {
         const block2 = liveTaskBlock(content2, task, this.getDateFormat());
         const destination = liveTaskBlock(content2, anchor, this.getDateFormat());
         const indent = destination.indent + (placement === "child" ? 2 : 0);
-        return placeTaskBlock(content2, task, anchor, placement, rewriteBlock(block2, draft, indent, this.getDateFormat()), this.getDateFormat());
+        return placeTaskBlock(content2, task, anchor, placement, rewriteBlock(block2, draft, indent, this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
       });
       return;
     }
@@ -6849,7 +6869,7 @@ var TaskStore = class {
     await this.app.vault.process(target, (current) => {
       before = current;
       const destination = liveTaskBlock(current, anchor, this.getDateFormat());
-      after = placeTaskBlock(current, void 0, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? 2 : 0), this.getDateFormat()), this.getDateFormat());
+      after = placeTaskBlock(current, void 0, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? 2 : 0), this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
       return after;
     });
     try {
@@ -6875,7 +6895,7 @@ var TaskStore = class {
         const block2 = liveTaskBlock(content2, task, this.getDateFormat());
         return insertIntoDestination(
           removeTaskBlockFromContent(content2, task, block2.lines.length),
-          rewriteBlock(block2, draft, 0, this.getDateFormat()),
+          rewriteBlock(block2, draft, 0, this.getDateFormat(), this.getLinkDates()),
           heading,
           this.getNewTaskPosition()
         );
@@ -6888,7 +6908,7 @@ var TaskStore = class {
     let after = "";
     await this.app.vault.process(target, (current) => {
       before = current;
-      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat()), heading, this.getNewTaskPosition());
+      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition());
       return after;
     });
     try {
@@ -6925,7 +6945,7 @@ var TaskStore = class {
       if (!files.has(path)) files.set(path, heading ? this.requireFile(path) : await this.ensureFile(path));
     }
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)])));
-    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition() });
+    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates() });
     const written = [];
     try {
       for (const [path, content] of after) {
@@ -6978,6 +6998,7 @@ var TaskStore = class {
 // src/types.ts
 var DEFAULT_SETTINGS = {
   taskMode: false,
+  linkDates: true,
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: true,
   wrapKanbanTaskTitles: true,
@@ -7000,6 +7021,16 @@ var TaskManagerSettingTab = class extends import_obsidian15.PluginSettingTab {
         desc: "Open project notes in task view across all tabs. Turning this off restores their Markdown views.",
         render: (setting) => {
           setting.addToggle((toggle) => toggle.setValue(this.plugin.settings.taskMode).onChange((value) => this.plugin.setTaskMode(value)));
+        }
+      },
+      {
+        name: "Link dates",
+        desc: "Write scheduled and deadline dates as [[date]] links. When off, write plain dates. Applies when creating or editing tasks; existing notes are not rewritten automatically.",
+        render: (setting) => {
+          setting.addToggle((toggle) => toggle.setValue(this.plugin.settings.linkDates).onChange(async (value) => {
+            this.plugin.settings.linkDates = value;
+            await this.plugin.saveSettings();
+          }));
         }
       },
       {
@@ -7072,10 +7103,10 @@ var TaskManagerPlugin = class extends import_obsidian16.Plugin {
   async onload() {
     await this.loadSettings();
     this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat());
-    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition);
+    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates);
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
-    this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode));
+    this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), (task) => this.openEditor({ mode: "all", task })));
     this.registerMarkdownPostProcessor((element, context) => {

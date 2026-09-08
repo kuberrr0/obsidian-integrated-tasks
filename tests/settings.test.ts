@@ -39,7 +39,7 @@ import { TaskManagerSettingTab } from "../src/settings";
 function setup() {
   rows.length = 0;
   const plugin = {
-    settings: { taskMode: false, wrapTaskTitles: false, wrapCalendarTaskTitles: true, wrapKanbanTaskTitles: true, inboxPath: "Tasks.md", newTaskPosition: "top" },
+    settings: { taskMode: false, linkDates: true, wrapTaskTitles: false, wrapCalendarTaskTitles: true, wrapKanbanTaskTitles: true, inboxPath: "Tasks.md", newTaskPosition: "top" },
     saveSettings: vi.fn().mockResolvedValue(undefined),
     refreshViews: vi.fn(),
     setTaskMode: vi.fn().mockResolvedValue(undefined)
@@ -52,7 +52,7 @@ describe("settings compatibility", () => {
   it("provides searchable names and descriptions without rendering or saving during indexing", () => {
     const { tab, plugin } = setup();
     const definitions = tab.getSettingDefinitions();
-    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Inbox note", "New task position", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
+    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Link dates", "Inbox note", "New task position", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();
@@ -105,6 +105,11 @@ describe("settings compatibility", () => {
     expect(plugin.settings.wrapKanbanTaskTitles).toBe(false);
     expect(plugin.settings.wrapTaskTitles).toBe(true);
     expect(plugin.saveSettings).toHaveBeenCalledTimes(7);
+    const links = rows.find(({ name }) => name === "Link dates")!;
+    expect(links.value).toBe(true);
+    await links.change!(false);
+    expect(plugin.settings.linkDates).toBe(false);
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(8);
     expect(plugin.refreshViews).toHaveBeenCalledTimes(5);
   });
 });

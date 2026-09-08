@@ -20,8 +20,8 @@ export function liveTaskBlock(content: string, task: Task, dateFormat?: string):
   if (live.endLine >= end) throw new Error("Task structure changed. Check its indentation in the note before moving it.");
   return { start, end, indent: live.indent, lines: lines.slice(start, end), description: live.description, descriptionLines: live.descriptionLines };
 }
-export function rewriteBlock(block: ReturnType<typeof liveTaskBlock>, draft: TaskDraft, indent: number, dateFormat?: string): string[] {
-  return [serializeTask({ ...draft, indent }, dateFormat), ...block.lines.slice(1).map(line => {
+export function rewriteBlock(block: ReturnType<typeof liveTaskBlock>, draft: TaskDraft, indent: number, dateFormat?: string, linkDates = true): string[] {
+  return [serializeTask({ ...draft, indent }, dateFormat, linkDates), ...block.lines.slice(1).map(line => {
     if (!line.trim()) return line;
     return " ".repeat(Math.max(0, indentation(line) - block.indent + indent)) + line.replace(/^[ \t]*/, "");
   })];

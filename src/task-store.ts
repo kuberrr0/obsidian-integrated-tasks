@@ -17,7 +17,8 @@ export class TaskStore {
   constructor(
     private readonly app: App,
     private readonly getDateFormat: () => string,
-    private readonly getNewTaskPosition: () => TaskManagerSettings["newTaskPosition"] = () => "top"
+    private readonly getNewTaskPosition: () => TaskManagerSettings["newTaskPosition"] = () => "top",
+    private readonly getLinkDates: () => boolean = () => true
   ) {}
 
   async toggle(task: Task, completed: boolean): Promise<void> {
@@ -37,7 +38,7 @@ export class TaskStore {
     const { path, heading } = splitDestination(draft.destination);
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);
     await this.app.vault.process(file, (content) =>
-      insertIntoDestination(content, newTaskLines(draft, this.getDateFormat()), heading, this.getNewTaskPosition())
+      insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition())
     );
   }
 
@@ -53,7 +54,7 @@ export class TaskStore {
     }
 
     const file = this.requireFile(task.path);
-    await this.app.vault.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat()));
+    await this.app.vault.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates()));
   }
 
   async relocate(task: Task, anchor: Task, placement: ListPlacement, draft: TaskDraft): Promise<void> {
@@ -64,7 +65,7 @@ export class TaskStore {
         const block = liveTaskBlock(content, task, this.getDateFormat());
         const destination = liveTaskBlock(content, anchor, this.getDateFormat());
         const indent = destination.indent + (placement === "child" ? 2 : 0);
-        return placeTaskBlock(content, task, anchor, placement, rewriteBlock(block, draft, indent, this.getDateFormat()), this.getDateFormat());
+        return placeTaskBlock(content, task, anchor, placement, rewriteBlock(block, draft, indent, this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
       });
       return;
     }
@@ -75,7 +76,7 @@ export class TaskStore {
     await this.app.vault.process(target, current => {
       before = current;
       const destination = liveTaskBlock(current, anchor, this.getDateFormat());
-      after = placeTaskBlock(current, undefined, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? 2 : 0), this.getDateFormat()), this.getDateFormat());
+      after = placeTaskBlock(current, undefined, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? 2 : 0), this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
       return after;
     });
     try {
@@ -101,7 +102,7 @@ export class TaskStore {
       await this.app.vault.process(source, content => {
         const block = liveTaskBlock(content, task, this.getDateFormat());
         return insertIntoDestination(removeTaskBlockFromContent(content, task, block.lines.length),
-          rewriteBlock(block, draft, 0, this.getDateFormat()), heading, this.getNewTaskPosition());
+          rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition());
       });
       return;
     }
@@ -111,7 +112,7 @@ export class TaskStore {
     let after = "";
     await this.app.vault.process(target, current => {
       before = current;
-      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat()), heading, this.getNewTaskPosition());
+      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition());
       return after;
     });
     try {
@@ -152,7 +153,7 @@ export class TaskStore {
       if (!files.has(path)) files.set(path, heading ? this.requireFile(path) : await this.ensureFile(path));
     }
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
-    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition() });
+    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates() });
     const written: string[] = [];
     try {
       for (const [path, content] of after) {

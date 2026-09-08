@@ -3,7 +3,7 @@ import { TFile, type App } from "obsidian";
 import { TaskStore } from "../src/task-store";
 import { scanTasks } from "../src/parser";
 
-function setup(content: string, position: "top" | "bottom" = "top") {
+function setup(content: string, position: "top" | "bottom" = "top", linkDates = true) {
   const file = Object.assign(new TFile(), { path: "Project.md" });
   let text = content;
   const app = { vault: {
@@ -11,7 +11,7 @@ function setup(content: string, position: "top" | "bottom" = "top") {
     read: async () => text,
     process: async (_file: TFile, update: (content: string) => string) => { text = update(text); }
   } } as unknown as App;
-  return { store: new TaskStore(app, () => "YYYY-MM-DD", () => position), read: () => text };
+  return { store: new TaskStore(app, () => "YYYY-MM-DD", () => position, () => linkDates), read: () => text };
 }
 const draft = { title: "New", completed: false, indent: 0, destination: "Project.md#Plan" };
 
@@ -117,4 +117,18 @@ it("edits and clears a parent's description without removing its children or the
   expect(read()).toBe("## Plan\n- [ ] New\n  - Changed\n  - Second line\n  - [ ] Child\n    - Child note\n- [ ] Keep\n");
   await store.update(scanTasks("Project.md", read())[0], { ...draft, description: "" });
   expect(read()).toBe("## Plan\n- [ ] New\n  - [ ] Child\n    - Child note\n- [ ] Keep\n");
+});
+
+
+it("uses unlinked dates for creation, updates and bulk edits", async () => {
+  const { store, read } = setup("# Plan", "top", false);
+  await store.create({ ...draft, scheduledDate: "2026-09-08", deadline: "2026-09-10" });
+  expect(read()).toContain("New 2026-09-08 {2026-09-10}");
+  let task = scanTasks("Project.md", read())[0];
+  await store.update(task, { ...draft, scheduledDate: "2026-09-09" });
+  expect(read()).toContain("New 2026-09-09");
+  task = scanTasks("Project.md", read())[0];
+  await store.bulkUpdate([task], { deadline: "2026-09-11" });
+  expect(read()).toContain("New 2026-09-09 {2026-09-11}");
+  expect(read()).not.toContain("[[");
 });

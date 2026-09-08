@@ -24,11 +24,12 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
       const dateLabel = formatDate((range.kind === "scheduledDate" ? parsed.scheduledDate : parsed.deadline)!, dateFormat);
       const time = range.kind === "scheduledDate" ? parsed.scheduledTime : parsed.deadlineTime;
       const value = `${dateLabel}${time ? ` ${time}` : ""}`;
-      const original = link?.[1] ?? source.slice(1, -1).trim();
+      const braced = range.kind === "deadline";
+      const original = link?.[1] ?? (braced ? source.slice(1, -1).trim() : source);
       const label = link ? dateLabel : value;
       const display = original === label ? undefined : {
-        from: range.from + (link?.index ?? 1),
-        to: link ? range.from + link.index + link[0].length : range.to - 1,
+        from: range.from + (link?.index ?? (braced ? 1 : 0)),
+        to: link ? range.from + link.index + link[0].length : range.to - (braced ? 1 : 0),
         label,
         linkText: link?.[1]
       };

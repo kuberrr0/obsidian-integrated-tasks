@@ -333,3 +333,11 @@ describe("task descriptions", () => {
     expect(tasks[1].description).toBeUndefined();
   });
 });
+
+it.each(["YYYY-MM-DD", "DD/MM/YYYY", "MMM D, YYYY"])("round-trips unlinked dates in %s format", format => {
+  const draft = { title: "Plan", completed: false, indent: 0, destination: "Inbox.md", scheduledDate: "2026-09-08", scheduledTime: "09:30", deadline: "2026-09-10", deadlineTime: "17:00", priority: 2 as const };
+  const plain = serializeTask(draft, format, false);
+  expect(plain).not.toContain("[[");
+  expect(parseTaskLine(plain, reference, format)).toMatchObject({ title: "Plan", scheduledDate: draft.scheduledDate, scheduledTime: draft.scheduledTime, deadline: draft.deadline, deadlineTime: draft.deadlineTime, priority: 2 });
+  expect(serializeTask(draft, format)).toContain("[[");
+});

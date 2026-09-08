@@ -24,8 +24,8 @@ export function replaceDescription(slots: string[][], line: number, ownedLines: 
   slots[line].push(...descriptionLines(text, indent));
 }
 
-export function newTaskLines(draft: TaskDraft, dateFormat?: string): string[] {
-  const lines = [serializeTask({ ...draft, indent: 0 }, dateFormat), ...(draft.additionalLines ?? [])];
+export function newTaskLines(draft: TaskDraft, dateFormat?: string, linkDates = true): string[] {
+  const lines = [serializeTask({ ...draft, indent: 0 }, dateFormat, linkDates), ...(draft.additionalLines ?? [])];
   if (draft.description === undefined) return lines;
   const task = scanTasks("", lines.join("\n"), new Date(), dateFormat)[0];
   const slots = lines.map(line => [line]);

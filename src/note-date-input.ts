@@ -4,7 +4,7 @@ import { parseTaskLine, type ParsedTokenRange } from "./parser";
 import { bodyLines } from "./structure";
 
 /** Resolve explicit @ dates while leaving links, code and ordinary prose alone. */
-export function noteDateChanges(text: string, dateFormat: string, reference = new Date()): { from: number; to: number; insert: string }[] {
+export function noteDateChanges(text: string, dateFormat: string, reference = new Date(), linkDates = true): { from: number; to: number; insert: string }[] {
   const prose = text.replace(/(`+)[\s\S]*?\1|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\{(?!@)[^}]*\}/g, match => " ".repeat(match.length));
   const changes: { from: number; to: number; insert: string }[] = [];
   const pattern = /(^|\s|\{)@/g;
@@ -24,7 +24,8 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
       const dateTime = parseDateTimeExpression(expression, reference, dateFormat);
       const date = dateTime?.date ?? parseDateExpression(expression, reference, dateFormat);
       if (!date) continue;
-      changes.push({ from, to: from + 1 + length, insert: `[[${formatDate(date, dateFormat)}]]${dateTime?.time ? ` ${dateTime.time}` : ""}` });
+      const label = formatDate(date, dateFormat);
+      changes.push({ from, to: from + 1 + length, insert: `${linkDates ? `[[${label}]]` : label}${dateTime?.time ? ` ${dateTime.time}` : ""}` });
       pattern.lastIndex = from + 1 + length;
       break;
     }
@@ -48,7 +49,7 @@ function orderNoteProperties(text: string, dateFormat: string, reference: Date):
 }
 
 /** Resolve dates and order properties when the caret leaves a task line (including Enter). */
-export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boolean) {
+export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boolean, getLinkDates: () => boolean = () => true) {
   return EditorState.transactionFilter.of(transaction => {
     if (isTaskMode() || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
     if (!transaction.selection && !transaction.docChanged) return transaction;
@@ -66,7 +67,7 @@ export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boo
       if (!candidates.has(line + 1) || !/^\s*-\s+\[[ xX]\]\s/.test(text)) continue;
       const { from } = transaction.newDoc.line(line + 1);
       const dateFormat = getDateFormat();
-      const resolvedDates = noteDateChanges(text, dateFormat, reference);
+      const resolvedDates = noteDateChanges(text, dateFormat, reference, getLinkDates());
       let resolved = text;
       for (const change of resolvedDates.reverse()) {
         resolved = resolved.slice(0, change.from) + change.insert + resolved.slice(change.to);

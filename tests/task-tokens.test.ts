@@ -72,3 +72,9 @@ it("formats Markdown date labels with Daily Notes settings while retaining link 
   expect(tokens.map(token => text.slice(token.display!.from, token.display!.to))).toEqual(["[[2026-09-09]]", "[[Sep 10, 2026]]"]);
   expect(taskTokens("- [ ] Call {2026-09-09 noon}", "DD/MM/YYYY")[0]).toMatchObject({ label: "Due 09/09/2026 12:00", display: { label: "09/09/2026 12:00" } });
 });
+
+it("renders unlinked scheduled dates and deadlines as property pills", () => {
+  const tokens = taskTokens("- [ ] Plan 2026-09-08 09:30 {2026-09-10}");
+  expect(tokens.map(token => token.kind)).toEqual(["scheduledDate", "deadline"]);
+  expect(tokens[0]).toMatchObject({ label: "2026-09-08 09:30", linkText: undefined, display: undefined });
+});

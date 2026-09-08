@@ -26,11 +26,11 @@ export function toggleTaskInContent(content: string, task: Task, completed: bool
   return lines.join(eol);
 }
 
-export function updateTaskInContent(content: string, task: Task, draft: TaskDraft, dateFormat?: string): string {
+export function updateTaskInContent(content: string, task: Task, draft: TaskDraft, dateFormat?: string, linkDates = true): string {
   const eol = lineEnding(content);
   const lines = content.split(/\r?\n/);
   const liveLine = findLiveLine(lines, task);
-  lines[liveLine] = serializeTask({ ...draft, indent: task.indent }, dateFormat);
+  lines[liveLine] = serializeTask({ ...draft, indent: task.indent }, dateFormat, linkDates);
   return lines.join(eol);
 }
 

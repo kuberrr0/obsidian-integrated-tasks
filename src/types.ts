@@ -83,6 +83,7 @@ export interface TaskDraft extends ParsedTaskMetadata {
 
 export interface TaskManagerSettings {
   taskMode: boolean;
+  linkDates: boolean;
   wrapTaskTitles: boolean;
   wrapCalendarTaskTitles: boolean;
   wrapKanbanTaskTitles: boolean;
@@ -93,6 +94,7 @@ export interface TaskManagerSettings {
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
   taskMode: false,
+  linkDates: true,
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: true,
   wrapKanbanTaskTitles: true,

@@ -147,8 +147,8 @@ export class TaskEditorModal extends Modal {
       this.descriptionDirty = true;
       if (this.options.task) return;
       try {
-        const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat);
-        const lines = newTaskLines({ ...draft, description: this.descriptionInput.value }, this.options.dateFormat);
+        const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat, this.options.settings.linkDates);
+        const lines = newTaskLines({ ...draft, description: this.descriptionInput.value }, this.options.dateFormat, this.options.settings.linkDates);
         this.rawInput.value = [this.serializeDraft(draft), ...lines.slice(1)].join("\n");
         this.lastRawDescription = scanTasks("", lines.join("\n"), new Date(), this.options.dateFormat)[0]?.description ?? "";
         this.rawDirty = true;
@@ -203,8 +203,8 @@ export class TaskEditorModal extends Modal {
       error.empty();
       if (!this.options.task) {
         try {
-          const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat);
-          const description = scanTasks("", newTaskLines(draft, this.options.dateFormat).join("\n"), new Date(), this.options.dateFormat)[0]?.description ?? "";
+          const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat, this.options.settings.linkDates);
+          const description = scanTasks("", newTaskLines(draft, this.options.dateFormat, this.options.settings.linkDates).join("\n"), new Date(), this.options.dateFormat)[0]?.description ?? "";
           if (!this.descriptionDirty || description !== this.lastRawDescription) {
             this.descriptionInput.value = description;
             this.descriptionDirty = false;
@@ -300,12 +300,12 @@ export class TaskEditorModal extends Modal {
 
   private serializeDraft(draft: TaskDraft): string {
     return draft.destination === this.options.settings.inboxPath
-      ? serializeTask(draft, this.options.dateFormat)
-      : serializeTaskInput(draft, this.options.dateFormat);
+      ? serializeTask(draft, this.options.dateFormat, this.options.settings.linkDates)
+      : serializeTaskInput(draft, this.options.dateFormat, this.options.settings.linkDates);
   }
 
   private readRaw(): TaskDraft | undefined {
-    if (!this.options.task) return { ...parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat), ...this.descriptionPatch() };
+    if (!this.options.task) return { ...parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat, this.options.settings.linkDates), ...this.descriptionPatch() };
     const parsed = parseTaskInput(this.rawInput.value.trimEnd(), new Date(), this.options.dateFormat, true);
     if (!parsed || !parsed.title) {
       new Notice("Raw text must be one valid checklist line with a title.");
@@ -343,7 +343,7 @@ export class TaskEditorModal extends Modal {
       return undefined;
     }
     const additionalLines = notify && !this.options.task
-      ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat).additionalLines
+      ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat, this.options.settings.linkDates).additionalLines
       : undefined;
     return {
       ...(additionalLines ? { additionalLines } : {}),
