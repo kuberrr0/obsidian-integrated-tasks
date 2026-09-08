@@ -691,7 +691,7 @@ export class TaskMainView extends ItemView {
 
   private badge(parent: HTMLElement, iconName: string, text: string, variant?: string): void {
     const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
-    const icon = badge.createSpan();
+    const icon = badge.createSpan({ cls: "tm-meta-icon" });
     setIcon(icon, iconName);
     badge.createSpan({ text });
   }

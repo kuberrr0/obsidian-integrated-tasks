@@ -5511,7 +5511,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
   }
   badge(parent, iconName, text, variant) {
     const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
-    const icon = badge.createSpan();
+    const icon = badge.createSpan({ cls: "tm-meta-icon" });
     (0, import_obsidian7.setIcon)(icon, iconName);
     badge.createSpan({ text });
   }

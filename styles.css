@@ -286,7 +286,16 @@ button.tm-source,
   white-space: nowrap;
 }
 
+.tm-meta-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
 .tm-meta svg {
+  display: block;
   width: 13px;
   height: 13px;
 }
