@@ -18,7 +18,7 @@ function setup(files: Record<string, string>, fail?: (path: string, count: numbe
   } } as unknown as App;
   return new TaskStore(app, () => "YYYY-MM-DD");
 }
-const content = "## Plan\n- [ ] Parent [[2026-09-07]] 09:00 1h p1\n  - Parent notes\n  - [ ] Child 30m p2\n    - Child notes\n  - [ ] Unselected 45m p3\n- [ ] Other 15m\n- [ ] Last\n## Later\n";
+const content = "# Plan\n- [ ] Parent [[2026-09-07]] 09:00 1h p1\n  - Parent notes\n  - [ ] Child 30m p2\n    - Child notes\n  - [ ] Unselected 45m p3\n- [ ] Other 15m\n- [ ] Last\n# Later\n";
 const originalTasks = () => scanTasks("Work.md", content);
 
 describe("bulk properties and deletion", () => {
@@ -43,10 +43,10 @@ describe("bulk properties and deletion", () => {
     const files = { "Work.md": content };
     const tasks = originalTasks();
     await setup(files).bulkDelete([tasks[1], tasks[0], tasks[3]]);
-    expect(files["Work.md"]).toBe("## Plan\n- [ ] Last\n## Later\n");
+    expect(files["Work.md"]).toBe("# Plan\n- [ ] Last\n# Later\n");
   });
   it("moves selected parents and children together, applying properties to both", async () => {
-    const files = { "Work.md": content, "Target.md": "## Next\n- [ ] Existing\n" };
+    const files = { "Work.md": content, "Target.md": "# Next\n- [ ] Existing\n" };
     const tasks = originalTasks();
     await setup(files).bulkUpdate([tasks[0], tasks[1], tasks[3]], { destination: "Target.md#Next", priority: 2 });
     const moved = scanTasks("Target.md", files["Target.md"]);
@@ -56,7 +56,7 @@ describe("bulk properties and deletion", () => {
     expect(moved[1].priority).toBe(2);
     expect(moved[2].priority).toBe(3);
     expect(moved[3].priority).toBe(2);
-    expect(files["Work.md"]).toBe("## Plan\n- [ ] Last\n## Later\n");
+    expect(files["Work.md"]).toBe("# Plan\n- [ ] Last\n# Later\n");
   });
   it("validates all selected tasks and destination headings before writing", async () => {
     const files = { "Work.md": content, "Target.md": "- [ ] Existing\n" };

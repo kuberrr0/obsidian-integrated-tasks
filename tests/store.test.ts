@@ -24,10 +24,10 @@ describe("Markdown task insertion", () => {
     expect(insertIntoDestination("", ["- [ ] First"])).toBe("- [ ] First\n");
   });
 
-  it("inserts directly beneath a heading at any level", () => {
-    const input = "# Project\n### Plan\n- [ ] Existing\n## Notes\nKeep me\n";
+  it("inserts beneath level-one headings", () => {
+    const input = "# Project\n# Plan\n- [ ] Existing\n# Notes\nKeep me\n";
     expect(insertIntoDestination(input, ["- [ ] New task"], "Plan")).toBe(
-      "# Project\n### Plan\n- [ ] New task\n- [ ] Existing\n## Notes\nKeep me\n"
+      "# Project\n# Plan\n- [ ] New task\n- [ ] Existing\n# Notes\nKeep me\n"
     );
     expect(insertIntoDestination("Plan\n====\nOld\n", ["- [ ] New"], "Plan")).toBe("Plan\n====\n- [ ] New\nOld\n");
   });
@@ -38,8 +38,12 @@ describe("Markdown task insertion", () => {
     );
   });
 
+  it.each([2, 3, 4, 5, 6])("does not offer a level-%s heading as a section destination", level => {
+    expect(() => insertIntoDestination("#".repeat(level) + " Plan\n", ["- [ ] New"], "Plan")).toThrow(/Cannot find heading/);
+  });
+
   it("rejects missing headings and ignores headings inside code", () => {
-    expect(() => insertIntoDestination("```\n## Plan\n```\n", ["- [ ] New"], "Plan")).toThrow(/Cannot find heading/);
+    expect(() => insertIntoDestination("```\n# Plan\n```\n", ["- [ ] New"], "Plan")).toThrow(/Cannot find heading/);
   });
 
   it("toggles only the intended checklist line", () => {
@@ -73,7 +77,7 @@ describe("Markdown task insertion", () => {
 
 
 describe("checklist insertion order", () => {
-  const content = "## Plan\nIntro paragraph.\n\n- [ ] First\n  Notes for first.\n  - [ ] Child\n- [x] Last\n  - [ ] Last child\n\nClosing paragraph.\n## Next\n- [ ] Elsewhere\n";
+  const content = "# Plan\nIntro paragraph.\n\n- [ ] First\n  Notes for first.\n  - [ ] Child\n- [x] Last\n  - [ ] Last child\n\nClosing paragraph.\n# Next\n- [ ] Elsewhere\n";
 
   it("keeps the introduction before new top tasks", () => {
     expect(insertIntoDestination(content, ["- [ ] New"], "Plan")).toBe(content.replace("- [ ] First", "- [ ] New\n- [ ] First"));
@@ -96,7 +100,7 @@ describe("checklist insertion order", () => {
   it.each(["top", "bottom"] as const)("uses only the root checklist when one exists (%s)", (position) => {
     const intro = "Intro\n\n";
     const root = "- [ ] Root\n  - [ ] Child\n";
-    const section = "## Heading\n- [ ] Section task\n";
+    const section = "# Heading\n- [ ] Section task\n";
     const expected = position === "top" ? "- [ ] New\n" + root : root + "- [ ] New\n";
     expect(insertIntoDestination(intro + root + section, ["- [ ] New"], undefined, position)).toBe(intro + expected + section);
   });
@@ -106,9 +110,9 @@ describe("checklist insertion order", () => {
     expect(insertIntoDestination(input, ["- [ ] New"])).toBe(input.replace("- [ ] Real", "- [ ] New\n- [ ] Real"));
   });
 
-  it("does not use a subsection's checklist for an empty heading scope", () => {
-    const input = "## Plan\nIntro\n### Child\n- [ ] Child task\n";
-    expect(insertIntoDestination(input, ["- [ ] New"], "Plan", "bottom")).toBe("## Plan\n- [ ] New\nIntro\n### Child\n- [ ] Child task\n");
+  it("uses a subsection's checklist within its level-one section", () => {
+    const input = "# Plan\nIntro\n## Child\n- [ ] Child task\n";
+    expect(insertIntoDestination(input, ["- [ ] New"], "Plan", "bottom")).toBe("# Plan\nIntro\n## Child\n- [ ] Child task\n- [ ] New\n");
   });
 
   it("preserves CRLF, indentation, and moved task children", () => {
@@ -116,7 +120,7 @@ describe("checklist insertion order", () => {
   });
 
   it("does not cross a heading or an intervening paragraph at the bottom", () => {
-    for (const separator of ["## Next", "Separate paragraph"]) {
+    for (const separator of ["# Next", "Separate paragraph"]) {
       const input = `- [ ] First\n${separator}\n- [ ] Second\n`;
       expect(insertIntoDestination(input, ["- [ ] New"], undefined, "bottom")).toBe(`- [ ] First\n- [ ] New\n${separator}\n- [ ] Second\n`);
     }

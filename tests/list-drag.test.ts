@@ -18,14 +18,14 @@ function setup(files: Record<string, string>, failSource = false) {
   } } as unknown as App;
   return new TaskStore(app, () => "YYYY-MM-DD");
 }
-const content = "## Plan\n- [ ] Parent\n  - [ ] Child\n    Child notes\n- [ ] Other\n  - [ ] Other child\n";
+const content = "# Plan\n- [ ] Parent\n  - [ ] Child\n    Child notes\n- [ ] Other\n  - [ ] Other child\n";
 
 describe("list task dragging", () => {
   it("reorders complete subtrees including indented notes", async () => {
     const files = { "Work.md": content };
     const tasks = scanTasks("Work.md", content);
     await setup(files).relocate(tasks[0], tasks[2], "after", draftForGroup(tasks[0]));
-    expect(files["Work.md"]).toBe("## Plan\n- [ ] Other\n  - [ ] Other child\n- [ ] Parent\n  - [ ] Child\n    Child notes\n");
+    expect(files["Work.md"]).toBe("# Plan\n- [ ] Other\n  - [ ] Other child\n- [ ] Parent\n  - [ ] Child\n    Child notes\n");
   });
   it("indents with children, then outdents without absorbing following siblings", async () => {
     const files = { "Work.md": content };
@@ -47,12 +47,12 @@ describe("list task dragging", () => {
     expect(files["Work.md"]).toBe(content);
   });
   it("moves across notes and applies the target property", async () => {
-    const files = { "Source.md": content, "Target.md": "## Next\n- [ ] Destination p1\n" };
+    const files = { "Source.md": content, "Target.md": "# Next\n- [ ] Destination p1\n" };
     const source = scanTasks("Source.md", content)[0];
     const target = scanTasks("Target.md", files["Target.md"])[0];
     await setup(files).relocate(source, target, "before", draftForGroup(source, taskGroupTarget("priority", target)));
-    expect(files["Source.md"]).toBe("## Plan\n- [ ] Other\n  - [ ] Other child\n");
-    expect(files["Target.md"]).toBe("## Next\n- [ ] Parent p1\n  - [ ] Child\n    Child notes\n- [ ] Destination p1\n");
+    expect(files["Source.md"]).toBe("# Plan\n- [ ] Other\n  - [ ] Other child\n");
+    expect(files["Target.md"]).toBe("# Next\n- [ ] Parent p1\n  - [ ] Child\n    Child notes\n- [ ] Destination p1\n");
   });
   it("rolls back a cross-note insertion if removing the source fails", async () => {
     const files = { "Source.md": content, "Target.md": "- [ ] Destination\n" };

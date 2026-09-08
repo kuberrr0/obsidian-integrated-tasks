@@ -192,8 +192,17 @@ describe("project sections", () => {
     }
   });
 
+  it("keeps levels two through six in the enclosing level-one section", () => {
+    const content = ["## Intro", "- [ ] Root", "# Plan", "- [ ] First",
+      ...[2, 3, 4, 5, 6].flatMap(level => ["#".repeat(level) + " Detail", "- [ ] Detail task"]),
+      "# Next", "- [ ] Last"].join("\n");
+    const tasks = scanTasks("Project.md", content);
+    expect(tasks.map(task => task.section)).toEqual([undefined, ...Array(6).fill("Plan"), "Next"]);
+    expect(tasks.map(task => task.sectionLine)).toEqual([undefined, ...Array(6).fill(2), 14]);
+  });
+
   it("assigns headings in document order and keeps task trees within sections", () => {
-    const tasks = scanTasks("Project.md", "- [ ] Root\n## Plan\n- [ ] Parent\n  - [ ] Child\n### Next\n  - [ ] Separate\n## Plan\n- [ ] Repeated");
+    const tasks = scanTasks("Project.md", "- [ ] Root\n# Plan\n- [ ] Parent\n  - [ ] Child\n# Next\n  - [ ] Separate\n# Plan\n- [ ] Repeated");
     expect(tasks.map((task) => task.section)).toEqual([undefined, "Plan", "Plan", "Next", "Plan"]);
     expect(tasks.map((task) => task.sectionLine)).toEqual([undefined, 1, 1, 4, 6]);
     expect(tasks[1].endLine).toBe(3);

@@ -47,6 +47,11 @@ export function scanHeadings(content: string): NoteHeading[] {
   return headings;
 }
 
+/** Only level-one headings define task sections and destinations. */
+export function scanSections(content: string): NoteHeading[] {
+  return scanHeadings(content).filter(heading => heading.level === 1);
+}
+
 export function splitDestination(value: string): { path: string; heading?: string } {
   const target = value.trim().replace(/^~?\[\[|\]\]$/g, "").split("|", 1)[0];
   const separator = target.indexOf("#");

@@ -1,5 +1,5 @@
 import { parseProjectProperties, parseProjectParent } from "./project-properties";
-import { scanHeadings, splitDestination, type NoteHeading } from "./structure";
+import { scanSections, splitDestination, type NoteHeading } from "./structure";
 import { getAllTags, type App, type EventRef, TFile } from "obsidian";
 import { scanTasks } from "./parser";
 import { sortTasks, taskMatchesQuery } from "./query";
@@ -131,7 +131,7 @@ export class TaskIndex {
 
   private async scanFile(file: TFile): Promise<void> {
     const content = await this.app.vault.cachedRead(file);
-    this.headingsByPath.set(file.path, scanHeadings(content));
+    this.headingsByPath.set(file.path, scanSections(content));
     this.tasksByPath.set(file.path, scanTasks(file.path, content, new Date(), this.getDateFormat()));
   }
 

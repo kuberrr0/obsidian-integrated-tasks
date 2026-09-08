@@ -6,7 +6,7 @@ import { scanTasks } from "../src/parser";
 const tasks = scanTasks("Work.md", "- [ ] Open task p2\n- [x] Done task p1\n- [ ] Scheduled [[2027-03-28]]\n");
 describe("Kanban columns", () => {
   it("defaults to sections from note headings", () => {
-    const sectionTasks = scanTasks("Work.md", "- [ ] Unsectioned\n# Planning\n- [ ] Plan\n- [x] Planned\n## Doing\n- [ ] Build\n");
+    const sectionTasks = scanTasks("Work.md", "- [ ] Unsectioned\n# Planning\n- [ ] Plan\n- [x] Planned\n# Doing\n- [ ] Build\n");
     const columns = kanbanColumns(sectionTasks, "default");
     expect(columns.map(column => column.title)).toEqual(["No section", "Planning", "Doing"]);
     expect(columns.map(column => column.tasks.length)).toEqual([1, 2, 1]);

@@ -1,4 +1,4 @@
-import { bodyLines, scanHeadings } from "./structure";
+import { bodyLines, scanSections } from "./structure";
 import { serializeTask } from "./parser";
 import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
@@ -46,7 +46,7 @@ export function insertIntoDestination(content: string, block: string[], heading?
   const eol = lineEnding(content);
   const lines = content ? content.split(/\r?\n/) : [];
   let insertion = 0;
-  const headings = scanHeadings(content);
+  const headings = scanSections(content);
   let scopeEnd = headings[0]?.line ?? lines.length;
   if (heading) {
     const target = headings.find((item) => item.name.toLocaleLowerCase() === heading.toLocaleLowerCase());

@@ -1,5 +1,5 @@
 import { formatTags } from "./task-tags";
-import { bodyLines, scanHeadings, splitDestination, destinationString } from "./structure";
+import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
 import { findInputDate, findInputDeadline, formatDate, parseDateTimeExpression } from "./date";
 import type { ParsedTaskMetadata, Priority, Task, TaskDraft } from "./types";
 
@@ -206,8 +206,8 @@ export function scanTasks(path: string, content: string, reference = new Date(),
   const stack: Task[] = [];
   const sourceLines = content.split(/\r?\n/);
   const descriptions = new Map<Task, { lines: string[]; lineNumbers: number[]; bulletIndent: number }>();
-  const headings = new Map(scanHeadings(content).map((heading) => [heading.line, heading]));
-  let section: ReturnType<typeof scanHeadings>[number] | undefined;
+  const headings = new Map(scanSections(content).map((heading) => [heading.line, heading]));
+  let section: ReturnType<typeof scanSections>[number] | undefined;
 
   for (const { text: line, line: lineNumber } of bodyLines(content)) {
     const heading = headings.get(lineNumber);

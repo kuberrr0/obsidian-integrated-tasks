@@ -3074,6 +3074,9 @@ function scanHeadings(content) {
   }
   return headings;
 }
+function scanSections(content) {
+  return scanHeadings(content).filter((heading) => heading.level === 1);
+}
 function splitDestination(value) {
   const target = value.trim().replace(/^~?\[\[|\]\]$/g, "").split("|", 1)[0];
   const separator = target.indexOf("#");
@@ -3260,7 +3263,7 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
   const stack = [];
   const sourceLines = content.split(/\r?\n/);
   const descriptions = /* @__PURE__ */ new Map();
-  const headings = new Map(scanHeadings(content).map((heading) => [heading.line, heading]));
+  const headings = new Map(scanSections(content).map((heading) => [heading.line, heading]));
   let section;
   for (const { text: line, line: lineNumber } of bodyLines(content)) {
     const heading = headings.get(lineNumber);
@@ -6520,7 +6523,7 @@ var TaskIndex = class {
   }
   async scanFile(file) {
     const content = await this.app.vault.cachedRead(file);
-    this.headingsByPath.set(file.path, scanHeadings(content));
+    this.headingsByPath.set(file.path, scanSections(content));
     this.tasksByPath.set(file.path, scanTasks(file.path, content, /* @__PURE__ */ new Date(), this.getDateFormat()));
   }
   refreshProjects() {
@@ -6657,7 +6660,7 @@ function insertIntoDestination(content, block, heading, position = "top") {
   const eol = lineEnding(content);
   const lines = content ? content.split(/\r?\n/) : [];
   let insertion = 0;
-  const headings = scanHeadings(content);
+  const headings = scanSections(content);
   let scopeEnd = (_b = (_a = headings[0]) == null ? void 0 : _a.line) != null ? _b : lines.length;
   if (heading) {
     const target = headings.find((item) => item.name.toLocaleLowerCase() === heading.toLocaleLowerCase());
