@@ -785,7 +785,7 @@ button.tm-filter-toggle { display: flex; align-items: center; }
 .tm-calendar-weekday { padding: 8px 2px; text-align: center; color: var(--text-muted); font-size: var(--font-ui-small); }
 .tm-calendar-cell { min-width: 0; min-height: 110px; padding: 4px; border: 1px solid var(--background-modifier-border); border-left: 0; }
 .tm-calendar-cell.is-outside { background: var(--background-secondary); color: var(--text-muted); }
-.tm-calendar-cell.is-today > .tm-calendar-date { background: var(--interactive-accent); color: var(--text-on-accent); }
+.tm-calendar-cell.is-today > .tm-calendar-date { background: transparent; color: var(--text-accent); font-weight: 700; }
 button.tm-calendar-date { border: 0; box-shadow: none; background: transparent; padding: 3px 7px; }
 .tm-calendar button.tm-calendar-task { border-radius: 4px; display: block; width: 100%; height: auto; min-height: 12px; padding: 0 4px; margin: 2px 0; box-sizing: border-box; line-height: 10px; text-align: left; white-space: normal; overflow-wrap: anywhere; box-shadow: none; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); font-size: 10px; cursor: grab; }
 button.tm-calendar-task.is-completed { text-decoration: line-through; opacity: .65; }
@@ -891,7 +891,7 @@ button.tm-calendar-task.is-timed { position: absolute; margin: 0; min-height: 12
 .tm-calendar-week-gutter { align-self: end; padding: 4px; color: var(--text-muted); font-size: 10px; }
 .tm-calendar-week-heading { min-width: 0; padding: 4px; border-left: 1px solid var(--background-modifier-border); }
 .tm-calendar-week-heading > .tm-calendar-date { width: 100%; font-size: var(--font-ui-small); white-space: normal; }
-.tm-calendar-week-heading.is-today > .tm-calendar-date { color: var(--text-on-accent); background: var(--interactive-accent); }
+.tm-calendar-week-heading.is-today > .tm-calendar-date { color: var(--text-accent); background: transparent; font-weight: 700; }
 .tm-calendar-week-timeline { margin: 0; }
 .tm-calendar-week-columns { position: absolute; left: 56px; right: 0; height: 100%; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .tm-calendar-week-day { position: relative; min-width: 0; border-left: 1px solid var(--background-modifier-border); }
