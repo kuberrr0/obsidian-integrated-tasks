@@ -543,6 +543,20 @@ button.tm-source,
   flex-shrink: 0;
 }
 
+.tm-task-metadata.tm-project-header-metadata {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  max-width: 100%;
+  margin-top: var(--size-4-2);
+  overflow: visible;
+}
+
+.tm-project-header-metadata .tm-meta {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 700px) {
   .tm-project-row .tm-task-content {
     grid-template-columns: minmax(0, 1fr) auto;

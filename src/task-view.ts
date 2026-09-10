@@ -269,6 +269,13 @@ export class TaskMainView extends ItemView {
     }
     const heading = titleGroup.createDiv();
     heading.createEl("h1", { text: this.getDisplayText() });
+    const project = this.pagePath ? this.plugin.index.projects().find(project => project.path === this.pagePath) : undefined;
+    if (project) {
+      const metadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
+      this.renderProperties(metadata, project);
+      if (project.parent) this.badge(metadata, "folder", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
+      if (!metadata.childElementCount) metadata.remove();
+    }
 
     const actions = header.createDiv({ cls: "tm-header-actions" });
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Task view layout" } });
@@ -474,7 +481,6 @@ export class TaskMainView extends ItemView {
       button.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
       this.renderProperties(metadata, project);
-      if (project.endDate) this.badge(metadata, "calendar-check", `End: ${formatDate(project.endDate, this.plugin.dateFormat())}`);
       if (!metadata.childElementCount) metadata.remove();
       const total = project.openTasks + project.completedTasks;
       const percentage = total ? Math.round(project.completedTasks / total * 100) : 0;
@@ -684,6 +690,7 @@ export class TaskMainView extends ItemView {
   private renderProperties(parent: HTMLElement, properties: ProjectProperties | Task): void {
     const incompleteTask = "completed" in properties && !properties.completed;
     if (properties.scheduledDate) this.badge(parent, TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : undefined);
+    if ("endDate" in properties && properties.endDate) this.badge(parent, "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
     if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
     if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : undefined);
     if (properties.priority) this.badge(parent, TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);

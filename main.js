@@ -3623,7 +3623,8 @@ function addProjectProperties(frontmatter) {
     ["date", ["date", "startdate", "scheduleddate"]],
     ["end date", ["enddate"]],
     ["deadline", ["deadline"]],
-    ["priority", ["priority"]]
+    ["priority", ["priority"]],
+    ["parent", ["parent"]]
   ]) {
     if (!aliases.some((alias) => keys.has(alias))) frontmatter[name] = null;
   }
@@ -5067,6 +5068,13 @@ var TaskMainView = class extends import_obsidian7.ItemView {
     }
     const heading = titleGroup.createDiv();
     heading.createEl("h1", { text: this.getDisplayText() });
+    const project = this.pagePath ? this.plugin.index.projects().find((project2) => project2.path === this.pagePath) : void 0;
+    if (project) {
+      const metadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
+      this.renderProperties(metadata, project);
+      if (project.parent) this.badge(metadata, "folder", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
+      if (!metadata.childElementCount) metadata.remove();
+    }
     const actions = header.createDiv({ cls: "tm-header-actions" });
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Task view layout" } });
     for (const [layout, icon2, label] of [["list", "list", "List"], ["calendar", "calendar-days", "Calendar"], ["kanban", "columns-3", "Kanban"]]) {
@@ -5299,7 +5307,6 @@ var TaskMainView = class extends import_obsidian7.ItemView {
       button.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian7.Notice(String(error))));
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
       this.renderProperties(metadata, project);
-      if (project.endDate) this.badge(metadata, "calendar-check", `End: ${formatDate(project.endDate, this.plugin.dateFormat())}`);
       if (!metadata.childElementCount) metadata.remove();
       const total = project.openTasks + project.completedTasks;
       const percentage = total ? Math.round(project.completedTasks / total * 100) : 0;
@@ -5524,6 +5531,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
     var _a;
     const incompleteTask = "completed" in properties && !properties.completed;
     if (properties.scheduledDate) this.badge(parent, TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : void 0);
+    if ("endDate" in properties && properties.endDate) this.badge(parent, "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
     if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
     if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : void 0);
     if (properties.priority) this.badge(parent, TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);

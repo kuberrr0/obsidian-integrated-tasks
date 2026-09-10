@@ -30,7 +30,7 @@ describe("convert to project", () => {
   it("adds a project tag and empty editable properties", () => {
     const properties = {};
     addProjectProperties(properties);
-    expect(properties).toEqual({ tags: ["project"], date: null, "end date": null, deadline: null, priority: null });
+    expect(properties).toEqual({ tags: ["project"], date: null, "end date": null, deadline: null, priority: null, parent: null });
   });
 
   it("preserves existing tags, aliases, values and unrelated properties on repeated conversion", () => {
@@ -38,7 +38,15 @@ describe("convert to project", () => {
     const original = structuredClone(properties);
     addProjectProperties(properties);
     addProjectProperties(properties);
-    expect(properties).toEqual({ ...original, "end date": null });
+    expect(properties).toEqual({ ...original, "end date": null, parent: null });
+  });
+
+  it("preserves an existing parent link on repeated conversion", () => {
+    const properties = { Parent: ["[[Projects/Parent]]"] };
+    addProjectProperties(properties);
+    addProjectProperties(properties);
+    expect(properties.Parent).toEqual(["[[Projects/Parent]]"]);
+    expect(properties).not.toHaveProperty("parent");
   });
 
   it("normalizes scalar tag lists without losing tags or duplicating project", () => {

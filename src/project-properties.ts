@@ -36,7 +36,8 @@ export function addProjectProperties(frontmatter: Record<string, unknown>): void
     ["date", ["date", "startdate", "scheduleddate"]],
     ["end date", ["enddate"]],
     ["deadline", ["deadline"]],
-    ["priority", ["priority"]]
+    ["priority", ["priority"]],
+    ["parent", ["parent"]]
   ] as const) {
     if (!aliases.some((alias) => keys.has(alias))) frontmatter[name] = null;
   }
