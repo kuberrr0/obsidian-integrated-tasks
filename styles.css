@@ -787,7 +787,7 @@ button.tm-filter-toggle { display: flex; align-items: center; }
 .tm-calendar-cell.is-outside { background: var(--background-secondary); color: var(--text-muted); }
 .tm-calendar-cell.is-today > .tm-calendar-date { background: var(--interactive-accent); color: var(--text-on-accent); }
 button.tm-calendar-date { border: 0; box-shadow: none; background: transparent; padding: 3px 7px; }
-.tm-calendar button.tm-calendar-task { border-radius: 6px; display: block; width: 100%; height: auto; min-height: 24px; padding: 4px 6px; margin: 3px 0; text-align: left; white-space: normal; overflow-wrap: anywhere; box-shadow: none; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); font-size: var(--font-ui-small); cursor: grab; }
+.tm-calendar button.tm-calendar-task { border-radius: 4px; display: block; width: 100%; height: auto; min-height: 12px; padding: 0 4px; margin: 2px 0; box-sizing: border-box; line-height: 10px; text-align: left; white-space: normal; overflow-wrap: anywhere; box-shadow: none; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); font-size: 10px; cursor: grab; }
 button.tm-calendar-task.is-completed { text-decoration: line-through; opacity: .65; }
 .tm-calendar .is-drop-target { outline: 2px solid var(--interactive-accent); outline-offset: -2px; background-color: var(--background-modifier-hover); }
 .tm-calendar-grid.is-week .tm-calendar-cell { min-height: 320px; }
@@ -814,7 +814,7 @@ button.tm-calendar-task.is-timed { position: absolute; margin: 0; min-height: 12
 @media (max-width: 700px) {
   .tm-calendar-toolbar h2 { flex-basis: 50%; }
   .tm-calendar-cell { min-height: 75px; padding: 1px; }
-  .tm-calendar-cell .tm-calendar-task { font-size: 11px; padding: 2px; }
+  .tm-calendar-cell .tm-calendar-task { font-size: 10px; padding: 0 3px; }
   .tm-calendar-scopes { width: 100%; }
   .tm-calendar-scopes button { flex: 1; min-height: 44px; }
   .tm-calendar-date { min-height: 32px; }
@@ -823,6 +823,65 @@ button.tm-calendar-task.is-timed { position: absolute; margin: 0; min-height: 12
 .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view.is-calendar-view {
   max-width: none;
   width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 16px;
+}
+
+.is-calendar-view > .tm-view-header,
+.is-calendar-view > .tm-filters,
+.is-calendar-view > .tm-selection-bar { flex-shrink: 0; }
+.is-calendar-view > .tm-task-results { flex: 1; min-height: 0; overflow: hidden; }
+.is-calendar-view .tm-calendar { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.is-calendar-view .tm-calendar-toolbar { flex-shrink: 0; }
+.is-calendar-view .tm-calendar-day-scroll { flex: 1; min-height: 0; max-height: none; }
+.is-calendar-view .tm-calendar-allday { flex-shrink: 0; max-height: 20%; overflow-y: auto; }
+.is-calendar-view .tm-calendar-unscheduled { flex-shrink: 0; max-height: 20%; overflow-y: auto; margin-top: 8px; }
+.is-calendar-view .tm-calendar-unscheduled h3 { margin: 0 0 4px; font-size: var(--font-ui-small); }
+
+.is-month-scope > .tm-calendar-grid {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: auto repeat(6, minmax(0, 1fr));
+}
+.is-month-scope .tm-calendar-cell { min-height: 0; overflow-y: auto; }
+.tm-calendar.is-month-scope button.tm-calendar-task {
+  height: 16px;
+  min-height: 16px;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 14px;
+  overflow: hidden;
+}
+.tm-calendar.is-month-scope .tm-calendar-task-title {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.is-year-scope .tm-calendar-year {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  overflow: auto;
+}
+.tm-calendar-year > div { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; }
+.tm-calendar-year h3 { margin-bottom: 4px; font-size: var(--font-ui-small); }
+.tm-calendar-year .tm-calendar-grid { flex: 1; border: 0; grid-template-rows: auto repeat(6, minmax(18px, 1fr)); }
+.tm-calendar-year .tm-calendar-weekday { padding: 0; font-size: 10px; }
+.tm-calendar-year .tm-calendar-grid.is-compact .tm-calendar-cell { border: 0; min-height: 0; padding: 0; }
+.tm-calendar-year .tm-calendar-grid.is-compact button.tm-calendar-date { height: 18px; min-height: 0; padding: 0; font-size: 10px; line-height: 18px; }
+.tm-calendar-year button.tm-calendar-count { position: absolute; top: 0; right: 0; height: 10px; padding: 0 2px; font-size: 8px; line-height: 10px; }
+.tm-calendar-year .tm-calendar-month-tasks { flex-shrink: 0; max-height: 35%; margin-top: 4px; font-size: 10px; }
+@media (max-width: 700px) {
+  .is-year-scope .tm-calendar-year { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 8px; }
 }
 
 /* Week is seven daily schedules on a shared time axis. */

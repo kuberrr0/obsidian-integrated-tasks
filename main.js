@@ -4489,7 +4489,7 @@ var ListDragController = class {
 var import_obsidian6 = require("obsidian");
 function renderCalendar(container, options) {
   var _a, _b, _c, _d, _e;
-  const root = container.createDiv({ cls: "tm-calendar" });
+  const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope` });
   const byDate = /* @__PURE__ */ new Map();
   for (const task of options.tasks) {
     const key = (_a = calendarDate(task)) != null ? _a : "";

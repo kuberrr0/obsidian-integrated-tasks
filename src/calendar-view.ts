@@ -20,7 +20,7 @@ export interface CalendarOptions {
 
 /** Render inside the task view; all writes go through its existing task store. */
 export function renderCalendar(container: HTMLElement, options: CalendarOptions): void {
-  const root = container.createDiv({ cls: "tm-calendar" });
+  const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope` });
   const byDate = new Map<string, Task[]>();
   for (const task of options.tasks) {
     const key = calendarDate(task) ?? "";
