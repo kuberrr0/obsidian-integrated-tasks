@@ -593,7 +593,7 @@ button.tm-source,
 .tm-note-token a.internal-link:hover { color: var(--text-accent-hover); }
 .tm-note-token-priority { text-transform: uppercase; }
 /* Native Live Preview link spans and Reading view anchors use the pill color. */
-:is(.markdown-source-view.mod-cm6 .cm-editor, .markdown-reading-view) .tm-note-token:is(.tm-note-token-scheduledDate, .tm-note-token-deadline) * {
+:is(.markdown-source-view.mod-cm6 .cm-editor, .markdown-reading-view) .tm-note-token:is(.tm-note-token-scheduledDate, .tm-note-token-deadline, .tm-note-token-tags) * {
   color: inherit;
   text-decoration: none;
 }
