@@ -6599,11 +6599,7 @@ var TaskNavigationView = class extends import_obsidian13.ItemView {
     container.empty();
     container.addClass("tm-navigation");
     const header = container.createDiv({ cls: "tm-nav-header" });
-    header.createEl("h3", { text: "Tasks" });
-    const newButton = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "New task" } });
-    (0, import_obsidian13.setIcon)(newButton, "plus");
-    newButton.addEventListener("click", () => this.plugin.openEditor({ mode: this.activeMode }));
-    const mode = container.createEl("label", { cls: "tm-global-task-mode" });
+    const mode = header.createEl("label", { cls: "tm-global-task-mode" });
     const toggle = mode.createEl("input", { type: "checkbox" });
     toggle.checked = this.plugin.settings.taskMode;
     mode.createSpan({ text: "Task mode" });
@@ -6614,6 +6610,9 @@ var TaskNavigationView = class extends import_obsidian13.ItemView {
         this.render();
       });
     });
+    const newButton = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "New task" } });
+    (0, import_obsidian13.setIcon)(newButton, "plus");
+    newButton.addEventListener("click", () => this.plugin.openEditor({ mode: this.activeMode }));
     const nav = container.createDiv({ cls: "tm-nav-list" });
     for (const item of NAV_ITEMS) {
       const button = nav.createEl("button", {

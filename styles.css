@@ -32,12 +32,6 @@
   justify-content: space-between;
 }
 
-.tm-nav-header h3 {
-  margin: 0;
-  font-size: var(--font-ui-medium);
-  font-weight: var(--font-semibold);
-}
-
 .tm-nav-list {
   display: flex;
   flex-direction: column;
@@ -1024,7 +1018,7 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-gantt-selection[hidden] { display: none; }
 .tm-gantt-undated[hidden] { display: none; }
 
-.tm-global-task-mode { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 8px; cursor: pointer; }
+.tm-global-task-mode { display: flex; align-items: center; gap: 8px; padding: 8px 4px; cursor: pointer; }
 
 /* Hollow metadata pills in task views, Reading view, and Live Preview. */
 .tm-meta,
