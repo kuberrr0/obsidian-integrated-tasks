@@ -24,6 +24,9 @@ Quick-created tasks go to `Inbox.md` by default. You can choose a different inbo
 | **Upcoming** | Future tasks, organized by date. |
 | **All Tasks** | Tasks from Markdown notes throughout your vault. |
 | **Projects** | Notes tagged `#project`, with progress and project dates. |
+| **Tags** | Task tags with open and completed counts; open a tag to see its matching tasks. |
+
+The sidebar uses a compact file-style tree. Its icon toolbar provides **Create task**, **Create project**, and **Task mode**. Expand Projects or Tags for direct access, or click their labels to open the full lists. Creating a project makes a named Markdown note with the `project` frontmatter tag. Tag pages support the existing task layouts, filters, and editing tools; new tasks created there inherit the tag.
 
 Today and Upcoming use the earlier of a task’s scheduled date and deadline. Undated tasks remain available in Inbox, All Tasks, and their source note’s task view.
 

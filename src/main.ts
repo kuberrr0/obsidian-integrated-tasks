@@ -1,3 +1,4 @@
+import { ProjectCreatorModal, projectNotePath, projectNoteContent } from "./project-creator";
 import { BulkTaskEditorModal } from "./bulk-task-editor";
 import { TaskModeController } from "./task-mode";
 import type { TaskEditorPreset } from "./types";
@@ -51,7 +52,8 @@ export default class TaskManagerPlugin extends Plugin {
       ["today", "Open Today", "open-today"],
       ["upcoming", "Open Upcoming", "open-upcoming"],
       ["all", "Open All Tasks", "open-all-tasks"],
-      ["projects", "Open Projects", "open-projects"]
+      ["projects", "Open Projects", "open-projects"],
+      ["tags", "Open Tags", "open-tags"]
     ];
     for (const [mode, name, id] of commands) {
       this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new Notice(String(error))) });
@@ -155,8 +157,21 @@ export default class TaskManagerPlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
     for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
       const view = navLeaf.view;
-      if (view instanceof TaskNavigationView) view.setActive(state.mode);
+      if (view instanceof TaskNavigationView) view.setActive(state.mode, state.tag);
     }
+  }
+
+  openProjectCreator(): void {
+    new ProjectCreatorModal(this.app, {
+      projects: this.index.projects(), dateFormat: this.dateFormat(), linkDates: this.settings.linkDates,
+      createProject: async draft => {
+        const path = projectNotePath(draft.name);
+        if (this.app.vault.getAbstractFileByPath(path)) throw new Error("A note with this name already exists.");
+        await this.app.vault.create(path, projectNoteContent(draft, this.dateFormat(), this.settings.linkDates));
+        await this.index.refreshPath(path);
+        await this.openProject(path);
+      }
+    }).open();
   }
 
   async openProject(path: string): Promise<void> {
@@ -167,6 +182,9 @@ export default class TaskManagerPlugin extends Plugin {
     if (!this.settings.taskMode) await this.setTaskMode(true);
     else await this.taskModeController?.sync();
     await this.app.workspace.revealLeaf(leaf);
+    for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
+      if (navLeaf.view instanceof TaskNavigationView) navLeaf.view.setActive("projects", undefined, path);
+    }
   }
 
   private editSelectedTaskProperties(checking: boolean): boolean {
@@ -231,6 +249,7 @@ export default class TaskManagerPlugin extends Plugin {
   openEditor(state: OpenEditorState): void {
     const options: TaskEditorOptions = {
       ...state,
+      preset: state.tag ? { ...state.preset, tags: [...new Set([...(state.preset?.tags ?? []), state.tag])] } : state.preset,
       projectPath: state.pagePath ?? state.projectPath,
       projects: this.index.projects(),
       settings: this.settings,

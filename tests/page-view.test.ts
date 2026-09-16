@@ -224,7 +224,7 @@ it.each([false, true])("opens a real project file and reconciles task mode (alre
   const leaf = { openFile: vi.fn().mockResolvedValue(undefined) };
   const sync = vi.fn().mockResolvedValue(undefined);
   const revealLeaf = vi.fn().mockResolvedValue(undefined);
-  plugin.app = { vault: { getAbstractFileByPath: () => file }, workspace: { getLeaf: vi.fn(() => leaf), revealLeaf } } as unknown as App;
+  plugin.app = { vault: { getAbstractFileByPath: () => file }, workspace: { getLeavesOfType: () => [], getLeaf: vi.fn(() => leaf), revealLeaf } } as unknown as App;
   plugin.settings.taskMode = enabled;
   const mode = vi.spyOn(plugin, "setTaskMode").mockImplementation(async value => { plugin.settings.taskMode = value; await sync(); });
   (plugin as unknown as { taskModeController: unknown }).taskModeController = { sync };
@@ -391,4 +391,15 @@ it("binds each rendered property badge to its field without opening the row edit
   }
   expect(openEditor).toHaveBeenCalledTimes(5);
   expect(openBulkEditor).not.toHaveBeenCalled();
+});
+
+it("restores tag page state and clears it when navigating to All Tasks", async () => {
+  const view = new TaskMainView({} as WorkspaceLeaf, {} as TaskManagerPlugin);
+  vi.spyOn(view, "render").mockImplementation(() => {});
+  await view.setState({ mode: "tags", tag: "client notes" });
+  expect(view.getState()).toMatchObject({ mode: "tags", tag: "client notes" });
+  expect(view.getDisplayText()).toBe("client notes");
+  await view.setState({ mode: "all" });
+  expect(view.getState().tag).toBeUndefined();
+  expect(view.getDisplayText()).toBe("All Tasks");
 });

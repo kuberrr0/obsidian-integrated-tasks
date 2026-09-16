@@ -41,9 +41,10 @@ export interface Project extends ProjectProperties {
   archived: boolean;
 }
 
-export type TaskViewMode = "inbox" | "today" | "upcoming" | "all" | "projects";
+export type TaskViewMode = "inbox" | "today" | "upcoming" | "all" | "projects" | "tags";
 
 export interface TaskViewState {
+  tag?: string;
   mode: TaskViewMode;
   projectPath?: string;
   pagePath?: string;
@@ -61,6 +62,7 @@ export interface TaskFilter {
 }
 
 export interface TaskQuery {
+  tag?: string;
   mode: TaskViewMode | "project";
   showCompleted: boolean;
   projectPath?: string;

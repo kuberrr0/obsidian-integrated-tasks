@@ -1,3 +1,4 @@
+import { taskTagSummaries } from "./task-tags";
 import type { TaskEditorProperty } from "./task-editor";
 import { TASK_PROPERTY_ICONS } from "./task-property-icons";
 import { TaskSelection } from "./task-selection";
@@ -25,7 +26,8 @@ const TITLES: Record<TaskViewMode, string> = {
   today: "Today",
   upcoming: "Upcoming",
   all: "All Tasks",
-  projects: "Projects"
+  projects: "Projects",
+  tags: "Tags"
 };
 
 export class TaskMainView extends ItemView {
@@ -64,6 +66,7 @@ export class TaskMainView extends ItemView {
 
   getViewType(): string { return TASK_MAIN_VIEW; }
   getDisplayText(): string {
+    if (this.state.mode === "tags" && this.state.tag) return this.state.tag;
     if (this.pagePath) return this.pagePath.replace(/\.md$/i, "").split("/").pop() ?? "Project";
     return TITLES[this.state.mode];
   }
@@ -79,7 +82,7 @@ export class TaskMainView extends ItemView {
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
     if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
-    if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath) {
+    if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag) {
       this.selection.clear();
       this.search = "";
       this.propertyFilters = [];
@@ -89,6 +92,7 @@ export class TaskMainView extends ItemView {
       this.filtersExpanded = false;
     }
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode as TaskViewMode;
+    this.state.tag = typeof state.tag === "string" && state.tag ? state.tag : undefined;
     this.state.pagePath = typeof state.pagePath === "string" ? state.pagePath : undefined;
     this.state.markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState as Record<string, unknown> : undefined;
     this.state.projectPath = typeof state.projectPath === "string" ? state.projectPath : undefined;
@@ -121,6 +125,11 @@ export class TaskMainView extends ItemView {
     container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
+    if (this.state.mode === "tags" && !this.state.tag) {
+      container.classList.remove("is-calendar-view", "is-kanban-view");
+      this.renderTagList(container);
+      return;
+    }
     if (this.state.mode === "projects" && !this.pagePath) {
       this.renderProjectList(container);
       return;
@@ -145,6 +154,7 @@ export class TaskMainView extends ItemView {
       mode: this.pagePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
       showCompleted: this.showCompleted || this.layout === "kanban",
       projectPath: this.pagePath,
+      tag: this.state.mode === "tags" ? this.state.tag : undefined,
       filters: this.propertyFilters,
       search: this.search || undefined
     };
@@ -264,6 +274,11 @@ export class TaskMainView extends ItemView {
   private renderHeader(container: HTMLElement): void {
     const header = container.createDiv({ cls: "tm-view-header" });
     const titleGroup = header.createDiv({ cls: "tm-title-group" });
+    if (this.state.mode === "tags" && this.state.tag) {
+      const back = titleGroup.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Back to tags" } });
+      setIcon(back, "arrow-left");
+      back.addEventListener("click", () => void this.plugin.openTaskView({ mode: "tags" }));
+    }
     if (this.state.projectPath && !this.state.pagePath) {
       const back = titleGroup.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Back to projects" } });
       setIcon(back, "arrow-left");
@@ -413,6 +428,29 @@ export class TaskMainView extends ItemView {
       }
       options.showAtMouseEvent(event);
     });
+  }
+
+  private renderTagList(container: HTMLElement): void {
+    container.createEl("h1", { text: "Tags" });
+    const search = container.createEl("input", { type: "search", cls: "tm-tag-search", attr: { placeholder: "Search tags…", "aria-label": "Search tags" } });
+    search.value = this.search;
+    const list = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
+    const render = (): void => {
+      list.empty();
+      const tags = taskTagSummaries(this.plugin.index.allTasks()).filter(tag => tag.name.toLocaleLowerCase().includes(this.search.toLocaleLowerCase()));
+      if (!tags.length) list.createDiv({ cls: "tm-empty", text: this.search ? "No matching tags" : "No tags yet. Add a tag to a task to see it here." });
+      for (const tag of tags) {
+        const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
+        const icon = row.createSpan({ cls: "tm-project-icon" });
+        setIcon(icon, "tag");
+        const content = row.createDiv({ cls: "tm-task-content" });
+        const title = content.createEl("button", { cls: "tm-task-title", text: tag.name });
+        title.addEventListener("click", () => void this.plugin.openTaskView({ mode: "tags", tag: tag.name }));
+        content.createDiv({ cls: "tm-task-metadata", text: `${tag.openTasks} open · ${tag.completedTasks} completed` });
+      }
+    };
+    search.addEventListener("input", () => { this.search = search.value; render(); });
+    render();
   }
 
   private renderProjectList(container: HTMLElement): void {

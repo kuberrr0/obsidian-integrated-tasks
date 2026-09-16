@@ -3,6 +3,7 @@ import { actionDate, todayIso } from "./date";
 import type { Task, TaskQuery, TaskSort, TaskGrouping } from "./types";
 
 export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string, now = new Date()): boolean {
+  if (query.tag !== undefined && !task.tags?.includes(query.tag)) return false;
   if (query.filters?.some(filter => !matchesFilter(task, filter))) return false;
   if (!query.showCompleted && !query.filters?.some(filter => filter.property === "status") && task.completed) return false;
   if (query.sourcePath && task.path !== query.sourcePath) return false;
@@ -26,6 +27,7 @@ export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string
       return task.path === query.projectPath;
     case "projects":
       return false;
+    case "tags":
     case "all":
       return true;
   }
