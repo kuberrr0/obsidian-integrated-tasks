@@ -25,115 +25,8 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
-// src/task-filters.ts
-function cloneTaskFilters(filters) {
-  return filters.map((filter) => ({
-    ...filter,
-    values: [...filter.values],
-    ...filter.conditions ? {
-      conditions: filter.conditions.map((condition) => ({ ...condition, values: [...condition.values] }))
-    } : {}
-  }));
-}
-
-// src/smart-list-editor.ts
+// src/project-creator.ts
 var import_obsidian2 = require("obsidian");
-
-// src/task-tags.ts
-function normalizeTags(tags = []) {
-  const normalized = tags.map((tag) => tag.trim());
-  if (normalized.some((tag) => !tag || /[[\]\r\n|]/.test(tag))) {
-    throw new Error("Use nonempty tag names without brackets, newlines, or aliases.");
-  }
-  return [...new Set(normalized)];
-}
-function formatTags(tags = []) {
-  return normalizeTags(tags).map((tag) => `#[[${tag}]]`).join(" ");
-}
-function parseTags(value) {
-  const tags = [];
-  const remaining = value.replace(/#\[\[([^[\]\r\n|]+)\]\]/g, (_match, tag) => {
-    tags.push(tag);
-    return "";
-  });
-  if (remaining.trim()) throw new Error("Use tags such as #[[work]] #[[client notes]].");
-  return normalizeTags(tags);
-}
-function taskTagSummaries(tasks) {
-  var _a, _b;
-  const tags = /* @__PURE__ */ new Map();
-  for (const task of tasks) for (const name of new Set((_a = task.tags) != null ? _a : [])) {
-    const tag = (_b = tags.get(name)) != null ? _b : { name, openTasks: 0, completedTasks: 0 };
-    if (task.completed) tag.completedTasks++;
-    else tag.openTasks++;
-    tags.set(name, tag);
-  }
-  return [...tags.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-// src/structure.ts
-function bodyLines(content) {
-  var _a, _b;
-  const result = [];
-  const lines = content.split(/\r?\n/);
-  let frontmatter = ((_a = lines[0]) == null ? void 0 : _a.trim()) === "---";
-  let fence;
-  for (let line = 0; line < lines.length; line++) {
-    const text = lines[line];
-    if (line === 0 && frontmatter) continue;
-    if (frontmatter) {
-      if (/^(---|\.\.\.)\s*$/.test(text)) frontmatter = false;
-      continue;
-    }
-    const marker = (_b = /^ {0,3}(`{3,}|~{3,})/.exec(text)) == null ? void 0 : _b[1];
-    if (fence) {
-      if ((marker == null ? void 0 : marker[0]) === fence[0] && marker.length >= fence.length && text.trim() === marker) fence = void 0;
-      continue;
-    }
-    if (marker) {
-      fence = marker;
-      continue;
-    }
-    result.push({ text, line });
-  }
-  return result;
-}
-function scanHeadings(content) {
-  const headings = [];
-  const lines = bodyLines(content);
-  for (let i = 0; i < lines.length; i++) {
-    const { text, line } = lines[i];
-    const atx = /^ {0,3}(#{1,6})(?:\s+|$)(.*)$/.exec(text);
-    if (atx) {
-      headings.push({ name: atx[2].replace(/\s+#+\s*$/, "").trim(), line, endLine: line, level: atx[1].length });
-    } else if (/^ {0,3}(=+|-+)\s*$/.test(text) && i > 0) {
-      const previous = lines[i - 1];
-      if (previous.line === line - 1 && previous.text.trim() && !/^\s*[-*>#]/.test(previous.text)) {
-        headings.push({ name: previous.text.trim(), line: line - 1, endLine: line, level: text.trim()[0] === "=" ? 1 : 2 });
-      }
-    }
-  }
-  return headings;
-}
-function scanSections(content) {
-  return scanHeadings(content).filter((heading) => heading.level === 1);
-}
-function splitDestination(value) {
-  const target = value.trim().replace(/^~?\[\[|\]\]$/g, "").split("|", 1)[0];
-  const separator = target.indexOf("#");
-  const path = (separator < 0 ? target : target.slice(0, separator)).trim();
-  const heading = separator < 0 ? void 0 : target.slice(separator + 1).trim() || void 0;
-  if (!path || /[\r\n]/.test(target)) throw new Error("Enter a destination note.");
-  return { path: /\.md$/i.test(path) ? path : `${path}.md`, heading };
-}
-function destinationString(path, heading) {
-  return `${path}${heading ? `#${heading}` : ""}`;
-}
-function destinationLabel(destination) {
-  const separator = destination.indexOf("#");
-  const path = separator < 0 ? destination : destination.slice(0, separator);
-  return path.replace(/\.md$/i, "") + (separator < 0 ? "" : destination.slice(separator));
-}
 
 // node_modules/chrono-node/dist/esm/types.js
 var Meridiem;
@@ -3116,6 +3009,332 @@ function formatDateTime(date, time, dateFormat) {
   return `${formatDate(date, dateFormat)}${time ? ` ${time}` : ""}`;
 }
 
+// src/mobile-layout.ts
+function trackModalViewport(modal, content) {
+  const win = modal.ownerDocument.defaultView;
+  const container = modal.parentElement;
+  if (!win || !container) return () => {
+  };
+  container.classList.add("tm-editor-container");
+  const viewport = win.visualViewport;
+  let frame = 0;
+  const update = () => {
+    var _a, _b;
+    container.style.setProperty("--tm-viewport-height", `${(_a = viewport == null ? void 0 : viewport.height) != null ? _a : win.innerHeight}px`);
+    container.style.setProperty("--tm-viewport-top", `${(_b = viewport == null ? void 0 : viewport.offsetTop) != null ? _b : 0}px`);
+    win.cancelAnimationFrame(frame);
+    frame = win.requestAnimationFrame(() => {
+      if (!modal.ownerDocument.body.classList.contains("is-mobile") && !win.matchMedia("(max-width: 700px)").matches) return;
+      const focused = modal.ownerDocument.activeElement;
+      if (!focused || !content.contains(focused)) return;
+      const field2 = focused.getBoundingClientRect();
+      const area = content.getBoundingClientRect();
+      if (field2.bottom > area.bottom - 12) content.scrollTop += field2.bottom - area.bottom + 12;
+      else if (field2.top < area.top + 12) content.scrollTop -= area.top + 12 - field2.top;
+    });
+  };
+  viewport == null ? void 0 : viewport.addEventListener("resize", update);
+  viewport == null ? void 0 : viewport.addEventListener("scroll", update);
+  win.addEventListener("resize", update);
+  content.addEventListener("focusin", update);
+  update();
+  return () => {
+    win.cancelAnimationFrame(frame);
+    viewport == null ? void 0 : viewport.removeEventListener("resize", update);
+    viewport == null ? void 0 : viewport.removeEventListener("scroll", update);
+    win.removeEventListener("resize", update);
+    content.removeEventListener("focusin", update);
+    container.classList.remove("tm-editor-container");
+    container.style.removeProperty("--tm-viewport-height");
+    container.style.removeProperty("--tm-viewport-top");
+  };
+}
+
+// src/project-creator.ts
+var ProjectCreatorModal = class extends import_obsidian2.Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+  }
+  onOpen() {
+    this.modalEl.addClass("tm-editor-modal");
+    const content = this.contentEl;
+    content.empty();
+    content.createEl("h2", { text: this.options.initial ? "Edit project" : "Create project" });
+    const field2 = (label, kind = "input", placeholder) => {
+      const row = content.createDiv({ cls: "tm-editor-field" });
+      const caption = row.createEl("label", { text: label });
+      const input = kind === "select" ? row.createEl("select") : row.createEl("input", { type: "text", attr: { placeholder: placeholder != null ? placeholder : "" } });
+      input.setAttribute("aria-label", label);
+      caption.addEventListener("click", () => input.focus());
+      return input;
+    };
+    const name = field2("Project name", "input", "New project");
+    const date = field2("Start date", "input", "Tomorrow or a formatted date");
+    const endDate = field2("End date", "input", "Next Friday or a formatted date");
+    const deadline = field2("Deadline", "input", "Next Friday or a formatted date");
+    const priority = field2("Priority", "select");
+    for (const [value, text] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) priority.createEl("option", { value, text });
+    const parent = field2("Parent project", "select");
+    parent.createEl("option", { value: "", text: "No parent" });
+    for (const project of this.options.projects) parent.createEl("option", { value: project.path, text: project.path.replace(/\.md$/i, "") });
+    const tags = field2("Tags", "input", "project, work");
+    tags.value = "project";
+    const archiveRow = content.createEl("label", { cls: "tm-toggle" });
+    const archived = archiveRow.createEl("input", { type: "checkbox", attr: { "aria-label": "Archived" } });
+    archiveRow.createSpan({ text: "Archived" });
+    const fields = { name, date, endDate, deadline, priority, parent, tags, archived };
+    if (this.options.initial) {
+      const initial = this.options.initial;
+      for (const key of ["name", "date", "endDate", "deadline", "priority", "parent", "tags"]) fields[key].value = initial[key];
+      archived.checked = initial.archived;
+    }
+    const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
+    this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
+    const cancel = this.actions.createEl("button", { text: "Cancel" });
+    const create = this.actions.createEl("button", { text: this.options.initial ? "Save project" : "Create project", cls: "mod-cta" });
+    const submit = async () => {
+      if (create.disabled) return;
+      const draft = {
+        name: name.value,
+        date: date.value,
+        endDate: endDate.value,
+        deadline: deadline.value,
+        priority: priority.value,
+        parent: parent.value,
+        tags: tags.value,
+        archived: archived.checked
+      };
+      create.disabled = cancel.disabled = true;
+      try {
+        if (this.options.initial) projectDraftProperties(draft, this.options.dateFormat, this.options.linkDates);
+        else projectNoteContent(draft, this.options.dateFormat, this.options.linkDates);
+        await this.options.createProject(draft);
+        this.close();
+      } catch (cause) {
+        error.setText(cause instanceof Error ? cause.message : String(cause));
+        create.disabled = cancel.disabled = false;
+      }
+    };
+    create.addEventListener("click", () => {
+      void submit();
+    });
+    cancel.addEventListener("click", () => this.close());
+    content.onkeydown = (event) => {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing || event.altKey) return;
+      event.preventDefault();
+      if (!event.repeat) void submit();
+    };
+    this.stopViewportTracking = trackModalViewport(this.modalEl, content);
+    this.focusTimer = setTimeout(() => {
+      var _a;
+      const input = fields[(_a = this.options.focusProperty) != null ? _a : "name"];
+      input.focus();
+      if ("select" in input && input.type !== "checkbox") input.select();
+    }, 0);
+  }
+  onClose() {
+    var _a, _b;
+    clearTimeout(this.focusTimer);
+    (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
+    (_b = this.actions) == null ? void 0 : _b.remove();
+    this.contentEl.onkeydown = null;
+    this.contentEl.empty();
+  }
+};
+function projectNoteContent(draft, dateFormat, linkDates, reference = /* @__PURE__ */ new Date()) {
+  if (draft.parent === projectNotePath(draft.name)) throw new Error("A project cannot be its own parent.");
+  const frontmatter = projectDraftProperties(draft, dateFormat, linkDates, reference);
+  return `---
+${Object.entries(frontmatter).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join("\n")}
+---
+`;
+}
+function projectDraftProperties(draft, dateFormat, linkDates, reference = /* @__PURE__ */ new Date()) {
+  projectNotePath(draft.name);
+  const date = (value, label) => {
+    if (!value.trim()) return null;
+    const text = value.trim().replace(/^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/, "$1");
+    const parsed = parseDateExpression(text, reference, dateFormat);
+    if (!parsed) throw new Error(`Could not understand the ${label}.`);
+    const formatted = formatDate(parsed, dateFormat);
+    return linkDates ? `[[${formatted}]]` : formatted;
+  };
+  if (draft.priority && !/^[123]$/.test(draft.priority)) throw new Error("Select a valid priority.");
+  const tags = [.../* @__PURE__ */ new Set(["project", ...draft.tags.split(/[,\s]+/).map((tag) => tag.replace(/^#/, "")).filter((tag) => Boolean(tag) && tag !== "archived")])];
+  if (draft.archived && !tags.includes("archived")) tags.push("archived");
+  return {
+    tags,
+    date: date(draft.date, "start date"),
+    "end date": date(draft.endDate, "end date"),
+    deadline: date(draft.deadline, "deadline"),
+    priority: draft.priority ? Number(draft.priority) : null,
+    parent: draft.parent ? `[[${draft.parent.replace(/\.md$/i, "")}]]` : null
+  };
+}
+function projectNotePath(name) {
+  const title = name.trim().replace(/\.md$/i, "");
+  if (!title || title === "." || title === ".." || /[\\/:*?"<>|#^[\]\r\n]/.test(title)) {
+    throw new Error("Enter a project name without path separators or special filename characters.");
+  }
+  return `${title}.md`;
+}
+
+// src/project-editor.ts
+var propertyAliases = {
+  date: ["date", "startdate", "scheduleddate"],
+  "end date": ["enddate"],
+  deadline: ["deadline"],
+  priority: ["priority"],
+  parent: ["parent"],
+  tags: ["tags"]
+};
+var normalize = (key) => key.toLowerCase().replace(/[\s_-]/g, "");
+function projectEditDraft(project, frontmatter) {
+  var _a, _b;
+  const value = (property) => {
+    const entries = Object.entries(frontmatter);
+    return propertyAliases[property].map((alias) => {
+      var _a2;
+      return (_a2 = entries.find(([key]) => normalize(key) === alias)) == null ? void 0 : _a2[1];
+    }).find((value2) => value2 !== null && value2 !== void 0);
+  };
+  const scalar = (property) => {
+    const raw = value(property);
+    const single = Array.isArray(raw) && raw.length === 1 ? raw[0] : raw;
+    return typeof single === "string" || typeof single === "number" ? String(single) : "";
+  };
+  const rawTags = value("tags");
+  const tags = Array.isArray(rawTags) ? rawTags.filter((tag) => typeof tag === "string") : scalar("tags").split(/[,\s]+/);
+  return {
+    name: project.name,
+    date: scalar("date"),
+    endDate: scalar("end date"),
+    deadline: scalar("deadline"),
+    priority: project.priority ? String(project.priority) : "",
+    parent: (_b = (_a = project.parentPath) != null ? _a : project.parent) != null ? _b : "",
+    tags: tags.map((tag) => tag.replace(/^#/, "")).filter((tag) => tag && tag !== "archived").join(", "),
+    archived: project.archived
+  };
+}
+function applyProjectDraft(frontmatter, draft, dateFormat, linkDates) {
+  const values = projectDraftProperties(draft, dateFormat, linkDates);
+  for (const [property, value] of Object.entries(values)) {
+    const keys = Object.keys(frontmatter).filter((key) => propertyAliases[property].includes(normalize(key)));
+    for (const key of keys.length ? keys : [property]) frontmatter[key] = value;
+  }
+}
+
+// src/task-filters.ts
+function cloneTaskFilters(filters) {
+  return filters.map((filter) => ({
+    ...filter,
+    values: [...filter.values],
+    ...filter.conditions ? {
+      conditions: filter.conditions.map((condition) => ({ ...condition, values: [...condition.values] }))
+    } : {}
+  }));
+}
+
+// src/smart-list-editor.ts
+var import_obsidian3 = require("obsidian");
+
+// src/task-tags.ts
+function normalizeTags(tags = []) {
+  const normalized = tags.map((tag) => tag.trim());
+  if (normalized.some((tag) => !tag || /[[\]\r\n|]/.test(tag))) {
+    throw new Error("Use nonempty tag names without brackets, newlines, or aliases.");
+  }
+  return [...new Set(normalized)];
+}
+function formatTags(tags = []) {
+  return normalizeTags(tags).map((tag) => `#[[${tag}]]`).join(" ");
+}
+function parseTags(value) {
+  const tags = [];
+  const remaining = value.replace(/#\[\[([^[\]\r\n|]+)\]\]/g, (_match, tag) => {
+    tags.push(tag);
+    return "";
+  });
+  if (remaining.trim()) throw new Error("Use tags such as #[[work]] #[[client notes]].");
+  return normalizeTags(tags);
+}
+function taskTagSummaries(tasks) {
+  var _a, _b;
+  const tags = /* @__PURE__ */ new Map();
+  for (const task of tasks) for (const name of new Set((_a = task.tags) != null ? _a : [])) {
+    const tag = (_b = tags.get(name)) != null ? _b : { name, openTasks: 0, completedTasks: 0 };
+    if (task.completed) tag.completedTasks++;
+    else tag.openTasks++;
+    tags.set(name, tag);
+  }
+  return [...tags.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// src/structure.ts
+function bodyLines(content) {
+  var _a, _b;
+  const result = [];
+  const lines = content.split(/\r?\n/);
+  let frontmatter = ((_a = lines[0]) == null ? void 0 : _a.trim()) === "---";
+  let fence;
+  for (let line = 0; line < lines.length; line++) {
+    const text = lines[line];
+    if (line === 0 && frontmatter) continue;
+    if (frontmatter) {
+      if (/^(---|\.\.\.)\s*$/.test(text)) frontmatter = false;
+      continue;
+    }
+    const marker = (_b = /^ {0,3}(`{3,}|~{3,})/.exec(text)) == null ? void 0 : _b[1];
+    if (fence) {
+      if ((marker == null ? void 0 : marker[0]) === fence[0] && marker.length >= fence.length && text.trim() === marker) fence = void 0;
+      continue;
+    }
+    if (marker) {
+      fence = marker;
+      continue;
+    }
+    result.push({ text, line });
+  }
+  return result;
+}
+function scanHeadings(content) {
+  const headings = [];
+  const lines = bodyLines(content);
+  for (let i = 0; i < lines.length; i++) {
+    const { text, line } = lines[i];
+    const atx = /^ {0,3}(#{1,6})(?:\s+|$)(.*)$/.exec(text);
+    if (atx) {
+      headings.push({ name: atx[2].replace(/\s+#+\s*$/, "").trim(), line, endLine: line, level: atx[1].length });
+    } else if (/^ {0,3}(=+|-+)\s*$/.test(text) && i > 0) {
+      const previous = lines[i - 1];
+      if (previous.line === line - 1 && previous.text.trim() && !/^\s*[-*>#]/.test(previous.text)) {
+        headings.push({ name: previous.text.trim(), line: line - 1, endLine: line, level: text.trim()[0] === "=" ? 1 : 2 });
+      }
+    }
+  }
+  return headings;
+}
+function scanSections(content) {
+  return scanHeadings(content).filter((heading) => heading.level === 1);
+}
+function splitDestination(value) {
+  const target = value.trim().replace(/^~?\[\[|\]\]$/g, "").split("|", 1)[0];
+  const separator = target.indexOf("#");
+  const path = (separator < 0 ? target : target.slice(0, separator)).trim();
+  const heading = separator < 0 ? void 0 : target.slice(separator + 1).trim() || void 0;
+  if (!path || /[\r\n]/.test(target)) throw new Error("Enter a destination note.");
+  return { path: /\.md$/i.test(path) ? path : `${path}.md`, heading };
+}
+function destinationString(path, heading) {
+  return `${path}${heading ? `#${heading}` : ""}`;
+}
+function destinationLabel(destination) {
+  const separator = destination.indexOf("#");
+  const path = separator < 0 ? destination : destination.slice(0, separator);
+  return path.replace(/\.md$/i, "") + (separator < 0 ? "" : destination.slice(separator));
+}
+
 // src/parser.ts
 var CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
 var TAG = /(?:^|\s)#\[\[([^[\]\r\n|]+)\]\]\s*$/;
@@ -3556,52 +3775,11 @@ function renderPropertyFilter(container, property, initial, tasks, onChange) {
   render();
 }
 
-// src/mobile-layout.ts
-function trackModalViewport(modal, content) {
-  const win = modal.ownerDocument.defaultView;
-  const container = modal.parentElement;
-  if (!win || !container) return () => {
-  };
-  container.classList.add("tm-editor-container");
-  const viewport = win.visualViewport;
-  let frame = 0;
-  const update = () => {
-    var _a, _b;
-    container.style.setProperty("--tm-viewport-height", `${(_a = viewport == null ? void 0 : viewport.height) != null ? _a : win.innerHeight}px`);
-    container.style.setProperty("--tm-viewport-top", `${(_b = viewport == null ? void 0 : viewport.offsetTop) != null ? _b : 0}px`);
-    win.cancelAnimationFrame(frame);
-    frame = win.requestAnimationFrame(() => {
-      if (!modal.ownerDocument.body.classList.contains("is-mobile") && !win.matchMedia("(max-width: 700px)").matches) return;
-      const focused = modal.ownerDocument.activeElement;
-      if (!focused || !content.contains(focused)) return;
-      const field2 = focused.getBoundingClientRect();
-      const area = content.getBoundingClientRect();
-      if (field2.bottom > area.bottom - 12) content.scrollTop += field2.bottom - area.bottom + 12;
-      else if (field2.top < area.top + 12) content.scrollTop -= area.top + 12 - field2.top;
-    });
-  };
-  viewport == null ? void 0 : viewport.addEventListener("resize", update);
-  viewport == null ? void 0 : viewport.addEventListener("scroll", update);
-  win.addEventListener("resize", update);
-  content.addEventListener("focusin", update);
-  update();
-  return () => {
-    win.cancelAnimationFrame(frame);
-    viewport == null ? void 0 : viewport.removeEventListener("resize", update);
-    viewport == null ? void 0 : viewport.removeEventListener("scroll", update);
-    win.removeEventListener("resize", update);
-    content.removeEventListener("focusin", update);
-    container.classList.remove("tm-editor-container");
-    container.style.removeProperty("--tm-viewport-height");
-    container.style.removeProperty("--tm-viewport-top");
-  };
-}
-
 // src/smart-list-editor.ts
 function smartListDraft(list) {
   return list ? { name: list.name, filters: cloneTaskFilters(list.filters), sort: list.sort, descending: list.descending, grouping: list.grouping } : { name: "", filters: [], sort: "date", descending: false, grouping: "default" };
 }
-var SmartListEditorModal = class extends import_obsidian2.Modal {
+var SmartListEditorModal = class extends import_obsidian3.Modal {
   constructor(app, tasks, save, list) {
     super(app);
     this.tasks = tasks;
@@ -3689,120 +3867,6 @@ var SmartListEditorModal = class extends import_obsidian2.Modal {
     this.contentEl.empty();
   }
 };
-
-// src/project-creator.ts
-var import_obsidian3 = require("obsidian");
-var ProjectCreatorModal = class extends import_obsidian3.Modal {
-  constructor(app, options) {
-    super(app);
-    this.options = options;
-  }
-  onOpen() {
-    this.modalEl.addClass("tm-editor-modal");
-    const content = this.contentEl;
-    content.empty();
-    content.createEl("h2", { text: "Create project" });
-    const field2 = (label, kind = "input", placeholder) => {
-      const row = content.createDiv({ cls: "tm-editor-field" });
-      const caption = row.createEl("label", { text: label });
-      const input = kind === "select" ? row.createEl("select") : row.createEl("input", { type: "text", attr: { placeholder: placeholder != null ? placeholder : "" } });
-      input.setAttribute("aria-label", label);
-      caption.addEventListener("click", () => input.focus());
-      return input;
-    };
-    const name = field2("Project name", "input", "New project");
-    const date = field2("Start date", "input", "Tomorrow or a formatted date");
-    const endDate = field2("End date", "input", "Next Friday or a formatted date");
-    const deadline = field2("Deadline", "input", "Next Friday or a formatted date");
-    const priority = field2("Priority", "select");
-    for (const [value, text] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) priority.createEl("option", { value, text });
-    const parent = field2("Parent project", "select");
-    parent.createEl("option", { value: "", text: "No parent" });
-    for (const project of this.options.projects) parent.createEl("option", { value: project.path, text: project.path.replace(/\.md$/i, "") });
-    const tags = field2("Tags", "input", "project, work");
-    tags.value = "project";
-    const archiveRow = content.createEl("label", { cls: "tm-toggle" });
-    const archived = archiveRow.createEl("input", { type: "checkbox", attr: { "aria-label": "Archived" } });
-    archiveRow.createSpan({ text: "Archived" });
-    const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
-    this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
-    const cancel = this.actions.createEl("button", { text: "Cancel" });
-    const create = this.actions.createEl("button", { text: "Create project", cls: "mod-cta" });
-    const submit = async () => {
-      if (create.disabled) return;
-      const draft = {
-        name: name.value,
-        date: date.value,
-        endDate: endDate.value,
-        deadline: deadline.value,
-        priority: priority.value,
-        parent: parent.value,
-        tags: tags.value,
-        archived: archived.checked
-      };
-      create.disabled = cancel.disabled = true;
-      try {
-        projectNoteContent(draft, this.options.dateFormat, this.options.linkDates);
-        await this.options.createProject(draft);
-        this.close();
-      } catch (cause) {
-        error.setText(cause instanceof Error ? cause.message : String(cause));
-        create.disabled = cancel.disabled = false;
-      }
-    };
-    create.addEventListener("click", () => {
-      void submit();
-    });
-    cancel.addEventListener("click", () => this.close());
-    content.onkeydown = (event) => {
-      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing || event.altKey) return;
-      event.preventDefault();
-      if (!event.repeat) void submit();
-    };
-    this.stopViewportTracking = trackModalViewport(this.modalEl, content);
-  }
-  onClose() {
-    var _a, _b;
-    (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
-    (_b = this.actions) == null ? void 0 : _b.remove();
-    this.contentEl.onkeydown = null;
-    this.contentEl.empty();
-  }
-};
-function projectNoteContent(draft, dateFormat, linkDates, reference = /* @__PURE__ */ new Date()) {
-  const path = projectNotePath(draft.name);
-  const date = (value, label) => {
-    if (!value.trim()) return null;
-    const text = value.trim().replace(/^\[\[([^\]]+)\]\]$/, "$1");
-    const parsed = parseDateExpression(text, reference, dateFormat);
-    if (!parsed) throw new Error(`Could not understand the ${label}.`);
-    const formatted = formatDate(parsed, dateFormat);
-    return linkDates ? `[[${formatted}]]` : formatted;
-  };
-  if (draft.priority && !/^[123]$/.test(draft.priority)) throw new Error("Select a valid priority.");
-  if (draft.parent === path) throw new Error("A project cannot be its own parent.");
-  const tags = [.../* @__PURE__ */ new Set(["project", ...draft.tags.split(/[,\s]+/).map((tag) => tag.replace(/^#/, "")).filter(Boolean)])];
-  if (draft.archived && !tags.includes("archived")) tags.push("archived");
-  const frontmatter = {
-    tags,
-    date: date(draft.date, "start date"),
-    "end date": date(draft.endDate, "end date"),
-    deadline: date(draft.deadline, "deadline"),
-    priority: draft.priority ? Number(draft.priority) : null,
-    parent: draft.parent ? `[[${draft.parent.replace(/\.md$/i, "")}]]` : null
-  };
-  return `---
-${Object.entries(frontmatter).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join("\n")}
----
-`;
-}
-function projectNotePath(name) {
-  const title = name.trim().replace(/\.md$/i, "");
-  if (!title || title === "." || title === ".." || /[\\/:*?"<>|#^[\]\r\n]/.test(title)) {
-    throw new Error("Enter a project name without path separators or special filename characters.");
-  }
-  return `${title}.md`;
-}
 
 // src/bulk-task-editor.ts
 var import_obsidian4 = require("obsidian");
@@ -5487,8 +5551,11 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     const project = this.pagePath ? this.plugin.index.projects().find((project2) => project2.path === this.pagePath) : void 0;
     if (project) {
       const metadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
-      this.renderProperties(metadata, project);
-      if (project.parent) this.badge(metadata, "folder", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
+      this.renderProperties(metadata, project, (property) => this.plugin.openProjectEditor(project.path, property));
+      if (project.parent) {
+        const badge = this.badge(metadata, "folder", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
+        this.makePropertyEditable(badge, "parent project", () => this.plugin.openProjectEditor(project.path, "parent"));
+      }
       if (!metadata.childElementCount) metadata.remove();
     }
     const actions = header.createDiv({ cls: "tm-header-actions" });
@@ -5960,30 +6027,38 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     (0, import_obsidian9.setIcon)(menuButton, "more-horizontal");
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
   }
-  renderProperties(parent, properties) {
+  makePropertyEditable(badge, label, edit) {
+    var _a;
+    badge.setAttribute("role", "button");
+    badge.setAttribute("tabindex", "0");
+    badge.setAttribute("aria-label", `Edit ${label}: ${(_a = badge.textContent) != null ? _a : ""}`);
+    badge.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      edit();
+    });
+    badge.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      edit();
+    });
+  }
+  renderProperties(parent, properties, editProject) {
     var _a;
     const propertyBadge = (property, icon, text, variant) => {
       const badge = this.badge(parent, icon, text, variant);
-      if (!("completed" in properties)) return;
-      badge.setAttribute("role", "button");
-      badge.setAttribute("tabindex", "0");
-      const label = { scheduledDate: "scheduled date and time", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
-      badge.setAttribute("aria-label", `Edit ${label}: ${text}`);
-      badge.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.editTask(properties, property);
-      });
-      badge.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        event.stopPropagation();
-        this.editTask(properties, property);
-      });
+      const label = { scheduledDate: "scheduled date and time", endDate: "end date", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
+      if ("completed" in properties && property !== "endDate") {
+        this.makePropertyEditable(badge, label, () => this.editTask(properties, property));
+      } else if (editProject && property !== "durationMinutes") {
+        const field2 = property === "scheduledDate" ? "date" : property;
+        this.makePropertyEditable(badge, label, () => editProject(field2));
+      }
     };
     const incompleteTask = "completed" in properties && !properties.completed;
     if (properties.scheduledDate) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : void 0);
-    if ("endDate" in properties && properties.endDate) this.badge(parent, "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
+    if ("endDate" in properties && properties.endDate) propertyBadge("endDate", "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
     if ("durationMinutes" in properties && properties.durationMinutes) propertyBadge("durationMinutes", TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
     if (properties.deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : void 0);
     if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
@@ -7771,6 +7846,14 @@ var TaskManagerPlugin = class extends import_obsidian18.Plugin {
       if (!checking) void this.deleteSmartList(list.id).catch((error) => new import_obsidian18.Notice(String(error)));
       return true;
     } });
+    this.addCommand({ id: "edit-project", name: "Edit project", checkCallback: (checking) => {
+      var _a, _b;
+      const view = (_a = this.app.workspace.getActiveViewOfType(TaskMainView)) != null ? _a : this.app.workspace.getActiveViewOfType(import_obsidian18.MarkdownView);
+      const path = view instanceof TaskMainView ? view.pagePath : view instanceof import_obsidian18.MarkdownView ? (_b = view.file) == null ? void 0 : _b.path : void 0;
+      if (!path || !this.index.isProject(path)) return false;
+      if (!checking) this.openProjectEditor(path);
+      return true;
+    } });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: (checking) => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: (checking) => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
@@ -7911,6 +7994,39 @@ var TaskManagerPlugin = class extends import_obsidian18.Plugin {
         await this.app.vault.create(path, projectNoteContent(draft, this.dateFormat(), this.settings.linkDates));
         await this.index.refreshPath(path);
         await this.openProject(path);
+      }
+    }).open();
+  }
+  openProjectEditor(path, focusProperty) {
+    var _a, _b;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    const project = this.index.projects().find((project2) => project2.path === path);
+    if (!(file instanceof import_obsidian18.TFile) || !project) {
+      new import_obsidian18.Notice("Project note no longer exists.");
+      return;
+    }
+    const initial = projectEditDraft(project, (_b = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter) != null ? _b : {});
+    const projects = this.index.projects().filter((project2) => project2.path !== path);
+    if (initial.parent && !projects.some((project2) => project2.path === initial.parent)) {
+      projects.push({ path: initial.parent, name: initial.parent, openTasks: 0, completedTasks: 0, archived: false });
+    }
+    new ProjectCreatorModal(this.app, {
+      projects,
+      dateFormat: this.dateFormat(),
+      linkDates: this.settings.linkDates,
+      initial,
+      focusProperty,
+      createProject: async (draft) => {
+        const basename = projectNotePath(draft.name);
+        const folder = file.path.slice(0, file.path.lastIndexOf("/") + 1);
+        const destination = folder + basename;
+        const existing = this.app.vault.getAbstractFileByPath(destination);
+        if (existing && existing !== file) throw new Error("A note with this name already exists.");
+        if (draft.parent === file.path || draft.parent === destination) throw new Error("A project cannot be its own parent.");
+        await this.app.fileManager.processFrontMatter(file, (frontmatter) => applyProjectDraft(frontmatter, draft, this.dateFormat(), this.settings.linkDates));
+        if (destination !== file.path) await this.app.fileManager.renameFile(file, destination);
+        await this.index.refreshPath(file.path);
+        await this.openProject(file.path);
       }
     }).open();
   }

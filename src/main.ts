@@ -1,6 +1,7 @@
+import { applyProjectDraft, projectEditDraft } from "./project-editor";
 import { cloneTaskFilters } from "./task-filters";
 import { SmartListEditorModal, type SmartListDraft } from "./smart-list-editor";
-import { ProjectCreatorModal, projectNotePath, projectNoteContent } from "./project-creator";
+import { ProjectCreatorModal, projectNotePath, projectNoteContent, type ProjectDraft } from "./project-creator";
 import { BulkTaskEditorModal } from "./bulk-task-editor";
 import { TaskModeController } from "./task-mode";
 import type { TaskEditorPreset } from "./types";
@@ -92,6 +93,13 @@ export default class TaskManagerPlugin extends Plugin {
       const list = this.activeSmartList();
       if (!list) return false;
       if (!checking) void this.deleteSmartList(list.id).catch(error => new Notice(String(error)));
+      return true;
+    } });
+    this.addCommand({ id: "edit-project", name: "Edit project", checkCallback: checking => {
+      const view = this.app.workspace.getActiveViewOfType(TaskMainView) ?? this.app.workspace.getActiveViewOfType(MarkdownView);
+      const path = view instanceof TaskMainView ? view.pagePath : view instanceof MarkdownView ? view.file?.path : undefined;
+      if (!path || !this.index.isProject(path)) return false;
+      if (!checking) this.openProjectEditor(path);
       return true;
     } });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
@@ -229,6 +237,33 @@ export default class TaskManagerPlugin extends Plugin {
         await this.app.vault.create(path, projectNoteContent(draft, this.dateFormat(), this.settings.linkDates));
         await this.index.refreshPath(path);
         await this.openProject(path);
+      }
+    }).open();
+  }
+
+  openProjectEditor(path: string, focusProperty?: keyof ProjectDraft): void {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    const project = this.index.projects().find(project => project.path === path);
+    if (!(file instanceof TFile) || !project) { new Notice("Project note no longer exists."); return; }
+    const initial = projectEditDraft(project, this.app.metadataCache.getFileCache(file)?.frontmatter ?? {});
+    const projects = this.index.projects().filter(project => project.path !== path);
+    if (initial.parent && !projects.some(project => project.path === initial.parent)) {
+      projects.push({ path: initial.parent, name: initial.parent, openTasks: 0, completedTasks: 0, archived: false });
+    }
+    new ProjectCreatorModal(this.app, {
+      projects, dateFormat: this.dateFormat(), linkDates: this.settings.linkDates, initial, focusProperty,
+      createProject: async draft => {
+        const basename = projectNotePath(draft.name);
+        const folder = file.path.slice(0, file.path.lastIndexOf("/") + 1);
+        const destination = folder + basename;
+        const existing = this.app.vault.getAbstractFileByPath(destination);
+        if (existing && existing !== file) throw new Error("A note with this name already exists.");
+        if (draft.parent === file.path || draft.parent === destination) throw new Error("A project cannot be its own parent.");
+        await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) =>
+          applyProjectDraft(frontmatter, draft, this.dateFormat(), this.settings.linkDates));
+        if (destination !== file.path) await this.app.fileManager.renameFile(file, destination);
+        await this.index.refreshPath(file.path);
+        await this.openProject(file.path);
       }
     }).open();
   }

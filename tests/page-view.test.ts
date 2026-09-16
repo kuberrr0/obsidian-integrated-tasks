@@ -17,7 +17,7 @@ vi.mock("../src/note-token-editor", () => ({ noteTokenEditor: vi.fn() }));
 import TaskManagerPlugin from "../src/main";
 import { TaskMainView } from "../src/task-view";
 import { scanTasks } from "../src/parser";
-import type { Task, TaskViewState } from "../src/types";
+import type { Task, ProjectProperties, TaskViewState } from "../src/types";
 
 describe("page task view", () => {
   it.each(["navigation", "tasks"])("waits for %s reveal and propagates reveal failures", async (target) => {
@@ -119,7 +119,7 @@ function selectionView() {
     prepareDrag(task: Task): void;
     editTask(task: Task, focusProperty?: string): void;
     clearSelectionOutside(event: unknown): void;
-    renderProperties(parent: unknown, task: Task): void;
+    renderProperties(parent: unknown, task: Task | ProjectProperties, editProject?: (property: string) => void): void;
     badge: (...args: unknown[]) => unknown;
     dropListTask(task: Task, group?: unknown, anchor?: Task, placement?: string): Promise<void>;
   };
@@ -402,4 +402,25 @@ it("restores tag page state and clears it when navigating to All Tasks", async (
   await view.setState({ mode: "all" });
   expect(view.getState().tag).toBeUndefined();
   expect(view.getDisplayText()).toBe("All Tasks");
+});
+
+it("routes project date and priority pills to the matching editor fields", () => {
+  const { internals, openEditor } = selectionView();
+  const badges: Array<Map<string, (event: unknown) => void>> = [];
+  internals.badge = () => {
+    const handlers = new Map<string, (event: unknown) => void>();
+    badges.push(handlers);
+    return { setAttribute: vi.fn(), addEventListener: (type: string, callback: (event: unknown) => void) => handlers.set(type, callback) };
+  };
+  const edit = vi.fn();
+  internals.renderProperties({}, { scheduledDate: "2026-09-18", endDate: "2026-09-20", deadline: "2026-09-21", priority: 1 }, edit);
+  for (const [index, field] of ["date", "endDate", "deadline", "priority"].entries()) {
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), key: "Enter" };
+    badges[index].get("click")!(event);
+    expect(edit).toHaveBeenLastCalledWith(field);
+    badges[index].get("keydown")!(event);
+    expect(edit).toHaveBeenLastCalledWith(field);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(2);
+  }
+  expect(openEditor).not.toHaveBeenCalled();
 });

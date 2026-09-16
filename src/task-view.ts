@@ -1,3 +1,4 @@
+import type { ProjectDraft } from "./project-creator";
 import { cloneTaskFilters } from "./task-filters";
 import { renderPropertyFilter } from "./filter-editor";
 import { taskTagSummaries } from "./task-tags";
@@ -315,8 +316,11 @@ export class TaskMainView extends ItemView {
     const project = this.pagePath ? this.plugin.index.projects().find(project => project.path === this.pagePath) : undefined;
     if (project) {
       const metadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
-      this.renderProperties(metadata, project);
-      if (project.parent) this.badge(metadata, "folder", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
+      this.renderProperties(metadata, project, property => this.plugin.openProjectEditor(project.path, property));
+      if (project.parent) {
+        const badge = this.badge(metadata, "folder", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
+        this.makePropertyEditable(badge, "parent project", () => this.plugin.openProjectEditor(project.path, "parent"));
+      }
       if (!metadata.childElementCount) metadata.remove();
     }
 
@@ -759,27 +763,33 @@ export class TaskMainView extends ItemView {
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
   }
 
-  private renderProperties(parent: HTMLElement, properties: ProjectProperties | Task): void {
-    const propertyBadge = (property: TaskEditorProperty, icon: string, text: string, variant?: string): void => {
+  private makePropertyEditable(badge: HTMLElement, label: string, edit: () => void): void {
+    badge.setAttribute("role", "button");
+    badge.setAttribute("tabindex", "0");
+    badge.setAttribute("aria-label", `Edit ${label}: ${badge.textContent ?? ""}`);
+    badge.addEventListener("click", event => {
+      event.preventDefault(); event.stopPropagation(); edit();
+    });
+    badge.addEventListener("keydown", event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault(); event.stopPropagation(); edit();
+    });
+  }
+
+  private renderProperties(parent: HTMLElement, properties: ProjectProperties | Task, editProject?: (property: keyof ProjectDraft) => void): void {
+    const propertyBadge = (property: TaskEditorProperty | "endDate", icon: string, text: string, variant?: string): void => {
       const badge = this.badge(parent, icon, text, variant);
-      if (!("completed" in properties)) return;
-      badge.setAttribute("role", "button");
-      badge.setAttribute("tabindex", "0");
-      const label = { scheduledDate: "scheduled date and time", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
-      badge.setAttribute("aria-label", `Edit ${label}: ${text}`);
-      badge.addEventListener("click", event => {
-        event.preventDefault(); event.stopPropagation();
-        this.editTask(properties, property);
-      });
-      badge.addEventListener("keydown", event => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault(); event.stopPropagation();
-        this.editTask(properties, property);
-      });
+      const label = { scheduledDate: "scheduled date and time", endDate: "end date", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
+      if ("completed" in properties && property !== "endDate") {
+        this.makePropertyEditable(badge, label, () => this.editTask(properties, property));
+      } else if (editProject && property !== "durationMinutes") {
+        const field = property === "scheduledDate" ? "date" : property;
+        this.makePropertyEditable(badge, label, () => editProject(field));
+      }
     };
     const incompleteTask = "completed" in properties && !properties.completed;
     if (properties.scheduledDate) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : undefined);
-    if ("endDate" in properties && properties.endDate) this.badge(parent, "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
+    if ("endDate" in properties && properties.endDate) propertyBadge("endDate", "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
     if ("durationMinutes" in properties && properties.durationMinutes) propertyBadge("durationMinutes", TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
     if (properties.deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : undefined);
     if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);

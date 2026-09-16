@@ -59,3 +59,20 @@ it("shows all fields, retains invalid input, and submits the complete draft", as
   await vi.waitFor(() => expect(view.close).toHaveBeenCalledOnce());
   expect(createProject).toHaveBeenCalledExactlyOnceWith({ ...blank, date: "2026-09-17", priority: "1" });
 });
+
+it.each(["name", "date", "endDate", "deadline", "priority", "parent", "tags", "archived"] as const)("prefills the project editor and focuses %s", async focusProperty => {
+  const initial = { ...blank, date: "2026-09-18", endDate: "2026-09-19", deadline: "2026-09-20", priority: "2", parent: "Studio.md", tags: "project, work", archived: true };
+  const createProject = vi.fn().mockResolvedValue(undefined);
+  const modal = new ProjectCreatorModal({} as App, { projects: [], dateFormat: "YYYY-MM-DD", linkDates: false, createProject, initial, focusProperty });
+  const view = modal as unknown as { contentEl: Element; modalEl: Element; close: () => void };
+  view.contentEl = new Element(); view.modalEl = new Element(); view.close = vi.fn();
+  modal.onOpen();
+  const fields = view.contentEl.all().filter(el => el.attrs["aria-label"]);
+  const keys = ["name", "date", "endDate", "deadline", "priority", "parent", "tags", "archived"] as const;
+  for (const [index, key] of keys.entries()) expect(key === "archived" ? fields[index].checked : fields[index].value).toBe(initial[key]);
+  const focus = vi.spyOn(fields[keys.indexOf(focusProperty)], "focus");
+  await vi.waitFor(() => expect(focus).toHaveBeenCalledOnce());
+  view.modalEl.all().find(el => el.text === "Save project")!.dispatchEvent(new Event("click"));
+  await vi.waitFor(() => expect(view.close).toHaveBeenCalledOnce());
+  expect(createProject).toHaveBeenCalledWith(initial);
+});
