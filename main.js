@@ -5651,6 +5651,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
       this.showArchivedProjects = checkbox.checked;
       this.render();
     });
+    actions.createEl("button", { text: "Create new project", cls: "mod-cta" }).addEventListener("click", () => this.plugin.openProjectCreator());
     const projects = this.plugin.index.projects();
     const active = projects.filter((project) => !project.archived);
     const archived = projects.filter((project) => project.archived);
