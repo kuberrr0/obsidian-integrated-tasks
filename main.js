@@ -25,6 +25,17 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
+// src/task-filters.ts
+function cloneTaskFilters(filters) {
+  return filters.map((filter) => ({
+    ...filter,
+    values: [...filter.values],
+    ...filter.conditions ? {
+      conditions: filter.conditions.map((condition) => ({ ...condition, values: [...condition.values] }))
+    } : {}
+  }));
+}
+
 // src/smart-list-editor.ts
 var import_obsidian2 = require("obsidian");
 
@@ -3588,7 +3599,7 @@ function trackModalViewport(modal, content) {
 
 // src/smart-list-editor.ts
 function smartListDraft(list) {
-  return list ? { name: list.name, filters: JSON.parse(JSON.stringify(list.filters)), sort: list.sort, descending: list.descending, grouping: list.grouping } : { name: "", filters: [], sort: "date", descending: false, grouping: "default" };
+  return list ? { name: list.name, filters: cloneTaskFilters(list.filters), sort: list.sort, descending: list.descending, grouping: list.grouping } : { name: "", filters: [], sort: "date", descending: false, grouping: "default" };
 }
 var SmartListEditorModal = class extends import_obsidian2.Modal {
   constructor(app, tasks, save, list) {
@@ -5277,7 +5288,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
       const version = JSON.stringify(list);
       if (list && version !== this.smartListVersion) {
         this.smartListVersion = version;
-        this.propertyFilters = JSON.parse(JSON.stringify(list.filters));
+        this.propertyFilters = cloneTaskFilters(list.filters);
         this.sort = list.sort;
         this.descending = list.descending;
         this.grouping = list.grouping;
@@ -7857,7 +7868,7 @@ var TaskManagerPlugin = class extends import_obsidian18.Plugin {
     const name = draft.name.trim();
     if (!name) throw new Error("Enter a list name.");
     if (id && !this.settings.smartLists.some((list) => list.id === id)) throw new Error("This smart list no longer exists.");
-    const saved = { ...draft, name, filters: JSON.parse(JSON.stringify(draft.filters)), id: id != null ? id : crypto.randomUUID() };
+    const saved = { ...draft, name, filters: cloneTaskFilters(draft.filters), id: id != null ? id : crypto.randomUUID() };
     const previous = this.settings.smartLists;
     this.settings.smartLists = id ? previous.map((list) => list.id === id ? saved : list) : [...previous, saved];
     try {

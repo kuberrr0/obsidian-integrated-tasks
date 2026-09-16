@@ -1,3 +1,4 @@
+import { cloneTaskFilters } from "./task-filters";
 import { SmartListEditorModal, type SmartListDraft } from "./smart-list-editor";
 import { ProjectCreatorModal, projectNotePath, projectNoteContent } from "./project-creator";
 import { BulkTaskEditorModal } from "./bulk-task-editor";
@@ -192,7 +193,7 @@ export default class TaskManagerPlugin extends Plugin {
     const name = draft.name.trim();
     if (!name) throw new Error("Enter a list name.");
     if (id && !this.settings.smartLists.some(list => list.id === id)) throw new Error("This smart list no longer exists.");
-    const saved: SmartList = { ...draft, name, filters: JSON.parse(JSON.stringify(draft.filters)), id: id ?? crypto.randomUUID() };
+    const saved: SmartList = { ...draft, name, filters: cloneTaskFilters(draft.filters), id: id ?? crypto.randomUUID() };
     const previous = this.settings.smartLists;
     this.settings.smartLists = id ? previous.map(list => list.id === id ? saved : list) : [...previous, saved];
     try { await this.saveSettings(); }

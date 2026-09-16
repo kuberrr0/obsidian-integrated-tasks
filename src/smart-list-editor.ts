@@ -1,3 +1,4 @@
+import { cloneTaskFilters } from "./task-filters";
 import { Modal, type App } from "obsidian";
 import { renderPropertyFilter } from "./filter-editor";
 import { TASK_PROPERTIES } from "./task-properties";
@@ -6,7 +7,7 @@ import type { SmartList, Task, TaskGrouping, TaskSort } from "./types";
 
 export type SmartListDraft = Omit<SmartList, "id">;
 export function smartListDraft(list?: SmartList): SmartListDraft {
-  return list ? { name: list.name, filters: JSON.parse(JSON.stringify(list.filters)), sort: list.sort, descending: list.descending, grouping: list.grouping }
+  return list ? { name: list.name, filters: cloneTaskFilters(list.filters), sort: list.sort, descending: list.descending, grouping: list.grouping }
     : { name: "", filters: [], sort: "date", descending: false, grouping: "default" };
 }
 export class SmartListEditorModal extends Modal {

@@ -1,3 +1,4 @@
+import { cloneTaskFilters } from "./task-filters";
 import { renderPropertyFilter } from "./filter-editor";
 import { taskTagSummaries } from "./task-tags";
 import type { TaskEditorProperty } from "./task-editor";
@@ -124,7 +125,7 @@ export class TaskMainView extends ItemView {
       const version = JSON.stringify(list);
       if (list && version !== this.smartListVersion) {
         this.smartListVersion = version;
-        this.propertyFilters = JSON.parse(JSON.stringify(list.filters));
+        this.propertyFilters = cloneTaskFilters(list.filters);
         this.sort = list.sort; this.descending = list.descending; this.grouping = list.grouping;
         this.selection.clear();
       }
