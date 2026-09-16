@@ -91,7 +91,7 @@ Tasks remain ordinary checklists with optional properties at the end:
 | Tags | `#[[work]] #[[client notes]]` |
 | Destination in the editor | `~[[Note]]` or `~[[Note#Heading]]` |
 
-Dates follow your **Daily Notes** date format, with `YYYY-MM-DD` as the fallback; ISO dates are also supported. Turn off **Link dates** to save plain dates instead of links. This setting affects new edits, without rewriting existing tasks.
+Dates use **Date format** when set; it is empty by default and falls back to your **Daily Notes** date format, then `YYYY-MM-DD`. ISO dates are also supported. Turn off **Link dates** to save plain dates instead of links. These settings apply to new edits. Click **Update dates** in settings to convert scheduled and deadline tokens in all tasks across the vault, including completed tasks, to the selected format and link style. The updater preserves task text and times and skips frontmatter and fenced code blocks.
 
 Tags can contain spaces. They appear as badges and work with search, filters, sorting, and grouping. Duplicate tags are saved once.
 

@@ -84,6 +84,9 @@ export interface TaskDraft extends ParsedTaskMetadata {
 export interface TaskManagerSettings {
   taskMode: boolean;
   linkDates: boolean;
+  dateFormat: string;
+  /** Format used before a pending date-token migration. */
+  previousDateFormat?: string;
   wrapTaskTitles: boolean;
   wrapCalendarTaskTitles: boolean;
   wrapKanbanTaskTitles: boolean;
@@ -94,9 +97,10 @@ export interface TaskManagerSettings {
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
   taskMode: false,
-  linkDates: true,
+  linkDates: false,
+  dateFormat: "",
   wrapTaskTitles: true,
-  wrapCalendarTaskTitles: true,
+  wrapCalendarTaskTitles: false,
   wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
   tasksHeading: "Tasks",

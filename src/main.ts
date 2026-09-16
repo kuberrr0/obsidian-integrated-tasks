@@ -122,7 +122,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<TaskManagerSettings> | null);
     this.settings.taskMode = this.settings.taskMode === true;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
-    this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles !== false;
+    this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
   }
@@ -261,7 +261,31 @@ export default class TaskManagerPlugin extends Plugin {
     }
   }
 
+  async setDateFormat(value: string): Promise<void> {
+    const previous = this.dateFormat();
+    this.settings.dateFormat = value.trim();
+    if (previous !== this.dateFormat()) this.settings.previousDateFormat ??= previous;
+    await this.saveSettings();
+    await this.refreshDateParsing();
+  }
+
+  private async refreshDateParsing(): Promise<void> {
+    await Promise.all(this.app.vault.getMarkdownFiles().map(file => this.index.refreshPath(file.path)));
+    this.refreshViews();
+  }
+
+  async updateTaskDates(): Promise<void> {
+    const paths = await this.store.updateDates([
+      this.settings.previousDateFormat ?? this.dateFormat(),
+      this.dateFormat(), dailyNoteDateFormat(this.app)
+    ]);
+    delete this.settings.previousDateFormat;
+    await this.saveSettings();
+    await this.refreshDateParsing();
+    new Notice(`Updated task dates in ${paths.length} note${paths.length === 1 ? "" : "s"}.`);
+  }
+
   dateFormat(): string {
-    return dailyNoteDateFormat(this.app);
+    return this.settings.dateFormat.trim() || dailyNoteDateFormat(this.app);
   }
 }

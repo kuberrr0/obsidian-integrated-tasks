@@ -28,7 +28,7 @@ export function tomorrowIso(now = new Date()): string {
 export function parseDateExpression(
   value: string,
   reference = new Date(),
-  dateFormat = DEFAULT_DATE_FORMAT
+  dateFormat: string | string[] = DEFAULT_DATE_FORMAT
 ): string | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
@@ -104,7 +104,7 @@ export function parseTimeExpression(value: string, reference = new Date()): stri
   return result ? resultTime(result) : undefined;
 }
 
-export function parseDateTimeExpression(value: string, reference = new Date(), dateFormat = DEFAULT_DATE_FORMAT): { date: string; time?: string } | undefined {
+export function parseDateTimeExpression(value: string, reference = new Date(), dateFormat: string | string[] = DEFAULT_DATE_FORMAT): { date: string; time?: string } | undefined {
   const text = value.trim();
   const link = /^\[\[([^\]]+)\]\](?:\s+(.+))?$/.exec(text);
   if (link) {
@@ -116,7 +116,7 @@ export function parseDateTimeExpression(value: string, reference = new Date(), d
   for (let index = text.length; index > 0; index--) {
     if (index !== text.length && text[index] !== " ") continue;
     const prefix = text.slice(0, index);
-    const strict = moment(prefix, [DEFAULT_DATE_FORMAT, dateFormat], true);
+    const strict = moment(prefix, [DEFAULT_DATE_FORMAT, ...[dateFormat].flat()], true);
     if (!strict.isValid()) continue;
     const suffix = text.slice(index).trim();
     const time = suffix ? parseTimeExpression(suffix, reference) : undefined;

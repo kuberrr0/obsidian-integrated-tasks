@@ -1,3 +1,4 @@
+import { updateTaskDateTokens } from "./task-date-update";
 import { newTaskLines } from "./task-description";
 import { planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
@@ -20,6 +21,20 @@ export class TaskStore {
     private readonly getNewTaskPosition: () => TaskManagerSettings["newTaskPosition"] = () => "top",
     private readonly getLinkDates: () => boolean = () => true
   ) {}
+
+  async updateDates(sourceFormats: string[]): Promise<string[]> {
+    const format = this.getDateFormat();
+    const linkDates = this.getLinkDates();
+    const files = new Map(this.app.vault.getMarkdownFiles().map(file => [file.path, file]));
+    const before = new Map<string, string>();
+    const after = new Map<string, string>();
+    for (const [path, file] of files) {
+      const content = await this.app.vault.read(file);
+      const updated = updateTaskDateTokens(content, sourceFormats, format, linkDates);
+      if (updated !== content) { before.set(path, content); after.set(path, updated); }
+    }
+    return this.commitChanges(files, before, after);
+  }
 
   async toggle(task: Task, completed: boolean): Promise<void> {
     const file = this.requireFile(task.path);
@@ -154,6 +169,10 @@ export class TaskStore {
     }
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
     const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates() });
+    return this.commitChanges(files, before, after);
+  }
+
+  private async commitChanges(files: Map<string, TFile>, before: Map<string, string>, after: Map<string, string>): Promise<string[]> {
     const written: string[] = [];
     try {
       for (const [path, content] of after) {

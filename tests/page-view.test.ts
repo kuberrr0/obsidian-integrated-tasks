@@ -67,7 +67,7 @@ it("defaults wrapping on while preserving a saved choice to turn it off", async 
     plugin.loadData = vi.fn().mockResolvedValue(saved);
     await plugin.loadSettings();
     expect(plugin.settings.wrapTaskTitles).toBe(expected);
-    expect(plugin.settings.wrapCalendarTaskTitles).toBe(true);
+    expect(plugin.settings.wrapCalendarTaskTitles).toBe(false);
     expect(plugin.settings.wrapKanbanTaskTitles).toBe(true);
   }
 });

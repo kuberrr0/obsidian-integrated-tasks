@@ -1,4 +1,4 @@
-import { PluginSettingTab, Setting, type App, type SettingDefinitionRender } from "obsidian";
+import { Notice, PluginSettingTab, Setting, type App, type SettingDefinitionRender } from "obsidian";
 import type TaskManagerPlugin from "./main";
 
 export class TaskManagerSettingTab extends PluginSettingTab {
@@ -14,12 +14,32 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.taskMode).onChange(value => this.plugin.setTaskMode(value))); }
       },
       {
+        name: "Date format",
+        desc: "Moment date format for task dates, for example DD/MM/YYYY. Leave empty to use the Daily Notes format (YYYY-MM-DD if unset).",
+        render: (setting: Setting) => { setting.addText(text => text
+          .setPlaceholder("Daily Notes format")
+          .setValue(this.plugin.settings.dateFormat)
+          .onChange(value => this.plugin.setDateFormat(value))); }
+      },
+      {
         name: "Link dates",
         desc: "Write scheduled and deadline dates as [[date]] links. When off, write plain dates. Applies when creating or editing tasks; existing notes are not rewritten automatically.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.linkDates).onChange(async value => {
           this.plugin.settings.linkDates = value;
           await this.plugin.saveSettings();
         })); }
+      },
+      {
+        name: "Update dates",
+        desc: "Update scheduled and deadline date tokens in all Markdown tasks in the vault, including completed tasks, to follow Date format and Link dates.",
+        render: (setting: Setting) => { setting.addButton(button => button
+          .setButtonText("Update dates")
+          .onClick(async () => {
+            button.setDisabled(true);
+            try { await this.plugin.updateTaskDates(); }
+            catch (error) { new Notice(String(error)); }
+            finally { button.setDisabled(false); }
+          })); }
       },
       {
         name: "Inbox note",

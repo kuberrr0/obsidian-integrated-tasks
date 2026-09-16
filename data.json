@@ -1,0 +1,11 @@
+{
+  "taskMode": false,
+  "linkDates": false,
+  "dateFormat": "MMM D, YYYY",
+  "wrapTaskTitles": true,
+  "wrapCalendarTaskTitles": false,
+  "wrapKanbanTaskTitles": true,
+  "inboxPath": "Inbox.md",
+  "tasksHeading": "Tasks",
+  "newTaskPosition": "top"
+}

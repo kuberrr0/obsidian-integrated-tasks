@@ -3015,7 +3015,7 @@ function parseDateTimeExpression(value, reference = /* @__PURE__ */ new Date(), 
   for (let index = text.length; index > 0; index--) {
     if (index !== text.length && text[index] !== " ") continue;
     const prefix = text.slice(0, index);
-    const strict2 = moment(prefix, [DEFAULT_DATE_FORMAT, dateFormat], true);
+    const strict2 = moment(prefix, [DEFAULT_DATE_FORMAT, ...[dateFormat].flat()], true);
     if (!strict2.isValid()) continue;
     const suffix = text.slice(index).trim();
     const time = suffix ? parseTimeExpression(suffix, reference) : void 0;
@@ -3111,7 +3111,7 @@ function plainScheduled(text, reference, dateFormat) {
     const parsed = parseDateTimeExpression(value, reference, dateFormat);
     if (!parsed) continue;
     const time = parsed.time ? ` ${parsed.time}` : "";
-    if (value !== `${formatDate(parsed.date, dateFormat)}${time}` && value !== `${parsed.date}${time}`) continue;
+    if (!dateFormat.some((format) => value === `${formatDate(parsed.date, format)}${time}`) && value !== `${parsed.date}${time}`) continue;
     const match = Object.assign([text.slice(start.index), value], { index: start.index, input: text });
     return match;
   }
@@ -3141,8 +3141,9 @@ function formatDuration(minutes) {
   const remainder = minutes % 60;
   return `${hours ? `${hours}h` : ""}${remainder ? `${remainder}m` : ""}`;
 }
-function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat, naturalDates = false, tokenRanges) {
-  var _a, _b;
+function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat, naturalDates = false, tokenRanges, fallbackDateFormats = []) {
+  var _a;
+  const dateFormats = [dateFormat != null ? dateFormat : "YYYY-MM-DD", ...fallbackDateFormats];
   const checkbox = CHECKBOX.exec(line);
   if (!checkbox) return void 0;
   let remainder = checkbox[3].trimEnd();
@@ -3175,7 +3176,7 @@ function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat,
       consumed.add("priority");
       changed = true;
     } else if (!consumed.has("deadline") && (match = DEADLINE.exec(remainder))) {
-      const date = parseDateTimeExpression(match[1], reference, dateFormat);
+      const date = parseDateTimeExpression(match[1], reference, dateFormats);
       if (date) {
         metadata.deadline = date.date;
         if (date.time) metadata.deadlineTime = date.time;
@@ -3193,8 +3194,8 @@ function parseTaskLine(line, reference = /* @__PURE__ */ new Date(), dateFormat,
         consumed.add("duration");
         changed = true;
       }
-    } else if (!consumed.has("scheduled") && (match = (_b = SCHEDULED.exec(remainder)) != null ? _b : plainScheduled(remainder, reference, dateFormat))) {
-      const date = parseDateTimeExpression(match[1], reference, dateFormat);
+    } else if (!consumed.has("scheduled") && (match = (match = SCHEDULED.exec(remainder)) && parseDateTimeExpression(match[1], reference, dateFormats) ? match : plainScheduled(remainder, reference, dateFormats))) {
+      const date = parseDateTimeExpression(match[1], reference, dateFormats);
       if (date) {
         metadata.scheduledDate = date.date;
         if (date.time) metadata.scheduledTime = date.time;
@@ -5487,7 +5488,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
     return depth;
   }
   renderTaskRow(list, task, depth, target) {
-    var _a;
+    var _a, _b;
     const row = list.createDiv({ cls: `tm-task-row${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
     this.bindSelection(row, task);
@@ -5517,7 +5518,8 @@ var TaskMainView = class extends import_obsidian7.ItemView {
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
-    if (task.path !== this.pagePath) {
+    const implicitSource = (_b = this.pagePath) != null ? _b : this.state.mode === "inbox" ? this.plugin.settings.inboxPath : void 0;
+    if (task.path !== implicitSource) {
       const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
       source.addEventListener("click", () => void this.openSource(task));
     }
@@ -6627,6 +6629,30 @@ var TaskNavigationView = class extends import_obsidian13.ItemView {
   }
 };
 
+// src/task-date-update.ts
+function updateTaskDateTokens(content, sourceFormats, targetFormat, linkDates) {
+  const lines = content.split(/(\r?\n)/);
+  const formats = [.../* @__PURE__ */ new Set([...sourceFormats, targetFormat])];
+  const reference = /* @__PURE__ */ new Date();
+  for (const { text, line } of bodyLines(content)) {
+    const ranges = [];
+    const task = parseTaskLine(text, reference, formats[0], false, ranges, formats.slice(1));
+    if (!task) continue;
+    let updated = text;
+    for (const range of ranges.sort((a, b) => b.from - a.from)) {
+      if (range.kind !== "scheduledDate" && range.kind !== "deadline") continue;
+      const date = task[range.kind];
+      if (!date) continue;
+      const label = formatDate(date, targetFormat);
+      const time = range.kind === "scheduledDate" ? task.scheduledTime : task.deadlineTime;
+      const value = `${linkDates ? `[[${label}]]` : label}${time ? ` ${time}` : ""}`;
+      updated = updated.slice(0, range.from) + (range.kind === "deadline" ? `{${value}}` : value) + updated.slice(range.to);
+    }
+    lines[line * 2] = updated;
+  }
+  return lines.join("");
+}
+
 // src/markdown.ts
 function lineEnding(content) {
   return content.includes("\r\n") ? "\r\n" : "\n";
@@ -6828,6 +6854,22 @@ var TaskStore = class {
     this.getNewTaskPosition = getNewTaskPosition;
     this.getLinkDates = getLinkDates;
   }
+  async updateDates(sourceFormats) {
+    const format = this.getDateFormat();
+    const linkDates = this.getLinkDates();
+    const files = new Map(this.app.vault.getMarkdownFiles().map((file) => [file.path, file]));
+    const before = /* @__PURE__ */ new Map();
+    const after = /* @__PURE__ */ new Map();
+    for (const [path, file] of files) {
+      const content = await this.app.vault.read(file);
+      const updated = updateTaskDateTokens(content, sourceFormats, format, linkDates);
+      if (updated !== content) {
+        before.set(path, content);
+        after.set(path, updated);
+      }
+    }
+    return this.commitChanges(files, before, after);
+  }
   async toggle(task, completed) {
     const file = this.requireFile(task.path);
     await this.app.vault.process(file, (content) => toggleTaskInContent(content, task, completed));
@@ -6957,6 +6999,9 @@ var TaskStore = class {
     }
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)])));
     const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates() });
+    return this.commitChanges(files, before, after);
+  }
+  async commitChanges(files, before, after) {
     const written = [];
     try {
       for (const [path, content] of after) {
@@ -7009,9 +7054,10 @@ var TaskStore = class {
 // src/types.ts
 var DEFAULT_SETTINGS = {
   taskMode: false,
-  linkDates: true,
+  linkDates: false,
+  dateFormat: "",
   wrapTaskTitles: true,
-  wrapCalendarTaskTitles: true,
+  wrapCalendarTaskTitles: false,
   wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
   tasksHeading: "Tasks",
@@ -7035,12 +7081,35 @@ var TaskManagerSettingTab = class extends import_obsidian15.PluginSettingTab {
         }
       },
       {
+        name: "Date format",
+        desc: "Moment date format for task dates, for example DD/MM/YYYY. Leave empty to use the Daily Notes format (YYYY-MM-DD if unset).",
+        render: (setting) => {
+          setting.addText((text) => text.setPlaceholder("Daily Notes format").setValue(this.plugin.settings.dateFormat).onChange((value) => this.plugin.setDateFormat(value)));
+        }
+      },
+      {
         name: "Link dates",
         desc: "Write scheduled and deadline dates as [[date]] links. When off, write plain dates. Applies when creating or editing tasks; existing notes are not rewritten automatically.",
         render: (setting) => {
           setting.addToggle((toggle) => toggle.setValue(this.plugin.settings.linkDates).onChange(async (value) => {
             this.plugin.settings.linkDates = value;
             await this.plugin.saveSettings();
+          }));
+        }
+      },
+      {
+        name: "Update dates",
+        desc: "Update scheduled and deadline date tokens in all Markdown tasks in the vault, including completed tasks, to follow Date format and Link dates.",
+        render: (setting) => {
+          setting.addButton((button) => button.setButtonText("Update dates").onClick(async () => {
+            button.setDisabled(true);
+            try {
+              await this.plugin.updateTaskDates();
+            } catch (error) {
+              new import_obsidian15.Notice(String(error));
+            } finally {
+              button.setDisabled(false);
+            }
           }));
         }
       },
@@ -7203,7 +7272,7 @@ var TaskManagerPlugin = class extends import_obsidian16.Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     this.settings.taskMode = this.settings.taskMode === true;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
-    this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles !== false;
+    this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
   }
@@ -7345,7 +7414,31 @@ var TaskManagerPlugin = class extends import_obsidian16.Plugin {
       if (view instanceof TaskMainView) view.render();
     }
   }
+  async setDateFormat(value) {
+    var _a, _b;
+    const previous = this.dateFormat();
+    this.settings.dateFormat = value.trim();
+    if (previous !== this.dateFormat()) (_b = (_a = this.settings).previousDateFormat) != null ? _b : _a.previousDateFormat = previous;
+    await this.saveSettings();
+    await this.refreshDateParsing();
+  }
+  async refreshDateParsing() {
+    await Promise.all(this.app.vault.getMarkdownFiles().map((file) => this.index.refreshPath(file.path)));
+    this.refreshViews();
+  }
+  async updateTaskDates() {
+    var _a;
+    const paths = await this.store.updateDates([
+      (_a = this.settings.previousDateFormat) != null ? _a : this.dateFormat(),
+      this.dateFormat(),
+      dailyNoteDateFormat(this.app)
+    ]);
+    delete this.settings.previousDateFormat;
+    await this.saveSettings();
+    await this.refreshDateParsing();
+    new import_obsidian16.Notice(`Updated task dates in ${paths.length} note${paths.length === 1 ? "" : "s"}.`);
+  }
   dateFormat() {
-    return dailyNoteDateFormat(this.app);
+    return this.settings.dateFormat.trim() || dailyNoteDateFormat(this.app);
   }
 };

@@ -111,7 +111,7 @@ describe("multiline modal interactions", () => {
     expect(fields.rawInput.value).toBe("- [x] Renamed p1\n  - [ ] Child tomorrow p2\n  - Description\n- [ ] Sibling");
     key({ metaKey: true });
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-    expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Renamed", completed: true, priority: 1, additionalLines: [expect.stringMatching(/^  - \[ \] Child \[\[.*\]\] p2$/), "  - Description", "- [ ] Sibling"] });
+    expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Renamed", completed: true, priority: 1, additionalLines: [expect.stringMatching(/^  - \[ \] Child \d{4}-\d{2}-\d{2} p2$/), "  - Description", "- [ ] Sibling"] });
   });
   it.each([false, true])("requires Cmd/Ctrl+Enter in the modal (editing: %s)", async edit => {
     const { fields, onSave, key } = openModal(edit);

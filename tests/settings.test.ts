@@ -6,11 +6,14 @@ const { rows } = vi.hoisted(() => ({ rows: [] as Array<{
   name: string;
   desc: string;
   heading?: boolean;
+  click?: () => Promise<void>;
+  disabled?: boolean;
   value?: string | boolean;
   change?: (value: string | boolean) => Promise<void>;
 }> }));
 
 vi.mock("obsidian", () => ({
+  Notice: class {},
   PluginSettingTab: class { containerEl = { empty: () => { rows.length = 0; } }; },
   Setting: class {
     row = { name: "", desc: "" } as typeof rows[number];
@@ -18,12 +21,16 @@ vi.mock("obsidian", () => ({
     setName(name: string) { this.row.name = name; return this; }
     setDesc(desc: string) { this.row.desc = desc; return this; }
     setHeading() { this.row.heading = true; return this; }
+    addButton(callback: (control: unknown) => void) { callback(this.control()); return this; }
     addToggle(callback: (control: unknown) => void) { callback(this.control()); return this; }
     addText(callback: (control: unknown) => void) { callback(this.control()); return this; }
     addDropdown(callback: (control: unknown) => void) { callback(this.control()); return this; }
     control() {
       const row = this.row;
       return {
+        setButtonText() { return this; },
+        setDisabled(value: boolean) { row.disabled = value; return this; },
+        onClick(click: typeof row.click) { row.click = click; return this; },
         setPlaceholder() { return this; },
         addOption() { return this; },
         setValue(value: string | boolean) { row.value = value; return this; },
@@ -39,9 +46,11 @@ import { TaskManagerSettingTab } from "../src/settings";
 function setup() {
   rows.length = 0;
   const plugin = {
-    settings: { taskMode: false, linkDates: true, wrapTaskTitles: false, wrapCalendarTaskTitles: true, wrapKanbanTaskTitles: true, inboxPath: "Tasks.md", newTaskPosition: "top" },
+    settings: { dateFormat: "", taskMode: false, linkDates: true, wrapTaskTitles: false, wrapCalendarTaskTitles: true, wrapKanbanTaskTitles: true, inboxPath: "Tasks.md", newTaskPosition: "top" },
     saveSettings: vi.fn().mockResolvedValue(undefined),
     refreshViews: vi.fn(),
+    setDateFormat: vi.fn().mockResolvedValue(undefined),
+    updateTaskDates: vi.fn().mockResolvedValue(undefined),
     setTaskMode: vi.fn().mockResolvedValue(undefined)
   };
   const tab = new TaskManagerSettingTab({} as App, plugin as unknown as TaskManagerPlugin);
@@ -52,7 +61,7 @@ describe("settings compatibility", () => {
   it("provides searchable names and descriptions without rendering or saving during indexing", () => {
     const { tab, plugin } = setup();
     const definitions = tab.getSettingDefinitions();
-    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Link dates", "Inbox note", "New task position", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
+    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();
@@ -113,3 +122,21 @@ describe("settings compatibility", () => {
     expect(plugin.refreshViews).toHaveBeenCalledTimes(5);
   });
 });
+
+ it("changes the format and runs the date updater with a disabled button until completion", async () => {
+    const { tab, plugin } = setup();
+    tab.display();
+    const format = rows.find(row => row.name === "Date format")!;
+    expect(format.value).toBe("");
+    await format.change!("DD/MM/YYYY");
+    expect(plugin.setDateFormat).toHaveBeenCalledWith("DD/MM/YYYY");
+    const update = rows.find(row => row.name === "Update dates")!;
+    const pending = update.click!();
+    expect(update.disabled).toBe(true);
+    await pending;
+    expect(plugin.updateTaskDates).toHaveBeenCalledOnce();
+    expect(update.disabled).toBe(false);
+    plugin.updateTaskDates.mockRejectedValueOnce(new Error("Write failed"));
+    await update.click!();
+    expect(update.disabled).toBe(false);
+ });

@@ -676,7 +676,8 @@ export class TaskMainView extends ItemView {
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
-    if (task.path !== this.pagePath) {
+    const implicitSource = this.pagePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
+    if (task.path !== implicitSource) {
       const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
       source.addEventListener("click", () => void this.openSource(task));
     }

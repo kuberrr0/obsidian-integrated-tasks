@@ -12,7 +12,7 @@ const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 const DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
 
 /** Plain metadata must exactly match the configured date format (or ISO). */
-function plainScheduled(text: string, reference: Date, dateFormat?: string): RegExpExecArray | null {
+function plainScheduled(text: string, reference: Date, dateFormat: string[]): RegExpExecArray | null {
   const starts = /(?:^|\s)\S+/g;
   let start: RegExpExecArray | null;
   while ((start = starts.exec(text))) {
@@ -21,7 +21,7 @@ function plainScheduled(text: string, reference: Date, dateFormat?: string): Reg
     const parsed = parseDateTimeExpression(value, reference, dateFormat);
     if (!parsed) continue;
     const time = parsed.time ? ` ${parsed.time}` : "";
-    if (value !== `${formatDate(parsed.date, dateFormat)}${time}` && value !== `${parsed.date}${time}`) continue;
+    if (!dateFormat.some(format => value === `${formatDate(parsed.date, format)}${time}`) && value !== `${parsed.date}${time}`) continue;
     const match: RegExpExecArray = Object.assign([text.slice(start.index), value] as [string, string], { index: start.index, input: text });
     return match;
   }
@@ -70,8 +70,10 @@ export function parseTaskLine(
   reference = new Date(),
   dateFormat?: string,
   naturalDates = false,
-  tokenRanges?: ParsedTokenRange[]
+  tokenRanges?: ParsedTokenRange[],
+  fallbackDateFormats: string[] = []
 ): ParsedTaskLine | undefined {
+  const dateFormats = [dateFormat ?? "YYYY-MM-DD", ...fallbackDateFormats];
   const checkbox = CHECKBOX.exec(line);
   if (!checkbox) return undefined;
 
@@ -107,7 +109,7 @@ export function parseTaskLine(
       consumed.add("priority");
       changed = true;
     } else if (!consumed.has("deadline") && (match = DEADLINE.exec(remainder))) {
-      const date = parseDateTimeExpression(match[1], reference, dateFormat);
+      const date = parseDateTimeExpression(match[1], reference, dateFormats);
       if (date) {
         metadata.deadline = date.date;
         if (date.time) metadata.deadlineTime = date.time;
@@ -125,8 +127,9 @@ export function parseTaskLine(
         consumed.add("duration");
         changed = true;
       }
-    } else if (!consumed.has("scheduled") && (match = SCHEDULED.exec(remainder) ?? plainScheduled(remainder, reference, dateFormat))) {
-      const date = parseDateTimeExpression(match[1], reference, dateFormat);
+    } else if (!consumed.has("scheduled") && (match = ((match = SCHEDULED.exec(remainder)) && parseDateTimeExpression(match[1], reference, dateFormats))
+      ? match : plainScheduled(remainder, reference, dateFormats))) {
+      const date = parseDateTimeExpression(match[1], reference, dateFormats);
       if (date) {
         metadata.scheduledDate = date.date;
         if (date.time) metadata.scheduledTime = date.time;
