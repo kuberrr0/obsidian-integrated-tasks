@@ -22,15 +22,16 @@ export class TaskNavigationView extends ItemView {
   getIcon(): string { return "circle-check-big"; }
   async onOpen(): Promise<void> {
     this.unsubscribe = this.plugin.index.subscribe(() => this.render());
-    const syncActive = (leaf: WorkspaceLeaf | null): void => {
-      if (leaf?.view.getViewType() !== "task-manager-main") return;
-      const state = leaf.view.getState();
+    const syncActive = (): void => {
+      const view = this.app.workspace.getActiveViewOfType(ItemView);
+      if (view?.getViewType() !== "task-manager-main") return;
+      const state = view.getState();
       const mode = NAV_ITEMS.find(item => item.mode === state.mode)?.mode;
       if (mode) this.setActive(mode, typeof state.tag === "string" ? state.tag : undefined,
         typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : undefined);
     };
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncActive));
-    syncActive(this.app.workspace.activeLeaf);
+    syncActive();
     this.render();
   }
   async onClose(): Promise<void> { this.unsubscribe?.(); }

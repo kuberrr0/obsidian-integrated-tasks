@@ -23,8 +23,10 @@ export class TaskIndex {
   ) {}
 
   async initialize(): Promise<void> {
-    await Promise.all(this.app.vault.getMarkdownFiles().map((file) => this.scanFile(file)));
-    this.refreshProjects();
+    // All Tasks and project/tag discovery require every Markdown note.
+    const files = this.app.vault.getMarkdownFiles();
+    await Promise.all(files.map((file) => this.scanFile(file)));
+    this.refreshProjects(files);
     this.eventRefs.push(
       this.app.vault.on("create", (file) => {
         if (file instanceof TFile && file.extension === "md") void this.refreshFile(file);
@@ -135,11 +137,11 @@ export class TaskIndex {
     this.tasksByPath.set(file.path, scanTasks(file.path, content, new Date(), this.getDateFormat()));
   }
 
-  private refreshProjects(): void {
+  private refreshProjects(files: TFile[]): void {
     this.projectPaths.clear();
     this.projectProperties.clear();
     this.archivedPaths.clear();
-    for (const file of this.app.vault.getMarkdownFiles()) this.updateProjectStatus(file);
+    for (const file of files) this.updateProjectStatus(file);
   }
 
   private updateProjectStatus(file: TFile): void {

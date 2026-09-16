@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TFile, type App } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { DEFAULT_SETTINGS } from "../src/types";
@@ -9,9 +9,10 @@ function setup() {
   let properties: Record<string, unknown> = {};
   let content = "- [ ] Parent\n  - [x] Child\n- [x] Done\n";
   let changed: (file: TFile) => void = () => {};
+  const getMarkdownFiles = vi.fn(() => [file]);
   const app = {
     vault: {
-      getMarkdownFiles: () => [file],
+      getMarkdownFiles,
       getAbstractFileByPath: () => file,
       cachedRead: async () => content,
       on: () => ({}), offref: () => {}
@@ -22,6 +23,7 @@ function setup() {
     }
   } as unknown as App;
   return {
+    getMarkdownFiles,
     index: new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD"),
     setProperties: (next: Record<string, unknown>) => { properties = next; changed(file); },
     setTags: (next: string[]) => { tags = next; changed(file); },
@@ -31,8 +33,9 @@ function setup() {
 
 describe("project progress and archive indexing", () => {
   it("counts all checklist items, including nested and completed tasks", async () => {
-    const { index } = setup();
+    const { index, getMarkdownFiles } = setup();
     await index.initialize();
+    expect(getMarkdownFiles).toHaveBeenCalledOnce();
     expect(index.projects()[0]).toMatchObject({ openTasks: 1, completedTasks: 2, archived: false });
   });
 

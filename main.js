@@ -6667,8 +6667,9 @@ var TaskIndex = class {
     this.eventRefs = [];
   }
   async initialize() {
-    await Promise.all(this.app.vault.getMarkdownFiles().map((file) => this.scanFile(file)));
-    this.refreshProjects();
+    const files = this.app.vault.getMarkdownFiles();
+    await Promise.all(files.map((file) => this.scanFile(file)));
+    this.refreshProjects(files);
     this.eventRefs.push(
       this.app.vault.on("create", (file) => {
         if (file instanceof import_obsidian13.TFile && file.extension === "md") void this.refreshFile(file);
@@ -6767,11 +6768,11 @@ var TaskIndex = class {
     this.headingsByPath.set(file.path, scanSections(content));
     this.tasksByPath.set(file.path, scanTasks(file.path, content, /* @__PURE__ */ new Date(), this.getDateFormat()));
   }
-  refreshProjects() {
+  refreshProjects(files) {
     this.projectPaths.clear();
     this.projectProperties.clear();
     this.archivedPaths.clear();
-    for (const file of this.app.vault.getMarkdownFiles()) this.updateProjectStatus(file);
+    for (const file of files) this.updateProjectStatus(file);
   }
   updateProjectStatus(file) {
     const cache = this.app.metadataCache.getFileCache(file);
@@ -6820,10 +6821,11 @@ var TaskNavigationView = class extends import_obsidian14.ItemView {
   }
   async onOpen() {
     this.unsubscribe = this.plugin.index.subscribe(() => this.render());
-    const syncActive = (leaf) => {
+    const syncActive = () => {
       var _a;
-      if ((leaf == null ? void 0 : leaf.view.getViewType()) !== "task-manager-main") return;
-      const state = leaf.view.getState();
+      const view = this.app.workspace.getActiveViewOfType(import_obsidian14.ItemView);
+      if ((view == null ? void 0 : view.getViewType()) !== "task-manager-main") return;
+      const state = view.getState();
       const mode = (_a = NAV_ITEMS.find((item) => item.mode === state.mode)) == null ? void 0 : _a.mode;
       if (mode) this.setActive(
         mode,
@@ -6832,7 +6834,7 @@ var TaskNavigationView = class extends import_obsidian14.ItemView {
       );
     };
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncActive));
-    syncActive(this.app.workspace.activeLeaf);
+    syncActive();
     this.render();
   }
   async onClose() {
