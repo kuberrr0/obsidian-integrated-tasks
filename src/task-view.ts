@@ -1,3 +1,4 @@
+import { renderPropertyFilter } from "./filter-editor";
 import { taskTagSummaries } from "./task-tags";
 import type { TaskEditorProperty } from "./task-editor";
 import { TASK_PROPERTY_ICONS } from "./task-property-icons";
@@ -11,13 +12,13 @@ import { ListDragController } from "./list-drag-view";
 import { draftForGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
 import { renderCalendar } from "./calendar-view";
 import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
-import { TASK_PROPERTIES, filterOperators, propertyValue, propertyLabel } from "./task-properties";
+import { TASK_PROPERTIES } from "./task-properties";
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { formatDuration } from "./parser";
 import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
-import type { TaskFilter, FilterOperator, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
+import type { TaskFilter, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
@@ -334,7 +335,7 @@ export class TaskMainView extends ItemView {
       if (event.key === "Escape") { this.filtersExpanded = false; sync(); toggle.focus(); }
     });
     sync();
-    menu.createDiv({ text: "Match all property filters", cls: "tm-filter-hint" });
+    menu.createDiv({ text: "Match all properties. Within a property, AND is evaluated before OR.", cls: "tm-filter-hint" });
     const clear = menu.createEl("button", { text: "Clear all filters" });
     clear.addEventListener("click", () => { this.propertyFilters = []; this.render(); });
     for (const property of TASK_PROPERTIES) {
@@ -342,49 +343,13 @@ export class TaskMainView extends ItemView {
       const submenu = menu.createDiv({ cls: "tm-property-submenu" });
       const summary = submenu.createSpan({ cls: "tm-property-name", text: `${property.label}${active ? " •" : ""}` });
       const panel = submenu.createDiv({ cls: "tm-property-conditions" });
-      const operator = panel.createEl("select", { attr: { "aria-label": `${property.label} condition` } });
-      operator.createEl("option", { value: "", text: "Any value" });
-      for (const [value, label] of filterOperators(property.kind)) operator.createEl("option", { value, text: label });
-      operator.value = active?.operator ?? "";
-      const inputs = panel.createDiv({ cls: "tm-filter-values" });
-      let values = [...(active?.values ?? [])];
-      const apply = (): void => {
-        const op = operator.value as FilterOperator;
-        const needsValue = op && op !== "has" && op !== "missing";
-        const valid = !needsValue || (values.length > 0 && values[0] !== "" && (op !== "between" || Boolean(values[1])));
-        this.propertyFilters = this.propertyFilters.filter(filter => filter.property !== property.key);
-        if (op && valid) this.propertyFilters.push({ property: property.key, operator: op, values: [...values] });
-        summary.setText(`${property.label}${op && valid ? " •" : ""}`);
+      renderPropertyFilter(panel, property, active, this.plugin.index.allTasks(), filter => {
+        this.propertyFilters = this.propertyFilters.filter(item => item.property !== property.key);
+        if (filter) this.propertyFilters.push(filter);
+        summary.setText(`${property.label}${filter ? " •" : ""}`);
         sync();
         this.renderTaskResults();
-      };
-      const renderValues = (): void => {
-        inputs.empty();
-        if (!operator.value || ["has", "missing"].includes(operator.value)) return;
-        if (property.kind === "choice") {
-          const choices = property.key === "priority" ? ["1", "2", "3"] : property.key === "status" ? ["Open", "Completed"]
-            : [...new Set(this.plugin.index.allTasks().map(task => propertyValue(task, property.key)).filter(value => value !== undefined && value !== "").map(String))].sort();
-          for (const value of choices) {
-            const label = inputs.createEl("label");
-            const check = label.createEl("input", { type: "checkbox" });
-            check.checked = values.includes(value);
-            label.createSpan({ text: propertyLabel(property.key, value) });
-            check.addEventListener("change", () => { values = check.checked ? [...values, value] : values.filter(item => item !== value); apply(); });
-          }
-        } else {
-          for (let i = 0; i < (operator.value === "between" ? 2 : 1); i++) {
-            const input = inputs.createEl("input", { type: property.kind === "number" ? "number" : property.kind, attr: {
-              "aria-label": `${property.label} ${i ? "upper bound" : "value"}`,
-              ...(property.kind === "number" ? { min: "0", step: "1", placeholder: "Minutes" } : {})
-            } });
-            input.value = values[i] ?? "";
-            input.addEventListener("input", () => { if (!input.validity.valid) return; values[i] = input.value; apply(); });
-          }
-          if (property.kind === "number") inputs.createSpan({ text: "Duration in minutes", cls: "tm-filter-hint" });
-        }
-      };
-      operator.addEventListener("change", () => { values = []; renderValues(); apply(); });
-      renderValues();
+      });
     }
     const ordering = filters.createDiv({ cls: "tm-order-controls" });
     const iconButton = (icon: string, label: string): HTMLButtonElement => {

@@ -45,3 +45,23 @@ describe("property filters", () => {
     expect([...groupTasks([task, { ...other, deadline: undefined }], "deadline").keys()]).toEqual(["2026-09-10", "No deadline"]);
   });
 });
+
+it("combines conditions within one property using AND and OR", () => {
+  const bothTags: TaskFilter = { ...filter("tags", "is", ["work"]), conditions: [{ join: "and", operator: "is", values: ["client notes"] }] };
+  expect(matchesFilter(task, bothTags)).toBe(true);
+  expect(matchesFilter({ ...task, tags: ["work"] }, bothTags)).toBe(false);
+  expect(matchesFilter({ ...task, tags: ["client notes"] }, { ...bothTags, conditions: [{ ...bothTags.conditions![0], join: "or" }] })).toBe(true);
+  const range: TaskFilter = { ...filter("duration", "after", ["30"]), conditions: [{ join: "and", operator: "before", values: ["60"] }] };
+  expect(matchesFilter(task, range)).toBe(true);
+  expect(matchesFilter({ ...task, durationMinutes: 70 }, range)).toBe(false);
+});
+it("evaluates AND before OR, including presence and negation", () => {
+  const mixed: TaskFilter = { ...filter("title", "contains", ["write"]), conditions: [
+    { join: "or", operator: "contains", values: ["review"] },
+    { join: "and", operator: "isNot", values: ["Review draft"] }
+  ] };
+  expect(matchesFilter(task, mixed)).toBe(true);
+  expect(matchesFilter({ ...task, title: "Review report" }, mixed)).toBe(true);
+  expect(matchesFilter({ ...task, title: "Review draft" }, mixed)).toBe(false);
+  expect(matchesFilter({ ...task, deadline: undefined }, { ...filter("deadline", "missing"), conditions: [{ join: "or", operator: "after", values: ["2026-10-01"] }] })).toBe(true);
+});

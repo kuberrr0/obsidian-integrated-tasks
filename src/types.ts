@@ -55,7 +55,13 @@ export type TaskProperty = "tags" | "title" | "priority" | "scheduledDate" | "sc
 export type TaskSort = "date" | TaskProperty;
 export type TaskGrouping = "default" | "none" | "date" | TaskProperty;
 export type FilterOperator = "has" | "missing" | "is" | "isNot" | "contains" | "before" | "after" | "between";
+export interface TaskFilterCondition {
+  operator: FilterOperator;
+  values: string[];
+  join: "and" | "or";
+}
 export interface TaskFilter {
+  conditions?: TaskFilterCondition[];
   property: TaskProperty;
   operator: FilterOperator;
   values: string[];

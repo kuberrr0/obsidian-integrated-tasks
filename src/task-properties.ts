@@ -35,7 +35,19 @@ export function filterOperators(kind: string): [FilterOperator, string][] {
   return common;
 }
 
+/** AND has precedence within each OR-separated group. */
 export function matchesFilter(task: Task, filter: TaskFilter): boolean {
+  let group = matchesCondition(task, filter);
+  let matched = false;
+  for (const condition of filter.conditions ?? []) {
+    const next = matchesCondition(task, { property: filter.property, ...condition });
+    if (condition.join === "or") { matched ||= group; group = next; }
+    else group = group && next;
+  }
+  return matched || group;
+}
+
+function matchesCondition(task: Task, filter: TaskFilter): boolean {
   if (filter.property === "tags") {
     const tags = (task.tags ?? []).map(tag => tag.toLocaleLowerCase());
     const values = filter.values.map(value => value.replace(/^#\[\[|\]\]$/g, "").trim().toLocaleLowerCase());

@@ -30,7 +30,7 @@ The sidebar uses a compact file-style tree. Its icon toolbar provides **Create t
 
 Today and Upcoming use the earlier of a task’s scheduled date and deadline. Undated tasks remain available in Inbox, All Tasks, and their source note’s task view.
 
-Search task titles, descriptions, and tags. Filter by title, status, scheduled date or time, deadline, duration, priority, tags, source note, or section. Filters support matching values, missing properties, and date or duration ranges where applicable.
+Search task titles, descriptions, and tags. Filter by title, status, scheduled date or time, deadline, duration, priority, tags, source note, or section. Filters support matching values, missing properties, and date or duration ranges where applicable. After completing a condition, use the inline AND / OR control to add another condition for that property. AND is evaluated before OR; separate property filters must all match.
 
 Sort in either direction and group by task properties, or choose **None** for a flat list. **View default** keeps the view’s usual organization, including note headings in project views. Visible subtasks stay beside their parents. Search, filters, sorting, and grouping reset when you switch to a different view or page.
 

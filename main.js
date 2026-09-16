@@ -3667,6 +3667,202 @@ var BulkTaskEditorModal = class extends import_obsidian3.Modal {
 // src/task-mode.ts
 var import_obsidian9 = require("obsidian");
 
+// src/task-properties.ts
+var TASK_PROPERTIES = [
+  { key: "title", label: "Title", kind: "text" },
+  { key: "status", label: "Status", kind: "choice" },
+  { key: "scheduledDate", label: "Scheduled date", kind: "date" },
+  { key: "scheduledTime", label: "Scheduled time", kind: "time" },
+  { key: "duration", label: "Duration", kind: "number" },
+  { key: "deadline", label: "Deadline", kind: "date" },
+  { key: "deadlineTime", label: "Deadline time", kind: "time" },
+  { key: "priority", label: "Priority", kind: "choice" },
+  { key: "tags", label: "Tags", kind: "text" },
+  { key: "source", label: "Source note / list", kind: "choice" },
+  { key: "section", label: "Section", kind: "choice" }
+];
+function propertyValue(task, property) {
+  var _a;
+  if (property === "tags") return ((_a = task.tags) == null ? void 0 : _a.length) ? formatTags([...task.tags].sort()) : void 0;
+  if (property === "status") return task.completed ? "Completed" : "Open";
+  if (property === "source") return task.path;
+  if (property === "duration") return task.durationMinutes;
+  return task[property];
+}
+function propertyLabel(property, value) {
+  return property === "priority" ? `P${value}` : property === "duration" ? formatDuration(Number(value)) : String(value);
+}
+function filterOperators(kind) {
+  const common = [["has", "Has a value"], ["missing", "Doesn't have a value"], ["is", "Is"], ["isNot", "Is not"]];
+  if (kind === "text") common.push(["contains", "Contains"]);
+  if (["date", "time", "number"].includes(kind)) common.push(["before", kind === "number" ? "Less than" : "Before"], ["after", kind === "number" ? "Greater than" : "After"], ["between", "Between (inclusive)"]);
+  return common;
+}
+function matchesFilter(task, filter) {
+  var _a;
+  let group = matchesCondition(task, filter);
+  let matched = false;
+  for (const condition of (_a = filter.conditions) != null ? _a : []) {
+    const next = matchesCondition(task, { property: filter.property, ...condition });
+    if (condition.join === "or") {
+      matched || (matched = group);
+      group = next;
+    } else group = group && next;
+  }
+  return matched || group;
+}
+function matchesCondition(task, filter) {
+  var _a, _b;
+  if (filter.property === "tags") {
+    const tags = ((_a = task.tags) != null ? _a : []).map((tag) => tag.toLocaleLowerCase());
+    const values2 = filter.values.map((value2) => value2.replace(/^#\[\[|\]\]$/g, "").trim().toLocaleLowerCase());
+    if (filter.operator === "has") return tags.length > 0;
+    if (filter.operator === "missing") return tags.length === 0;
+    if (!tags.length) return false;
+    if (filter.operator === "is") return tags.some((tag) => values2.includes(tag));
+    if (filter.operator === "isNot") return tags.every((tag) => !values2.includes(tag));
+    if (filter.operator === "contains") return tags.some((tag) => {
+      var _a2;
+      return tag.includes((_a2 = values2[0]) != null ? _a2 : "");
+    });
+    return false;
+  }
+  const value = propertyValue(task, filter.property);
+  const present = value !== void 0 && value !== "";
+  if (filter.operator === "has") return present;
+  if (filter.operator === "missing") return !present;
+  if (!present) return false;
+  const normalized = String(value).toLocaleLowerCase();
+  const values = filter.values.map((item) => item.toLocaleLowerCase());
+  if (filter.operator === "is") return values.includes(normalized);
+  if (filter.operator === "isNot") return !values.includes(normalized);
+  if (filter.operator === "contains") return normalized.includes((_b = values[0]) != null ? _b : "");
+  const numeric = filter.property === "duration";
+  const actual = numeric ? Number(value) : normalized;
+  const lower = numeric ? Number(values[0]) : values[0];
+  const upper = numeric ? Number(values[1]) : values[1];
+  if (!values[0] || filter.operator === "between" && !values[1]) return false;
+  if (filter.operator === "before") return actual < lower;
+  if (filter.operator === "after") return actual > lower;
+  return actual >= lower && actual <= upper;
+}
+
+// src/filter-editor.ts
+var complete = (clause) => {
+  var _a, _b;
+  return Boolean(clause.operator && (clause.operator === "has" || clause.operator === "missing" || ((_a = clause.values[0]) == null ? void 0 : _a.trim()) && (clause.operator !== "between" || ((_b = clause.values[1]) == null ? void 0 : _b.trim()))));
+};
+function renderPropertyFilter(container, property, initial, tasks, onChange) {
+  var _a, _b, _c;
+  const clauses = [
+    { operator: (_a = initial == null ? void 0 : initial.operator) != null ? _a : "", values: [...(_b = initial == null ? void 0 : initial.values) != null ? _b : []], join: "and" },
+    ...((_c = initial == null ? void 0 : initial.conditions) != null ? _c : []).map((condition) => ({ ...condition, values: [...condition.values] }))
+  ];
+  const apply = () => {
+    const valid = [];
+    for (const clause of clauses) {
+      if (!complete(clause)) break;
+      valid.push(clause);
+    }
+    const first = valid.shift();
+    onChange(first ? {
+      property: property.key,
+      operator: first.operator,
+      values: [...first.values],
+      ...valid.length ? { conditions: valid.map((clause) => ({ join: clause.join, operator: clause.operator, values: [...clause.values] })) } : {}
+    } : void 0);
+  };
+  const syncControls = [];
+  const render = () => {
+    container.empty();
+    syncControls.length = 0;
+    clauses.forEach((clause, index) => {
+      const row = container.createDiv({ cls: "tm-filter-clause" });
+      if (index) {
+        const join = row.createEl("select", { cls: "tm-filter-join", attr: { "aria-label": `${property.label} connector ${index}` } });
+        join.createEl("option", { value: "and", text: "AND" });
+        join.createEl("option", { value: "or", text: "OR" });
+        join.value = clause.join;
+        join.addEventListener("change", () => {
+          clause.join = join.value === "or" ? "or" : "and";
+          apply();
+        });
+      }
+      const operator = row.createEl("select", { attr: { "aria-label": `${property.label} condition${index ? ` ${index + 1}` : ""}` } });
+      operator.createEl("option", { value: "", text: "Any value" });
+      for (const [value, text] of filterOperators(property.kind)) operator.createEl("option", { value, text });
+      operator.value = clause.operator;
+      const inputs = row.createDiv({ cls: "tm-filter-values" });
+      if (index) {
+        const remove = row.createEl("button", { text: "\xD7", attr: { "aria-label": `Remove ${property.label} condition ${index + 1}` } });
+        remove.addEventListener("click", () => {
+          clauses.splice(index, 1);
+          render();
+          apply();
+        });
+      }
+      const add = row.createEl("select", { cls: "tm-filter-join", attr: { "aria-label": `Add ${property.label} condition` } });
+      add.createEl("option", { value: "", text: "AND / OR\u2026" });
+      add.createEl("option", { value: "and", text: "AND" });
+      add.createEl("option", { value: "or", text: "OR" });
+      const sync = () => {
+        add.hidden = index !== clauses.length - 1 || !clauses.every(complete);
+      };
+      syncControls.push(sync);
+      add.addEventListener("change", () => {
+        if (!add.value) return;
+        clauses.push({ join: add.value === "or" ? "or" : "and", operator: "", values: [] });
+        render();
+      });
+      const changed = () => {
+        apply();
+        syncControls.forEach((update) => update());
+      };
+      const renderValues = () => {
+        var _a2;
+        inputs.empty();
+        if (!clause.operator || ["has", "missing"].includes(clause.operator)) return;
+        if (property.kind === "choice") {
+          const choices = property.key === "priority" ? ["1", "2", "3"] : property.key === "status" ? ["Open", "Completed"] : [...new Set(tasks.map((task) => propertyValue(task, property.key)).filter((value) => value !== void 0 && value !== "").map(String))].sort();
+          for (const value of choices) {
+            const label = inputs.createEl("label");
+            const check = label.createEl("input", { type: "checkbox" });
+            check.checked = clause.values.includes(value);
+            label.createSpan({ text: propertyLabel(property.key, value) });
+            check.addEventListener("change", () => {
+              clause.values = check.checked ? [...clause.values, value] : clause.values.filter((item) => item !== value);
+              changed();
+            });
+          }
+        } else {
+          for (let i = 0; i < (clause.operator === "between" ? 2 : 1); i++) {
+            const input = inputs.createEl("input", { type: property.kind === "number" ? "number" : property.kind, attr: {
+              "aria-label": `${property.label} ${i ? "upper bound" : "value"}${index ? ` ${index + 1}` : ""}`,
+              ...property.kind === "number" ? { min: "0", step: "1", placeholder: "Minutes" } : {}
+            } });
+            input.value = (_a2 = clause.values[i]) != null ? _a2 : "";
+            input.addEventListener("input", () => {
+              if (!input.validity.valid) return;
+              clause.values[i] = input.value;
+              changed();
+            });
+          }
+          if (property.kind === "number") inputs.createSpan({ text: "Duration in minutes", cls: "tm-filter-hint" });
+        }
+      };
+      operator.addEventListener("change", () => {
+        clause.operator = operator.value;
+        clause.values = [];
+        renderValues();
+        changed();
+      });
+      renderValues();
+      sync();
+    });
+  };
+  render();
+}
+
 // src/task-property-icons.ts
 var import_obsidian4 = require("obsidian");
 var TASK_PROPERTY_ICONS = {
@@ -4173,73 +4369,6 @@ function renderGantt(container, options) {
       });
     }
   }
-}
-
-// src/task-properties.ts
-var TASK_PROPERTIES = [
-  { key: "title", label: "Title", kind: "text" },
-  { key: "status", label: "Status", kind: "choice" },
-  { key: "scheduledDate", label: "Scheduled date", kind: "date" },
-  { key: "scheduledTime", label: "Scheduled time", kind: "time" },
-  { key: "duration", label: "Duration", kind: "number" },
-  { key: "deadline", label: "Deadline", kind: "date" },
-  { key: "deadlineTime", label: "Deadline time", kind: "time" },
-  { key: "priority", label: "Priority", kind: "choice" },
-  { key: "tags", label: "Tags", kind: "text" },
-  { key: "source", label: "Source note / list", kind: "choice" },
-  { key: "section", label: "Section", kind: "choice" }
-];
-function propertyValue(task, property) {
-  var _a;
-  if (property === "tags") return ((_a = task.tags) == null ? void 0 : _a.length) ? formatTags([...task.tags].sort()) : void 0;
-  if (property === "status") return task.completed ? "Completed" : "Open";
-  if (property === "source") return task.path;
-  if (property === "duration") return task.durationMinutes;
-  return task[property];
-}
-function propertyLabel(property, value) {
-  return property === "priority" ? `P${value}` : property === "duration" ? formatDuration(Number(value)) : String(value);
-}
-function filterOperators(kind) {
-  const common = [["has", "Has a value"], ["missing", "Doesn't have a value"], ["is", "Is"], ["isNot", "Is not"]];
-  if (kind === "text") common.push(["contains", "Contains"]);
-  if (["date", "time", "number"].includes(kind)) common.push(["before", kind === "number" ? "Less than" : "Before"], ["after", kind === "number" ? "Greater than" : "After"], ["between", "Between (inclusive)"]);
-  return common;
-}
-function matchesFilter(task, filter) {
-  var _a, _b;
-  if (filter.property === "tags") {
-    const tags = ((_a = task.tags) != null ? _a : []).map((tag) => tag.toLocaleLowerCase());
-    const values2 = filter.values.map((value2) => value2.replace(/^#\[\[|\]\]$/g, "").trim().toLocaleLowerCase());
-    if (filter.operator === "has") return tags.length > 0;
-    if (filter.operator === "missing") return tags.length === 0;
-    if (!tags.length) return false;
-    if (filter.operator === "is") return tags.some((tag) => values2.includes(tag));
-    if (filter.operator === "isNot") return tags.every((tag) => !values2.includes(tag));
-    if (filter.operator === "contains") return tags.some((tag) => {
-      var _a2;
-      return tag.includes((_a2 = values2[0]) != null ? _a2 : "");
-    });
-    return false;
-  }
-  const value = propertyValue(task, filter.property);
-  const present = value !== void 0 && value !== "";
-  if (filter.operator === "has") return present;
-  if (filter.operator === "missing") return !present;
-  if (!present) return false;
-  const normalized = String(value).toLocaleLowerCase();
-  const values = filter.values.map((item) => item.toLocaleLowerCase());
-  if (filter.operator === "is") return values.includes(normalized);
-  if (filter.operator === "isNot") return !values.includes(normalized);
-  if (filter.operator === "contains") return normalized.includes((_b = values[0]) != null ? _b : "");
-  const numeric = filter.property === "duration";
-  const actual = numeric ? Number(value) : normalized;
-  const lower = numeric ? Number(values[0]) : values[0];
-  const upper = numeric ? Number(values[1]) : values[1];
-  if (!values[0] || filter.operator === "between" && !values[1]) return false;
-  if (filter.operator === "before") return actual < lower;
-  if (filter.operator === "after") return actual > lower;
-  return actual >= lower && actual <= upper;
 }
 
 // src/query.ts
@@ -5255,7 +5384,6 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     input == null ? void 0 : input.select();
   }
   renderFilters(container) {
-    var _a, _b;
     const filters = container.createDiv({ cls: "tm-filters" });
     const search = filters.createEl("input", { type: "search", attr: { placeholder: "Search tasks\u2026", "aria-label": "Search tasks" } });
     search.value = this.search;
@@ -5282,7 +5410,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       }
     });
     sync();
-    menu.createDiv({ text: "Match all property filters", cls: "tm-filter-hint" });
+    menu.createDiv({ text: "Match all properties. Within a property, AND is evaluated before OR.", cls: "tm-filter-hint" });
     const clear = menu.createEl("button", { text: "Clear all filters" });
     clear.addEventListener("click", () => {
       this.propertyFilters = [];
@@ -5293,60 +5421,13 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       const submenu = menu.createDiv({ cls: "tm-property-submenu" });
       const summary = submenu.createSpan({ cls: "tm-property-name", text: `${property.label}${active ? " \u2022" : ""}` });
       const panel = submenu.createDiv({ cls: "tm-property-conditions" });
-      const operator = panel.createEl("select", { attr: { "aria-label": `${property.label} condition` } });
-      operator.createEl("option", { value: "", text: "Any value" });
-      for (const [value, label] of filterOperators(property.kind)) operator.createEl("option", { value, text: label });
-      operator.value = (_a = active == null ? void 0 : active.operator) != null ? _a : "";
-      const inputs = panel.createDiv({ cls: "tm-filter-values" });
-      let values = [...(_b = active == null ? void 0 : active.values) != null ? _b : []];
-      const apply = () => {
-        const op = operator.value;
-        const needsValue = op && op !== "has" && op !== "missing";
-        const valid = !needsValue || values.length > 0 && values[0] !== "" && (op !== "between" || Boolean(values[1]));
-        this.propertyFilters = this.propertyFilters.filter((filter) => filter.property !== property.key);
-        if (op && valid) this.propertyFilters.push({ property: property.key, operator: op, values: [...values] });
-        summary.setText(`${property.label}${op && valid ? " \u2022" : ""}`);
+      renderPropertyFilter(panel, property, active, this.plugin.index.allTasks(), (filter) => {
+        this.propertyFilters = this.propertyFilters.filter((item) => item.property !== property.key);
+        if (filter) this.propertyFilters.push(filter);
+        summary.setText(`${property.label}${filter ? " \u2022" : ""}`);
         sync();
         this.renderTaskResults();
-      };
-      const renderValues = () => {
-        var _a2;
-        inputs.empty();
-        if (!operator.value || ["has", "missing"].includes(operator.value)) return;
-        if (property.kind === "choice") {
-          const choices = property.key === "priority" ? ["1", "2", "3"] : property.key === "status" ? ["Open", "Completed"] : [...new Set(this.plugin.index.allTasks().map((task) => propertyValue(task, property.key)).filter((value) => value !== void 0 && value !== "").map(String))].sort();
-          for (const value of choices) {
-            const label = inputs.createEl("label");
-            const check = label.createEl("input", { type: "checkbox" });
-            check.checked = values.includes(value);
-            label.createSpan({ text: propertyLabel(property.key, value) });
-            check.addEventListener("change", () => {
-              values = check.checked ? [...values, value] : values.filter((item) => item !== value);
-              apply();
-            });
-          }
-        } else {
-          for (let i = 0; i < (operator.value === "between" ? 2 : 1); i++) {
-            const input = inputs.createEl("input", { type: property.kind === "number" ? "number" : property.kind, attr: {
-              "aria-label": `${property.label} ${i ? "upper bound" : "value"}`,
-              ...property.kind === "number" ? { min: "0", step: "1", placeholder: "Minutes" } : {}
-            } });
-            input.value = (_a2 = values[i]) != null ? _a2 : "";
-            input.addEventListener("input", () => {
-              if (!input.validity.valid) return;
-              values[i] = input.value;
-              apply();
-            });
-          }
-          if (property.kind === "number") inputs.createSpan({ text: "Duration in minutes", cls: "tm-filter-hint" });
-        }
-      };
-      operator.addEventListener("change", () => {
-        values = [];
-        renderValues();
-        apply();
       });
-      renderValues();
     }
     const ordering = filters.createDiv({ cls: "tm-order-controls" });
     const iconButton = (icon, label) => {

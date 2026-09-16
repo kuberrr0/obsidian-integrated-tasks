@@ -1101,3 +1101,7 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-description-input { width: 100%; min-width: 0; min-height: 88px; resize: vertical; font: inherit; line-height: 1.5; }
 
 @media (max-width: 700px) { .tm-description-input { font-size: 16px; } }
+
+.tm-filter-clause { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.tm-filter-clause select.tm-filter-join { width: auto; min-width: 78px; flex: 0 0 auto; }
+.tm-filter-clause select[hidden] { display: none; }
