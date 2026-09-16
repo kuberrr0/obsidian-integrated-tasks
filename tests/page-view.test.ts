@@ -110,12 +110,17 @@ function selectionView() {
   const tasks = scanTasks("Work.md", "- [ ] A\n- [ ] B\n- [ ] C");
   const bulkDrop = vi.fn().mockResolvedValue([]);
   const openEditor = vi.fn();
-  const plugin = { openEditor, store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
+  const openBulkEditor = vi.fn();
+  const plugin = { openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
   const view = new TaskMainView({} as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   const internals = view as unknown as {
     bindSelection(row: HTMLElement, task: Task): void;
     prepareDrag(task: Task): void;
+    editTask(task: Task, focusProperty?: string): void;
+    clearSelectionOutside(event: unknown): void;
+    renderProperties(parent: unknown, task: Task): void;
+    badge: (...args: unknown[]) => unknown;
     dropListTask(task: Task, group?: unknown, anchor?: Task, placement?: string): Promise<void>;
   };
   const rows = tasks.map(task => {
@@ -123,6 +128,7 @@ function selectionView() {
     const classes = new Map<string, boolean>();
     const row = { classList: { toggle: (key: string, value: boolean) => classes.set(key, value) },
       setAttribute: vi.fn(), focus: vi.fn(), closest: () => undefined,
+      contains: (target: unknown) => target === row,
       addEventListener: (key: string, callback: (event: unknown) => void) => handlers.set(key, callback)
     };
     internals.bindSelection(row as unknown as HTMLElement, task);
@@ -143,11 +149,11 @@ function selectionView() {
     };
     return { row, classes, click, contextmenu, pointerdown };
   });
-  return { view, internals, tasks, rows, bulkDrop, openEditor };
+  return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor };
 }
 
-it("left-click opens the editor without changing right-click selection", () => {
-  const { view, rows, tasks, openEditor } = selectionView();
+it("left-click opens task properties for a selection and the task editor otherwise", () => {
+  const { view, rows, tasks, openEditor, openBulkEditor } = selectionView();
   rows[0].click();
   rows[2].click({ shiftKey: true, metaKey: true });
   expect(view.getSelectedTasks()).toEqual([]);
@@ -156,7 +162,7 @@ it("left-click opens the editor without changing right-click selection", () => {
   rows[0].contextmenu(); rows[2].contextmenu(undefined, { shiftKey: true });
   expect(view.getSelectedTasks()).toHaveLength(3);
   rows[1].click();
-  expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task: tasks[1] }));
+  expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view);
   expect(view.getSelectedTasks()).toHaveLength(3);
   const title = { closest: () => ({ tagName: "BUTTON" }) };
   expect(rows[1].click({ target: title }).preventDefault).not.toHaveBeenCalled();
@@ -330,4 +336,59 @@ it.each([
   expect(buttonOptions?.attr?.["aria-label"]).toBe("Add task to Next");
   click!({ stopPropagation: vi.fn() });
   expect(openEditor).toHaveBeenCalledWith(expect.objectContaining({ preset: expect.objectContaining(expected) }));
+});
+
+it("clears selection on outside left clicks, but preserves it on selected rows and right clicks", () => {
+  const { view, internals, rows } = selectionView();
+  rows[0].contextmenu();
+  internals.clearSelectionOutside({ button: 0, target: rows[0].row });
+  expect(view.getSelectedTasks()).toHaveLength(1);
+  internals.clearSelectionOutside({ button: 2, target: {} });
+  expect(view.getSelectedTasks()).toHaveLength(1);
+  internals.clearSelectionOutside({ button: 0, target: rows[1].row });
+  expect(view.getSelectedTasks()).toHaveLength(0);
+  rows[0].contextmenu();
+  internals.clearSelectionOutside({ button: 0, target: {} });
+  expect(view.getSelectedTasks()).toHaveLength(0);
+});
+
+it("opens properties for one selected task and clears selection when opening another task", () => {
+  const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  rows[0].contextmenu();
+  internals.editTask(tasks[0]);
+  expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view);
+  internals.editTask(tasks[1]);
+  expect(view.getSelectedTasks()).toHaveLength(0);
+  expect(openEditor).toHaveBeenCalledWith(expect.objectContaining({ task: tasks[1] }));
+});
+
+it.each(["scheduledDate", "deadline", "durationMinutes", "priority", "tags"])("property clicks focus %s in the bulk editor when selected", property => {
+  const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  rows[0].contextmenu(); rows[1].contextmenu(undefined, { metaKey: true });
+  internals.editTask(tasks[0], property);
+  expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view, property);
+  expect(openEditor).not.toHaveBeenCalled();
+  expect(view.getSelectedTasks()).toHaveLength(2);
+});
+
+it("binds each rendered property badge to its field without opening the row editor", () => {
+  const { internals, tasks, openEditor, openBulkEditor } = selectionView();
+  const badges: Array<{ handlers: Map<string, (event: unknown) => void> }> = [];
+  internals.badge = () => {
+    const badge = { handlers: new Map<string, (event: unknown) => void>(), setAttribute: vi.fn(),
+      addEventListener(type: string, callback: (event: unknown) => void) { this.handlers.set(type, callback); } };
+    badges.push(badge);
+    return badge;
+  };
+  const task = { ...tasks[0], scheduledDate: "2026-09-16", deadline: "2026-09-17", durationMinutes: 60, priority: 1 as const, tags: ["Work"] };
+  internals.renderProperties({}, task);
+  expect(badges).toHaveLength(5);
+  for (const [index, property] of ["scheduledDate", "durationMinutes", "deadline", "priority", "tags"].entries()) {
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() };
+    badges[index].handlers.get("click")!(event);
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
+    expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task, focusProperty: property }));
+  }
+  expect(openEditor).toHaveBeenCalledTimes(5);
+  expect(openBulkEditor).not.toHaveBeenCalled();
 });

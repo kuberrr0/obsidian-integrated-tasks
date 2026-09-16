@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import type { TaskEditorProperty } from "../src/task-editor";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { App } from "obsidian";
 vi.mock("obsidian", async importOriginal => ({
   ...await importOriginal<typeof import("./obsidian-mock")>(), Modal: class {}, Notice: class {}
@@ -36,11 +37,11 @@ class Element extends EventTarget {
   all(): Element[] { return this.children.flatMap(child => [child, ...child.all()]); }
   click(): void { this.dispatchEvent(new Event("click")); }
 }
-function open() {
+function open(focusProperty?: TaskEditorProperty) {
   const tasks = scanTasks("Work.md", "- [ ] A [[2026-09-07]] 09:00 1h p1\n- [ ] B [[2026-09-08]] 1h p2");
   const onSave = vi.fn(async (_patch: BulkTaskPatch) => {});
   const onDelete = vi.fn(async () => {});
-  const modal = new BulkTaskEditorModal({} as App, { tasks, projects: [], inboxPath: "Inbox.md", dateFormat: "YYYY-MM-DD", onSave, onDelete });
+  const modal = new BulkTaskEditorModal({} as App, { tasks, focusProperty, projects: [], inboxPath: "Inbox.md", dateFormat: "YYYY-MM-DD", onSave, onDelete });
   const elements = modal as unknown as { contentEl: Element; modalEl: Element; close: () => void };
   elements.contentEl = new Element();
   elements.modalEl = new Element();
@@ -136,4 +137,25 @@ it("always shows description last in the bulk modal and applies only that edited
   description.dispatchEvent(new Event("input"));
   button("Save task").click();
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({ description: "Shared detail" }));
+});
+
+afterEach(() => vi.unstubAllGlobals());
+it.each([
+  ["scheduledDate", "Date and time"], ["deadline", "Deadline date and time"],
+  ["durationMinutes", "Duration"], ["priority", "Priority"], ["tags", "Tags"]
+] as const)("focuses %s without changing mixed or common values", async (property, label) => {
+  vi.stubGlobal("window", { setTimeout: vi.fn() });
+  const { input, button, onSave } = open(property);
+  const field = input(label);
+  const before = field.value;
+  const focus = vi.spyOn(field, "focus");
+  const select = vi.fn();
+  if (property !== "priority") Object.assign(field, { select });
+  const callback = vi.mocked(window.setTimeout).mock.calls[0][0] as () => void;
+  callback();
+  expect(focus).toHaveBeenCalledOnce();
+  if (property !== "priority") expect(select).toHaveBeenCalledOnce();
+  expect(field.value).toBe(before);
+  button("Save task").click();
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({}));
 });

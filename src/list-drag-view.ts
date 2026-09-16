@@ -112,13 +112,15 @@ export class ListDragController {
       origin = { x: event.clientX, y: event.clientY };
       dragging = false;
       row.draggable = false;
-      row.setPointerCapture(event.pointerId);
     });
     row.addEventListener("pointermove", event => {
       if (pointer !== event.pointerId) return;
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
       event.preventDefault();
       if (!dragging) {
+        // Capturing on press retargets ordinary pill/title clicks to the row.
+        // Keep their original target unless this gesture becomes a drag.
+        row.setPointerCapture(event.pointerId);
         this.dragStart(task);
         const rect = row.getBoundingClientRect();
         previewOffset = { x: origin.x - rect.left, y: origin.y - rect.top };
@@ -164,9 +166,11 @@ export class ListDragController {
       const found = dragging ? hit(event) : undefined;
       if (dragging) suppressClickUntil = Date.now() + 250;
       if (found) this.commit(found.target.group, found.target.anchor, found.target.placement);
+      const captured = dragging;
       reset();
-      row.releasePointerCapture(event.pointerId);
+      if (captured) row.releasePointerCapture(event.pointerId);
     });
+    row.addEventListener("pointerleave", () => { if (!dragging) reset(); });
     row.addEventListener("pointercancel", reset);
     row.addEventListener("lostpointercapture", reset);
     row.addEventListener("dragover", event => {

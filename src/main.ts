@@ -17,6 +17,7 @@ import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
 
 interface OpenEditorState extends TaskViewState {
+  focusProperty?: TaskEditorOptions["focusProperty"];
   preset?: TaskEditorPreset;
   task?: Task;
 }
@@ -213,7 +214,7 @@ export default class TaskManagerPlugin extends Plugin {
     }
   }
 
-  openBulkEditor(view: TaskMainView): void {
+  openBulkEditor(view: TaskMainView, focusProperty?: TaskEditorOptions["focusProperty"]): void {
     const tasks = view.getSelectedTasks();
     if (!tasks.length) return;
     const refresh = async (paths: string[]): Promise<void> => {
@@ -221,7 +222,7 @@ export default class TaskManagerPlugin extends Plugin {
       for (const path of paths) await this.index.refreshPath(path);
     };
     new BulkTaskEditorModal(this.app, {
-      tasks, projects: this.index.projects(), dateFormat: this.dateFormat(), inboxPath: this.settings.inboxPath,
+      tasks, focusProperty, projects: this.index.projects(), dateFormat: this.dateFormat(), inboxPath: this.settings.inboxPath,
       onSave: async patch => { await refresh(await this.store.bulkUpdate(tasks, patch)); },
       onDelete: async () => { await refresh(await this.store.bulkDelete(tasks)); }
     }).open();

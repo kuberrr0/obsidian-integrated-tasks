@@ -1,3 +1,4 @@
+import type { TaskEditorProperty } from "./task-editor";
 import { formatTags, parseTags } from "./task-tags";
 import { Modal, Notice, type App } from "obsidian";
 import { formatDateTime, parseDateTimeExpression } from "./date";
@@ -9,6 +10,7 @@ import type { Project, Task } from "./types";
 
 type Field = "tags" | "scheduled" | "deadline" | "duration" | "priority" | "destination" | "description";
 interface BulkEditorOptions {
+  focusProperty?: TaskEditorProperty;
   tasks: Task[];
   projects: Project[];
   dateFormat: string;
@@ -64,6 +66,7 @@ export class BulkTaskEditorModal extends Modal {
   private initial = new Map<Field, string | undefined>();
   private changed = new Set<Field>();
   private actions?: HTMLElement;
+  private focusTimer?: number;
   private stopViewportTracking?: () => void;
   constructor(app: App, private readonly options: BulkEditorOptions) { super(app); }
 
@@ -142,9 +145,18 @@ export class BulkTaskEditorModal extends Modal {
       if (!event.repeat) void run(false);
     };
     this.stopViewportTracking = trackModalViewport(this.modalEl, content);
+    if (this.options.focusProperty) {
+      const field: Field = { scheduledDate: "scheduled", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[this.options.focusProperty] as Field;
+      this.focusTimer = window.setTimeout(() => {
+        const input = this.inputs.get(field);
+        input?.focus();
+        if (input && "select" in input) input.select();
+      }, 0);
+    }
   }
 
   onClose(): void {
+    if (this.focusTimer !== undefined) window.clearTimeout(this.focusTimer);
     this.stopViewportTracking?.();
     this.actions?.remove();
     this.contentEl.onkeydown = null;

@@ -3,7 +3,7 @@ import type { App } from "obsidian";
 vi.mock("obsidian", async (importOriginal) => ({
   ...await importOriginal<typeof import("./obsidian-mock")>(), Modal: class {}, Notice: class {}, setIcon: vi.fn()
 }));
-import { TaskEditorModal } from "../src/task-editor";
+import { TaskEditorModal, type TaskEditorProperty } from "../src/task-editor";
 import { tomorrowIso } from "../src/date";
 import { DEFAULT_SETTINGS, type TaskDraft } from "../src/types";
 
@@ -75,12 +75,12 @@ class EditorElement extends EventTarget {
 class EditorButton extends EditorElement {}
 
 afterEach(() => vi.unstubAllGlobals());
-function openModal(edit = false) {
+function openModal(edit = false, focusProperty?: TaskEditorProperty) {
   vi.stubGlobal("window", { setTimeout: vi.fn() });
   vi.stubGlobal("HTMLButtonElement", EditorButton);
   const onSave = vi.fn(async (_draft: TaskDraft) => {});
   const modal = new TaskEditorModal({} as App, {
-    mode: "inbox", projects: [], settings: DEFAULT_SETTINGS, dateFormat: "YYYY-MM-DD", onSave,
+    mode: "inbox", projects: [], settings: DEFAULT_SETTINGS, dateFormat: "YYYY-MM-DD", onSave, focusProperty,
     task: edit ? { id: "Inbox.md:0", path: "Inbox.md", line: 0, endLine: 0, raw: "- [ ] Existing", title: "Existing", indent: 0, completed: false, childIds: [] } : undefined
   });
   const fields = modal as unknown as {
@@ -200,4 +200,21 @@ it("saves tags added in the structured field", async () => {
   key({ metaKey: true });
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   expect(onSave.mock.calls[0][0].tags).toEqual(["work", "client notes"]);
+});
+
+it.each([
+  ["scheduledDate", "scheduledInput"], ["deadline", "deadlineInput"],
+  ["durationMinutes", "durationInput"], ["priority", "priorityInput"], ["tags", "tagsInput"]
+] as const)("focuses the %s property field instead of raw task text", (property, field) => {
+  const { fields } = openModal(true, property);
+  const input = (fields as unknown as Record<string, EditorElement>)[field];
+  const focus = vi.spyOn(input, "focus");
+  const rawFocus = vi.spyOn(fields.rawInput, "focus");
+  const select = vi.fn();
+  if (property !== "priority") Object.assign(input, { select });
+  const callback = vi.mocked(window.setTimeout).mock.calls.at(-1)![0] as () => void;
+  callback();
+  expect(focus).toHaveBeenCalledOnce();
+  expect(rawFocus).not.toHaveBeenCalled();
+  if (property !== "priority") expect(select).toHaveBeenCalledOnce();
 });

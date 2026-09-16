@@ -3518,9 +3518,18 @@ var BulkTaskEditorModal = class extends import_obsidian2.Modal {
       if (!event.repeat) void run(false);
     };
     this.stopViewportTracking = trackModalViewport(this.modalEl, content);
+    if (this.options.focusProperty) {
+      const field2 = { scheduledDate: "scheduled", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[this.options.focusProperty];
+      this.focusTimer = window.setTimeout(() => {
+        const input = this.inputs.get(field2);
+        input == null ? void 0 : input.focus();
+        if (input && "select" in input) input.select();
+      }, 0);
+    }
   }
   onClose() {
     var _a, _b;
+    if (this.focusTimer !== void 0) window.clearTimeout(this.focusTimer);
     (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
     (_b = this.actions) == null ? void 0 : _b.remove();
     this.contentEl.onkeydown = null;
@@ -4402,7 +4411,6 @@ var ListDragController = class {
       origin = { x: event.clientX, y: event.clientY };
       dragging = false;
       row.draggable = false;
-      row.setPointerCapture(event.pointerId);
     });
     row.addEventListener("pointermove", (event) => {
       var _a;
@@ -4410,6 +4418,7 @@ var ListDragController = class {
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
       event.preventDefault();
       if (!dragging) {
+        row.setPointerCapture(event.pointerId);
         this.dragStart(task);
         const rect = row.getBoundingClientRect();
         previewOffset = { x: origin.x - rect.left, y: origin.y - rect.top };
@@ -4460,8 +4469,12 @@ var ListDragController = class {
       const found = dragging ? hit(event) : void 0;
       if (dragging) suppressClickUntil = Date.now() + 250;
       if (found) this.commit(found.target.group, found.target.anchor, found.target.placement);
+      const captured = dragging;
       reset();
-      row.releasePointerCapture(event.pointerId);
+      if (captured) row.releasePointerCapture(event.pointerId);
+    });
+    row.addEventListener("pointerleave", () => {
+      if (!dragging) reset();
     });
     row.addEventListener("pointercancel", reset);
     row.addEventListener("lostpointercapture", reset);
@@ -4891,6 +4904,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
     this.render();
   }
   async onOpen() {
+    this.registerDomEvent(this.containerEl.ownerDocument, "click", (event) => this.clearSelectionOutside(event), true);
     this.unsubscribe = this.plugin.index.subscribe(() => this.render());
     this.render();
   }
@@ -4956,7 +4970,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
           this.renderTaskResults();
         },
         create: (preset) => this.plugin.openEditor({ ...this.state, preset }),
-        edit: (task) => this.plugin.openEditor({ ...this.state, task }),
+        edit: (task) => this.editTask(task),
         bind: (card, task) => this.bindSelection(card, task),
         dragStart: (task) => this.prepareDrag(task),
         resize: async (task, date, time, duration) => {
@@ -5399,6 +5413,25 @@ var TaskMainView = class extends import_obsidian7.ItemView {
     this.selection.clear();
     this.updateSelection();
   }
+  clearSelectionOutside(event) {
+    var _a;
+    if (event.button !== 0 || import_obsidian7.Platform.isMacOS && event.ctrlKey || !this.getSelectedTasks().length) return;
+    const target = event.target;
+    if (target && ((_a = this.selectionBar) == null ? void 0 : _a.contains(target)) && target.closest("button")) return;
+    const selected = this.getSelectedTasks().some((task) => {
+      var _a2;
+      return (_a2 = this.selectionRows.get(task.id)) == null ? void 0 : _a2.some((row) => target && row.contains(target));
+    });
+    if (!selected) this.clearSelection();
+  }
+  editTask(task, focusProperty) {
+    if (!this.selection.has(task)) this.clearSelection();
+    if (this.selection.has(task)) {
+      if (focusProperty) this.plugin.openBulkEditor(this, focusProperty);
+      else this.plugin.openBulkEditor(this);
+    } else if (focusProperty) this.plugin.openEditor({ ...this.state, task, focusProperty });
+    else this.plugin.openEditor({ ...this.state, task });
+  }
   prepareDrag(task) {
     this.draggedTasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
   }
@@ -5441,7 +5474,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
       if (interactive(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
-      this.plugin.openEditor({ ...this.state, task });
+      this.editTask(task);
     });
     row.addEventListener("keydown", (event) => {
       this.contextSelectionOnPress = false;
@@ -5453,7 +5486,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
       if (event.key === " " || event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        this.plugin.openEditor({ ...this.state, task });
+        this.editTask(task);
       }
     });
   }
@@ -5473,7 +5506,10 @@ var TaskMainView = class extends import_obsidian7.ItemView {
     this.selectionBar.hidden = true;
     this.selectionCount = this.selectionBar.createSpan({ attr: { role: "status", "aria-live": "polite" } });
     const edit = this.selectionBar.createEl("button", { text: "Edit task properties" });
-    edit.addEventListener("click", () => this.plugin.openBulkEditor(this));
+    edit.addEventListener("click", () => {
+      this.plugin.openBulkEditor(this);
+      this.clearSelection();
+    });
     const clear = this.selectionBar.createEl("button", { text: "Clear selection" });
     clear.addEventListener("click", () => this.clearSelection());
   }
@@ -5512,7 +5548,7 @@ var TaskMainView = class extends import_obsidian7.ItemView {
     const primary = content.createDiv({ cls: "tm-task-primary" });
     (_a = this.listDrag) == null ? void 0 : _a.row(row, primary, task, target);
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
-    title.addEventListener("click", () => this.plugin.openEditor({ ...this.state, task }));
+    title.addEventListener("click", () => this.editTask(task));
     if (task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child) => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
@@ -5531,19 +5567,39 @@ var TaskMainView = class extends import_obsidian7.ItemView {
   }
   renderProperties(parent, properties) {
     var _a;
+    const propertyBadge = (property, icon, text, variant) => {
+      const badge = this.badge(parent, icon, text, variant);
+      if (!("completed" in properties)) return;
+      badge.setAttribute("role", "button");
+      badge.setAttribute("tabindex", "0");
+      const label = { scheduledDate: "scheduled date and time", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
+      badge.setAttribute("aria-label", `Edit ${label}: ${text}`);
+      badge.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.editTask(properties, property);
+      });
+      badge.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.editTask(properties, property);
+      });
+    };
     const incompleteTask = "completed" in properties && !properties.completed;
-    if (properties.scheduledDate) this.badge(parent, TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : void 0);
+    if (properties.scheduledDate) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : void 0);
     if ("endDate" in properties && properties.endDate) this.badge(parent, "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
-    if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
-    if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : void 0);
-    if (properties.priority) this.badge(parent, TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
-    if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) this.badge(parent, TASK_PROPERTY_ICONS.tags, tag);
+    if ("durationMinutes" in properties && properties.durationMinutes) propertyBadge("durationMinutes", TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
+    if (properties.deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : void 0);
+    if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
+    if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
   }
   badge(parent, iconName, text, variant) {
     const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
     const icon = badge.createSpan({ cls: "tm-meta-icon" });
     (0, import_obsidian7.setIcon)(icon, iconName);
     badge.createSpan({ text });
+    return badge;
   }
   openMenu(event, task) {
     const menu = new import_obsidian7.Menu();
@@ -6338,6 +6394,12 @@ var TaskEditorModal = class extends import_obsidian11.Modal {
     };
     this.stopViewportTracking = trackModalViewport(this.modalEl, contentEl);
     this.focusTimer = window.setTimeout(() => {
+      if (this.options.focusProperty) {
+        const input = { scheduledDate: this.scheduledInput, deadline: this.deadlineInput, durationMinutes: this.durationInput, priority: this.priorityInput, tags: this.tagsInput }[this.options.focusProperty];
+        input.focus();
+        if ("select" in input) input.select();
+        return;
+      }
       this.rawInput.focus();
       const titleStart = this.rawInput.value.indexOf("] ") + 2;
       this.rawInput.setSelectionRange(titleStart, titleStart + this.draft.title.length);
@@ -7361,7 +7423,7 @@ var TaskManagerPlugin = class extends import_obsidian16.Plugin {
       new import_obsidian16.Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
     }
   }
-  openBulkEditor(view) {
+  openBulkEditor(view, focusProperty) {
     const tasks = view.getSelectedTasks();
     if (!tasks.length) return;
     const refresh = async (paths) => {
@@ -7370,6 +7432,7 @@ var TaskManagerPlugin = class extends import_obsidian16.Plugin {
     };
     new BulkTaskEditorModal(this.app, {
       tasks,
+      focusProperty,
       projects: this.index.projects(),
       dateFormat: this.dateFormat(),
       inboxPath: this.settings.inboxPath,

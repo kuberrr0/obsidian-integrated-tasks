@@ -17,8 +17,8 @@ class Element {
   setAttribute(): void {}
   removeAttribute(): void {}
   closest(): unknown { return undefined; }
-  setPointerCapture(): void {}
-  releasePointerCapture(): void {}
+  setPointerCapture = vi.fn();
+  releasePointerCapture = vi.fn();
   getBoundingClientRect() { return { left: parseFloat(this.style.left) || 0, top: parseFloat(this.style.top) || 0, width: 300, height: 40 }; }
   addEventListener(type: string, listener: (event: any) => void): void {
     this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
@@ -118,4 +118,41 @@ it("keeps the grabbed point under the cursor inside an offset pane", () => {
   row.fire("pointermove", { clientX: 475, clientY: 180 });
   expect(preview.getBoundingClientRect()).toMatchObject({ left: 450, top: 170 });
   row.fire("pointerup");
+});
+
+it("keeps property-pill clicks on the pill until movement becomes a drag", () => {
+  const [task] = scanTasks("Work.md", "- [ ] Task p1");
+  const start = vi.fn();
+  const controller = new ListDragController(() => undefined, vi.fn(), true, start);
+  const row = new Element();
+  const pill = { closest: () => undefined };
+  controller.row(row as never, new Element() as never, task);
+  row.fire("pointerdown", { target: pill });
+  row.fire("pointermove", { target: pill, clientX: 2 });
+  expect(row.setPointerCapture).not.toHaveBeenCalled();
+  row.fire("pointerup", { target: pill, clientX: 2 });
+  expect(row.releasePointerCapture).not.toHaveBeenCalled();
+  expect(row.fire("click", { target: pill }).stopImmediatePropagation).not.toHaveBeenCalled();
+  expect(start).not.toHaveBeenCalled();
+
+  row.fire("pointerdown", { target: pill });
+  row.fire("pointermove", { target: pill, clientX: 10 });
+  expect(row.setPointerCapture).toHaveBeenCalledExactlyOnceWith(1);
+  expect(start).toHaveBeenCalledExactlyOnceWith(task);
+  row.fire("pointerup", { clientX: 10 });
+  expect(row.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1);
+  expect(row.fire("click").stopImmediatePropagation).toHaveBeenCalledOnce();
+});
+
+it("abandons an uncaptured press when the pointer leaves the row", () => {
+  const [task] = scanTasks("Work.md", "- [ ] Task");
+  const start = vi.fn();
+  const controller = new ListDragController(() => undefined, vi.fn(), true, start);
+  const row = new Element();
+  controller.row(row as never, new Element() as never, task);
+  row.fire("pointerdown");
+  row.fire("pointerleave");
+  row.fire("pointermove", { clientX: 50 });
+  expect(start).not.toHaveBeenCalled();
+  expect(row.draggable).toBe(true);
 });

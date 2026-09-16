@@ -1,3 +1,4 @@
+import type { TaskEditorProperty } from "./task-editor";
 import { TASK_PROPERTY_ICONS } from "./task-property-icons";
 import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
@@ -97,6 +98,7 @@ export class TaskMainView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    this.registerDomEvent(this.containerEl.ownerDocument, "click", event => this.clearSelectionOutside(event), true);
     this.unsubscribe = this.plugin.index.subscribe(() => this.render());
     this.render();
   }
@@ -159,7 +161,7 @@ export class TaskMainView extends ItemView {
         anchor: this.calendarAnchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
         navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.renderTaskResults(); },
         create: preset => this.plugin.openEditor({ ...this.state, preset }),
-        edit: task => this.plugin.openEditor({ ...this.state, task }),
+        edit: task => this.editTask(task),
         bind: (card, task) => this.bindSelection(card, task),
         dragStart: task => this.prepareDrag(task),
         resize: async (task, date, time, duration) => {
@@ -562,6 +564,26 @@ export class TaskMainView extends ItemView {
 
   clearSelection(): void { this.selection.clear(); this.updateSelection(); }
 
+  private clearSelectionOutside(event: MouseEvent): void {
+    if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || !this.getSelectedTasks().length) return;
+    const target = event.target as HTMLElement | null;
+    // Let the toolbar act on the selection before clearing it.
+    if (target && this.selectionBar?.contains(target) && target.closest("button")) return;
+    const selected = this.getSelectedTasks().some(task =>
+      this.selectionRows.get(task.id)?.some(row => target && row.contains(target)));
+    if (!selected) this.clearSelection();
+  }
+
+  private editTask(task: Task, focusProperty?: TaskEditorProperty): void {
+    if (!this.selection.has(task)) this.clearSelection();
+    if (this.selection.has(task)) {
+      if (focusProperty) this.plugin.openBulkEditor(this, focusProperty);
+      else this.plugin.openBulkEditor(this);
+    }
+    else if (focusProperty) this.plugin.openEditor({ ...this.state, task, focusProperty });
+    else this.plugin.openEditor({ ...this.state, task });
+  }
+
   private prepareDrag(task: Task): void {
     this.draggedTasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
   }
@@ -604,7 +626,7 @@ export class TaskMainView extends ItemView {
     row.addEventListener("click", event => {
       if (interactive(event.target)) return;
       event.preventDefault(); event.stopPropagation();
-      this.plugin.openEditor({ ...this.state, task });
+      this.editTask(task);
     });
     row.addEventListener("keydown", event => {
       this.contextSelectionOnPress = false;
@@ -612,7 +634,7 @@ export class TaskMainView extends ItemView {
       if (event.key === "Escape") { event.preventDefault(); this.clearSelection(); }
       if (event.key === " " || event.key === "Enter") {
         event.preventDefault(); event.stopPropagation();
-        this.plugin.openEditor({ ...this.state, task });
+        this.editTask(task);
       }
     });
   }
@@ -633,7 +655,7 @@ export class TaskMainView extends ItemView {
     this.selectionBar.hidden = true;
     this.selectionCount = this.selectionBar.createSpan({ attr: { role: "status", "aria-live": "polite" } });
     const edit = this.selectionBar.createEl("button", { text: "Edit task properties" });
-    edit.addEventListener("click", () => this.plugin.openBulkEditor(this));
+    edit.addEventListener("click", () => { this.plugin.openBulkEditor(this); this.clearSelection(); });
     const clear = this.selectionBar.createEl("button", { text: "Clear selection" });
     clear.addEventListener("click", () => this.clearSelection());
   }
@@ -670,7 +692,7 @@ export class TaskMainView extends ItemView {
     const primary = content.createDiv({ cls: "tm-task-primary" });
     this.listDrag?.row(row, primary, task, target);
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
-    title.addEventListener("click", () => this.plugin.openEditor({ ...this.state, task }));
+    title.addEventListener("click", () => this.editTask(task));
     if (task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
@@ -689,20 +711,38 @@ export class TaskMainView extends ItemView {
   }
 
   private renderProperties(parent: HTMLElement, properties: ProjectProperties | Task): void {
+    const propertyBadge = (property: TaskEditorProperty, icon: string, text: string, variant?: string): void => {
+      const badge = this.badge(parent, icon, text, variant);
+      if (!("completed" in properties)) return;
+      badge.setAttribute("role", "button");
+      badge.setAttribute("tabindex", "0");
+      const label = { scheduledDate: "scheduled date and time", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
+      badge.setAttribute("aria-label", `Edit ${label}: ${text}`);
+      badge.addEventListener("click", event => {
+        event.preventDefault(); event.stopPropagation();
+        this.editTask(properties, property);
+      });
+      badge.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault(); event.stopPropagation();
+        this.editTask(properties, property);
+      });
+    };
     const incompleteTask = "completed" in properties && !properties.completed;
-    if (properties.scheduledDate) this.badge(parent, TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : undefined);
+    if (properties.scheduledDate) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : undefined);
     if ("endDate" in properties && properties.endDate) this.badge(parent, "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
-    if ("durationMinutes" in properties && properties.durationMinutes) this.badge(parent, TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
-    if (properties.deadline) this.badge(parent, TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : undefined);
-    if (properties.priority) this.badge(parent, TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
-    if ("tags" in properties) for (const tag of properties.tags ?? []) this.badge(parent, TASK_PROPERTY_ICONS.tags, tag);
+    if ("durationMinutes" in properties && properties.durationMinutes) propertyBadge("durationMinutes", TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
+    if (properties.deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : undefined);
+    if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
+    if ("tags" in properties) for (const tag of properties.tags ?? []) propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
   }
 
-  private badge(parent: HTMLElement, iconName: string, text: string, variant?: string): void {
+  private badge(parent: HTMLElement, iconName: string, text: string, variant?: string): HTMLElement {
     const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
     const icon = badge.createSpan({ cls: "tm-meta-icon" });
     setIcon(icon, iconName);
     badge.createSpan({ text });
+    return badge;
   }
 
   private openMenu(event: MouseEvent, task: Task): void {

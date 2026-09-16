@@ -9,7 +9,10 @@ import { formatDate, formatDateTime, parseDateTimeExpression, todayIso, tomorrow
 import { formatDuration, scanTasks, parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
 import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from "./types";
 
+export type TaskEditorProperty = "scheduledDate" | "deadline" | "durationMinutes" | "priority" | "tags";
+
 export interface TaskEditorOptions {
+  focusProperty?: TaskEditorProperty;
   task?: Task;
   preset?: TaskEditorPreset;
   mode: TaskViewMode;
@@ -284,6 +287,12 @@ export class TaskEditorModal extends Modal {
 
     this.stopViewportTracking = trackModalViewport(this.modalEl, contentEl);
     this.focusTimer = window.setTimeout(() => {
+      if (this.options.focusProperty) {
+        const input = { scheduledDate: this.scheduledInput, deadline: this.deadlineInput, durationMinutes: this.durationInput, priority: this.priorityInput, tags: this.tagsInput }[this.options.focusProperty];
+        input.focus();
+        if ("select" in input) input.select();
+        return;
+      }
       this.rawInput.focus();
       const titleStart = this.rawInput.value.indexOf("] ") + 2;
       this.rawInput.setSelectionRange(titleStart, titleStart + this.draft.title.length);
