@@ -28,6 +28,8 @@ Quick-created tasks go to `Inbox.md` by default. You can choose a different inbo
 
 The sidebar uses a compact file-style tree. Its icon toolbar provides **Create task**, **Create project**, and **Task mode**. Expand Projects or Tags for direct access, or click their labels to open the full lists. Creating a project makes a named Markdown note with the `project` frontmatter tag. Tag pages support the existing task layouts, filters, and editing tools; new tasks created there inherit the tag.
 
+Use **Create new smart list** to save a named set of filters (including AND/OR conditions), sorting, and grouping. Saved lists appear under **Smart Lists** in the sidebar and update as tasks change. With a saved list open, **Edit smart list** changes its definition and **Delete smart list** removes the saved list without deleting tasks. Smart lists are stored in the plugin’s workspace settings.
+
 Today and Upcoming use the earlier of a task’s scheduled date and deadline. Undated tasks remain available in Inbox, All Tasks, and their source note’s task view.
 
 Search task titles, descriptions, and tags. Filter by title, status, scheduled date or time, deadline, duration, priority, tags, source note, or section. Filters support matching values, missing properties, and date or duration ranges where applicable. After completing a condition, use the inline AND / OR control to add another condition for that property. AND is evaluated before OR; separate property filters must all match.

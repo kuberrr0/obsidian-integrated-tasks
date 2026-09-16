@@ -41,9 +41,10 @@ export interface Project extends ProjectProperties {
   archived: boolean;
 }
 
-export type TaskViewMode = "inbox" | "today" | "upcoming" | "all" | "projects" | "tags";
+export type TaskViewMode = "inbox" | "today" | "upcoming" | "all" | "projects" | "tags" | "smartLists";
 
 export interface TaskViewState {
+  smartListId?: string;
   tag?: string;
   mode: TaskViewMode;
   projectPath?: string;
@@ -89,7 +90,17 @@ export interface TaskDraft extends ParsedTaskMetadata {
   indent: number;
 }
 
+export interface SmartList {
+  id: string;
+  name: string;
+  filters: TaskFilter[];
+  sort: TaskSort;
+  descending: boolean;
+  grouping: TaskGrouping;
+}
+
 export interface TaskManagerSettings {
+  smartLists: SmartList[];
   taskMode: boolean;
   linkDates: boolean;
   dateFormat: string;
@@ -104,6 +115,7 @@ export interface TaskManagerSettings {
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
+  smartLists: [],
   taskMode: false,
   linkDates: false,
   dateFormat: "",

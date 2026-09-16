@@ -7,12 +7,14 @@ export const TASK_NAV_VIEW = "task-manager-navigation";
 const NAV_ITEMS: Array<{ mode: TaskViewMode; label: string }> = [
   { mode: "inbox", label: "Inbox" }, { mode: "today", label: "Today" },
   { mode: "upcoming", label: "Upcoming" }, { mode: "all", label: "All Tasks" },
-  { mode: "projects", label: "Projects" }, { mode: "tags", label: "Tags" }
+  { mode: "projects", label: "Projects" }, { mode: "tags", label: "Tags" },
+  { mode: "smartLists", label: "Smart Lists" }
 ];
 
 export class TaskNavigationView extends ItemView {
   private activeMode: TaskViewMode = "today";
   private activeTag?: string;
+  private activeSmartList?: string;
   private activeProject?: string;
   private expanded = new Set<TaskViewMode>();
   private unsubscribe?: () => void;
@@ -27,6 +29,7 @@ export class TaskNavigationView extends ItemView {
       if (view?.getViewType() !== "task-manager-main") return;
       const state = view.getState();
       const mode = NAV_ITEMS.find(item => item.mode === state.mode)?.mode;
+      if (mode === "smartLists") { this.setActive(mode, undefined, undefined, typeof state.smartListId === "string" ? state.smartListId : undefined); return; }
       if (mode) this.setActive(mode, typeof state.tag === "string" ? state.tag : undefined,
         typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : undefined);
     };
@@ -35,9 +38,10 @@ export class TaskNavigationView extends ItemView {
     this.render();
   }
   async onClose(): Promise<void> { this.unsubscribe?.(); }
-  setActive(mode: TaskViewMode, tag?: string, project?: string): void {
+  setActive(mode: TaskViewMode, tag?: string, project?: string, smartListId?: string): void {
+    this.activeSmartList = smartListId;
     this.activeMode = mode; this.activeTag = tag; this.activeProject = project;
-    if (tag || project) this.expanded.add(mode);
+    if (tag || project || smartListId) this.expanded.add(mode);
     this.render();
   }
   refresh(): void { this.render(); }
@@ -73,9 +77,9 @@ export class TaskNavigationView extends ItemView {
       return row;
     };
     for (const entry of NAV_ITEMS) {
-      const branch = entry.mode === "projects" || entry.mode === "tags";
+      const branch = entry.mode === "projects" || entry.mode === "tags" || entry.mode === "smartLists";
       const group = nav.createDiv({ cls: branch ? "tree-item nav-folder" : "tree-item nav-file" });
-      const row = item(group, entry.label, entry.mode === this.activeMode && !this.activeTag && !this.activeProject,
+      const row = item(group, entry.label, entry.mode === this.activeMode && !this.activeTag && !this.activeProject && !this.activeSmartList,
         () => this.plugin.openTaskView({ mode: entry.mode }));
       if (!branch) continue;
       const expanded = this.expanded.has(entry.mode);
@@ -94,6 +98,10 @@ export class TaskNavigationView extends ItemView {
         const projects = this.plugin.index.projects().filter(project => !project.archived);
         for (const project of projects) item(children, project.name, this.activeProject === project.path, () => this.plugin.openProject(project.path));
         if (!projects.length) children.createDiv({ cls: "tm-nav-empty", text: "No projects yet" });
+      } else if (entry.mode === "smartLists") {
+        const lists = this.plugin.settings.smartLists;
+        for (const list of lists) item(children, list.name, this.activeSmartList === list.id, () => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }));
+        if (!lists.length) children.createDiv({ cls: "tm-nav-empty", text: "No smart lists yet" });
       } else {
         const tags = taskTagSummaries(this.plugin.index.allTasks());
         for (const tag of tags) item(children, tag.name, this.activeTag === tag.name, () => this.plugin.openTaskView({ mode: "tags", tag: tag.name }));

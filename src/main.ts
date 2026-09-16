@@ -1,3 +1,4 @@
+import { SmartListEditorModal, type SmartListDraft } from "./smart-list-editor";
 import { ProjectCreatorModal, projectNotePath, projectNoteContent } from "./project-creator";
 import { BulkTaskEditorModal } from "./bulk-task-editor";
 import { TaskModeController } from "./task-mode";
@@ -12,7 +13,7 @@ import { TaskIndex } from "./task-index";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
 import { TaskStore } from "./task-store";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
-import { DEFAULT_SETTINGS, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
+import { DEFAULT_SETTINGS, type SmartList, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
@@ -79,6 +80,19 @@ export default class TaskManagerPlugin extends Plugin {
         });
       }
     }
+    this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
+    this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: checking => {
+      const list = this.activeSmartList();
+      if (!list) return false;
+      if (!checking) this.openSmartListEditor(list);
+      return true;
+    } });
+    this.addCommand({ id: "delete-smart-list", name: "Delete smart list", checkCallback: checking => {
+      const list = this.activeSmartList();
+      if (!list) return false;
+      if (!checking) void this.deleteSmartList(list.id).catch(error => new Notice(String(error)));
+      return true;
+    } });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: checking => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
@@ -123,6 +137,7 @@ export default class TaskManagerPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<TaskManagerSettings> | null);
+    this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
@@ -157,8 +172,51 @@ export default class TaskManagerPlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
     for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
       const view = navLeaf.view;
-      if (view instanceof TaskNavigationView) view.setActive(state.mode, state.tag);
+      if (view instanceof TaskNavigationView) view.setActive(state.mode, state.tag, undefined, state.smartListId);
     }
+  }
+
+  private activeSmartList(): SmartList | undefined {
+    const state = this.app.workspace.getActiveViewOfType(TaskMainView)?.getState();
+    return state?.mode === "smartLists" ? this.settings.smartLists.find(list => list.id === state.smartListId) : undefined;
+  }
+
+  openSmartListEditor(list?: SmartList): void {
+    new SmartListEditorModal(this.app, this.index.allTasks(), async draft => {
+      const saved = await this.saveSmartList(draft, list?.id);
+      await this.openTaskView({ mode: "smartLists", smartListId: saved.id });
+    }, list).open();
+  }
+
+  async saveSmartList(draft: SmartListDraft, id?: string): Promise<SmartList> {
+    const name = draft.name.trim();
+    if (!name) throw new Error("Enter a list name.");
+    if (id && !this.settings.smartLists.some(list => list.id === id)) throw new Error("This smart list no longer exists.");
+    const saved: SmartList = { ...draft, name, filters: JSON.parse(JSON.stringify(draft.filters)), id: id ?? crypto.randomUUID() };
+    const previous = this.settings.smartLists;
+    this.settings.smartLists = id ? previous.map(list => list.id === id ? saved : list) : [...previous, saved];
+    try { await this.saveSettings(); }
+    catch (cause) { this.settings.smartLists = previous; throw cause; }
+    this.refreshSmartLists();
+    return saved;
+  }
+
+  async deleteSmartList(id: string): Promise<void> {
+    const previous = this.settings.smartLists;
+    this.settings.smartLists = previous.filter(list => list.id !== id);
+    try { await this.saveSettings(); }
+    catch (cause) { this.settings.smartLists = previous; throw cause; }
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
+      if (leaf.view.getState().smartListId === id) await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { mode: "smartLists" } });
+    }
+    this.refreshSmartLists();
+  }
+
+  private refreshSmartLists(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
+      if (leaf.view instanceof TaskNavigationView) leaf.view.refresh();
+    }
+    this.refreshViews();
   }
 
   openProjectCreator(): void {

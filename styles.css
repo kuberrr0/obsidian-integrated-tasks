@@ -1105,3 +1105,7 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-filter-clause { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
 .tm-filter-clause select.tm-filter-join { width: auto; min-width: 78px; flex: 0 0 auto; }
 .tm-filter-clause select[hidden] { display: none; }
+
+.modal.tm-smart-list-modal { width: min(900px, 95vw); }
+.tm-smart-list-filters { margin-bottom: 16px; }
+.tm-smart-list-filters .tm-property-name { min-width: 130px; }

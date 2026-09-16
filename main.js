@@ -25,8 +25,104 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
-// src/project-creator.ts
+// src/smart-list-editor.ts
 var import_obsidian2 = require("obsidian");
+
+// src/task-tags.ts
+function normalizeTags(tags = []) {
+  const normalized = tags.map((tag) => tag.trim());
+  if (normalized.some((tag) => !tag || /[[\]\r\n|]/.test(tag))) {
+    throw new Error("Use nonempty tag names without brackets, newlines, or aliases.");
+  }
+  return [...new Set(normalized)];
+}
+function formatTags(tags = []) {
+  return normalizeTags(tags).map((tag) => `#[[${tag}]]`).join(" ");
+}
+function parseTags(value) {
+  const tags = [];
+  const remaining = value.replace(/#\[\[([^[\]\r\n|]+)\]\]/g, (_match, tag) => {
+    tags.push(tag);
+    return "";
+  });
+  if (remaining.trim()) throw new Error("Use tags such as #[[work]] #[[client notes]].");
+  return normalizeTags(tags);
+}
+function taskTagSummaries(tasks) {
+  var _a, _b;
+  const tags = /* @__PURE__ */ new Map();
+  for (const task of tasks) for (const name of new Set((_a = task.tags) != null ? _a : [])) {
+    const tag = (_b = tags.get(name)) != null ? _b : { name, openTasks: 0, completedTasks: 0 };
+    if (task.completed) tag.completedTasks++;
+    else tag.openTasks++;
+    tags.set(name, tag);
+  }
+  return [...tags.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// src/structure.ts
+function bodyLines(content) {
+  var _a, _b;
+  const result = [];
+  const lines = content.split(/\r?\n/);
+  let frontmatter = ((_a = lines[0]) == null ? void 0 : _a.trim()) === "---";
+  let fence;
+  for (let line = 0; line < lines.length; line++) {
+    const text = lines[line];
+    if (line === 0 && frontmatter) continue;
+    if (frontmatter) {
+      if (/^(---|\.\.\.)\s*$/.test(text)) frontmatter = false;
+      continue;
+    }
+    const marker = (_b = /^ {0,3}(`{3,}|~{3,})/.exec(text)) == null ? void 0 : _b[1];
+    if (fence) {
+      if ((marker == null ? void 0 : marker[0]) === fence[0] && marker.length >= fence.length && text.trim() === marker) fence = void 0;
+      continue;
+    }
+    if (marker) {
+      fence = marker;
+      continue;
+    }
+    result.push({ text, line });
+  }
+  return result;
+}
+function scanHeadings(content) {
+  const headings = [];
+  const lines = bodyLines(content);
+  for (let i = 0; i < lines.length; i++) {
+    const { text, line } = lines[i];
+    const atx = /^ {0,3}(#{1,6})(?:\s+|$)(.*)$/.exec(text);
+    if (atx) {
+      headings.push({ name: atx[2].replace(/\s+#+\s*$/, "").trim(), line, endLine: line, level: atx[1].length });
+    } else if (/^ {0,3}(=+|-+)\s*$/.test(text) && i > 0) {
+      const previous = lines[i - 1];
+      if (previous.line === line - 1 && previous.text.trim() && !/^\s*[-*>#]/.test(previous.text)) {
+        headings.push({ name: previous.text.trim(), line: line - 1, endLine: line, level: text.trim()[0] === "=" ? 1 : 2 });
+      }
+    }
+  }
+  return headings;
+}
+function scanSections(content) {
+  return scanHeadings(content).filter((heading) => heading.level === 1);
+}
+function splitDestination(value) {
+  const target = value.trim().replace(/^~?\[\[|\]\]$/g, "").split("|", 1)[0];
+  const separator = target.indexOf("#");
+  const path = (separator < 0 ? target : target.slice(0, separator)).trim();
+  const heading = separator < 0 ? void 0 : target.slice(separator + 1).trim() || void 0;
+  if (!path || /[\r\n]/.test(target)) throw new Error("Enter a destination note.");
+  return { path: /\.md$/i.test(path) ? path : `${path}.md`, heading };
+}
+function destinationString(path, heading) {
+  return `${path}${heading ? `#${heading}` : ""}`;
+}
+function destinationLabel(destination) {
+  const separator = destination.indexOf("#");
+  const path = separator < 0 ? destination : destination.slice(0, separator);
+  return path.replace(/\.md$/i, "") + (separator < 0 ? "" : destination.slice(separator));
+}
 
 // node_modules/chrono-node/dist/esm/types.js
 var Meridiem;
@@ -3009,259 +3105,6 @@ function formatDateTime(date, time, dateFormat) {
   return `${formatDate(date, dateFormat)}${time ? ` ${time}` : ""}`;
 }
 
-// src/mobile-layout.ts
-function trackModalViewport(modal, content) {
-  const win = modal.ownerDocument.defaultView;
-  const container = modal.parentElement;
-  if (!win || !container) return () => {
-  };
-  container.classList.add("tm-editor-container");
-  const viewport = win.visualViewport;
-  let frame = 0;
-  const update = () => {
-    var _a, _b;
-    container.style.setProperty("--tm-viewport-height", `${(_a = viewport == null ? void 0 : viewport.height) != null ? _a : win.innerHeight}px`);
-    container.style.setProperty("--tm-viewport-top", `${(_b = viewport == null ? void 0 : viewport.offsetTop) != null ? _b : 0}px`);
-    win.cancelAnimationFrame(frame);
-    frame = win.requestAnimationFrame(() => {
-      if (!modal.ownerDocument.body.classList.contains("is-mobile") && !win.matchMedia("(max-width: 700px)").matches) return;
-      const focused = modal.ownerDocument.activeElement;
-      if (!focused || !content.contains(focused)) return;
-      const field2 = focused.getBoundingClientRect();
-      const area = content.getBoundingClientRect();
-      if (field2.bottom > area.bottom - 12) content.scrollTop += field2.bottom - area.bottom + 12;
-      else if (field2.top < area.top + 12) content.scrollTop -= area.top + 12 - field2.top;
-    });
-  };
-  viewport == null ? void 0 : viewport.addEventListener("resize", update);
-  viewport == null ? void 0 : viewport.addEventListener("scroll", update);
-  win.addEventListener("resize", update);
-  content.addEventListener("focusin", update);
-  update();
-  return () => {
-    win.cancelAnimationFrame(frame);
-    viewport == null ? void 0 : viewport.removeEventListener("resize", update);
-    viewport == null ? void 0 : viewport.removeEventListener("scroll", update);
-    win.removeEventListener("resize", update);
-    content.removeEventListener("focusin", update);
-    container.classList.remove("tm-editor-container");
-    container.style.removeProperty("--tm-viewport-height");
-    container.style.removeProperty("--tm-viewport-top");
-  };
-}
-
-// src/project-creator.ts
-var ProjectCreatorModal = class extends import_obsidian2.Modal {
-  constructor(app, options) {
-    super(app);
-    this.options = options;
-  }
-  onOpen() {
-    this.modalEl.addClass("tm-editor-modal");
-    const content = this.contentEl;
-    content.empty();
-    content.createEl("h2", { text: "Create project" });
-    const field2 = (label, kind = "input", placeholder) => {
-      const row = content.createDiv({ cls: "tm-editor-field" });
-      const caption = row.createEl("label", { text: label });
-      const input = kind === "select" ? row.createEl("select") : row.createEl("input", { type: "text", attr: { placeholder: placeholder != null ? placeholder : "" } });
-      input.setAttribute("aria-label", label);
-      caption.addEventListener("click", () => input.focus());
-      return input;
-    };
-    const name = field2("Project name", "input", "New project");
-    const date = field2("Start date", "input", "Tomorrow or a formatted date");
-    const endDate = field2("End date", "input", "Next Friday or a formatted date");
-    const deadline = field2("Deadline", "input", "Next Friday or a formatted date");
-    const priority = field2("Priority", "select");
-    for (const [value, text] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) priority.createEl("option", { value, text });
-    const parent = field2("Parent project", "select");
-    parent.createEl("option", { value: "", text: "No parent" });
-    for (const project of this.options.projects) parent.createEl("option", { value: project.path, text: project.path.replace(/\.md$/i, "") });
-    const tags = field2("Tags", "input", "project, work");
-    tags.value = "project";
-    const archiveRow = content.createEl("label", { cls: "tm-toggle" });
-    const archived = archiveRow.createEl("input", { type: "checkbox", attr: { "aria-label": "Archived" } });
-    archiveRow.createSpan({ text: "Archived" });
-    const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
-    this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
-    const cancel = this.actions.createEl("button", { text: "Cancel" });
-    const create = this.actions.createEl("button", { text: "Create project", cls: "mod-cta" });
-    const submit = async () => {
-      if (create.disabled) return;
-      const draft = {
-        name: name.value,
-        date: date.value,
-        endDate: endDate.value,
-        deadline: deadline.value,
-        priority: priority.value,
-        parent: parent.value,
-        tags: tags.value,
-        archived: archived.checked
-      };
-      create.disabled = cancel.disabled = true;
-      try {
-        projectNoteContent(draft, this.options.dateFormat, this.options.linkDates);
-        await this.options.createProject(draft);
-        this.close();
-      } catch (cause) {
-        error.setText(cause instanceof Error ? cause.message : String(cause));
-        create.disabled = cancel.disabled = false;
-      }
-    };
-    create.addEventListener("click", () => {
-      void submit();
-    });
-    cancel.addEventListener("click", () => this.close());
-    content.onkeydown = (event) => {
-      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing || event.altKey) return;
-      event.preventDefault();
-      if (!event.repeat) void submit();
-    };
-    this.stopViewportTracking = trackModalViewport(this.modalEl, content);
-  }
-  onClose() {
-    var _a, _b;
-    (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
-    (_b = this.actions) == null ? void 0 : _b.remove();
-    this.contentEl.onkeydown = null;
-    this.contentEl.empty();
-  }
-};
-function projectNoteContent(draft, dateFormat, linkDates, reference = /* @__PURE__ */ new Date()) {
-  const path = projectNotePath(draft.name);
-  const date = (value, label) => {
-    if (!value.trim()) return null;
-    const text = value.trim().replace(/^\[\[([^\]]+)\]\]$/, "$1");
-    const parsed = parseDateExpression(text, reference, dateFormat);
-    if (!parsed) throw new Error(`Could not understand the ${label}.`);
-    const formatted = formatDate(parsed, dateFormat);
-    return linkDates ? `[[${formatted}]]` : formatted;
-  };
-  if (draft.priority && !/^[123]$/.test(draft.priority)) throw new Error("Select a valid priority.");
-  if (draft.parent === path) throw new Error("A project cannot be its own parent.");
-  const tags = [.../* @__PURE__ */ new Set(["project", ...draft.tags.split(/[,\s]+/).map((tag) => tag.replace(/^#/, "")).filter(Boolean)])];
-  if (draft.archived && !tags.includes("archived")) tags.push("archived");
-  const frontmatter = {
-    tags,
-    date: date(draft.date, "start date"),
-    "end date": date(draft.endDate, "end date"),
-    deadline: date(draft.deadline, "deadline"),
-    priority: draft.priority ? Number(draft.priority) : null,
-    parent: draft.parent ? `[[${draft.parent.replace(/\.md$/i, "")}]]` : null
-  };
-  return `---
-${Object.entries(frontmatter).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join("\n")}
----
-`;
-}
-function projectNotePath(name) {
-  const title = name.trim().replace(/\.md$/i, "");
-  if (!title || title === "." || title === ".." || /[\\/:*?"<>|#^[\]\r\n]/.test(title)) {
-    throw new Error("Enter a project name without path separators or special filename characters.");
-  }
-  return `${title}.md`;
-}
-
-// src/task-tags.ts
-function normalizeTags(tags = []) {
-  const normalized = tags.map((tag) => tag.trim());
-  if (normalized.some((tag) => !tag || /[[\]\r\n|]/.test(tag))) {
-    throw new Error("Use nonempty tag names without brackets, newlines, or aliases.");
-  }
-  return [...new Set(normalized)];
-}
-function formatTags(tags = []) {
-  return normalizeTags(tags).map((tag) => `#[[${tag}]]`).join(" ");
-}
-function parseTags(value) {
-  const tags = [];
-  const remaining = value.replace(/#\[\[([^[\]\r\n|]+)\]\]/g, (_match, tag) => {
-    tags.push(tag);
-    return "";
-  });
-  if (remaining.trim()) throw new Error("Use tags such as #[[work]] #[[client notes]].");
-  return normalizeTags(tags);
-}
-function taskTagSummaries(tasks) {
-  var _a, _b;
-  const tags = /* @__PURE__ */ new Map();
-  for (const task of tasks) for (const name of new Set((_a = task.tags) != null ? _a : [])) {
-    const tag = (_b = tags.get(name)) != null ? _b : { name, openTasks: 0, completedTasks: 0 };
-    if (task.completed) tag.completedTasks++;
-    else tag.openTasks++;
-    tags.set(name, tag);
-  }
-  return [...tags.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-// src/bulk-task-editor.ts
-var import_obsidian3 = require("obsidian");
-
-// src/structure.ts
-function bodyLines(content) {
-  var _a, _b;
-  const result = [];
-  const lines = content.split(/\r?\n/);
-  let frontmatter = ((_a = lines[0]) == null ? void 0 : _a.trim()) === "---";
-  let fence;
-  for (let line = 0; line < lines.length; line++) {
-    const text = lines[line];
-    if (line === 0 && frontmatter) continue;
-    if (frontmatter) {
-      if (/^(---|\.\.\.)\s*$/.test(text)) frontmatter = false;
-      continue;
-    }
-    const marker = (_b = /^ {0,3}(`{3,}|~{3,})/.exec(text)) == null ? void 0 : _b[1];
-    if (fence) {
-      if ((marker == null ? void 0 : marker[0]) === fence[0] && marker.length >= fence.length && text.trim() === marker) fence = void 0;
-      continue;
-    }
-    if (marker) {
-      fence = marker;
-      continue;
-    }
-    result.push({ text, line });
-  }
-  return result;
-}
-function scanHeadings(content) {
-  const headings = [];
-  const lines = bodyLines(content);
-  for (let i = 0; i < lines.length; i++) {
-    const { text, line } = lines[i];
-    const atx = /^ {0,3}(#{1,6})(?:\s+|$)(.*)$/.exec(text);
-    if (atx) {
-      headings.push({ name: atx[2].replace(/\s+#+\s*$/, "").trim(), line, endLine: line, level: atx[1].length });
-    } else if (/^ {0,3}(=+|-+)\s*$/.test(text) && i > 0) {
-      const previous = lines[i - 1];
-      if (previous.line === line - 1 && previous.text.trim() && !/^\s*[-*>#]/.test(previous.text)) {
-        headings.push({ name: previous.text.trim(), line: line - 1, endLine: line, level: text.trim()[0] === "=" ? 1 : 2 });
-      }
-    }
-  }
-  return headings;
-}
-function scanSections(content) {
-  return scanHeadings(content).filter((heading) => heading.level === 1);
-}
-function splitDestination(value) {
-  const target = value.trim().replace(/^~?\[\[|\]\]$/g, "").split("|", 1)[0];
-  const separator = target.indexOf("#");
-  const path = (separator < 0 ? target : target.slice(0, separator)).trim();
-  const heading = separator < 0 ? void 0 : target.slice(separator + 1).trim() || void 0;
-  if (!path || /[\r\n]/.test(target)) throw new Error("Enter a destination note.");
-  return { path: /\.md$/i.test(path) ? path : `${path}.md`, heading };
-}
-function destinationString(path, heading) {
-  return `${path}${heading ? `#${heading}` : ""}`;
-}
-function destinationLabel(destination) {
-  const separator = destination.indexOf("#");
-  const path = separator < 0 ? destination : destination.slice(0, separator);
-  return path.replace(/\.md$/i, "") + (separator < 0 ? "" : destination.slice(separator));
-}
-
 // src/parser.ts
 var CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
 var TAG = /(?:^|\s)#\[\[([^[\]\r\n|]+)\]\]\s*$/;
@@ -3506,167 +3349,6 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
   return tasks;
 }
 
-// src/bulk-task-editor.ts
-function bulkPropertyValues(task, dateFormat) {
-  var _a;
-  return {
-    scheduled: task.scheduledDate ? formatDateTime(task.scheduledDate, task.scheduledTime, dateFormat) : "",
-    deadline: task.deadline ? formatDateTime(task.deadline, task.deadlineTime, dateFormat) : "",
-    duration: task.durationMinutes ? formatDuration(task.durationMinutes) : "",
-    tags: formatTags(task.tags),
-    priority: task.priority ? String(task.priority) : "",
-    description: (_a = task.description) != null ? _a : "",
-    destination: destinationString(task.path, task.section)
-  };
-}
-function bulkPropertyPatch(values, dateFormat, reference = /* @__PURE__ */ new Date()) {
-  var _a, _b, _c;
-  const patch = {};
-  for (const field2 of ["scheduled", "deadline"]) {
-    if (!(field2 in values)) continue;
-    const value = values[field2].trim();
-    const parsed = value ? parseDateTimeExpression(value, reference, dateFormat) : void 0;
-    if (value && !parsed) throw new Error(`Could not understand the ${field2 === "scheduled" ? "scheduled date and time" : "deadline date and time"}.`);
-    if (field2 === "scheduled") {
-      patch.scheduledDate = parsed == null ? void 0 : parsed.date;
-      patch.scheduledTime = parsed == null ? void 0 : parsed.time;
-    } else {
-      patch.deadline = parsed == null ? void 0 : parsed.date;
-      patch.deadlineTime = parsed == null ? void 0 : parsed.time;
-    }
-  }
-  if ("duration" in values) {
-    const value = values.duration.trim();
-    const duration = durationToMinutes(value.replace(/\s+/g, ""));
-    if (value && !duration) throw new Error("Use a duration such as 45m, 2h, or 1h30m.");
-    patch.durationMinutes = duration;
-  }
-  if ("priority" in values) {
-    if (values.priority && !/^[123]$/.test(values.priority)) throw new Error("Select a valid priority.");
-    patch.priority = values.priority ? Number(values.priority) : void 0;
-  }
-  if ("destination" in values) {
-    if (!((_a = values.destination) == null ? void 0 : _a.trim())) throw new Error("Select a destination note.");
-    patch.destination = values.destination;
-  }
-  if ("tags" in values) patch.tags = parseTags((_b = values.tags) != null ? _b : "");
-  if ("description" in values) patch.description = (_c = values.description) != null ? _c : "";
-  return patch;
-}
-var BulkTaskEditorModal = class extends import_obsidian3.Modal {
-  constructor(app, options) {
-    super(app);
-    this.options = options;
-    this.inputs = /* @__PURE__ */ new Map();
-    this.initial = /* @__PURE__ */ new Map();
-    this.changed = /* @__PURE__ */ new Set();
-  }
-  onOpen() {
-    var _a;
-    this.modalEl.addClass("tm-editor-modal");
-    const content = this.contentEl;
-    content.empty();
-    content.createEl("h2", { text: "Edit task properties" });
-    content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
-    const snapshots = this.options.tasks.map((task) => bulkPropertyValues(task, this.options.dateFormat));
-    for (const [key, label] of [["scheduled", "Date and time"], ["duration", "Duration"], ["deadline", "Deadline date and time"], ["priority", "Priority"], ["tags", "Tags"], ["destination", "Destination"], ["description", "Description"]]) {
-      const common = snapshots.every((value) => value[key] === snapshots[0][key]) ? snapshots[0][key] : void 0;
-      this.initial.set(key, common);
-      const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });
-      const caption = row.createEl("label", { text: label });
-      const input = key === "description" ? row.createEl("textarea", { cls: "tm-description-input", attr: { rows: "4" } }) : key === "priority" || key === "destination" ? row.createEl("select") : row.createEl("input", { type: "text" });
-      input.setAttribute("aria-label", label);
-      caption.addEventListener("click", () => input.focus());
-      if (input.tagName === "SELECT") {
-        const select = input;
-        if (common === void 0) select.createEl("option", { value: "__mixed__", text: "Mixed \u2014 unchanged" });
-        if (key === "priority") {
-          for (const [value, text] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) select.createEl("option", { value, text });
-        } else {
-          const destinations = /* @__PURE__ */ new Set([this.options.inboxPath, ...snapshots.map((value) => value.destination)]);
-          for (const project of this.options.projects) {
-            destinations.add(project.path);
-            for (const heading of (_a = project.headings) != null ? _a : []) destinations.add(destinationString(project.path, heading.name));
-          }
-          for (const destination of [...destinations].sort()) select.createEl("option", { value: destination, text: destinationLabel(destination) });
-        }
-        input.value = common != null ? common : "__mixed__";
-      } else {
-        input.placeholder = common === void 0 ? "Mixed \u2014 unchanged" : key === "tags" ? "#[[work]] #[[client notes]]" : key === "duration" ? "45m or 1h30m" : key === "description" ? "Add a description\u2026" : "Tomorrow at 9am";
-        input.value = common != null ? common : "";
-      }
-      this.inputs.set(key, input);
-      const update = () => {
-        if (input.value === "__mixed__" || input.value === this.initial.get(key)) this.changed.delete(key);
-        else this.changed.add(key);
-      };
-      input.addEventListener("input", update);
-      input.addEventListener("change", update);
-      if (key !== "destination") {
-        const clear = row.createEl("button", { text: "Clear", attr: { "aria-label": `Clear ${label.toLowerCase()}` } });
-        clear.addEventListener("click", () => {
-          input.value = "";
-          this.changed.add(key);
-        });
-      }
-    }
-    const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
-    this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
-    const remove = this.actions.createEl("button", { text: "Delete task", cls: "tm-delete-task" });
-    const cancel = this.actions.createEl("button", { text: "Cancel" });
-    const save = this.actions.createEl("button", { text: "Save task", cls: "mod-cta", attr: { title: "Cmd/Ctrl+Enter" } });
-    const run = async (deleting) => {
-      if (save.disabled) return;
-      try {
-        const values = Object.fromEntries([...this.changed].map((key) => [key, this.inputs.get(key).value]));
-        const patch = deleting ? {} : bulkPropertyPatch(values, this.options.dateFormat);
-        save.disabled = remove.disabled = cancel.disabled = true;
-        if (deleting) await this.options.onDelete();
-        else await this.options.onSave(patch);
-        this.close();
-      } catch (cause) {
-        save.disabled = remove.disabled = cancel.disabled = false;
-        const message = cause instanceof Error ? cause.message : "Could not update selected tasks.";
-        error.setText(message);
-        new import_obsidian3.Notice(message);
-      }
-    };
-    remove.addEventListener("click", () => {
-      void run(true);
-    });
-    save.addEventListener("click", () => {
-      void run(false);
-    });
-    cancel.addEventListener("click", () => this.close());
-    content.onkeydown = (event) => {
-      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (!event.repeat) void run(false);
-    };
-    this.stopViewportTracking = trackModalViewport(this.modalEl, content);
-    if (this.options.focusProperty) {
-      const field2 = { scheduledDate: "scheduled", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[this.options.focusProperty];
-      this.focusTimer = window.setTimeout(() => {
-        const input = this.inputs.get(field2);
-        input == null ? void 0 : input.focus();
-        if (input && "select" in input) input.select();
-      }, 0);
-    }
-  }
-  onClose() {
-    var _a, _b;
-    if (this.focusTimer !== void 0) window.clearTimeout(this.focusTimer);
-    (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
-    (_b = this.actions) == null ? void 0 : _b.remove();
-    this.contentEl.onkeydown = null;
-    this.contentEl.empty();
-  }
-};
-
-// src/task-mode.ts
-var import_obsidian9 = require("obsidian");
-
 // src/task-properties.ts
 var TASK_PROPERTIES = [
   { key: "title", label: "Title", kind: "text" },
@@ -3863,8 +3545,418 @@ function renderPropertyFilter(container, property, initial, tasks, onChange) {
   render();
 }
 
-// src/task-property-icons.ts
+// src/mobile-layout.ts
+function trackModalViewport(modal, content) {
+  const win = modal.ownerDocument.defaultView;
+  const container = modal.parentElement;
+  if (!win || !container) return () => {
+  };
+  container.classList.add("tm-editor-container");
+  const viewport = win.visualViewport;
+  let frame = 0;
+  const update = () => {
+    var _a, _b;
+    container.style.setProperty("--tm-viewport-height", `${(_a = viewport == null ? void 0 : viewport.height) != null ? _a : win.innerHeight}px`);
+    container.style.setProperty("--tm-viewport-top", `${(_b = viewport == null ? void 0 : viewport.offsetTop) != null ? _b : 0}px`);
+    win.cancelAnimationFrame(frame);
+    frame = win.requestAnimationFrame(() => {
+      if (!modal.ownerDocument.body.classList.contains("is-mobile") && !win.matchMedia("(max-width: 700px)").matches) return;
+      const focused = modal.ownerDocument.activeElement;
+      if (!focused || !content.contains(focused)) return;
+      const field2 = focused.getBoundingClientRect();
+      const area = content.getBoundingClientRect();
+      if (field2.bottom > area.bottom - 12) content.scrollTop += field2.bottom - area.bottom + 12;
+      else if (field2.top < area.top + 12) content.scrollTop -= area.top + 12 - field2.top;
+    });
+  };
+  viewport == null ? void 0 : viewport.addEventListener("resize", update);
+  viewport == null ? void 0 : viewport.addEventListener("scroll", update);
+  win.addEventListener("resize", update);
+  content.addEventListener("focusin", update);
+  update();
+  return () => {
+    win.cancelAnimationFrame(frame);
+    viewport == null ? void 0 : viewport.removeEventListener("resize", update);
+    viewport == null ? void 0 : viewport.removeEventListener("scroll", update);
+    win.removeEventListener("resize", update);
+    content.removeEventListener("focusin", update);
+    container.classList.remove("tm-editor-container");
+    container.style.removeProperty("--tm-viewport-height");
+    container.style.removeProperty("--tm-viewport-top");
+  };
+}
+
+// src/smart-list-editor.ts
+function smartListDraft(list) {
+  return list ? { name: list.name, filters: JSON.parse(JSON.stringify(list.filters)), sort: list.sort, descending: list.descending, grouping: list.grouping } : { name: "", filters: [], sort: "date", descending: false, grouping: "default" };
+}
+var SmartListEditorModal = class extends import_obsidian2.Modal {
+  constructor(app, tasks, save, list) {
+    super(app);
+    this.tasks = tasks;
+    this.save = save;
+    this.list = list;
+  }
+  onOpen() {
+    this.modalEl.addClass("tm-editor-modal", "tm-smart-list-modal");
+    const content = this.contentEl;
+    content.empty();
+    const draft = smartListDraft(this.list);
+    content.createEl("h2", { text: this.list ? "Edit smart list" : "Create new smart list" });
+    const field2 = (label, select = false) => {
+      const row = content.createDiv({ cls: "tm-editor-field" });
+      const caption = row.createEl("label", { text: label });
+      const input = select ? row.createEl("select") : row.createEl("input", { type: "text" });
+      input.setAttribute("aria-label", label);
+      caption.addEventListener("click", () => input.focus());
+      return input;
+    };
+    const name = field2("List name");
+    name.value = draft.name;
+    const sort = field2("Sort by", true);
+    for (const item of [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES]) sort.createEl("option", { value: item.key, text: item.label });
+    sort.value = draft.sort;
+    const direction = field2("Sort direction", true);
+    direction.createEl("option", { value: "ascending", text: "Ascending" });
+    direction.createEl("option", { value: "descending", text: "Descending" });
+    direction.value = draft.descending ? "descending" : "ascending";
+    const grouping = field2("Group by", true);
+    for (const item of [{ key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES]) grouping.createEl("option", { value: item.key, text: item.label });
+    grouping.value = draft.grouping;
+    content.createEl("h3", { text: "Filters" });
+    content.createDiv({ cls: "tm-filter-hint", text: "Match all properties. AND is evaluated before OR. Use Status to include completed tasks." });
+    const filters = content.createDiv({ cls: "tm-smart-list-filters" });
+    for (const property of TASK_PROPERTIES) {
+      const row = filters.createDiv({ cls: "tm-property-submenu" });
+      row.createSpan({ cls: "tm-property-name", text: property.label });
+      const panel = row.createDiv({ cls: "tm-property-conditions" });
+      renderPropertyFilter(panel, property, draft.filters.find((filter) => filter.property === property.key), this.tasks, (filter) => {
+        draft.filters = draft.filters.filter((item) => item.property !== property.key);
+        if (filter) draft.filters.push(filter);
+      });
+    }
+    const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
+    this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
+    const cancel = this.actions.createEl("button", { text: "Cancel" });
+    const save = this.actions.createEl("button", { text: "Save smart list", cls: "mod-cta" });
+    const submit = async () => {
+      if (save.disabled) return;
+      draft.name = name.value.trim();
+      if (!draft.name) {
+        error.setText("Enter a list name.");
+        name.focus();
+        return;
+      }
+      draft.sort = sort.value;
+      draft.descending = direction.value === "descending";
+      draft.grouping = grouping.value;
+      save.disabled = cancel.disabled = true;
+      try {
+        await this.save(draft);
+        this.close();
+      } catch (cause) {
+        error.setText(cause instanceof Error ? cause.message : String(cause));
+        save.disabled = cancel.disabled = false;
+      }
+    };
+    save.addEventListener("click", () => {
+      void submit();
+    });
+    cancel.addEventListener("click", () => this.close());
+    content.onkeydown = (event) => {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing || event.altKey) return;
+      event.preventDefault();
+      if (!event.repeat) void submit();
+    };
+    this.stopViewportTracking = trackModalViewport(this.modalEl, content);
+  }
+  onClose() {
+    var _a, _b;
+    (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
+    (_b = this.actions) == null ? void 0 : _b.remove();
+    this.contentEl.onkeydown = null;
+    this.contentEl.empty();
+  }
+};
+
+// src/project-creator.ts
+var import_obsidian3 = require("obsidian");
+var ProjectCreatorModal = class extends import_obsidian3.Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+  }
+  onOpen() {
+    this.modalEl.addClass("tm-editor-modal");
+    const content = this.contentEl;
+    content.empty();
+    content.createEl("h2", { text: "Create project" });
+    const field2 = (label, kind = "input", placeholder) => {
+      const row = content.createDiv({ cls: "tm-editor-field" });
+      const caption = row.createEl("label", { text: label });
+      const input = kind === "select" ? row.createEl("select") : row.createEl("input", { type: "text", attr: { placeholder: placeholder != null ? placeholder : "" } });
+      input.setAttribute("aria-label", label);
+      caption.addEventListener("click", () => input.focus());
+      return input;
+    };
+    const name = field2("Project name", "input", "New project");
+    const date = field2("Start date", "input", "Tomorrow or a formatted date");
+    const endDate = field2("End date", "input", "Next Friday or a formatted date");
+    const deadline = field2("Deadline", "input", "Next Friday or a formatted date");
+    const priority = field2("Priority", "select");
+    for (const [value, text] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) priority.createEl("option", { value, text });
+    const parent = field2("Parent project", "select");
+    parent.createEl("option", { value: "", text: "No parent" });
+    for (const project of this.options.projects) parent.createEl("option", { value: project.path, text: project.path.replace(/\.md$/i, "") });
+    const tags = field2("Tags", "input", "project, work");
+    tags.value = "project";
+    const archiveRow = content.createEl("label", { cls: "tm-toggle" });
+    const archived = archiveRow.createEl("input", { type: "checkbox", attr: { "aria-label": "Archived" } });
+    archiveRow.createSpan({ text: "Archived" });
+    const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
+    this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
+    const cancel = this.actions.createEl("button", { text: "Cancel" });
+    const create = this.actions.createEl("button", { text: "Create project", cls: "mod-cta" });
+    const submit = async () => {
+      if (create.disabled) return;
+      const draft = {
+        name: name.value,
+        date: date.value,
+        endDate: endDate.value,
+        deadline: deadline.value,
+        priority: priority.value,
+        parent: parent.value,
+        tags: tags.value,
+        archived: archived.checked
+      };
+      create.disabled = cancel.disabled = true;
+      try {
+        projectNoteContent(draft, this.options.dateFormat, this.options.linkDates);
+        await this.options.createProject(draft);
+        this.close();
+      } catch (cause) {
+        error.setText(cause instanceof Error ? cause.message : String(cause));
+        create.disabled = cancel.disabled = false;
+      }
+    };
+    create.addEventListener("click", () => {
+      void submit();
+    });
+    cancel.addEventListener("click", () => this.close());
+    content.onkeydown = (event) => {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing || event.altKey) return;
+      event.preventDefault();
+      if (!event.repeat) void submit();
+    };
+    this.stopViewportTracking = trackModalViewport(this.modalEl, content);
+  }
+  onClose() {
+    var _a, _b;
+    (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
+    (_b = this.actions) == null ? void 0 : _b.remove();
+    this.contentEl.onkeydown = null;
+    this.contentEl.empty();
+  }
+};
+function projectNoteContent(draft, dateFormat, linkDates, reference = /* @__PURE__ */ new Date()) {
+  const path = projectNotePath(draft.name);
+  const date = (value, label) => {
+    if (!value.trim()) return null;
+    const text = value.trim().replace(/^\[\[([^\]]+)\]\]$/, "$1");
+    const parsed = parseDateExpression(text, reference, dateFormat);
+    if (!parsed) throw new Error(`Could not understand the ${label}.`);
+    const formatted = formatDate(parsed, dateFormat);
+    return linkDates ? `[[${formatted}]]` : formatted;
+  };
+  if (draft.priority && !/^[123]$/.test(draft.priority)) throw new Error("Select a valid priority.");
+  if (draft.parent === path) throw new Error("A project cannot be its own parent.");
+  const tags = [.../* @__PURE__ */ new Set(["project", ...draft.tags.split(/[,\s]+/).map((tag) => tag.replace(/^#/, "")).filter(Boolean)])];
+  if (draft.archived && !tags.includes("archived")) tags.push("archived");
+  const frontmatter = {
+    tags,
+    date: date(draft.date, "start date"),
+    "end date": date(draft.endDate, "end date"),
+    deadline: date(draft.deadline, "deadline"),
+    priority: draft.priority ? Number(draft.priority) : null,
+    parent: draft.parent ? `[[${draft.parent.replace(/\.md$/i, "")}]]` : null
+  };
+  return `---
+${Object.entries(frontmatter).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join("\n")}
+---
+`;
+}
+function projectNotePath(name) {
+  const title = name.trim().replace(/\.md$/i, "");
+  if (!title || title === "." || title === ".." || /[\\/:*?"<>|#^[\]\r\n]/.test(title)) {
+    throw new Error("Enter a project name without path separators or special filename characters.");
+  }
+  return `${title}.md`;
+}
+
+// src/bulk-task-editor.ts
 var import_obsidian4 = require("obsidian");
+function bulkPropertyValues(task, dateFormat) {
+  var _a;
+  return {
+    scheduled: task.scheduledDate ? formatDateTime(task.scheduledDate, task.scheduledTime, dateFormat) : "",
+    deadline: task.deadline ? formatDateTime(task.deadline, task.deadlineTime, dateFormat) : "",
+    duration: task.durationMinutes ? formatDuration(task.durationMinutes) : "",
+    tags: formatTags(task.tags),
+    priority: task.priority ? String(task.priority) : "",
+    description: (_a = task.description) != null ? _a : "",
+    destination: destinationString(task.path, task.section)
+  };
+}
+function bulkPropertyPatch(values, dateFormat, reference = /* @__PURE__ */ new Date()) {
+  var _a, _b, _c;
+  const patch = {};
+  for (const field2 of ["scheduled", "deadline"]) {
+    if (!(field2 in values)) continue;
+    const value = values[field2].trim();
+    const parsed = value ? parseDateTimeExpression(value, reference, dateFormat) : void 0;
+    if (value && !parsed) throw new Error(`Could not understand the ${field2 === "scheduled" ? "scheduled date and time" : "deadline date and time"}.`);
+    if (field2 === "scheduled") {
+      patch.scheduledDate = parsed == null ? void 0 : parsed.date;
+      patch.scheduledTime = parsed == null ? void 0 : parsed.time;
+    } else {
+      patch.deadline = parsed == null ? void 0 : parsed.date;
+      patch.deadlineTime = parsed == null ? void 0 : parsed.time;
+    }
+  }
+  if ("duration" in values) {
+    const value = values.duration.trim();
+    const duration = durationToMinutes(value.replace(/\s+/g, ""));
+    if (value && !duration) throw new Error("Use a duration such as 45m, 2h, or 1h30m.");
+    patch.durationMinutes = duration;
+  }
+  if ("priority" in values) {
+    if (values.priority && !/^[123]$/.test(values.priority)) throw new Error("Select a valid priority.");
+    patch.priority = values.priority ? Number(values.priority) : void 0;
+  }
+  if ("destination" in values) {
+    if (!((_a = values.destination) == null ? void 0 : _a.trim())) throw new Error("Select a destination note.");
+    patch.destination = values.destination;
+  }
+  if ("tags" in values) patch.tags = parseTags((_b = values.tags) != null ? _b : "");
+  if ("description" in values) patch.description = (_c = values.description) != null ? _c : "";
+  return patch;
+}
+var BulkTaskEditorModal = class extends import_obsidian4.Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+    this.inputs = /* @__PURE__ */ new Map();
+    this.initial = /* @__PURE__ */ new Map();
+    this.changed = /* @__PURE__ */ new Set();
+  }
+  onOpen() {
+    var _a;
+    this.modalEl.addClass("tm-editor-modal");
+    const content = this.contentEl;
+    content.empty();
+    content.createEl("h2", { text: "Edit task properties" });
+    content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
+    const snapshots = this.options.tasks.map((task) => bulkPropertyValues(task, this.options.dateFormat));
+    for (const [key, label] of [["scheduled", "Date and time"], ["duration", "Duration"], ["deadline", "Deadline date and time"], ["priority", "Priority"], ["tags", "Tags"], ["destination", "Destination"], ["description", "Description"]]) {
+      const common = snapshots.every((value) => value[key] === snapshots[0][key]) ? snapshots[0][key] : void 0;
+      this.initial.set(key, common);
+      const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });
+      const caption = row.createEl("label", { text: label });
+      const input = key === "description" ? row.createEl("textarea", { cls: "tm-description-input", attr: { rows: "4" } }) : key === "priority" || key === "destination" ? row.createEl("select") : row.createEl("input", { type: "text" });
+      input.setAttribute("aria-label", label);
+      caption.addEventListener("click", () => input.focus());
+      if (input.tagName === "SELECT") {
+        const select = input;
+        if (common === void 0) select.createEl("option", { value: "__mixed__", text: "Mixed \u2014 unchanged" });
+        if (key === "priority") {
+          for (const [value, text] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) select.createEl("option", { value, text });
+        } else {
+          const destinations = /* @__PURE__ */ new Set([this.options.inboxPath, ...snapshots.map((value) => value.destination)]);
+          for (const project of this.options.projects) {
+            destinations.add(project.path);
+            for (const heading of (_a = project.headings) != null ? _a : []) destinations.add(destinationString(project.path, heading.name));
+          }
+          for (const destination of [...destinations].sort()) select.createEl("option", { value: destination, text: destinationLabel(destination) });
+        }
+        input.value = common != null ? common : "__mixed__";
+      } else {
+        input.placeholder = common === void 0 ? "Mixed \u2014 unchanged" : key === "tags" ? "#[[work]] #[[client notes]]" : key === "duration" ? "45m or 1h30m" : key === "description" ? "Add a description\u2026" : "Tomorrow at 9am";
+        input.value = common != null ? common : "";
+      }
+      this.inputs.set(key, input);
+      const update = () => {
+        if (input.value === "__mixed__" || input.value === this.initial.get(key)) this.changed.delete(key);
+        else this.changed.add(key);
+      };
+      input.addEventListener("input", update);
+      input.addEventListener("change", update);
+      if (key !== "destination") {
+        const clear = row.createEl("button", { text: "Clear", attr: { "aria-label": `Clear ${label.toLowerCase()}` } });
+        clear.addEventListener("click", () => {
+          input.value = "";
+          this.changed.add(key);
+        });
+      }
+    }
+    const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
+    this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
+    const remove = this.actions.createEl("button", { text: "Delete task", cls: "tm-delete-task" });
+    const cancel = this.actions.createEl("button", { text: "Cancel" });
+    const save = this.actions.createEl("button", { text: "Save task", cls: "mod-cta", attr: { title: "Cmd/Ctrl+Enter" } });
+    const run = async (deleting) => {
+      if (save.disabled) return;
+      try {
+        const values = Object.fromEntries([...this.changed].map((key) => [key, this.inputs.get(key).value]));
+        const patch = deleting ? {} : bulkPropertyPatch(values, this.options.dateFormat);
+        save.disabled = remove.disabled = cancel.disabled = true;
+        if (deleting) await this.options.onDelete();
+        else await this.options.onSave(patch);
+        this.close();
+      } catch (cause) {
+        save.disabled = remove.disabled = cancel.disabled = false;
+        const message = cause instanceof Error ? cause.message : "Could not update selected tasks.";
+        error.setText(message);
+        new import_obsidian4.Notice(message);
+      }
+    };
+    remove.addEventListener("click", () => {
+      void run(true);
+    });
+    save.addEventListener("click", () => {
+      void run(false);
+    });
+    cancel.addEventListener("click", () => this.close());
+    content.onkeydown = (event) => {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) void run(false);
+    };
+    this.stopViewportTracking = trackModalViewport(this.modalEl, content);
+    if (this.options.focusProperty) {
+      const field2 = { scheduledDate: "scheduled", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[this.options.focusProperty];
+      this.focusTimer = window.setTimeout(() => {
+        const input = this.inputs.get(field2);
+        input == null ? void 0 : input.focus();
+        if (input && "select" in input) input.select();
+      }, 0);
+    }
+  }
+  onClose() {
+    var _a, _b;
+    if (this.focusTimer !== void 0) window.clearTimeout(this.focusTimer);
+    (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
+    (_b = this.actions) == null ? void 0 : _b.remove();
+    this.contentEl.onkeydown = null;
+    this.contentEl.empty();
+  }
+};
+
+// src/task-mode.ts
+var import_obsidian10 = require("obsidian");
+
+// src/task-property-icons.ts
+var import_obsidian5 = require("obsidian");
 var TASK_PROPERTY_ICONS = {
   scheduledDate: "calendar-days",
   deadline: "flag",
@@ -3877,7 +3969,7 @@ function notePropertyIconStyle(property) {
   const name = TASK_PROPERTY_ICONS[property];
   const cached = masks.get(name);
   if (cached) return cached;
-  const icon = (0, import_obsidian4.getIcon)(name);
+  const icon = (0, import_obsidian5.getIcon)(name);
   if (!icon) return "";
   icon.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   icon.setAttribute("stroke", "black");
@@ -4002,7 +4094,7 @@ function updateProjectDates(frontmatter, changes, expected, dateFormat) {
 }
 
 // src/gantt-view.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/calendar.ts
 var SLOT_MINUTES = 15;
@@ -4156,7 +4248,7 @@ function renderGantt(container, options) {
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
     const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-    (0, import_obsidian5.setIcon)(button, icon);
+    (0, import_obsidian6.setIcon)(button, icon);
     button.addEventListener("click", () => options.navigate(addDays(start, delta * days), options.zoom));
   }
   const today2 = toolbar.createEl("button", { text: "Today" });
@@ -4203,7 +4295,7 @@ function renderGantt(container, options) {
         }
       }
     } catch (cause) {
-      new import_obsidian5.Notice(cause instanceof Error ? cause.message : "Could not update project dates.");
+      new import_obsidian6.Notice(cause instanceof Error ? cause.message : "Could not update project dates.");
     } finally {
       busy = false;
       root.removeAttribute("aria-busy");
@@ -4399,6 +4491,7 @@ ${((_e = task.tags) != null ? _e : []).join("\n")}`.toLocaleLowerCase().includes
       return task.path === query.projectPath;
     case "projects":
       return false;
+    case "smartLists":
     case "tags":
     case "all":
       return true;
@@ -4543,7 +4636,7 @@ function kanbanColumns(tasks, grouping) {
 }
 
 // src/list-drag-view.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 var ListDragController = class {
   constructor(getTask, drop, allowNesting = true, dragStart = () => {
   }) {
@@ -4595,7 +4688,7 @@ var ListDragController = class {
   }
   row(row, primary, task, group) {
     const handle = primary.createEl("button", { cls: "clickable-icon tm-list-drag-handle", attr: { "aria-label": `Drag ${task.title}`, title: "Drag to reorder; drop to the right to nest, or to the left to outdent" } });
-    (0, import_obsidian6.setIcon)(handle, "grip-vertical");
+    (0, import_obsidian7.setIcon)(handle, "grip-vertical");
     primary.prepend(handle);
     row.draggable = true;
     let suppressClickUntil = 0;
@@ -4661,7 +4754,7 @@ var ListDragController = class {
       return void 0;
     };
     row.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || import_obsidian6.Platform.isMacOS && event.ctrlKey || this.busy) return;
+      if (event.button !== 0 || import_obsidian7.Platform.isMacOS && event.ctrlKey || this.busy) return;
       const target = event.target;
       if (target.closest("input, label, select, textarea, a, button") && !target.closest(".tm-task-title, .tm-list-drag-handle")) return;
       event.stopPropagation();
@@ -4758,7 +4851,7 @@ var ListDragController = class {
 };
 
 // src/calendar-view.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 function renderCalendar(container, options) {
   var _a, _b, _c, _d, _e;
   const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope` });
@@ -4774,7 +4867,7 @@ function renderCalendar(container, options) {
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
     const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-    (0, import_obsidian7.setIcon)(button, icon);
+    (0, import_obsidian8.setIcon)(button, icon);
     button.addEventListener("click", () => options.navigate(shiftCalendar(options.anchor, options.scope, delta), options.scope));
   }
   const today2 = toolbar.createEl("button", { text: "Today" });
@@ -4805,7 +4898,7 @@ function renderCalendar(container, options) {
       dragged = void 0;
       moving = true;
       void options.move(task, targetDate, getTime == null ? void 0 : getTime(event)).catch((cause) => {
-        new import_obsidian7.Notice(cause instanceof Error ? cause.message : "Could not reschedule task.");
+        new import_obsidian8.Notice(cause instanceof Error ? cause.message : "Could not reschedule task.");
       }).finally(() => {
         moving = false;
       });
@@ -4971,7 +5064,7 @@ function renderCalendar(container, options) {
           card.setAttribute("aria-busy", "true");
           void options.resize(task, day, minuteTime(range.start), range.duration).catch((cause) => {
             restore();
-            new import_obsidian7.Notice(cause instanceof Error ? cause.message : "Could not resize task.");
+            new import_obsidian8.Notice(cause instanceof Error ? cause.message : "Could not resize task.");
           }).finally(() => {
             moving = false;
             card.removeAttribute("aria-busy");
@@ -5083,7 +5176,7 @@ function renderCalendar(container, options) {
 }
 
 // src/task-view.ts
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 var TASK_MAIN_VIEW = "task-manager-main";
 var TITLES = {
   inbox: "Inbox",
@@ -5091,9 +5184,10 @@ var TITLES = {
   upcoming: "Upcoming",
   all: "All Tasks",
   projects: "Projects",
-  tags: "Tags"
+  tags: "Tags",
+  smartLists: "Smart Lists"
 };
-var TaskMainView = class extends import_obsidian8.ItemView {
+var TaskMainView = class extends import_obsidian9.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -5127,9 +5221,10 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     return TASK_MAIN_VIEW;
   }
   getDisplayText() {
-    var _a;
+    var _a, _b, _c;
+    if (this.state.mode === "smartLists" && this.state.smartListId) return (_b = (_a = this.plugin.settings.smartLists.find((list) => list.id === this.state.smartListId)) == null ? void 0 : _a.name) != null ? _b : "Smart list not found";
     if (this.state.mode === "tags" && this.state.tag) return this.state.tag;
-    if (this.pagePath) return (_a = this.pagePath.replace(/\.md$/i, "").split("/").pop()) != null ? _a : "Project";
+    if (this.pagePath) return (_c = this.pagePath.replace(/\.md$/i, "").split("/").pop()) != null ? _c : "Project";
     return TITLES[this.state.mode];
   }
   getIcon() {
@@ -5147,7 +5242,8 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
     if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
-    if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag) {
+    if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId) {
+      this.smartListVersion = void 0;
       this.selection.clear();
       this.search = "";
       this.propertyFilters = [];
@@ -5157,6 +5253,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       this.filtersExpanded = false;
     }
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode;
+    this.state.smartListId = typeof state.smartListId === "string" ? state.smartListId : void 0;
     this.state.tag = typeof state.tag === "string" && state.tag ? state.tag : void 0;
     this.state.pagePath = typeof state.pagePath === "string" ? state.pagePath : void 0;
     this.state.markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState : void 0;
@@ -5175,6 +5272,18 @@ var TaskMainView = class extends import_obsidian8.ItemView {
   }
   render() {
     const container = this.containerEl.children[1];
+    if (this.state.mode === "smartLists" && this.state.smartListId) {
+      const list = this.plugin.settings.smartLists.find((item) => item.id === this.state.smartListId);
+      const version = JSON.stringify(list);
+      if (list && version !== this.smartListVersion) {
+        this.smartListVersion = version;
+        this.propertyFilters = JSON.parse(JSON.stringify(list.filters));
+        this.sort = list.sort;
+        this.descending = list.descending;
+        this.grouping = list.grouping;
+        this.selection.clear();
+      }
+    }
     container.empty();
     this.taskResults = void 0;
     this.selectionBar = void 0;
@@ -5186,6 +5295,15 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
+    if (this.state.mode === "smartLists" && !this.state.smartListId) {
+      container.classList.remove("is-calendar-view", "is-kanban-view");
+      this.renderSmartLists(container);
+      return;
+    }
+    if (this.state.mode === "smartLists" && !this.plugin.settings.smartLists.some((list) => list.id === this.state.smartListId)) {
+      container.createDiv({ cls: "tm-empty", text: "This smart list no longer exists." });
+      return;
+    }
     if (this.state.mode === "tags" && !this.state.tag) {
       container.classList.remove("is-calendar-view", "is-kanban-view");
       this.renderTagList(container);
@@ -5345,12 +5463,12 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     const titleGroup = header.createDiv({ cls: "tm-title-group" });
     if (this.state.mode === "tags" && this.state.tag) {
       const back = titleGroup.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Back to tags" } });
-      (0, import_obsidian8.setIcon)(back, "arrow-left");
+      (0, import_obsidian9.setIcon)(back, "arrow-left");
       back.addEventListener("click", () => void this.plugin.openTaskView({ mode: "tags" }));
     }
     if (this.state.projectPath && !this.state.pagePath) {
       const back = titleGroup.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Back to projects" } });
-      (0, import_obsidian8.setIcon)(back, "arrow-left");
+      (0, import_obsidian9.setIcon)(back, "arrow-left");
       back.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects" }));
     }
     const heading = titleGroup.createDiv();
@@ -5366,7 +5484,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Task view layout" } });
     for (const [layout, icon2, label] of [["list", "list", "List"], ["calendar", "calendar-days", "Calendar"], ["kanban", "columns-3", "Kanban"]]) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${label} view`, title: `${label} view`, "aria-pressed": String(this.layout === layout) } });
-      (0, import_obsidian8.setIcon)(button, icon2);
+      (0, import_obsidian9.setIcon)(button, icon2);
       button.addEventListener("click", () => {
         this.layout = layout;
         this.render();
@@ -5374,7 +5492,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     }
     const add = actions.createEl("button", { cls: "mod-cta tm-add-task" });
     const icon = add.createSpan();
-    (0, import_obsidian8.setIcon)(icon, "plus");
+    (0, import_obsidian9.setIcon)(icon, "plus");
     add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
   }
@@ -5432,12 +5550,12 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     const ordering = filters.createDiv({ cls: "tm-order-controls" });
     const iconButton = (icon, label) => {
       const button = ordering.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-      (0, import_obsidian8.setIcon)(button, icon);
+      (0, import_obsidian9.setIcon)(button, icon);
       return button;
     };
     const sort = iconButton("list-filter", `Sort: ${this.sort}`);
     sort.addEventListener("click", (event) => {
-      const options = new import_obsidian8.Menu();
+      const options = new import_obsidian9.Menu();
       for (const property of [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES.filter((property2) => property2.key !== "scheduledTime" && property2.key !== "deadlineTime").map((property2) => ({ ...property2, label: property2.key === "scheduledDate" ? "Scheduled date and time" : property2.key === "deadline" ? "Deadline date and time" : property2.label }))]) {
         options.addItem((item) => item.setTitle(property.label).setChecked(this.sort === property.key).onClick(() => {
           this.sort = property.key;
@@ -5451,14 +5569,14 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     const direction = iconButton(this.descending ? "arrow-down" : "arrow-up", this.descending ? "Descending" : "Ascending");
     direction.addEventListener("click", () => {
       this.descending = !this.descending;
-      (0, import_obsidian8.setIcon)(direction, this.descending ? "arrow-down" : "arrow-up");
+      (0, import_obsidian9.setIcon)(direction, this.descending ? "arrow-down" : "arrow-up");
       direction.setAttribute("aria-label", this.descending ? "Descending" : "Ascending");
       direction.setAttribute("title", this.descending ? "Descending" : "Ascending");
       this.renderTaskResults();
     });
     const grouping = iconButton("group", `Group: ${this.grouping}`);
     grouping.addEventListener("click", (event) => {
-      const options = new import_obsidian8.Menu();
+      const options = new import_obsidian9.Menu();
       for (const property of [{ key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES]) {
         options.addItem((item) => item.setTitle(property.label).setChecked(this.grouping === property.key).onClick(() => {
           this.grouping = property.key;
@@ -5469,6 +5587,22 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       }
       options.showAtMouseEvent(event);
     });
+  }
+  renderSmartLists(container) {
+    const header = container.createDiv({ cls: "tm-view-header" });
+    header.createEl("h1", { text: "Smart Lists" });
+    header.createEl("button", { text: "Create new smart list", cls: "mod-cta" }).addEventListener("click", () => this.plugin.openSmartListEditor());
+    const lists = this.plugin.settings.smartLists;
+    if (!lists.length) container.createDiv({ cls: "tm-empty", text: "No smart lists yet. Save filters, sorting, and grouping to create one." });
+    const entries = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
+    for (const list of lists) {
+      const row = entries.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
+      const icon = row.createSpan({ cls: "tm-project-icon" });
+      (0, import_obsidian9.setIcon)(icon, "list-filter");
+      const content = row.createDiv({ cls: "tm-task-content" });
+      const primary = content.createDiv({ cls: "tm-task-primary" });
+      primary.createEl("button", { cls: "tm-task-title", text: list.name, attr: { title: list.name } }).addEventListener("click", () => void this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }));
+    }
   }
   renderTagList(container) {
     container.createEl("h1", { text: "Tags" });
@@ -5482,7 +5616,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       for (const tag of tags) {
         const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
         const icon = row.createSpan({ cls: "tm-project-icon" });
-        (0, import_obsidian8.setIcon)(icon, "tag");
+        (0, import_obsidian9.setIcon)(icon, "tag");
         const content = row.createDiv({ cls: "tm-task-content" });
         const title = content.createEl("button", { cls: "tm-task-title", text: tag.name });
         title.addEventListener("click", () => void this.plugin.openTaskView({ mode: "tags", tag: tag.name }));
@@ -5503,7 +5637,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Projects layout" } });
     for (const [layout, icon] of [["list", "list"], ["gantt", "chart-gantt"]]) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${layout === "gantt" ? "Gantt" : "List"} projects view`, "aria-pressed": String(this.projectLayout === layout), title: `${layout === "gantt" ? "Gantt" : "List"} view` } });
-      (0, import_obsidian8.setIcon)(button, icon);
+      (0, import_obsidian9.setIcon)(button, icon);
       button.addEventListener("click", () => {
         this.projectLayout = layout;
         this.render();
@@ -5523,7 +5657,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     if (!active.length && (!this.showArchivedProjects || !archived.length)) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
-      (0, import_obsidian8.setIcon)(icon, "folder-kanban");
+      (0, import_obsidian9.setIcon)(icon, "folder-kanban");
       empty.createEl("h3", { text: archived.length ? "No active projects" : "No projects yet" });
       empty.createEl("p", { text: archived.length ? "Enable Show archived projects to see your archived projects." : "Add #project to a note or include project in its frontmatter tags." });
       return;
@@ -5540,11 +5674,11 @@ var TaskMainView = class extends import_obsidian8.ItemView {
           this.render();
         },
         open: (project) => {
-          void this.plugin.openProject(project.path).catch((error) => new import_obsidian8.Notice(String(error)));
+          void this.plugin.openProject(project.path).catch((error) => new import_obsidian9.Notice(String(error)));
         },
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
-          if (!(file instanceof import_obsidian8.TFile)) throw new Error("Project note no longer exists.");
+          if (!(file instanceof import_obsidian9.TFile)) throw new Error("Project note no longer exists.");
           await this.app.fileManager.processFrontMatter(file, (frontmatter) => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()));
           await this.plugin.index.refreshPath(project.path);
         }
@@ -5564,11 +5698,11 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
       row.style.setProperty("--tm-depth", String(depth));
       const icon = row.createSpan({ cls: "tm-project-icon" });
-      (0, import_obsidian8.setIcon)(icon, project.archived ? "archive" : "folder");
+      (0, import_obsidian9.setIcon)(icon, project.archived ? "archive" : "folder");
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
-      button.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian8.Notice(String(error))));
+      button.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian9.Notice(String(error))));
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
       this.renderProperties(metadata, project);
       if (!metadata.childElementCount) metadata.remove();
@@ -5586,8 +5720,8 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       track.createSpan({ cls: "tm-project-progress-fill" }).style.width = `${percentage}%`;
       progress.createSpan({ cls: "tm-project-percentage", text: `${percentage}%` });
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
-      (0, import_obsidian8.setIcon)(open, "chevron-right");
-      open.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian8.Notice(String(error))));
+      (0, import_obsidian9.setIcon)(open, "chevron-right");
+      open.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian9.Notice(String(error))));
     }
   }
   renderGroupAddButton(parent, title, target) {
@@ -5596,7 +5730,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       "aria-label": `Add task to ${title}`,
       title: `Add task to ${title}`
     } });
-    (0, import_obsidian8.setIcon)(add, "plus");
+    (0, import_obsidian9.setIcon)(add, "plus");
     add.addEventListener("click", (event) => {
       var _a;
       event.stopPropagation();
@@ -5650,7 +5784,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       for (const path of paths) await this.plugin.index.refreshPath(path);
       this.render();
     } catch (cause) {
-      new import_obsidian8.Notice(cause instanceof Error ? cause.message : "Could not move selected tasks.");
+      new import_obsidian9.Notice(cause instanceof Error ? cause.message : "Could not move selected tasks.");
     } finally {
       this.draggedTasks = [];
     }
@@ -5664,7 +5798,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
   }
   clearSelectionOutside(event) {
     var _a;
-    if (event.button !== 0 || import_obsidian8.Platform.isMacOS && event.ctrlKey || !this.getSelectedTasks().length) return;
+    if (event.button !== 0 || import_obsidian9.Platform.isMacOS && event.ctrlKey || !this.getSelectedTasks().length) return;
     const target = event.target;
     if (target && ((_a = this.selectionBar) == null ? void 0 : _a.contains(target)) && target.closest("button")) return;
     const selected = this.getSelectedTasks().some((task) => {
@@ -5699,7 +5833,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       return Boolean(control && control !== row);
     };
     const selectForContextMenu = (event) => {
-      const additive = import_obsidian8.Platform.isMacOS ? event.metaKey : event.ctrlKey;
+      const additive = import_obsidian9.Platform.isMacOS ? event.metaKey : event.ctrlKey;
       if (!this.selection.has(task) || event.shiftKey || additive) {
         this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
       }
@@ -5707,7 +5841,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       this.updateSelection();
     };
     row.addEventListener("pointerdown", (event) => {
-      this.contextSelectionOnPress = event.button === 2 || import_obsidian8.Platform.isMacOS && event.button === 0 && event.ctrlKey;
+      this.contextSelectionOnPress = event.button === 2 || import_obsidian9.Platform.isMacOS && event.button === 0 && event.ctrlKey;
       if (this.contextSelectionOnPress) {
         selectForContextMenu(event);
       }
@@ -5787,7 +5921,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
       } catch (cause) {
         checkbox.checked = !checkbox.checked;
         checkbox.disabled = false;
-        new import_obsidian8.Notice(cause instanceof Error ? cause.message : "Could not update the task.");
+        new import_obsidian9.Notice(cause instanceof Error ? cause.message : "Could not update the task.");
       }
     };
     checkbox.addEventListener("change", () => {
@@ -5811,7 +5945,7 @@ var TaskMainView = class extends import_obsidian8.ItemView {
     this.renderProperties(metadata, task);
     if (!metadata.childElementCount) metadata.remove();
     const menuButton = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": "Task actions" } });
-    (0, import_obsidian8.setIcon)(menuButton, "more-horizontal");
+    (0, import_obsidian9.setIcon)(menuButton, "more-horizontal");
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
   }
   renderProperties(parent, properties) {
@@ -5846,26 +5980,26 @@ var TaskMainView = class extends import_obsidian8.ItemView {
   badge(parent, iconName, text, variant) {
     const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
     const icon = badge.createSpan({ cls: "tm-meta-icon" });
-    (0, import_obsidian8.setIcon)(icon, iconName);
+    (0, import_obsidian9.setIcon)(icon, iconName);
     badge.createSpan({ text });
     return badge;
   }
   openMenu(event, task) {
-    const menu = new import_obsidian8.Menu();
+    const menu = new import_obsidian9.Menu();
     menu.addItem((item) => item.setTitle("Edit task").setIcon("pencil").onClick(() => this.plugin.openEditor({ ...this.state, task })));
     menu.addItem((item) => item.setTitle("Open source note").setIcon("file-text").onClick(() => void this.openSource(task)));
     menu.showAtMouseEvent(event);
   }
   async openSource(task) {
     const file = this.app.vault.getAbstractFileByPath(task.path);
-    if (file instanceof import_obsidian8.TFile) {
+    if (file instanceof import_obsidian9.TFile) {
       await this.app.workspace.getLeaf("tab").openFile(file, { eState: { line: task.line } });
     }
   }
   renderEmpty(container) {
     const empty = container.createDiv({ cls: "tm-empty" });
     const icon = empty.createDiv({ cls: "tm-empty-icon" });
-    (0, import_obsidian8.setIcon)(icon, "circle-check-big");
+    (0, import_obsidian9.setIcon)(icon, "circle-check-big");
     empty.createEl("h3", { text: "Nothing here" });
     empty.createEl("p", { text: this.search || this.propertyFilters.length ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
   }
@@ -5902,7 +6036,7 @@ var TaskModeController = class {
       for (const leaf of leaves) {
         if (this.disposed) return;
         const view = leaf.view;
-        if (view instanceof import_obsidian9.MarkdownView && view.file && this.enabled() && this.isProject(view.file.path)) {
+        if (view instanceof import_obsidian10.MarkdownView && view.file && this.enabled() && this.isProject(view.file.path)) {
           const path = view.file.path;
           const markdownState = view.getState();
           const saved = this.savedViews.get(leaf);
@@ -5913,7 +6047,7 @@ var TaskModeController = class {
           const path = typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : void 0;
           if (!path || this.enabled() && this.isProject(path)) continue;
           const file = this.app.vault.getAbstractFileByPath(path);
-          if (!(file instanceof import_obsidian9.TFile)) continue;
+          if (!(file instanceof import_obsidian10.TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState : {};
           this.savedViews.set(leaf, { ...state, pagePath: path, projectPath: void 0 });
           await leaf.setViewState({ type: "markdown", state: { ...markdownState, file: file.path } });
@@ -5995,7 +6129,7 @@ function noteDateInput(getDateFormat, isTaskMode, getLinkDates = () => true) {
 }
 
 // src/note-token-editor.ts
-var import_obsidian10 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 var import_view = require("@codemirror/view");
 
 // src/task-tokens.ts
@@ -6065,11 +6199,11 @@ var DateLabelWidget = class extends import_view.WidgetType {
       const open = (event) => {
         var _a, _b;
         if (event.button !== 0 && event.button !== 1) return;
-        const info = view.state.field(import_obsidian10.editorInfoField, false);
+        const info = view.state.field(import_obsidian11.editorInfoField, false);
         if (!info) return;
         event.preventDefault();
         event.stopPropagation();
-        void info.app.workspace.openLinkText(this.linkText, (_b = (_a = info.file) == null ? void 0 : _a.path) != null ? _b : "", event.button === 1 || (import_obsidian10.Platform.isMacOS ? event.metaKey : event.ctrlKey));
+        void info.app.workspace.openLinkText(this.linkText, (_b = (_a = info.file) == null ? void 0 : _a.path) != null ? _b : "", event.button === 1 || (import_obsidian11.Platform.isMacOS ? event.metaKey : event.ctrlKey));
       };
       element.addEventListener("click", open);
       element.addEventListener("auxclick", open);
@@ -6125,7 +6259,7 @@ function noteTokenEditor(getDateFormat) {
       }
     }
     decorate(view) {
-      if (!view.state.field(import_obsidian10.editorLivePreviewField, false)) {
+      if (!view.state.field(import_obsidian11.editorLivePreviewField, false)) {
         this.pills = this.syntax = import_view.Decoration.none;
         return;
       }
@@ -6144,11 +6278,11 @@ function noteTokenEditor(getDateFormat) {
 }
 
 // src/note-task-edit.ts
-var import_obsidian11 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 var import_view2 = require("@codemirror/view");
 function handleTaskEditClick(event, resolve, open) {
   var _a;
-  if (!(import_obsidian11.Platform.isMacOS ? event.metaKey : event.ctrlKey) || event.button !== 0) return;
+  if (!(import_obsidian12.Platform.isMacOS ? event.metaKey : event.ctrlKey) || event.button !== 0) return;
   const target = event.target;
   const checkbox = (_a = target == null ? void 0 : target.closest) == null ? void 0 : _a.call(target, 'input[type="checkbox"]');
   if (!checkbox) return;
@@ -6239,7 +6373,7 @@ function noteTaskEditEditor(getDateFormat, open) {
       this.view = view;
       this.resolve = (checkbox) => {
         var _a, _b;
-        const path = (_b = (_a = this.view.state.field(import_obsidian11.editorInfoField, false)) == null ? void 0 : _a.file) == null ? void 0 : _b.path;
+        const path = (_b = (_a = this.view.state.field(import_obsidian12.editorInfoField, false)) == null ? void 0 : _a.file) == null ? void 0 : _b.path;
         if (!path) return;
         const line = this.view.state.doc.lineAt(this.view.posAtDOM(checkbox)).number - 1;
         return scanTasks(path, this.view.state.doc.toString(), /* @__PURE__ */ new Date(), getDateFormat()).find((task) => task.line === line);
@@ -6252,7 +6386,7 @@ function noteTaskEditEditor(getDateFormat, open) {
   });
 }
 function registerNoteTaskEdit(root, context, getDateFormat, open) {
-  const child = new import_obsidian11.MarkdownRenderChild(root);
+  const child = new import_obsidian12.MarkdownRenderChild(root);
   context.addChild(child);
   child.register(bindNoteTaskEdit(root, (checkbox) => {
     const item = checkbox.closest("li.task-list-item");
@@ -6325,7 +6459,7 @@ function renderNoteTokens(root, dateFormat) {
 }
 
 // src/main.ts
-var import_obsidian17 = require("obsidian");
+var import_obsidian18 = require("obsidian");
 
 // src/task-description.ts
 function descriptionLines(text, indent) {
@@ -6403,7 +6537,7 @@ function parseTaskTreeInput(input, destination, reference = /* @__PURE__ */ new 
 }
 
 // src/task-editor.ts
-var import_obsidian12 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 function initialDraft(options) {
   var _a;
   if (options.task) {
@@ -6437,7 +6571,7 @@ function field(parent, label, input) {
   caption.addEventListener("click", () => input.focus());
   row.appendChild(input);
 }
-var TaskEditorModal = class extends import_obsidian12.Modal {
+var TaskEditorModal = class extends import_obsidian13.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -6595,7 +6729,7 @@ var TaskEditorModal = class extends import_obsidian12.Modal {
     cancel.addEventListener("click", () => this.close());
     const save = actions.createEl("button", { text: "Save task", cls: "mod-cta" });
     const saveIcon = save.createSpan({ cls: "tm-button-icon" });
-    (0, import_obsidian12.setIcon)(saveIcon, "check");
+    (0, import_obsidian13.setIcon)(saveIcon, "check");
     const saveTask = async () => {
       if (save.disabled) return;
       try {
@@ -6610,7 +6744,7 @@ var TaskEditorModal = class extends import_obsidian12.Modal {
         if (deleteButton) deleteButton.disabled = false;
         const message = cause instanceof Error ? cause.message : "Could not save the task.";
         error.setText(message);
-        new import_obsidian12.Notice(message);
+        new import_obsidian13.Notice(message);
       }
     };
     save.addEventListener("click", () => {
@@ -6628,7 +6762,7 @@ var TaskEditorModal = class extends import_obsidian12.Modal {
         save.disabled = false;
         const message = cause instanceof Error ? cause.message : "Could not delete the task.";
         error.setText(message);
-        new import_obsidian12.Notice(message);
+        new import_obsidian13.Notice(message);
       }
     };
     deleteButton == null ? void 0 : deleteButton.addEventListener("click", () => {
@@ -6670,7 +6804,7 @@ var TaskEditorModal = class extends import_obsidian12.Modal {
     if (!this.options.task) return { ...parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates), ...this.descriptionPatch() };
     const parsed = parseTaskInput(this.rawInput.value.trimEnd(), /* @__PURE__ */ new Date(), this.options.dateFormat, true);
     if (!parsed || !parsed.title) {
-      new import_obsidian12.Notice("Raw text must be one valid checklist line with a title.");
+      new import_obsidian13.Notice("Raw text must be one valid checklist line with a title.");
       return void 0;
     }
     return { ...parsed, destination: (_a = parsed.destination) != null ? _a : this.options.settings.inboxPath, ...this.descriptionPatch() };
@@ -6682,7 +6816,7 @@ var TaskEditorModal = class extends import_obsidian12.Modal {
     }
     const title = this.titleInput.value.trim();
     if (!title) {
-      if (notify) new import_obsidian12.Notice("Enter a task title.");
+      if (notify) new import_obsidian13.Notice("Enter a task title.");
       return void 0;
     }
     const scheduledDate = this.readDate(this.scheduledInput.value, "scheduled date", notify);
@@ -6693,7 +6827,7 @@ var TaskEditorModal = class extends import_obsidian12.Modal {
     if (this.durationInput.value.trim()) {
       durationMinutes = (_a = parseTaskLine(`- [ ] Task ${this.durationInput.value.trim()}`, /* @__PURE__ */ new Date(), this.options.dateFormat)) == null ? void 0 : _a.durationMinutes;
       if (!durationMinutes) {
-        if (notify) new import_obsidian12.Notice("Use a duration such as 45m, 2h, or 1h30m.");
+        if (notify) new import_obsidian13.Notice("Use a duration such as 45m, 2h, or 1h30m.");
         return void 0;
       }
     }
@@ -6701,7 +6835,7 @@ var TaskEditorModal = class extends import_obsidian12.Modal {
     try {
       tags = parseTags(this.tagsInput.value);
     } catch (cause) {
-      if (notify) new import_obsidian12.Notice(cause instanceof Error ? cause.message : "Invalid tags.");
+      if (notify) new import_obsidian13.Notice(cause instanceof Error ? cause.message : "Invalid tags.");
       return void 0;
     }
     const additionalLines = notify && !this.options.task ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates).additionalLines : void 0;
@@ -6727,13 +6861,13 @@ var TaskEditorModal = class extends import_obsidian12.Modal {
   readDate(value, label, notify) {
     if (!value.trim()) return void 0;
     const parsed = parseDateTimeExpression(value, /* @__PURE__ */ new Date(), this.options.dateFormat);
-    if (!parsed && notify) new import_obsidian12.Notice(`Could not understand the ${label}.`);
+    if (!parsed && notify) new import_obsidian13.Notice(`Could not understand the ${label}.`);
     return parsed;
   }
 };
 
 // src/task-index.ts
-var import_obsidian13 = require("obsidian");
+var import_obsidian14 = require("obsidian");
 var TaskIndex = class {
   constructor(app, getSettings, getDateFormat) {
     this.app = app;
@@ -6753,13 +6887,13 @@ var TaskIndex = class {
     this.refreshProjects(files);
     this.eventRefs.push(
       this.app.vault.on("create", (file) => {
-        if (file instanceof import_obsidian13.TFile && file.extension === "md") void this.refreshFile(file);
+        if (file instanceof import_obsidian14.TFile && file.extension === "md") void this.refreshFile(file);
       }),
       this.app.vault.on("modify", (file) => {
-        if (file instanceof import_obsidian13.TFile && file.extension === "md") void this.refreshFile(file);
+        if (file instanceof import_obsidian14.TFile && file.extension === "md") void this.refreshFile(file);
       }),
       this.app.vault.on("delete", (file) => {
-        if (file instanceof import_obsidian13.TFile && file.extension === "md") {
+        if (file instanceof import_obsidian14.TFile && file.extension === "md") {
           this.tasksByPath.delete(file.path);
           this.headingsByPath.delete(file.path);
           this.projectPaths.delete(file.path);
@@ -6769,7 +6903,7 @@ var TaskIndex = class {
         }
       }),
       this.app.vault.on("rename", (file, oldPath) => {
-        if (file instanceof import_obsidian13.TFile && file.extension === "md") {
+        if (file instanceof import_obsidian14.TFile && file.extension === "md") {
           this.tasksByPath.delete(oldPath);
           this.headingsByPath.delete(oldPath);
           this.projectPaths.delete(oldPath);
@@ -6837,7 +6971,7 @@ var TaskIndex = class {
   }
   async refreshPath(path) {
     const file = this.app.vault.getAbstractFileByPath(splitDestination(path).path);
-    if (file instanceof import_obsidian13.TFile) await this.refreshFile(file);
+    if (file instanceof import_obsidian14.TFile) await this.refreshFile(file);
   }
   async refreshFile(file) {
     await this.scanFile(file);
@@ -6857,7 +6991,7 @@ var TaskIndex = class {
   }
   updateProjectStatus(file) {
     const cache = this.app.metadataCache.getFileCache(file);
-    const tags = cache ? (0, import_obsidian13.getAllTags)(cache) : null;
+    const tags = cache ? (0, import_obsidian14.getAllTags)(cache) : null;
     if (tags == null ? void 0 : tags.includes("#archived")) this.archivedPaths.add(file.path);
     else this.archivedPaths.delete(file.path);
     if (tags == null ? void 0 : tags.some((tag) => tag === "#project" || tag.startsWith("#project/"))) {
@@ -6874,7 +7008,7 @@ var TaskIndex = class {
 };
 
 // src/navigation-view.ts
-var import_obsidian14 = require("obsidian");
+var import_obsidian15 = require("obsidian");
 var TASK_NAV_VIEW = "task-manager-navigation";
 var NAV_ITEMS = [
   { mode: "inbox", label: "Inbox" },
@@ -6882,9 +7016,10 @@ var NAV_ITEMS = [
   { mode: "upcoming", label: "Upcoming" },
   { mode: "all", label: "All Tasks" },
   { mode: "projects", label: "Projects" },
-  { mode: "tags", label: "Tags" }
+  { mode: "tags", label: "Tags" },
+  { mode: "smartLists", label: "Smart Lists" }
 ];
-var TaskNavigationView = class extends import_obsidian14.ItemView {
+var TaskNavigationView = class extends import_obsidian15.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -6904,10 +7039,14 @@ var TaskNavigationView = class extends import_obsidian14.ItemView {
     this.unsubscribe = this.plugin.index.subscribe(() => this.render());
     const syncActive = () => {
       var _a;
-      const view = this.app.workspace.getActiveViewOfType(import_obsidian14.ItemView);
+      const view = this.app.workspace.getActiveViewOfType(import_obsidian15.ItemView);
       if ((view == null ? void 0 : view.getViewType()) !== "task-manager-main") return;
       const state = view.getState();
       const mode = (_a = NAV_ITEMS.find((item) => item.mode === state.mode)) == null ? void 0 : _a.mode;
+      if (mode === "smartLists") {
+        this.setActive(mode, void 0, void 0, typeof state.smartListId === "string" ? state.smartListId : void 0);
+        return;
+      }
       if (mode) this.setActive(
         mode,
         typeof state.tag === "string" ? state.tag : void 0,
@@ -6922,11 +7061,12 @@ var TaskNavigationView = class extends import_obsidian14.ItemView {
     var _a;
     (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
   }
-  setActive(mode, tag, project) {
+  setActive(mode, tag, project, smartListId) {
+    this.activeSmartList = smartListId;
     this.activeMode = mode;
     this.activeTag = tag;
     this.activeProject = project;
-    if (tag || project) this.expanded.add(mode);
+    if (tag || project || smartListId) this.expanded.add(mode);
     this.render();
   }
   refresh() {
@@ -6940,9 +7080,9 @@ var TaskNavigationView = class extends import_obsidian14.ItemView {
     const toolbar = header.createDiv({ cls: "nav-buttons-container", attr: { role: "toolbar", "aria-label": "Task actions" } });
     const action = (label, icon, run) => {
       const button = toolbar.createEl("button", { cls: "clickable-icon nav-action-button", attr: { "aria-label": label, title: label } });
-      (0, import_obsidian14.setIcon)(button, icon);
+      (0, import_obsidian15.setIcon)(button, icon);
       button.addEventListener("click", () => {
-        void Promise.resolve().then(run).catch((error) => new import_obsidian14.Notice(String(error)));
+        void Promise.resolve().then(run).catch((error) => new import_obsidian15.Notice(String(error)));
       });
       return button;
     };
@@ -6964,17 +7104,17 @@ var TaskNavigationView = class extends import_obsidian14.ItemView {
       const row = parent.createDiv({ cls: `tree-item-self nav-file-title tm-nav-item${active ? " is-active" : ""}` });
       const button = row.createEl("button", { cls: "tm-nav-label", text: label, attr: { "aria-current": active ? "page" : "false", title: label } });
       button.addEventListener("click", () => {
-        void open().catch((error) => new import_obsidian14.Notice(String(error)));
+        void open().catch((error) => new import_obsidian15.Notice(String(error)));
       });
       return row;
     };
     for (const entry of NAV_ITEMS) {
-      const branch = entry.mode === "projects" || entry.mode === "tags";
+      const branch = entry.mode === "projects" || entry.mode === "tags" || entry.mode === "smartLists";
       const group = nav.createDiv({ cls: branch ? "tree-item nav-folder" : "tree-item nav-file" });
       const row = item(
         group,
         entry.label,
-        entry.mode === this.activeMode && !this.activeTag && !this.activeProject,
+        entry.mode === this.activeMode && !this.activeTag && !this.activeProject && !this.activeSmartList,
         () => this.plugin.openTaskView({ mode: entry.mode })
       );
       if (!branch) continue;
@@ -6983,7 +7123,7 @@ var TaskNavigationView = class extends import_obsidian14.ItemView {
         "aria-label": `${expanded ? "Collapse" : "Expand"} ${entry.label}`,
         "aria-expanded": String(expanded)
       } });
-      (0, import_obsidian14.setIcon)(collapse, expanded ? "chevron-down" : "chevron-right");
+      (0, import_obsidian15.setIcon)(collapse, expanded ? "chevron-down" : "chevron-right");
       row.prepend(collapse);
       collapse.addEventListener("click", () => {
         if (expanded) this.expanded.delete(entry.mode);
@@ -6996,6 +7136,10 @@ var TaskNavigationView = class extends import_obsidian14.ItemView {
         const projects = this.plugin.index.projects().filter((project) => !project.archived);
         for (const project of projects) item(children, project.name, this.activeProject === project.path, () => this.plugin.openProject(project.path));
         if (!projects.length) children.createDiv({ cls: "tm-nav-empty", text: "No projects yet" });
+      } else if (entry.mode === "smartLists") {
+        const lists = this.plugin.settings.smartLists;
+        for (const list of lists) item(children, list.name, this.activeSmartList === list.id, () => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }));
+        if (!lists.length) children.createDiv({ cls: "tm-nav-empty", text: "No smart lists yet" });
       } else {
         const tags = taskTagSummaries(this.plugin.index.allTasks());
         for (const tag of tags) item(children, tag.name, this.activeTag === tag.name, () => this.plugin.openTaskView({ mode: "tags", tag: tag.name }));
@@ -7222,7 +7366,7 @@ function planBulkTasks(contents, changes, options = {}) {
 }
 
 // src/task-store.ts
-var import_obsidian15 = require("obsidian");
+var import_obsidian16 = require("obsidian");
 var TaskStore = class {
   constructor(app, getDateFormat, getNewTaskPosition = () => "top", getLinkDates = () => true) {
     this.app = app;
@@ -7272,7 +7416,7 @@ var TaskStore = class {
       return;
     }
     const destination = splitDestination(draft.destination);
-    if ((0, import_obsidian15.normalizePath)(destination.path) !== task.path || destination.heading !== task.section) {
+    if ((0, import_obsidian16.normalizePath)(destination.path) !== task.path || destination.heading !== task.section) {
       await this.move(task, draft);
       return;
     }
@@ -7405,14 +7549,14 @@ var TaskStore = class {
     return [...after.keys()];
   }
   requireFile(path) {
-    const file = this.app.vault.getAbstractFileByPath((0, import_obsidian15.normalizePath)(path));
-    if (!(file instanceof import_obsidian15.TFile)) throw new Error(`Cannot find note: ${path}`);
+    const file = this.app.vault.getAbstractFileByPath((0, import_obsidian16.normalizePath)(path));
+    if (!(file instanceof import_obsidian16.TFile)) throw new Error(`Cannot find note: ${path}`);
     return file;
   }
   async ensureFile(path) {
-    const normalized = (0, import_obsidian15.normalizePath)(path.endsWith(".md") ? path : `${path}.md`);
+    const normalized = (0, import_obsidian16.normalizePath)(path.endsWith(".md") ? path : `${path}.md`);
     const existing = this.app.vault.getAbstractFileByPath(normalized);
-    if (existing instanceof import_obsidian15.TFile) return existing;
+    if (existing instanceof import_obsidian16.TFile) return existing;
     if (existing) throw new Error(`${normalized} is not a Markdown file.`);
     const parts = normalized.split("/");
     parts.pop();
@@ -7421,7 +7565,7 @@ var TaskStore = class {
       current = current ? `${current}/${part}` : part;
       const folder = this.app.vault.getAbstractFileByPath(current);
       if (!folder) await this.app.vault.createFolder(current);
-      else if (!(folder instanceof import_obsidian15.TFolder)) throw new Error(`${current} is not a folder.`);
+      else if (!(folder instanceof import_obsidian16.TFolder)) throw new Error(`${current} is not a folder.`);
     }
     return this.app.vault.create(normalized, "");
   }
@@ -7429,6 +7573,7 @@ var TaskStore = class {
 
 // src/types.ts
 var DEFAULT_SETTINGS = {
+  smartLists: [],
   taskMode: false,
   linkDates: false,
   dateFormat: "",
@@ -7441,8 +7586,8 @@ var DEFAULT_SETTINGS = {
 };
 
 // src/settings.ts
-var import_obsidian16 = require("obsidian");
-var TaskManagerSettingTab = class extends import_obsidian16.PluginSettingTab {
+var import_obsidian17 = require("obsidian");
+var TaskManagerSettingTab = class extends import_obsidian17.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -7482,7 +7627,7 @@ var TaskManagerSettingTab = class extends import_obsidian16.PluginSettingTab {
             try {
               await this.plugin.updateTaskDates();
             } catch (error) {
-              new import_obsidian16.Notice(String(error));
+              new import_obsidian17.Notice(String(error));
             } finally {
               button.setDisabled(false);
             }
@@ -7521,9 +7666,9 @@ var TaskManagerSettingTab = class extends import_obsidian16.PluginSettingTab {
     var _a;
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian16.Setting(containerEl).setName("Task defaults").setHeading();
+    new import_obsidian17.Setting(containerEl).setName("Task defaults").setHeading();
     for (const definition of this.getSettingDefinitions()) {
-      const setting = new import_obsidian16.Setting(containerEl).setName(definition.name).setDesc((_a = definition.desc) != null ? _a : "");
+      const setting = new import_obsidian17.Setting(containerEl).setName(definition.name).setDesc((_a = definition.desc) != null ? _a : "");
       definition.render(setting);
     }
   }
@@ -7551,7 +7696,7 @@ function dailyNoteDateFormat(app) {
 }
 
 // src/main.ts
-var TaskManagerPlugin = class extends import_obsidian17.Plugin {
+var TaskManagerPlugin = class extends import_obsidian18.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -7570,7 +7715,7 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
       registerNoteTaskEdit(element, context, () => this.dateFormat(), (task) => this.openEditor({ mode: "all", task }));
     });
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
-    this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new import_obsidian17.Notice(String(error))));
+    this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new import_obsidian18.Notice(String(error))));
     const commands = [
       ["inbox", "Open Inbox", "open-inbox"],
       ["today", "Open Today", "open-today"],
@@ -7580,7 +7725,7 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
       ["tags", "Open Tags", "open-tags"]
     ];
     for (const [mode, name, id] of commands) {
-      this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new import_obsidian17.Notice(String(error))) });
+      this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new import_obsidian18.Notice(String(error))) });
     }
     for (const [scope, layouts] of [["task", ["list", "calendar", "kanban"]], ["projects", ["list", "gantt"]]]) {
       for (const layout of layouts) {
@@ -7594,22 +7739,35 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
             const isProjects = state.mode === "projects" && !view.pagePath;
             if (isProjects !== (scope === "projects")) return false;
             if (!checking) {
-              void view.setState({ ...state, [isProjects ? "projectLayout" : "layout"]: layout }).then(() => this.app.workspace.requestSaveLayout()).catch((error) => new import_obsidian17.Notice(String(error)));
+              void view.setState({ ...state, [isProjects ? "projectLayout" : "layout"]: layout }).then(() => this.app.workspace.requestSaveLayout()).catch((error) => new import_obsidian18.Notice(String(error)));
             }
             return true;
           }
         });
       }
     }
+    this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
+    this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: (checking) => {
+      const list = this.activeSmartList();
+      if (!list) return false;
+      if (!checking) this.openSmartListEditor(list);
+      return true;
+    } });
+    this.addCommand({ id: "delete-smart-list", name: "Delete smart list", checkCallback: (checking) => {
+      const list = this.activeSmartList();
+      if (!list) return false;
+      if (!checking) void this.deleteSmartList(list.id).catch((error) => new import_obsidian18.Notice(String(error)));
+      return true;
+    } });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: (checking) => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: (checking) => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
     this.addCommand({ id: "toggle-task-mode", name: "Toggle task mode", callback: () => {
-      void this.setTaskMode(!this.settings.taskMode).catch((error) => new import_obsidian17.Notice(String(error)));
+      void this.setTaskMode(!this.settings.taskMode).catch((error) => new import_obsidian18.Notice(String(error)));
     } });
     this.taskModeRibbon = this.addRibbonIcon("list-checks", "Task mode", () => {
-      void this.setTaskMode(!this.settings.taskMode).catch((error) => new import_obsidian17.Notice(String(error)));
+      void this.setTaskMode(!this.settings.taskMode).catch((error) => new import_obsidian18.Notice(String(error)));
     });
     this.updateTaskModeControls();
     this.addCommand({
@@ -7617,10 +7775,10 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
       name: "Convert to project",
       checkCallback: (checking) => {
         var _a, _b;
-        const view = (_a = this.app.workspace.getActiveViewOfType(TaskMainView)) != null ? _a : this.app.workspace.getActiveViewOfType(import_obsidian17.MarkdownView);
-        const path = view instanceof TaskMainView ? view.pagePath : view instanceof import_obsidian17.MarkdownView ? (_b = view.file) == null ? void 0 : _b.path : void 0;
+        const view = (_a = this.app.workspace.getActiveViewOfType(TaskMainView)) != null ? _a : this.app.workspace.getActiveViewOfType(import_obsidian18.MarkdownView);
+        const path = view instanceof TaskMainView ? view.pagePath : view instanceof import_obsidian18.MarkdownView ? (_b = view.file) == null ? void 0 : _b.path : void 0;
         const file = path ? this.app.vault.getAbstractFileByPath(path) : void 0;
-        if (!(file instanceof import_obsidian17.TFile) || file.extension !== "md") return false;
+        if (!(file instanceof import_obsidian18.TFile) || file.extension !== "md") return false;
         if (!checking) void this.convertToProject(file);
         return true;
       }
@@ -7629,7 +7787,7 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
     this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, (path) => this.index.isProject(path));
     const syncTaskMode = () => {
       var _a;
-      void ((_a = this.taskModeController) == null ? void 0 : _a.sync().catch((error) => new import_obsidian17.Notice(String(error))));
+      void ((_a = this.taskModeController) == null ? void 0 : _a.sync().catch((error) => new import_obsidian18.Notice(String(error))));
     };
     this.registerEvent(this.app.workspace.on("file-open", syncTaskMode));
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncTaskMode));
@@ -7637,7 +7795,7 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
     this.register(this.index.subscribe(syncTaskMode));
     this.app.workspace.onLayoutReady(() => {
       syncTaskMode();
-      void this.activateNavigation(false).catch((error) => new import_obsidian17.Notice(String(error)));
+      void this.activateNavigation(false).catch((error) => new import_obsidian18.Notice(String(error)));
     });
   }
   onunload() {
@@ -7647,6 +7805,7 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
@@ -7679,8 +7838,55 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
     await this.app.workspace.revealLeaf(leaf);
     for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
       const view = navLeaf.view;
-      if (view instanceof TaskNavigationView) view.setActive(state.mode, state.tag);
+      if (view instanceof TaskNavigationView) view.setActive(state.mode, state.tag, void 0, state.smartListId);
     }
+  }
+  activeSmartList() {
+    var _a;
+    const state = (_a = this.app.workspace.getActiveViewOfType(TaskMainView)) == null ? void 0 : _a.getState();
+    return (state == null ? void 0 : state.mode) === "smartLists" ? this.settings.smartLists.find((list) => list.id === state.smartListId) : void 0;
+  }
+  openSmartListEditor(list) {
+    new SmartListEditorModal(this.app, this.index.allTasks(), async (draft) => {
+      const saved = await this.saveSmartList(draft, list == null ? void 0 : list.id);
+      await this.openTaskView({ mode: "smartLists", smartListId: saved.id });
+    }, list).open();
+  }
+  async saveSmartList(draft, id) {
+    const name = draft.name.trim();
+    if (!name) throw new Error("Enter a list name.");
+    if (id && !this.settings.smartLists.some((list) => list.id === id)) throw new Error("This smart list no longer exists.");
+    const saved = { ...draft, name, filters: JSON.parse(JSON.stringify(draft.filters)), id: id != null ? id : crypto.randomUUID() };
+    const previous = this.settings.smartLists;
+    this.settings.smartLists = id ? previous.map((list) => list.id === id ? saved : list) : [...previous, saved];
+    try {
+      await this.saveSettings();
+    } catch (cause) {
+      this.settings.smartLists = previous;
+      throw cause;
+    }
+    this.refreshSmartLists();
+    return saved;
+  }
+  async deleteSmartList(id) {
+    const previous = this.settings.smartLists;
+    this.settings.smartLists = previous.filter((list) => list.id !== id);
+    try {
+      await this.saveSettings();
+    } catch (cause) {
+      this.settings.smartLists = previous;
+      throw cause;
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
+      if (leaf.view.getState().smartListId === id) await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { mode: "smartLists" } });
+    }
+    this.refreshSmartLists();
+  }
+  refreshSmartLists() {
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
+      if (leaf.view instanceof TaskNavigationView) leaf.view.refresh();
+    }
+    this.refreshViews();
   }
   openProjectCreator() {
     new ProjectCreatorModal(this.app, {
@@ -7699,7 +7905,7 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
   async openProject(path) {
     var _a;
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof import_obsidian17.TFile)) throw new Error("Project note no longer exists.");
+    if (!(file instanceof import_obsidian18.TFile)) throw new Error("Project note no longer exists.");
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.openFile(file);
     if (!this.settings.taskMode) await this.setTaskMode(true);
@@ -7750,9 +7956,9 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
     try {
       await this.app.fileManager.processFrontMatter(file, addProjectProperties);
       await this.index.refreshPath(file.path);
-      new import_obsidian17.Notice(`Converted ${file.basename} to a project.`);
+      new import_obsidian18.Notice(`Converted ${file.basename} to a project.`);
     } catch (error) {
-      new import_obsidian17.Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
+      new import_obsidian18.Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
     }
   }
   openBulkEditor(view, focusProperty) {
@@ -7797,7 +8003,7 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
           if (state.task && state.task.path !== draft.destination) await this.index.refreshPath(state.task.path);
         } catch (cause) {
           const message = cause instanceof Error ? cause.message : "Could not save the task.";
-          new import_obsidian17.Notice(message);
+          new import_obsidian18.Notice(message);
           throw cause;
         }
       }
@@ -7832,7 +8038,7 @@ var TaskManagerPlugin = class extends import_obsidian17.Plugin {
     delete this.settings.previousDateFormat;
     await this.saveSettings();
     await this.refreshDateParsing();
-    new import_obsidian17.Notice(`Updated task dates in ${paths.length} note${paths.length === 1 ? "" : "s"}.`);
+    new import_obsidian18.Notice(`Updated task dates in ${paths.length} note${paths.length === 1 ? "" : "s"}.`);
   }
   dateFormat() {
     return this.settings.dateFormat.trim() || dailyNoteDateFormat(this.app);

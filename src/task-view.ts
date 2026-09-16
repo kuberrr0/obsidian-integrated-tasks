@@ -28,7 +28,8 @@ const TITLES: Record<TaskViewMode, string> = {
   upcoming: "Upcoming",
   all: "All Tasks",
   projects: "Projects",
-  tags: "Tags"
+  tags: "Tags",
+  smartLists: "Smart Lists"
 };
 
 export class TaskMainView extends ItemView {
@@ -42,6 +43,7 @@ export class TaskMainView extends ItemView {
   private showCompleted = false;
   private showArchivedProjects = false;
   private search = "";
+  private smartListVersion?: string;
   private propertyFilters: TaskFilter[] = [];
   private sort: TaskSort = "date";
   private descending = false;
@@ -67,6 +69,7 @@ export class TaskMainView extends ItemView {
 
   getViewType(): string { return TASK_MAIN_VIEW; }
   getDisplayText(): string {
+    if (this.state.mode === "smartLists" && this.state.smartListId) return this.plugin.settings.smartLists.find(list => list.id === this.state.smartListId)?.name ?? "Smart list not found";
     if (this.state.mode === "tags" && this.state.tag) return this.state.tag;
     if (this.pagePath) return this.pagePath.replace(/\.md$/i, "").split("/").pop() ?? "Project";
     return TITLES[this.state.mode];
@@ -83,7 +86,8 @@ export class TaskMainView extends ItemView {
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
     if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
-    if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag) {
+    if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId) {
+      this.smartListVersion = undefined;
       this.selection.clear();
       this.search = "";
       this.propertyFilters = [];
@@ -93,6 +97,7 @@ export class TaskMainView extends ItemView {
       this.filtersExpanded = false;
     }
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode as TaskViewMode;
+    this.state.smartListId = typeof state.smartListId === "string" ? state.smartListId : undefined;
     this.state.tag = typeof state.tag === "string" && state.tag ? state.tag : undefined;
     this.state.pagePath = typeof state.pagePath === "string" ? state.pagePath : undefined;
     this.state.markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState as Record<string, unknown> : undefined;
@@ -114,6 +119,16 @@ export class TaskMainView extends ItemView {
 
   render(): void {
     const container = this.containerEl.children[1] as HTMLElement;
+    if (this.state.mode === "smartLists" && this.state.smartListId) {
+      const list = this.plugin.settings.smartLists.find(item => item.id === this.state.smartListId);
+      const version = JSON.stringify(list);
+      if (list && version !== this.smartListVersion) {
+        this.smartListVersion = version;
+        this.propertyFilters = JSON.parse(JSON.stringify(list.filters));
+        this.sort = list.sort; this.descending = list.descending; this.grouping = list.grouping;
+        this.selection.clear();
+      }
+    }
     container.empty();
     this.taskResults = undefined;
     this.selectionBar = undefined;
@@ -126,6 +141,15 @@ export class TaskMainView extends ItemView {
     container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
+    if (this.state.mode === "smartLists" && !this.state.smartListId) {
+      container.classList.remove("is-calendar-view", "is-kanban-view");
+      this.renderSmartLists(container);
+      return;
+    }
+    if (this.state.mode === "smartLists" && !this.plugin.settings.smartLists.some(list => list.id === this.state.smartListId)) {
+      container.createDiv({ cls: "tm-empty", text: "This smart list no longer exists." });
+      return;
+    }
     if (this.state.mode === "tags" && !this.state.tag) {
       container.classList.remove("is-calendar-view", "is-kanban-view");
       this.renderTagList(container);
@@ -393,6 +417,25 @@ export class TaskMainView extends ItemView {
       }
       options.showAtMouseEvent(event);
     });
+  }
+
+  private renderSmartLists(container: HTMLElement): void {
+    const header = container.createDiv({ cls: "tm-view-header" });
+    header.createEl("h1", { text: "Smart Lists" });
+    header.createEl("button", { text: "Create new smart list", cls: "mod-cta" })
+      .addEventListener("click", () => this.plugin.openSmartListEditor());
+    const lists = this.plugin.settings.smartLists;
+    if (!lists.length) container.createDiv({ cls: "tm-empty", text: "No smart lists yet. Save filters, sorting, and grouping to create one." });
+    const entries = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
+    for (const list of lists) {
+      const row = entries.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
+      const icon = row.createSpan({ cls: "tm-project-icon" });
+      setIcon(icon, "list-filter");
+      const content = row.createDiv({ cls: "tm-task-content" });
+      const primary = content.createDiv({ cls: "tm-task-primary" });
+      primary.createEl("button", { cls: "tm-task-title", text: list.name, attr: { title: list.name } })
+        .addEventListener("click", () => void this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }));
+    }
   }
 
   private renderTagList(container: HTMLElement): void {
