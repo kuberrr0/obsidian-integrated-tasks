@@ -5994,6 +5994,15 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     }
     return depth;
   }
+  get metadataGrouping() {
+    if (this.layout === "calendar") return "none";
+    if (this.grouping !== "default") return this.grouping;
+    if (this.layout === "kanban") return "section";
+    if (this.taskSourcePath) return "section";
+    if (this.state.mode === "all") return "source";
+    if (this.state.mode === "upcoming") return "date";
+    return "none";
+  }
   renderTaskRow(list, task, depth, target) {
     var _a, _b;
     const row = list.createDiv({ cls: `tm-task-row${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
@@ -6026,7 +6035,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const implicitSource = (_b = this.taskSourcePath) != null ? _b : this.state.mode === "inbox" ? this.plugin.settings.inboxPath : void 0;
-    if (task.path !== implicitSource) {
+    if (task.path !== implicitSource && this.metadataGrouping !== "source") {
       const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
       source.addEventListener("click", () => void this.openSource(task));
     }
@@ -6055,7 +6064,9 @@ var TaskMainView = class extends import_obsidian9.ItemView {
   }
   renderProperties(parent, properties, editProject) {
     var _a;
+    const grouping = "completed" in properties ? this.metadataGrouping : "none";
     const propertyBadge = (property, icon, text, variant) => {
+      if (grouping === property && property !== "scheduledDate" && property !== "deadline" || property === "durationMinutes" && grouping === "duration") return;
       const badge = this.badge(parent, icon, text, variant);
       const label = { scheduledDate: "scheduled date and time", endDate: "end date", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
       if ("completed" in properties && property !== "endDate") {
@@ -6066,10 +6077,17 @@ var TaskMainView = class extends import_obsidian9.ItemView {
       }
     };
     const incompleteTask = "completed" in properties && !properties.completed;
-    if (properties.scheduledDate) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, `${formatDate(properties.scheduledDate, this.plugin.dateFormat())}${properties.scheduledTime ? ` ${properties.scheduledTime}` : ""}`, incompleteTask && properties.scheduledDate < todayIso() ? "danger" : void 0);
+    const dateText = (field2, timeField) => {
+      const date = properties[field2];
+      const hideDate = grouping === field2 || grouping === "date" && "completed" in properties && date === actionDate(properties);
+      return [date && !hideDate ? formatDate(date, this.plugin.dateFormat()) : "", grouping !== timeField ? properties[timeField] : ""].filter(Boolean).join(" ");
+    };
+    const scheduled = dateText("scheduledDate", "scheduledTime");
+    if (scheduled) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, scheduled, incompleteTask && properties.scheduledDate && properties.scheduledDate < todayIso() ? "danger" : void 0);
     if ("endDate" in properties && properties.endDate) propertyBadge("endDate", "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
     if ("durationMinutes" in properties && properties.durationMinutes) propertyBadge("durationMinutes", TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
-    if (properties.deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, `${formatDate(properties.deadline, this.plugin.dateFormat())}${properties.deadlineTime ? ` ${properties.deadlineTime}` : ""}`, (!("completed" in properties) || incompleteTask) && properties.deadline < todayIso() ? "danger" : void 0);
+    const deadline = dateText("deadline", "deadlineTime");
+    if (deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, deadline, (!("completed" in properties) || incompleteTask) && properties.deadline && properties.deadline < todayIso() ? "danger" : void 0);
     if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
     if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
   }

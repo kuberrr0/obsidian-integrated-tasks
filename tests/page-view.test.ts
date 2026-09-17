@@ -473,3 +473,26 @@ it("queries a file-backed tag across the vault instead of restricting results to
   expect(internals.taskSourcePath).toBeUndefined();
   expect(view.navigation).toBe(true);
 });
+
+it.each([
+  ["tags", ["09:00", "10:00", "1h", "P1"], ["work"]],
+  ["priority", ["work", "1h"], ["P1"]],
+  ["duration", ["work", "P1"], ["1h"]],
+  ["scheduledDate", ["09:00", "2026-09-20 10:00"], ["2026-09-18"]],
+  ["scheduledTime", ["2026-09-18", "10:00"], ["09:00"]],
+  ["deadline", ["10:00", "2026-09-18 09:00"], ["2026-09-20"]],
+  ["deadlineTime", ["2026-09-20", "09:00"], ["10:00"]],
+  ["date", ["09:00", "2026-09-20 10:00"], ["2026-09-18"]],
+  ["none", ["2026-09-18 09:00", "2026-09-20 10:00", "1h", "P1", "work"], []]
+])("hides only metadata represented by %s grouping", (grouping, present, absent) => {
+  const { view, internals, tasks } = selectionView();
+  Object.assign(view, { grouping });
+  const labels: string[] = [];
+  internals.badge = (_parent, _icon, text) => {
+    labels.push(String(text));
+    return { setAttribute: vi.fn(), addEventListener: vi.fn() };
+  };
+  internals.renderProperties({}, { ...tasks[0], scheduledDate: "2026-09-18", scheduledTime: "09:00", deadline: "2026-09-20", deadlineTime: "10:00", durationMinutes: 60, priority: 1, tags: ["work"] });
+  for (const text of present) expect(labels.some(label => label.includes(text))).toBe(true);
+  for (const text of absent) expect(labels.some(label => label.includes(text))).toBe(false);
+});
