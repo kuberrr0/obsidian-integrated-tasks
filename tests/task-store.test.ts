@@ -114,7 +114,7 @@ it("creates descriptions without duplicating raw bullets or changing subtask des
 it("edits and clears a parent's description without removing its children or their notes", async () => {
   const { store, read } = setup("# Plan\n- [ ] Main\n  - Before\n  - [ ] Child\n    - Child note\n  - After\n- [ ] Keep\n");
   await store.update(scanTasks("Project.md", read())[0], { ...draft, description: "Changed\nSecond line" });
-  expect(read()).toBe("# Plan\n- [ ] New\n  - Changed\n  - Second line\n  - [ ] Child\n    - Child note\n- [ ] Keep\n");
+  expect(read()).toBe("# Plan\n- [ ] New\n    - Changed\n    - Second line\n  - [ ] Child\n    - Child note\n- [ ] Keep\n");
   await store.update(scanTasks("Project.md", read())[0], { ...draft, description: "" });
   expect(read()).toBe("# Plan\n- [ ] New\n  - [ ] Child\n    - Child note\n- [ ] Keep\n");
 });

@@ -157,7 +157,7 @@ it.each([false, true])("always shows an editable description last and saves it (
   fields.rawInput.dispatchEvent(new Event("input"));
   fields.descriptionInput.value = "First detail\nSecond detail";
   fields.descriptionInput.dispatchEvent(new Event("input"));
-  if (!edit) expect(fields.rawInput.value).toContain("  - First detail\n  - Second detail");
+  if (!edit) expect(fields.rawInput.value).toContain("    - First detail\n    - Second detail");
   key({ metaKey: true });
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   expect(onSave.mock.calls[0][0].description).toBe("First detail\nSecond detail");
@@ -170,7 +170,7 @@ it("keeps the new task description field in sync with raw bullets and preserves 
   expect(fields.descriptionInput.value).toBe("- Original");
   fields.descriptionInput.value = "Replacement";
   fields.descriptionInput.dispatchEvent(new Event("input"));
-  expect(fields.rawInput.value).toBe("- [ ] Parent\n  - Replacement\n  - [ ] Child\n    - Child description");
+  expect(fields.rawInput.value).toBe("- [ ] Parent\n    - Replacement\n  - [ ] Child\n    - Child description");
   key({ metaKey: true });
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   expect(onSave.mock.calls[0][0].description).toBe("Replacement");

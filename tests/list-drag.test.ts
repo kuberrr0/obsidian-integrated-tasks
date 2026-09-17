@@ -34,8 +34,8 @@ describe("list task dragging", () => {
     await store.relocate(tasks[0], tasks[2], "child", draftForGroup(tasks[0]));
     tasks = scanTasks("Work.md", files["Work.md"]);
     const parent = tasks.find(task => task.title === "Parent")!;
-    expect(parent.indent).toBe(2);
-    expect(tasks.find(task => task.title === "Child")?.indent).toBe(4);
+    expect(parent.indent).toBe(4);
+    expect(tasks.find(task => task.title === "Child")?.indent).toBe(6);
     await store.relocate(parent, tasks[0], "after", draftForGroup(parent));
     expect(scanTasks("Work.md", files["Work.md"]).find(task => task.title === "Parent")?.parentId).toBeUndefined();
     expect(files["Work.md"]).toContain("- [ ] Other\n  - [ ] Other child\n- [ ] Parent\n  - [ ] Child\n    Child notes");

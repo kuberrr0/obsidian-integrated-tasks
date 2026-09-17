@@ -6593,6 +6593,9 @@ function renderNoteTokens(root, dateFormat) {
 // src/main.ts
 var import_obsidian18 = require("obsidian");
 
+// src/task-indentation.ts
+var TASK_INDENT = 4;
+
 // src/task-description.ts
 function descriptionLines(text, indent) {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -6606,7 +6609,7 @@ function descriptionLines(text, indent) {
     const bullet = /^\s*[-+*]\s+/.test(line);
     const checkbox = /^\s*[-+*]\s+\[[ xX]\](?:\s|$)/.test(line);
     const value = (bullet || /^\s+\S/.test(line)) && !checkbox ? line : `- ${line}`;
-    return " ".repeat(indent + 2) + value;
+    return " ".repeat(indent + TASK_INDENT) + value;
   });
 }
 function replaceDescription(slots, line, ownedLines, text, indent) {
@@ -7492,7 +7495,7 @@ function planBulkTasks(contents, changes, options = {}) {
     lines: options.delete ? [] : rewriteBlock(
       { ...entry.block, lines: lines.get(entry.task.path).slice(entry.block.start, entry.block.end).flat() },
       entry.draft,
-      anchor ? anchor.indent + (options.placement === "child" ? 2 : 0) : 0,
+      anchor ? anchor.indent + (options.placement === "child" ? TASK_INDENT : 0) : 0,
       options.dateFormat,
       options.linkDates
     )
@@ -7589,7 +7592,7 @@ var TaskStore = class {
       await this.app.vault.process(source, (content2) => {
         const block2 = liveTaskBlock(content2, task, this.getDateFormat());
         const destination = liveTaskBlock(content2, anchor, this.getDateFormat());
-        const indent = destination.indent + (placement === "child" ? 2 : 0);
+        const indent = destination.indent + (placement === "child" ? TASK_INDENT : 0);
         return placeTaskBlock(content2, task, anchor, placement, rewriteBlock(block2, draft, indent, this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
       });
       return;
@@ -7601,7 +7604,7 @@ var TaskStore = class {
     await this.app.vault.process(target, (current) => {
       before = current;
       const destination = liveTaskBlock(current, anchor, this.getDateFormat());
-      after = placeTaskBlock(current, void 0, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? 2 : 0), this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
+      after = placeTaskBlock(current, void 0, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? TASK_INDENT : 0), this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
       return after;
     });
     try {

@@ -1,3 +1,4 @@
+import { TASK_INDENT } from "./task-indentation";
 import { updateTaskDateTokens } from "./task-date-update";
 import { newTaskLines } from "./task-description";
 import { planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
@@ -79,7 +80,7 @@ export class TaskStore {
       await this.app.vault.process(source, content => {
         const block = liveTaskBlock(content, task, this.getDateFormat());
         const destination = liveTaskBlock(content, anchor, this.getDateFormat());
-        const indent = destination.indent + (placement === "child" ? 2 : 0);
+        const indent = destination.indent + (placement === "child" ? TASK_INDENT : 0);
         return placeTaskBlock(content, task, anchor, placement, rewriteBlock(block, draft, indent, this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
       });
       return;
@@ -91,7 +92,7 @@ export class TaskStore {
     await this.app.vault.process(target, current => {
       before = current;
       const destination = liveTaskBlock(current, anchor, this.getDateFormat());
-      after = placeTaskBlock(current, undefined, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? 2 : 0), this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
+      after = placeTaskBlock(current, undefined, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? TASK_INDENT : 0), this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
       return after;
     });
     try {

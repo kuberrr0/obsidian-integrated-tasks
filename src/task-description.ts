@@ -1,3 +1,4 @@
+import { TASK_INDENT } from "./task-indentation";
 import { scanTasks, serializeTask } from "./parser";
 import type { TaskDraft } from "./types";
 
@@ -14,7 +15,7 @@ export function descriptionLines(text: string, indent: number): string[] {
     const bullet = /^\s*[-+*]\s+/.test(line);
     const checkbox = /^\s*[-+*]\s+\[[ xX]\](?:\s|$)/.test(line);
     const value = (bullet || /^\s+\S/.test(line)) && !checkbox ? line : `- ${line}`;
-    return " ".repeat(indent + 2) + value;
+    return " ".repeat(indent + TASK_INDENT) + value;
   });
 }
 

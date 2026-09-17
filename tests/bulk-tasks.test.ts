@@ -89,8 +89,8 @@ describe("bulk dragging", () => {
     await setup(files).bulkDrop([external, parent, originalTasks()[1]], { property: "priority", value: 2 }, anchor, "child");
     const tasks = scanTasks("Target.md", files["Target.md"]);
     expect(tasks.map(task => task.title)).toEqual(["Anchor", "External", "Parent", "Child", "Unselected"]);
-    expect(tasks[2].indent).toBe(2);
-    expect(tasks[3].indent).toBe(4);
+    expect(tasks[2].indent).toBe(4);
+    expect(tasks[3].indent).toBe(6);
     expect(tasks[1].priority).toBe(2);
     expect(tasks[3].priority).toBe(2);
     expect(tasks[4].priority).toBe(3);

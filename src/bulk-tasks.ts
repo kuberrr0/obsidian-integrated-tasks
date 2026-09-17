@@ -1,3 +1,4 @@
+import { TASK_INDENT } from "./task-indentation";
 import { replaceDescription } from "./task-description";
 import { insertIntoDestination, lineEnding } from "./markdown";
 import { liveTaskBlock, rewriteBlock } from "./task-block";
@@ -57,7 +58,7 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
   const payloads = roots.map(entry => ({
     entry,
     lines: options.delete ? [] : rewriteBlock({ ...entry.block, lines: lines.get(entry.task.path)!.slice(entry.block.start, entry.block.end).flat() },
-      entry.draft!, anchor ? anchor.indent + (options.placement === "child" ? 2 : 0) : 0, options.dateFormat, options.linkDates)
+      entry.draft!, anchor ? anchor.indent + (options.placement === "child" ? TASK_INDENT : 0) : 0, options.dateFormat, options.linkDates)
   }));
   for (const [path, fileLines] of lines) {
     for (const entry of roots.filter(item => item.task.path === path).sort((a, b) => b.block.start - a.block.start)) {
