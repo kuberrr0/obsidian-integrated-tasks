@@ -6063,7 +6063,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     });
   }
   renderProperties(parent, properties, editProject) {
-    var _a;
+    var _a, _b;
     const grouping = "completed" in properties ? this.metadataGrouping : "none";
     const propertyBadge = (property, icon, text, variant) => {
       if (grouping === property && property !== "scheduledDate" && property !== "deadline" || property === "durationMinutes" && grouping === "duration") return;
@@ -6089,7 +6089,13 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     const deadline = dateText("deadline", "deadlineTime");
     if (deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, deadline, (!("completed" in properties) || incompleteTask) && properties.deadline && properties.deadline < todayIso() ? "danger" : void 0);
     if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
-    if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
+    if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) {
+      if (this.state.mode === "tags" && "completed" in properties) {
+        const currentTag = this.pagePath ? ((_b = this.app.metadataCache.getFirstLinkpathDest(tag, properties.path)) == null ? void 0 : _b.path) === this.pagePath : tag === this.state.tag;
+        if (currentTag) continue;
+      }
+      propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
+    }
   }
   badge(parent, iconName, text, variant) {
     const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });

@@ -819,7 +819,15 @@ export class TaskMainView extends ItemView {
     const deadline = dateText("deadline", "deadlineTime");
     if (deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, deadline, (!("completed" in properties) || incompleteTask) && properties.deadline && properties.deadline < todayIso() ? "danger" : undefined);
     if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
-    if ("tags" in properties) for (const tag of properties.tags ?? []) propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
+    if ("tags" in properties) for (const tag of properties.tags ?? []) {
+      if (this.state.mode === "tags" && "completed" in properties) {
+        const currentTag = this.pagePath
+          ? this.app.metadataCache.getFirstLinkpathDest(tag, properties.path)?.path === this.pagePath
+          : tag === this.state.tag;
+        if (currentTag) continue;
+      }
+      propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
+    }
   }
 
   private badge(parent: HTMLElement, iconName: string, text: string, variant?: string): HTMLElement {

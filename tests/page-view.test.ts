@@ -496,3 +496,16 @@ it.each([
   for (const text of present) expect(labels.some(label => label.includes(text))).toBe(true);
   for (const text of absent) expect(labels.some(label => label.includes(text))).toBe(false);
 });
+
+it.each([false, true])("hides the current tag but retains other tag pills (file-backed: %s)", async fileBacked => {
+  const { view, internals, tasks } = selectionView();
+  view.app = { metadataCache: { getFirstLinkpathDest: (tag: string) => ({ path: ["work", "Tags/work"].includes(tag) ? "Tags/work.md" : "Tags/other.md" }) } } as unknown as App;
+  await view.setState({ mode: "tags", tag: "work", ...(fileBacked ? { pagePath: "Tags/work.md" } : {}) });
+  const labels: string[] = [];
+  internals.badge = (_parent, _icon, text) => {
+    labels.push(String(text));
+    return { setAttribute: vi.fn(), addEventListener: vi.fn() };
+  };
+  internals.renderProperties({}, { ...tasks[0], tags: ["work", "Tags/work", "other"] });
+  expect(labels).toEqual(fileBacked ? ["other"] : ["Tags/work", "other"]);
+});
