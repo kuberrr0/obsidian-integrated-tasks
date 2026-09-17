@@ -1129,3 +1129,7 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 }
 .tm-description-indicator svg { width: 1em; height: 1em; }
 .tm-calendar-task-title .tm-description-indicator { margin-inline-start: 0.35em; }
+
+.tm-project-header-metadata .tm-project-progress { flex-shrink: 0; align-self: center; min-height: 0; }
+.tm-project-header-metadata .tm-meta + .tm-project-progress { margin-inline-start: 16px; }
+.tm-project-header-metadata .tm-project-progress-track { display: block; }

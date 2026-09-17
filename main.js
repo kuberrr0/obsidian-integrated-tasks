@@ -5578,7 +5578,7 @@ var TaskMainView = class extends import_obsidian10.ItemView {
         const badge = this.badge(metadata, "folder", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
         this.makePropertyEditable(badge, "parent project", () => this.plugin.openProjectEditor(project.path, "parent"));
       }
-      if (!metadata.childElementCount) metadata.remove();
+      this.renderProjectProgress(metadata, project);
     }
     const actions = header.createDiv({ cls: "tm-header-actions" });
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Task view layout" } });
@@ -5807,23 +5807,26 @@ var TaskMainView = class extends import_obsidian10.ItemView {
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
       this.renderProperties(metadata, project);
       if (!metadata.childElementCount) metadata.remove();
-      const total = project.openTasks + project.completedTasks;
-      const percentage = total ? Math.round(project.completedTasks / total * 100) : 0;
-      const progress = content.createDiv({ cls: "tm-project-progress", attr: {
-        role: "progressbar",
-        "aria-label": `${project.name}: ${project.completedTasks} of ${total} tasks completed`,
-        "aria-valuemin": "0",
-        "aria-valuemax": "100",
-        "aria-valuenow": String(percentage),
-        title: `${project.completedTasks} of ${total} tasks completed`
-      } });
-      const track = progress.createSpan({ cls: "tm-project-progress-track" });
-      track.createSpan({ cls: "tm-project-progress-fill" }).style.width = `${percentage}%`;
-      progress.createSpan({ cls: "tm-project-percentage", text: `${percentage}%` });
+      this.renderProjectProgress(content, project);
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
       (0, import_obsidian10.setIcon)(open, "chevron-right");
       open.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian10.Notice(String(error))));
     }
+  }
+  renderProjectProgress(parent, project) {
+    const total = project.openTasks + project.completedTasks;
+    const percentage = total ? Math.round(project.completedTasks / total * 100) : 0;
+    const progress = parent.createDiv({ cls: "tm-project-progress", attr: {
+      role: "progressbar",
+      "aria-label": `${project.name}: ${project.completedTasks} of ${total} tasks completed`,
+      "aria-valuemin": "0",
+      "aria-valuemax": "100",
+      "aria-valuenow": String(percentage),
+      title: `${project.completedTasks} of ${total} tasks completed`
+    } });
+    const track = progress.createSpan({ cls: "tm-project-progress-track" });
+    track.createSpan({ cls: "tm-project-progress-fill" }).style.width = `${percentage}%`;
+    progress.createSpan({ cls: "tm-project-percentage", text: `${percentage}%` });
   }
   renderGroupAddButton(parent, title, target) {
     const add = parent.createEl("button", { cls: "clickable-icon tm-group-add-task", attr: {
