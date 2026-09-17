@@ -79,7 +79,7 @@ export class TaskMainView extends ItemView {
     if (this.pagePath) return this.pagePath.replace(/\.md$/i, "").split("/").pop() ?? "Project";
     return TITLES[this.state.mode];
   }
-  getIcon(): string { return this.state.mode === "projects" ? "folder-kanban" : "circle-check-big"; }
+  getIcon(): string { return this.state.mode === "projects" ? "target" : "circle-check-big"; }
   getState(): Record<string, unknown> { return { ...this.state, layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
 
   async setState(state: Record<string, unknown>): Promise<void> {
@@ -326,7 +326,7 @@ export class TaskMainView extends ItemView {
       const metadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
       this.renderProperties(metadata, project, property => this.plugin.openProjectEditor(project.path, property));
       if (project.parent) {
-        const badge = this.badge(metadata, "folder", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
+        const badge = this.badge(metadata, "target", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
         this.makePropertyEditable(badge, "parent project", () => this.plugin.openProjectEditor(project.path, "parent"));
       }
       this.renderProjectProgress(metadata, project);
@@ -501,7 +501,7 @@ export class TaskMainView extends ItemView {
     if (!active.length && (!this.showArchivedProjects || !archived.length)) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
-      setIcon(icon, "folder-kanban");
+      setIcon(icon, "target");
       empty.createEl("h3", { text: archived.length ? "No active projects" : "No projects yet" });
       empty.createEl("p", { text: archived.length
         ? "Enable Show archived projects to see your archived projects."
@@ -537,7 +537,7 @@ export class TaskMainView extends ItemView {
       const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
       row.style.setProperty("--tm-depth", String(depth));
       const icon = row.createSpan({ cls: "tm-project-icon" });
-      setIcon(icon, project.archived ? "archive" : "folder");
+      setIcon(icon, project.archived ? "archive" : "target");
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });

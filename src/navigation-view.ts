@@ -59,7 +59,7 @@ export class TaskNavigationView extends ItemView {
       return button;
     };
     action("Create task", "square-pen", () => this.plugin.openEditor({ mode: this.activeMode, tag: this.activeTag }));
-    action("Create project", "folder-plus", () => this.plugin.openProjectCreator());
+    action("Create project", "target", () => this.plugin.openProjectCreator());
     const toggle = action("Task mode", "list-checks", async () => {
       toggle.disabled = true;
       try { await this.plugin.setTaskMode(!this.plugin.settings.taskMode); }
