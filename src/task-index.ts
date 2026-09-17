@@ -88,8 +88,29 @@ export class TaskIndex {
 
   query(query: TaskQuery, now = new Date()): Task[] {
     return sortTasks(
-      this.allTasks().filter((task) => taskMatchesQuery(task, query, this.getSettings().inboxPath, now))
+      this.allTasks().filter((task) => (!query.tagPath || this.taskHasTagPath(task, query.tagPath)) && taskMatchesQuery(task, query, this.getSettings().inboxPath, now))
     );
+  }
+
+  taskHasTagPath(task: Task, path: string): boolean {
+    return (task.tags ?? []).some(tag => this.app.metadataCache.getFirstLinkpathDest(tag, task.path)?.path === path);
+  }
+
+  tagForPath(path: string): string | undefined {
+    for (const task of this.allTasks()) {
+      const tag = task.tags?.find(tag => this.app.metadataCache.getFirstLinkpathDest(tag, task.path)?.path === path);
+      if (tag) return tag;
+    }
+    return undefined;
+  }
+
+  tagFile(tag: string): TFile | undefined {
+    for (const task of this.allTasks()) {
+      if (!task.tags?.includes(tag)) continue;
+      const file = this.app.metadataCache.getFirstLinkpathDest(tag, task.path);
+      if (file?.extension === "md") return file;
+    }
+    return undefined;
   }
 
   projects(): Project[] {

@@ -69,6 +69,8 @@ export class TaskMainView extends ItemView {
 
   get pagePath(): string | undefined { return this.state.pagePath ?? this.state.projectPath; }
 
+  private get taskSourcePath(): string | undefined { return this.state.mode === "tags" ? undefined : this.pagePath; }
+
   getViewType(): string { return TASK_MAIN_VIEW; }
   getDisplayText(): string {
     if (this.state.mode === "smartLists" && this.state.smartListId) return this.plugin.settings.smartLists.find(list => list.id === this.state.smartListId)?.name ?? "Smart list not found";
@@ -178,10 +180,11 @@ export class TaskMainView extends ItemView {
     this.updateSelection();
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", task => this.prepareDrag(task));
     const query: TaskQuery = {
-      mode: this.pagePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
+      mode: this.taskSourcePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
       showCompleted: this.showCompleted || this.layout === "kanban",
-      projectPath: this.pagePath,
-      tag: this.state.mode === "tags" ? this.state.tag : undefined,
+      projectPath: this.taskSourcePath,
+      tag: this.state.mode === "tags" && !this.pagePath ? this.state.tag : undefined,
+      tagPath: this.state.mode === "tags" ? this.pagePath : undefined,
       filters: this.propertyFilters,
       search: this.search || undefined
     };
@@ -221,8 +224,8 @@ export class TaskMainView extends ItemView {
       return;
     }
     if (!tasks.length) {
-      if (this.pagePath && this.grouping === "default" && !this.search && !this.propertyFilters.length) {
-        this.renderProjectSections(container, this.pagePath, tasks);
+      if (this.taskSourcePath && this.grouping === "default" && !this.search && !this.propertyFilters.length) {
+        this.renderProjectSections(container, this.taskSourcePath, tasks);
       } else this.renderEmpty(container);
       return;
     }
@@ -238,8 +241,8 @@ export class TaskMainView extends ItemView {
       }
       return;
     }
-    if (this.pagePath) {
-      this.renderProjectSections(container, this.pagePath, tasks);
+    if (this.taskSourcePath) {
+      this.renderProjectSections(container, this.taskSourcePath, tasks);
       return;
     }
     if (this.state.mode === "today") {
@@ -313,7 +316,7 @@ export class TaskMainView extends ItemView {
     }
     const heading = titleGroup.createDiv();
     heading.createEl("h1", { text: this.getDisplayText() });
-    const project = this.pagePath ? this.plugin.index.projects().find(project => project.path === this.pagePath) : undefined;
+    const project = this.taskSourcePath ? this.plugin.index.projects().find(project => project.path === this.taskSourcePath) : undefined;
     if (project) {
       const metadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
       this.renderProperties(metadata, project, property => this.plugin.openProjectEditor(project.path, property));
@@ -458,7 +461,7 @@ export class TaskMainView extends ItemView {
         setIcon(icon, "tag");
         const content = row.createDiv({ cls: "tm-task-content" });
         const title = content.createEl("button", { cls: "tm-task-title", text: tag.name });
-        title.addEventListener("click", () => void this.plugin.openTaskView({ mode: "tags", tag: tag.name }));
+        title.addEventListener("click", () => void this.plugin.openTag(tag.name).catch(error => new Notice(String(error))));
         content.createDiv({ cls: "tm-task-metadata", text: `${tag.openTasks} open · ${tag.completedTasks} completed` });
       }
     };
@@ -561,7 +564,7 @@ export class TaskMainView extends ItemView {
     setIcon(add, "plus");
     add.addEventListener("click", event => {
       event.stopPropagation();
-      const blank: Task = { id: "", path: this.pagePath ?? this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
+      const blank: Task = { id: "", path: this.taskSourcePath ?? this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
       this.plugin.openEditor({ ...this.state, preset: draftForGroup(blank, target) });
     });
   }
@@ -751,7 +754,7 @@ export class TaskMainView extends ItemView {
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
-    const implicitSource = this.pagePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
+    const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
     if (task.path !== implicitSource) {
       const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
       source.addEventListener("click", () => void this.openSource(task));

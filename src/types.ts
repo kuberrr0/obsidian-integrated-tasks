@@ -69,6 +69,7 @@ export interface TaskFilter {
 }
 
 export interface TaskQuery {
+  tagPath?: string;
   tag?: string;
   mode: TaskViewMode | "project";
   showCompleted: boolean;

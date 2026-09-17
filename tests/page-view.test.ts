@@ -77,7 +77,7 @@ it("offers search only in an active project while task mode is enabled", () => {
   const focusSearch = vi.fn();
   let active: { pagePath?: string; focusSearch: () => void } | undefined = { pagePath: "Project.md", focusSearch };
   plugin.app = { workspace: { getActiveViewOfType: () => active } } as unknown as App;
-  plugin.index = { isProject: (path: string) => path === "Project.md" } as never;
+  plugin.index = { isProject: (path: string) => path === "Project.md", tagForPath: () => undefined } as never;
   const check = (plugin as unknown as { focusProjectSearch(checking: boolean): boolean }).focusProjectSearch.bind(plugin);
   plugin.settings.taskMode = false;
   expect(check(false)).toBe(false);
@@ -423,4 +423,53 @@ it("routes project date and priority pills to the matching editor fields", () =>
     expect(event.stopPropagation).toHaveBeenCalledTimes(2);
   }
   expect(openEditor).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("opens a tag note and enables task mode (already enabled: %s)", async enabled => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  const file = Object.assign(new TFile(), { path: "Tags/work.md" });
+  const leaf = { openFile: vi.fn().mockResolvedValue(undefined) };
+  const sync = vi.fn().mockResolvedValue(undefined);
+  const revealLeaf = vi.fn().mockResolvedValue(undefined);
+  plugin.index = { tagFile: () => file } as never;
+  plugin.app = { workspace: { getLeavesOfType: () => [], getLeaf: vi.fn(() => leaf), revealLeaf } } as unknown as App;
+  plugin.settings.taskMode = enabled;
+  const mode = vi.spyOn(plugin, "setTaskMode").mockImplementation(async value => { plugin.settings.taskMode = value; await sync(); });
+  (plugin as unknown as { taskModeController: unknown }).taskModeController = { sync };
+  await plugin.openTag("work");
+  expect(leaf.openFile).toHaveBeenCalledExactlyOnceWith(file);
+  expect(plugin.settings.taskMode).toBe(true);
+  expect(mode).toHaveBeenCalledTimes(enabled ? 0 : 1);
+  expect(sync).toHaveBeenCalledOnce();
+  expect(sync.mock.invocationCallOrder[0]).toBeGreaterThan(leaf.openFile.mock.invocationCallOrder[0]);
+  expect(revealLeaf).toHaveBeenCalledExactlyOnceWith(leaf);
+});
+
+it("keeps tags without notes accessible without creating a file", async () => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  plugin.index = { tagFile: () => undefined } as never;
+  const open = vi.spyOn(plugin, "openTaskView").mockResolvedValue(undefined);
+  await plugin.openTag("missing");
+  expect(open).toHaveBeenCalledExactlyOnceWith({ mode: "tags", tag: "missing" });
+});
+
+it("queries a file-backed tag across the vault instead of restricting results to the tag note", async () => {
+  const query = vi.fn(() => []);
+  const view = new TaskMainView({} as WorkspaceLeaf, { index: { query } } as unknown as TaskManagerPlugin);
+  vi.spyOn(view, "render").mockImplementation(() => {});
+  await view.setState({ mode: "tags", tag: "work", pagePath: "Tags/work.md" });
+  const internals = view as unknown as {
+    taskResults: { empty(): void };
+    updateSelection(): void;
+    renderTaskLayouts(): void;
+    renderTaskResults(): void;
+    taskSourcePath?: string;
+  };
+  internals.taskResults = { empty: vi.fn() };
+  vi.spyOn(internals, "updateSelection").mockImplementation(() => {});
+  vi.spyOn(internals, "renderTaskLayouts").mockImplementation(() => {});
+  internals.renderTaskResults();
+  expect(query).toHaveBeenCalledWith(expect.objectContaining({ mode: "tags", tagPath: "Tags/work.md", tag: undefined, projectPath: undefined }));
+  expect(internals.taskSourcePath).toBeUndefined();
+  expect(view.navigation).toBe(true);
 });

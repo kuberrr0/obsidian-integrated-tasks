@@ -127,9 +127,10 @@ export default class TaskManagerPlugin extends Plugin {
     });
 
     await this.index.initialize();
-    this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, path => this.index.isProject(path));
+    this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, path => this.index.isProject(path), path => this.index.tagForPath(path));
     const syncTaskMode = (): void => { void this.taskModeController?.sync().catch(error => new Notice(String(error))); };
     this.registerEvent(this.app.workspace.on("file-open", syncTaskMode));
+    this.registerEvent(this.app.metadataCache.on("resolved", syncTaskMode));
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncTaskMode));
     this.registerEvent(this.app.workspace.on("layout-change", syncTaskMode));
     this.register(this.index.subscribe(syncTaskMode));
@@ -281,6 +282,19 @@ export default class TaskManagerPlugin extends Plugin {
     }
   }
 
+  async openTag(tag: string): Promise<void> {
+    const file = this.index.tagFile(tag);
+    if (!file) return this.openTaskView({ mode: "tags", tag });
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.openFile(file);
+    if (!this.settings.taskMode) await this.setTaskMode(true);
+    else await this.taskModeController?.sync();
+    await this.app.workspace.revealLeaf(leaf);
+    for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
+      if (navLeaf.view instanceof TaskNavigationView) navLeaf.view.setActive("tags", tag);
+    }
+  }
+
   private editSelectedTaskProperties(checking: boolean): boolean {
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
     if (!view?.getSelectedTasks().length) return false;
@@ -291,7 +305,7 @@ export default class TaskManagerPlugin extends Plugin {
   private focusProjectSearch(checking: boolean): boolean {
     if (!this.settings.taskMode) return false;
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
-    if (!view?.pagePath || !this.index.isProject(view.pagePath)) return false;
+    if (!view?.pagePath || (!this.index.isProject(view.pagePath) && !this.index.tagForPath(view.pagePath))) return false;
     if (!checking) view.focusSearch();
     return true;
   }
@@ -343,8 +357,8 @@ export default class TaskManagerPlugin extends Plugin {
   openEditor(state: OpenEditorState): void {
     const options: TaskEditorOptions = {
       ...state,
-      preset: state.tag ? { ...state.preset, tags: [...new Set([...(state.preset?.tags ?? []), state.tag])] } : state.preset,
-      projectPath: state.pagePath ?? state.projectPath,
+      preset: state.tag ? { ...state.preset, tags: [...new Set([...(state.preset?.tags ?? []), state.mode === "tags" && state.pagePath ? state.pagePath.replace(/\.md$/i, "") : state.tag])] } : state.preset,
+      projectPath: state.mode === "tags" ? undefined : state.pagePath ?? state.projectPath,
       projects: this.index.projects(),
       settings: this.settings,
       dateFormat: this.dateFormat(),

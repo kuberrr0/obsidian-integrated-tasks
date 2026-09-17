@@ -26,7 +26,7 @@ Quick-created tasks go to `Inbox.md` by default. You can choose a different inbo
 | **Projects** | Notes tagged `#project`, with progress and project dates. |
 | **Tags** | Task tags with open and completed counts; open a tag to see its matching tasks. |
 
-The sidebar uses a compact file-style tree. Its icon toolbar provides **Create task**, **Create project**, and **Task mode**. Expand Projects or Tags for direct access, or click their labels to open the full lists. Creating a project makes a named Markdown note with the `project` frontmatter tag. Tag pages support the existing task layouts, filters, and editing tools; new tasks created there inherit the tag.
+The sidebar uses a compact file-style tree. Its icon toolbar provides **Create task**, **Create project**, and **Task mode**. Expand Projects or Tags for direct access, or click their labels to open the full lists. Creating a project makes a named Markdown note with the `project` frontmatter tag. Tag pages support the existing task layouts, filters, and editing tools; new tasks created there inherit the tag. With Task mode on, Markdown notes linked by task tags such as `#[[work]]` open as tag task views, showing matching tasks across the vault. Opening a tag from the sidebar or Tags list opens its note and enables Task mode; tags without an existing note still open as tag lists.
 
 Use **Create new smart list** to save a named set of filters (including AND/OR conditions), sorting, and grouping. Saved lists appear under **Smart Lists** in the sidebar and update as tasks change. With a saved list open, **Edit smart list** changes its definition and **Delete smart list** removes the saved list without deleting tasks. Smart lists are stored in the plugin’s workspace settings.
 

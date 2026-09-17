@@ -10,10 +10,11 @@ import { TaskMainView, TASK_MAIN_VIEW } from "../src/task-view";
 async function setup() {
   let enabled = false;
   const projects = new Set(["Project.md", "Project2.md"]);
+  const tags = new Map<string, string>();
   const files = new Map<string, TFile>();
   const leaves: Array<{ view: MarkdownView | TaskMainView; setViewState: ReturnType<typeof vi.fn> }> = [];
   const app = { workspace: { getLeavesOfType: (type: string) => leaves.filter(leaf => type === "markdown" ? leaf.view instanceof MarkdownView : type === TASK_MAIN_VIEW && leaf.view instanceof TaskMainView) }, vault: { getAbstractFileByPath: (path: string) => files.get(path) } } as unknown as App;
-  const controller = new TaskModeController(app, () => enabled, path => projects.has(path));
+  const controller = new TaskModeController(app, () => enabled, path => projects.has(path), path => tags.get(path));
   const add = (path: string) => {
     const file = Object.assign(new TFile(), { path }); files.set(path, file);
     const state = { file: path, mode: "source", source: true, scroll: 12 };
@@ -32,7 +33,7 @@ async function setup() {
     leaves.push(leaf);
     return { leaf, state };
   };
-  return { controller, projects, add, setEnabled: (value: boolean) => { enabled = value; } };
+  return { controller, projects, tags, add, setEnabled: (value: boolean) => { enabled = value; } };
 }
 
 describe("global task mode", () => {
@@ -119,4 +120,28 @@ it("keeps the Projects dashboard open when task mode is turned off", async () =>
   await controller.sync();
   expect(leaf.view).toBeInstanceOf(TaskMainView);
   expect(leaf.view.getState().mode).toBe("projects");
+});
+
+it("converts tag notes into vault-wide tag views and restores their Markdown state", async () => {
+  const { controller, tags, add, setEnabled } = await setup();
+  const { leaf, state } = add("Tags/work.md");
+  tags.set("Tags/work.md", "work");
+  setEnabled(true); await controller.sync();
+  expect(leaf.view.getState()).toMatchObject({ mode: "tags", tag: "work", pagePath: "Tags/work.md", markdownState: state });
+  await (leaf.view as TaskMainView).setState({ ...leaf.view.getState(), layout: "calendar" });
+  setEnabled(false); await controller.sync();
+  expect(leaf.view).toBeInstanceOf(MarkdownView);
+  expect(leaf.view.getState()).toEqual(state);
+  setEnabled(true); await controller.sync();
+  expect(leaf.view.getState()).toMatchObject({ mode: "tags", tag: "work", layout: "calendar" });
+  tags.delete("Tags/work.md"); await controller.sync();
+  expect(leaf.view).toBeInstanceOf(MarkdownView);
+});
+
+it("updates open tag views when their linked tag name changes", async () => {
+  const { controller, tags, add, setEnabled } = await setup();
+  const { leaf } = add("Tags/work.md");
+  tags.set("Tags/work.md", "work"); setEnabled(true); await controller.sync();
+  tags.set("Tags/work.md", "Tags/work"); await controller.sync();
+  expect(leaf.view.getState()).toMatchObject({ mode: "tags", tag: "Tags/work", pagePath: "Tags/work.md" });
 });

@@ -5292,6 +5292,9 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     var _a;
     return (_a = this.state.pagePath) != null ? _a : this.state.projectPath;
   }
+  get taskSourcePath() {
+    return this.state.mode === "tags" ? void 0 : this.pagePath;
+  }
   getViewType() {
     return TASK_MAIN_VIEW;
   }
@@ -5403,10 +5406,11 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     this.updateSelection();
     this.listDrag = new ListDragController((id) => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", (task) => this.prepareDrag(task));
     const query = {
-      mode: this.pagePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
+      mode: this.taskSourcePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
       showCompleted: this.showCompleted || this.layout === "kanban",
-      projectPath: this.pagePath,
-      tag: this.state.mode === "tags" ? this.state.tag : void 0,
+      projectPath: this.taskSourcePath,
+      tag: this.state.mode === "tags" && !this.pagePath ? this.state.tag : void 0,
+      tagPath: this.state.mode === "tags" ? this.pagePath : void 0,
       filters: this.propertyFilters,
       search: this.search || void 0
     };
@@ -5453,8 +5457,8 @@ var TaskMainView = class extends import_obsidian9.ItemView {
       return;
     }
     if (!tasks.length) {
-      if (this.pagePath && this.grouping === "default" && !this.search && !this.propertyFilters.length) {
-        this.renderProjectSections(container, this.pagePath, tasks);
+      if (this.taskSourcePath && this.grouping === "default" && !this.search && !this.propertyFilters.length) {
+        this.renderProjectSections(container, this.taskSourcePath, tasks);
       } else this.renderEmpty(container);
       return;
     }
@@ -5469,8 +5473,8 @@ var TaskMainView = class extends import_obsidian9.ItemView {
       }
       return;
     }
-    if (this.pagePath) {
-      this.renderProjectSections(container, this.pagePath, tasks);
+    if (this.taskSourcePath) {
+      this.renderProjectSections(container, this.taskSourcePath, tasks);
       return;
     }
     if (this.state.mode === "today") {
@@ -5548,7 +5552,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     }
     const heading = titleGroup.createDiv();
     heading.createEl("h1", { text: this.getDisplayText() });
-    const project = this.pagePath ? this.plugin.index.projects().find((project2) => project2.path === this.pagePath) : void 0;
+    const project = this.taskSourcePath ? this.plugin.index.projects().find((project2) => project2.path === this.taskSourcePath) : void 0;
     if (project) {
       const metadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
       this.renderProperties(metadata, project, (property) => this.plugin.openProjectEditor(project.path, property));
@@ -5697,7 +5701,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
         (0, import_obsidian9.setIcon)(icon, "tag");
         const content = row.createDiv({ cls: "tm-task-content" });
         const title = content.createEl("button", { cls: "tm-task-title", text: tag.name });
-        title.addEventListener("click", () => void this.plugin.openTaskView({ mode: "tags", tag: tag.name }));
+        title.addEventListener("click", () => void this.plugin.openTag(tag.name).catch((error) => new import_obsidian9.Notice(String(error))));
         content.createDiv({ cls: "tm-task-metadata", text: `${tag.openTasks} open \xB7 ${tag.completedTasks} completed` });
       }
     };
@@ -5813,7 +5817,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     add.addEventListener("click", (event) => {
       var _a;
       event.stopPropagation();
-      const blank = { id: "", path: (_a = this.pagePath) != null ? _a : this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
+      const blank = { id: "", path: (_a = this.taskSourcePath) != null ? _a : this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
       this.plugin.openEditor({ ...this.state, preset: draftForGroup(blank, target) });
     });
   }
@@ -6016,7 +6020,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
-    const implicitSource = (_b = this.pagePath) != null ? _b : this.state.mode === "inbox" ? this.plugin.settings.inboxPath : void 0;
+    const implicitSource = (_b = this.taskSourcePath) != null ? _b : this.state.mode === "inbox" ? this.plugin.settings.inboxPath : void 0;
     if (task.path !== implicitSource) {
       const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
       source.addEventListener("click", () => void this.openSource(task));
@@ -6094,10 +6098,11 @@ var TaskMainView = class extends import_obsidian9.ItemView {
 
 // src/task-mode.ts
 var TaskModeController = class {
-  constructor(app, enabled, isProject) {
+  constructor(app, enabled, isProject, tagForPath = () => void 0) {
     this.app = app;
     this.enabled = enabled;
     this.isProject = isProject;
+    this.tagForPath = tagForPath;
     this.savedViews = /* @__PURE__ */ new WeakMap();
     this.pending = false;
     this.disposed = false;
@@ -6123,16 +6128,27 @@ var TaskModeController = class {
       for (const leaf of leaves) {
         if (this.disposed) return;
         const view = leaf.view;
-        if (view instanceof import_obsidian10.MarkdownView && view.file && this.enabled() && this.isProject(view.file.path)) {
+        if (view instanceof import_obsidian10.MarkdownView && view.file && this.enabled() && (this.isProject(view.file.path) || this.tagForPath(view.file.path))) {
           const path = view.file.path;
           const markdownState = view.getState();
           const saved = this.savedViews.get(leaf);
           const previous = (saved == null ? void 0 : saved.pagePath) === path ? saved : {};
-          await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { ...previous, mode: "all", pagePath: path, markdownState } });
+          const tag = this.tagForPath(path);
+          const next = { ...previous, mode: tag ? "tags" : "all", pagePath: path, markdownState };
+          if (tag) next.tag = tag;
+          else delete next.tag;
+          await leaf.setViewState({ type: TASK_MAIN_VIEW, state: next });
         } else if (view instanceof TaskMainView) {
           const state = view.getState();
           const path = typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : void 0;
-          if (!path || this.enabled() && this.isProject(path)) continue;
+          if (!path) continue;
+          const tag = this.tagForPath(path);
+          if (this.enabled() && (tag || this.isProject(path))) {
+            if (tag && (state.mode !== "tags" || state.tag !== tag) || !tag && state.mode === "tags") {
+              await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { ...state, mode: tag ? "tags" : "all", tag } });
+            }
+            continue;
+          }
           const file = this.app.vault.getAbstractFileByPath(path);
           if (!(file instanceof import_obsidian10.TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState : {};
@@ -7028,8 +7044,35 @@ var TaskIndex = class {
   }
   query(query, now2 = /* @__PURE__ */ new Date()) {
     return sortTasks(
-      this.allTasks().filter((task) => taskMatchesQuery(task, query, this.getSettings().inboxPath, now2))
+      this.allTasks().filter((task) => (!query.tagPath || this.taskHasTagPath(task, query.tagPath)) && taskMatchesQuery(task, query, this.getSettings().inboxPath, now2))
     );
+  }
+  taskHasTagPath(task, path) {
+    var _a;
+    return ((_a = task.tags) != null ? _a : []).some((tag) => {
+      var _a2;
+      return ((_a2 = this.app.metadataCache.getFirstLinkpathDest(tag, task.path)) == null ? void 0 : _a2.path) === path;
+    });
+  }
+  tagForPath(path) {
+    var _a;
+    for (const task of this.allTasks()) {
+      const tag = (_a = task.tags) == null ? void 0 : _a.find((tag2) => {
+        var _a2;
+        return ((_a2 = this.app.metadataCache.getFirstLinkpathDest(tag2, task.path)) == null ? void 0 : _a2.path) === path;
+      });
+      if (tag) return tag;
+    }
+    return void 0;
+  }
+  tagFile(tag) {
+    var _a;
+    for (const task of this.allTasks()) {
+      if (!((_a = task.tags) == null ? void 0 : _a.includes(tag))) continue;
+      const file = this.app.metadataCache.getFirstLinkpathDest(tag, task.path);
+      if ((file == null ? void 0 : file.extension) === "md") return file;
+    }
+    return void 0;
   }
   projects() {
     return [...this.projectPaths].map((path) => {
@@ -7137,7 +7180,7 @@ var TaskNavigationView = class extends import_obsidian15.ItemView {
       if (mode) this.setActive(
         mode,
         typeof state.tag === "string" ? state.tag : void 0,
-        typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : void 0
+        mode === "tags" ? void 0 : typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : void 0
       );
     };
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncActive));
@@ -7229,7 +7272,7 @@ var TaskNavigationView = class extends import_obsidian15.ItemView {
         if (!lists.length) children.createDiv({ cls: "tm-nav-empty", text: "No smart lists yet" });
       } else {
         const tags = taskTagSummaries(this.plugin.index.allTasks());
-        for (const tag of tags) item(children, tag.name, this.activeTag === tag.name, () => this.plugin.openTaskView({ mode: "tags", tag: tag.name }));
+        for (const tag of tags) item(children, tag.name, this.activeTag === tag.name, () => this.plugin.openTag(tag.name));
         if (!tags.length) children.createDiv({ cls: "tm-nav-empty", text: "No tags yet" });
       }
     }
@@ -7879,12 +7922,13 @@ var TaskManagerPlugin = class extends import_obsidian18.Plugin {
       }
     });
     await this.index.initialize();
-    this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, (path) => this.index.isProject(path));
+    this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, (path) => this.index.isProject(path), (path) => this.index.tagForPath(path));
     const syncTaskMode = () => {
       var _a;
       void ((_a = this.taskModeController) == null ? void 0 : _a.sync().catch((error) => new import_obsidian18.Notice(String(error))));
     };
     this.registerEvent(this.app.workspace.on("file-open", syncTaskMode));
+    this.registerEvent(this.app.metadataCache.on("resolved", syncTaskMode));
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncTaskMode));
     this.registerEvent(this.app.workspace.on("layout-change", syncTaskMode));
     this.register(this.index.subscribe(syncTaskMode));
@@ -8043,6 +8087,19 @@ var TaskManagerPlugin = class extends import_obsidian18.Plugin {
       if (navLeaf.view instanceof TaskNavigationView) navLeaf.view.setActive("projects", void 0, path);
     }
   }
+  async openTag(tag) {
+    var _a;
+    const file = this.index.tagFile(tag);
+    if (!file) return this.openTaskView({ mode: "tags", tag });
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.openFile(file);
+    if (!this.settings.taskMode) await this.setTaskMode(true);
+    else await ((_a = this.taskModeController) == null ? void 0 : _a.sync());
+    await this.app.workspace.revealLeaf(leaf);
+    for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
+      if (navLeaf.view instanceof TaskNavigationView) navLeaf.view.setActive("tags", tag);
+    }
+  }
   editSelectedTaskProperties(checking) {
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
     if (!(view == null ? void 0 : view.getSelectedTasks().length)) return false;
@@ -8052,7 +8109,7 @@ var TaskManagerPlugin = class extends import_obsidian18.Plugin {
   focusProjectSearch(checking) {
     if (!this.settings.taskMode) return false;
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
-    if (!(view == null ? void 0 : view.pagePath) || !this.index.isProject(view.pagePath)) return false;
+    if (!(view == null ? void 0 : view.pagePath) || !this.index.isProject(view.pagePath) && !this.index.tagForPath(view.pagePath)) return false;
     if (!checking) view.focusSearch();
     return true;
   }
@@ -8114,8 +8171,8 @@ var TaskManagerPlugin = class extends import_obsidian18.Plugin {
     var _a, _b, _c;
     const options = {
       ...state,
-      preset: state.tag ? { ...state.preset, tags: [.../* @__PURE__ */ new Set([...(_b = (_a = state.preset) == null ? void 0 : _a.tags) != null ? _b : [], state.tag])] } : state.preset,
-      projectPath: (_c = state.pagePath) != null ? _c : state.projectPath,
+      preset: state.tag ? { ...state.preset, tags: [.../* @__PURE__ */ new Set([...(_b = (_a = state.preset) == null ? void 0 : _a.tags) != null ? _b : [], state.mode === "tags" && state.pagePath ? state.pagePath.replace(/\.md$/i, "") : state.tag])] } : state.preset,
+      projectPath: state.mode === "tags" ? void 0 : (_c = state.pagePath) != null ? _c : state.projectPath,
       projects: this.index.projects(),
       settings: this.settings,
       dateFormat: this.dateFormat(),

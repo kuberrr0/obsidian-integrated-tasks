@@ -31,7 +31,7 @@ export class TaskNavigationView extends ItemView {
       const mode = NAV_ITEMS.find(item => item.mode === state.mode)?.mode;
       if (mode === "smartLists") { this.setActive(mode, undefined, undefined, typeof state.smartListId === "string" ? state.smartListId : undefined); return; }
       if (mode) this.setActive(mode, typeof state.tag === "string" ? state.tag : undefined,
-        typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : undefined);
+        mode === "tags" ? undefined : typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : undefined);
     };
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncActive));
     syncActive();
@@ -104,7 +104,7 @@ export class TaskNavigationView extends ItemView {
         if (!lists.length) children.createDiv({ cls: "tm-nav-empty", text: "No smart lists yet" });
       } else {
         const tags = taskTagSummaries(this.plugin.index.allTasks());
-        for (const tag of tags) item(children, tag.name, this.activeTag === tag.name, () => this.plugin.openTaskView({ mode: "tags", tag: tag.name }));
+        for (const tag of tags) item(children, tag.name, this.activeTag === tag.name, () => this.plugin.openTag(tag.name));
         if (!tags.length) children.createDiv({ cls: "tm-nav-empty", text: "No tags yet" });
       }
     }

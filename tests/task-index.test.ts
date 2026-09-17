@@ -94,3 +94,29 @@ it("resolves parent links relative to the project note and refreshes changes", a
   changed(child);
   expect(index.projects().find(project => project.path === child.path)?.parentPath).toBeUndefined();
 });
+
+it("resolves tag notes and queries links from all source notes without mixing duplicate filenames", async () => {
+  const file = (path: string) => Object.assign(new TFile(), { path, extension: "md" });
+  const work = file("Tags/work.md"); const other = file("Other/work.md");
+  const notes = [file("A.md"), file("B.md"), file("Other/C.md"), work, other];
+  const contents = new Map([
+    ["A.md", "- [ ] A #[[work]]"], ["B.md", "- [ ] B #[[Tags/work]]\n- [x] Done #[[work.md]]"],
+    ["Other/C.md", "- [ ] Other #[[work]]"], [work.path, "- [ ] Untagged task inside tag note"]
+  ]);
+  const app = {
+    vault: { getMarkdownFiles: () => notes, cachedRead: async (file: TFile) => contents.get(file.path) ?? "", on: () => ({}), offref: () => {} },
+    metadataCache: {
+      getFileCache: () => ({}), on: () => ({}),
+      getFirstLinkpathDest: (tag: string, source: string) => tag === "Tags/work" ? work : ["work", "work.md"].includes(tag) ? (source.startsWith("Other/") ? other : work) : null
+    }
+  } as unknown as App;
+  const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
+  await index.initialize();
+  expect(index.tagFile("Tags/work")).toBe(work);
+  expect(index.tagForPath(work.path)).toBeDefined();
+  expect(index.tagForPath("A.md")).toBeUndefined();
+  const query = { mode: "tags" as const, tagPath: work.path, showCompleted: false };
+  expect(index.query(query).map(task => task.title).sort()).toEqual(["A", "B"]);
+  expect(index.query({ ...query, showCompleted: true }).map(task => task.title).sort()).toEqual(["A", "B", "Done"]);
+  expect(index.query({ ...query, tagPath: other.path }).map(task => task.title)).toEqual(["Other"]);
+});
