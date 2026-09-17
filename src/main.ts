@@ -1,3 +1,4 @@
+import { scanTasks } from "./parser";
 import { applyProjectDraft, projectEditDraft } from "./project-editor";
 import { cloneTaskFilters } from "./task-filters";
 import { SmartListEditorModal, type SmartListDraft } from "./smart-list-editor";
@@ -9,7 +10,7 @@ import { noteDateInput } from "./note-date-input";
 import { noteTokenEditor } from "./note-token-editor";
 import { noteTaskEditEditor, registerNoteTaskEdit } from "./note-task-edit";
 import { renderNoteTokens } from "./note-token-reading";
-import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, Notice, Plugin, TFile, type Editor, type WorkspaceLeaf } from "obsidian";
 import { TaskEditorModal, type TaskEditorOptions } from "./task-editor";
 import { TaskIndex } from "./task-index";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
@@ -102,6 +103,8 @@ export default class TaskManagerPlugin extends Plugin {
       if (!checking) this.openProjectEditor(path);
       return true;
     } });
+    this.addCommand({ id: "edit-task", name: "Edit task", editorCheckCallback: (checking, editor, view) =>
+      this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: checking => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
@@ -302,6 +305,15 @@ export default class TaskManagerPlugin extends Plugin {
     for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
       if (navLeaf.view instanceof TaskNavigationView) navLeaf.view.setActive("tags", tag);
     }
+  }
+
+  private editCurrentLineTask(checking: boolean, editor: Editor, file: TFile | null): boolean {
+    if (this.settings.taskMode || !file) return false;
+    const line = editor.getCursor().line;
+    const task = scanTasks(file.path, editor.getValue(), new Date(), this.dateFormat()).find(task => task.line === line);
+    if (!task) return false;
+    if (!checking) this.openEditor({ mode: "all", task });
+    return true;
   }
 
   private editSelectedTaskProperties(checking: boolean): boolean {

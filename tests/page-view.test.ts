@@ -509,3 +509,25 @@ it.each([false, true])("hides the current tag but retains other tag pills (file-
   internals.renderProperties({}, { ...tasks[0], tags: ["work", "Tags/work", "other"] });
   expect(labels).toEqual(fileBacked ? ["other"] : ["Tags/work", "other"]);
 });
+
+it("edits the task on the current editor line only when task mode is off", () => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  plugin.settings = { ...plugin.settings, taskMode: false };
+  vi.spyOn(plugin, "dateFormat").mockReturnValue("YYYY-MM-DD");
+  const open = vi.spyOn(plugin, "openEditor").mockImplementation(() => {});
+  const file = Object.assign(new TFile(), { path: "Notes.md" });
+  let line = 1;
+  const editor = { getCursor: () => ({ line }), getValue: () => "# Heading\n- [ ] Current unsaved task\n    - Description\n```\n- [ ] Example\n```" };
+  const check = (plugin as unknown as { editCurrentLineTask(checking: boolean, editor: unknown, file: TFile | null): boolean });
+  expect(check.editCurrentLineTask(true, editor, file)).toBe(true);
+  expect(open).not.toHaveBeenCalled();
+  expect(check.editCurrentLineTask(false, editor, file)).toBe(true);
+  expect(open).toHaveBeenCalledWith({ mode: "all", task: expect.objectContaining({ path: "Notes.md", line: 1, title: "Current unsaved task", description: "- Description" }) });
+  for (line of [0, 2, 4]) expect(check.editCurrentLineTask(false, editor, file)).toBe(false);
+  line = 1;
+  plugin.settings.taskMode = true;
+  expect(check.editCurrentLineTask(false, editor, file)).toBe(false);
+  plugin.settings.taskMode = false;
+  expect(check.editCurrentLineTask(false, editor, null)).toBe(false);
+  expect(open).toHaveBeenCalledOnce();
+});

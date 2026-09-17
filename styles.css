@@ -1133,3 +1133,5 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-project-header-metadata .tm-project-progress { flex-shrink: 0; align-self: center; min-height: 0; }
 .tm-project-header-metadata .tm-meta + .tm-project-progress { margin-inline-start: 16px; }
 .tm-project-header-metadata .tm-project-progress-track { display: block; }
+
+.tm-task-metadata .tm-source.tm-meta { cursor: pointer; }

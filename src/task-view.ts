@@ -776,8 +776,21 @@ export class TaskMainView extends ItemView {
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
     if (task.path !== implicitSource && this.metadataGrouping !== "source") {
-      const source = metadata.createEl("button", { cls: "tm-source", text: task.path.replace(/\.md$/i, "") });
-      source.addEventListener("click", () => void this.openSource(task));
+      const source = this.badge(metadata, "target", task.path.replace(/\.md$/i, ""));
+      source.addClass("tm-source");
+      source.setAttribute("title", task.path);
+      source.setAttribute("role", "button");
+      source.setAttribute("tabindex", "0");
+      source.setAttribute("aria-label", `Open source note: ${task.path.replace(/\.md$/i, "")}`);
+      source.addEventListener("click", event => {
+        event.preventDefault(); event.stopPropagation();
+        void this.openSource(task);
+      });
+      source.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault(); event.stopPropagation();
+        void this.openSource(task);
+      });
     }
     this.renderProperties(metadata, task);
     if (!metadata.childElementCount) metadata.remove();
