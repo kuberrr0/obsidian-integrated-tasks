@@ -140,6 +140,10 @@ export class TaskMainView extends ItemView {
     this.visibleTasks = [];
     this.selectionRows.clear();
     container.addClass("tm-main-view");
+    const hover = this.plugin.settings.taskHoverHighlight ?? "none";
+    container.classList.toggle("tm-hover-title", hover === "title" || hover === "all");
+    container.classList.toggle("tm-hover-background", hover === "background" || hover === "all");
+    container.style.setProperty("--tm-task-row-height-multiplier", String(this.plugin.settings.taskListRowHeightMultiplier ?? 1.0));
     const wrapTitles = this.layout === "calendar" ? this.plugin.settings.wrapCalendarTaskTitles
       : this.layout === "kanban" ? this.plugin.settings.wrapKanbanTaskTitles : this.plugin.settings.wrapTaskTitles;
     container.classList.toggle("tm-wrap-task-titles", wrapTitles);

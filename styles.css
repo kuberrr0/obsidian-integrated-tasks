@@ -193,7 +193,7 @@
   transition: background-color 120ms ease;
 }
 
-.tm-task-row:hover {
+.tm-project-row:hover {
   background: var(--background-modifier-hover);
 }
 
@@ -241,8 +241,9 @@ button.tm-task-title {
   white-space: nowrap;
 }
 
-.tm-task-row:hover button.tm-task-title,
-.tm-calendar-task:hover .tm-calendar-task-title,
+.tm-project-row:hover button.tm-task-title,
+.tm-hover-title .tm-task-row:not(.tm-project-row):hover button.tm-task-title,
+.tm-hover-title .tm-calendar-task:hover .tm-calendar-task-title,
 button.tm-source:hover {
   color: var(--text-accent-hover);
 }
@@ -1109,3 +1110,12 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .modal.tm-smart-list-modal { width: min(900px, 95vw); }
 .tm-smart-list-filters { margin-bottom: 16px; }
 .tm-smart-list-filters .tm-property-name { min-width: 130px; }
+
+/* Task appearance preferences; selection and drag feedback remain independent. */
+.tm-main-view.tm-hover-background .tm-task-row:not(.tm-project-row):not(.is-selected):not([data-drop-position]):hover,
+.tm-main-view.tm-hover-background .tm-calendar button.tm-calendar-task:not(.is-selected):hover {
+  background: var(--background-modifier-hover);
+}
+.tm-main-view:not(.is-kanban-view):not(.is-calendar-view) .tm-task-row:not(.tm-project-row) {
+  min-height: calc(var(--font-text-size, 16px) * var(--tm-task-row-height-multiplier, 1.0));
+}

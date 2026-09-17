@@ -5349,6 +5349,7 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
   }
   render() {
+    var _a, _b;
     const container = this.containerEl.children[1];
     if (this.state.mode === "smartLists" && this.state.smartListId) {
       const list = this.plugin.settings.smartLists.find((item) => item.id === this.state.smartListId);
@@ -5369,6 +5370,10 @@ var TaskMainView = class extends import_obsidian9.ItemView {
     this.visibleTasks = [];
     this.selectionRows.clear();
     container.addClass("tm-main-view");
+    const hover = (_a = this.plugin.settings.taskHoverHighlight) != null ? _a : "none";
+    container.classList.toggle("tm-hover-title", hover === "title" || hover === "all");
+    container.classList.toggle("tm-hover-background", hover === "background" || hover === "all");
+    container.style.setProperty("--tm-task-row-height-multiplier", String((_b = this.plugin.settings.taskListRowHeightMultiplier) != null ? _b : 1));
     const wrapTitles = this.layout === "calendar" ? this.plugin.settings.wrapCalendarTaskTitles : this.layout === "kanban" ? this.plugin.settings.wrapKanbanTaskTitles : this.plugin.settings.wrapTaskTitles;
     container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
@@ -6452,22 +6457,22 @@ function bindNoteTaskEdit(root, resolve, open) {
   const contextMenu = (event) => {
     if (event.target === (press == null ? void 0 : press.checkbox) || event.target === held && Date.now() <= suppressUntil) block(event);
   };
-  const document = root.ownerDocument;
+  const document2 = root.ownerDocument;
   root.addEventListener("click", click, true);
   root.addEventListener("touchstart", start, { capture: true, passive: true });
   root.addEventListener("contextmenu", contextMenu, true);
-  document.addEventListener("touchmove", move, { capture: true, passive: true });
-  document.addEventListener("touchend", end, { capture: true, passive: false });
-  document.addEventListener("touchcancel", cancel, true);
+  document2.addEventListener("touchmove", move, { capture: true, passive: true });
+  document2.addEventListener("touchend", end, { capture: true, passive: false });
+  document2.addEventListener("touchcancel", cancel, true);
   return () => {
     cancel();
     held = void 0;
     root.removeEventListener("click", click, true);
     root.removeEventListener("touchstart", start, true);
     root.removeEventListener("contextmenu", contextMenu, true);
-    document.removeEventListener("touchmove", move, true);
-    document.removeEventListener("touchend", end, true);
-    document.removeEventListener("touchcancel", cancel, true);
+    document2.removeEventListener("touchmove", move, true);
+    document2.removeEventListener("touchend", end, true);
+    document2.removeEventListener("touchcancel", cancel, true);
   };
 }
 function noteTaskEditEditor(getDateFormat, open) {
@@ -6537,14 +6542,14 @@ function renderNoteTokens(root, dateFormat) {
       const first = segments.find((segment) => segment.from <= token.from && segment.to > token.from);
       const last = segments.find((segment) => segment.from < token.to && segment.to >= token.to);
       if (!first || !last) continue;
-      const document = item.ownerDocument;
-      const range = document.createRange();
+      const document2 = item.ownerDocument;
+      const range = document2.createRange();
       if (first.atomic) range.setStartBefore(first.node);
       else range.setStart(first.node, token.from - first.from);
       if (last.atomic) range.setEndAfter(last.node);
       else range.setEnd(last.node, token.to - last.from);
       const fragment = range.extractContents();
-      const win = document.win;
+      const win = document2.win;
       const pill = win.createFragment().createSpan({
         cls: tokenClass(token),
         title: token.description,
@@ -6554,7 +6559,7 @@ function renderNoteTokens(root, dateFormat) {
       if (link) {
         link.textContent = (_c = token.dateLabel) != null ? _c : link.textContent;
         pill.appendChild(link);
-        if (token.time) pill.appendChild(document.createTextNode(` ${token.time}`));
+        if (token.time) pill.appendChild(document2.createTextNode(` ${token.time}`));
       } else pill.textContent = token.kind === "deadline" ? token.label.replace(/^Due /, "") : token.label;
       range.insertNode(pill);
     }
@@ -7707,6 +7712,8 @@ var DEFAULT_SETTINGS = {
   taskMode: false,
   linkDates: false,
   dateFormat: "",
+  taskHoverHighlight: "none",
+  taskListRowHeightMultiplier: 1,
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: false,
   wrapKanbanTaskTitles: true,
@@ -7773,6 +7780,36 @@ var TaskManagerSettingTab = class extends import_obsidian17.PluginSettingTab {
         name: "New task position",
         desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
         render: (setting) => this.renderPositionSetting(setting)
+      },
+      {
+        name: "Task highlight on hover",
+        desc: "Highlight the task title, background, both, or neither when hovering over a task.",
+        render: (setting) => {
+          setting.addDropdown((dropdown) => dropdown.addOption("none", "None").addOption("title", "Title").addOption("background", "Background").addOption("all", "All").setValue(this.plugin.settings.taskHoverHighlight).onChange(async (value) => {
+            if (value !== "none" && value !== "title" && value !== "background" && value !== "all") return;
+            this.plugin.settings.taskHoverHighlight = value;
+            await this.plugin.saveSettings();
+            this.plugin.refreshViews();
+          }));
+        }
+      },
+      {
+        name: "Task height in list view",
+        desc: "Minimum row height as a multiplier of the editor font size (minimum 1.0; default 1.0). Wrapped content and controls can make rows taller.",
+        render: (setting) => {
+          setting.addText((text) => {
+            text.inputEl.type = "number";
+            text.inputEl.min = "1";
+            text.inputEl.step = "0.1";
+            text.setValue(String(this.plugin.settings.taskListRowHeightMultiplier)).onChange(async (value) => {
+              const height = Number(value);
+              if (!Number.isFinite(height) || height < 1) return;
+              this.plugin.settings.taskListRowHeightMultiplier = height;
+              await this.plugin.saveSettings();
+              this.plugin.refreshViews();
+            });
+          });
+        }
       },
       ...[
         ["wrapTaskTitles", "List"],
@@ -7943,9 +7980,16 @@ var TaskManagerPlugin = class extends import_obsidian18.Plugin {
     this.index.destroy();
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    if ((saved == null ? void 0 : saved.taskListRowHeightMultiplier) === void 0 && typeof (saved == null ? void 0 : saved.taskListRowHeight) === "number" && Number.isFinite(saved.taskListRowHeight)) {
+      const editorFontSize = typeof document === "undefined" ? 16 : parseFloat(getComputedStyle(document.body).getPropertyValue("--font-text-size")) || 16;
+      this.settings.taskListRowHeightMultiplier = Math.max(1, saved.taskListRowHeight / editorFontSize);
+    }
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
+    if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
+    if (!Number.isFinite(this.settings.taskListRowHeightMultiplier) || this.settings.taskListRowHeightMultiplier < 1) this.settings.taskListRowHeightMultiplier = DEFAULT_SETTINGS.taskListRowHeightMultiplier;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;

@@ -28,6 +28,7 @@ vi.mock("obsidian", () => ({
     control() {
       const row = this.row;
       return {
+        inputEl: { type: "", min: "", max: "", step: "" },
         setButtonText() { return this; },
         setDisabled(value: boolean) { row.disabled = value; return this; },
         onClick(click: typeof row.click) { row.click = click; return this; },
@@ -61,7 +62,7 @@ describe("settings compatibility", () => {
   it("provides searchable names and descriptions without rendering or saving during indexing", () => {
     const { tab, plugin } = setup();
     const definitions = tab.getSettingDefinitions();
-    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
+    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Task highlight on hover", "Task height in list view", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();

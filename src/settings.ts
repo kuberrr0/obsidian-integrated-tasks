@@ -51,6 +51,35 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
         render: (setting: Setting) => this.renderPositionSetting(setting)
       },
+      {
+        name: "Task highlight on hover",
+        desc: "Highlight the task title, background, both, or neither when hovering over a task.",
+        render: (setting: Setting) => { setting.addDropdown(dropdown => dropdown
+          .addOption("none", "None").addOption("title", "Title").addOption("background", "Background").addOption("all", "All")
+          .setValue(this.plugin.settings.taskHoverHighlight)
+          .onChange(async value => {
+            if (value !== "none" && value !== "title" && value !== "background" && value !== "all") return;
+            this.plugin.settings.taskHoverHighlight = value;
+            await this.plugin.saveSettings();
+            this.plugin.refreshViews();
+          })); }
+      },
+      {
+        name: "Task height in list view",
+        desc: "Minimum row height as a multiplier of the editor font size (minimum 1.0; default 1.0). Wrapped content and controls can make rows taller.",
+        render: (setting: Setting) => { setting.addText(text => {
+          text.inputEl.type = "number";
+          text.inputEl.min = "1";
+          text.inputEl.step = "0.1";
+          text.setValue(String(this.plugin.settings.taskListRowHeightMultiplier)).onChange(async value => {
+            const height = Number(value);
+            if (!Number.isFinite(height) || height < 1) return;
+            this.plugin.settings.taskListRowHeightMultiplier = height;
+            await this.plugin.saveSettings();
+            this.plugin.refreshViews();
+          });
+        }); }
+      },
       ...([
         ["wrapTaskTitles", "List"],
         ["wrapCalendarTaskTitles", "Calendar"],

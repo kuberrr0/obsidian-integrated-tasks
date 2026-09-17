@@ -107,6 +107,8 @@ export interface TaskManagerSettings {
   dateFormat: string;
   /** Format used before a pending date-token migration. */
   previousDateFormat?: string;
+  taskHoverHighlight: "none" | "title" | "background" | "all";
+  taskListRowHeightMultiplier: number;
   wrapTaskTitles: boolean;
   wrapCalendarTaskTitles: boolean;
   wrapKanbanTaskTitles: boolean;
@@ -120,6 +122,8 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   taskMode: false,
   linkDates: false,
   dateFormat: "",
+  taskHoverHighlight: "none",
+  taskListRowHeightMultiplier: 1.0,
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: false,
   wrapKanbanTaskTitles: true,

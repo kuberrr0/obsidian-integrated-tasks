@@ -146,9 +146,16 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<TaskManagerSettings> | null);
+    const saved = await this.loadData() as (Partial<TaskManagerSettings> & { taskListRowHeight?: number }) | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    if (saved?.taskListRowHeightMultiplier === undefined && typeof saved?.taskListRowHeight === "number" && Number.isFinite(saved.taskListRowHeight)) {
+      const editorFontSize = typeof document === "undefined" ? 16 : parseFloat(getComputedStyle(document.body).getPropertyValue("--font-text-size")) || 16;
+      this.settings.taskListRowHeightMultiplier = Math.max(1, saved.taskListRowHeight / editorFontSize);
+    }
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
+    if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
+    if (!Number.isFinite(this.settings.taskListRowHeightMultiplier) || this.settings.taskListRowHeightMultiplier < 1) this.settings.taskListRowHeightMultiplier = DEFAULT_SETTINGS.taskListRowHeightMultiplier;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
