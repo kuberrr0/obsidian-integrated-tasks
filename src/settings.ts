@@ -81,6 +81,17 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         }); }
       },
       ...([
+        ["showGroupTaskCounts", "Show task counts in group headings", "Show the number of tasks beside list group headings and Kanban column headings."],
+        ["showSubtaskCounts", "Show subtask counts", "Show completed and total subtask counts beside tasks that have subtasks."]
+      ] as const).map(([key, name, desc]) => ({
+        name, desc,
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
+          this.plugin.settings[key] = value;
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+        })); }
+      })),
+      ...([
         ["wrapTaskTitles", "List"],
         ["wrapCalendarTaskTitles", "Calendar"],
         ["wrapKanbanTaskTitles", "Kanban"]

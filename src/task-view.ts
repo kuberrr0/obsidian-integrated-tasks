@@ -283,7 +283,7 @@ export class TaskMainView extends ItemView {
       const title = column.target?.property && ["date", "scheduledDate", "deadline"].includes(column.target.property) && typeof column.target.value === "string"
         ? formatDate(column.target.value, this.plugin.dateFormat()) : column.title;
       header.createEl("h2", { text: title });
-      header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
+      if (this.plugin.settings.showGroupTaskCounts) header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
       this.renderGroupAddButton(header, title, column.target);
       if (column.target) this.listDrag?.group(section, column.target);
       this.renderTaskList(section, column.tasks, column.target);
@@ -297,7 +297,7 @@ export class TaskMainView extends ItemView {
       const group = tasks.filter((task) => task.sectionLine === heading.line);
       const section = container.createEl("section", { cls: "tm-section" });
       const title = section.createEl("h2", { text: heading.name });
-      title.createSpan({ cls: "tm-section-count", text: String(group.length) });
+      if (this.plugin.settings.showGroupTaskCounts) title.createSpan({ cls: "tm-section-count", text: String(group.length) });
       const target = { destination: `${path}#${heading.name}` };
       this.renderGroupAddButton(title, heading.name, target);
       this.listDrag?.group(section, target);
@@ -579,7 +579,7 @@ export class TaskMainView extends ItemView {
     const section = container.createEl("section", { cls: `tm-section${variant ? ` is-${variant}` : ""}` });
     const heading = section.createEl("h2");
     heading.createSpan({ text: title });
-    heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
+    if (this.plugin.settings.showGroupTaskCounts) heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
     this.renderGroupAddButton(heading, title, target);
     if (target) this.listDrag?.group(section, target);
     this.renderTaskList(section, tasks, target);
@@ -765,7 +765,7 @@ export class TaskMainView extends ItemView {
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
     title.addEventListener("click", () => this.editTask(task));
     renderDescriptionIndicator(primary, task.description);
-    if (task.childIds.length) {
+    if (this.plugin.settings.showSubtaskCounts && task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }

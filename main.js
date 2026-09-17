@@ -5533,7 +5533,7 @@ var TaskMainView = class extends import_obsidian10.ItemView {
       const header = section.createDiv({ cls: "tm-kanban-column-header" });
       const title = ((_a = column.target) == null ? void 0 : _a.property) && ["date", "scheduledDate", "deadline"].includes(column.target.property) && typeof column.target.value === "string" ? formatDate(column.target.value, this.plugin.dateFormat()) : column.title;
       header.createEl("h2", { text: title });
-      header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
+      if (this.plugin.settings.showGroupTaskCounts) header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
       this.renderGroupAddButton(header, title, column.target);
       if (column.target) (_b = this.listDrag) == null ? void 0 : _b.group(section, column.target);
       this.renderTaskList(section, column.tasks, column.target);
@@ -5547,7 +5547,7 @@ var TaskMainView = class extends import_obsidian10.ItemView {
       const group = tasks.filter((task) => task.sectionLine === heading.line);
       const section = container.createEl("section", { cls: "tm-section" });
       const title = section.createEl("h2", { text: heading.name });
-      title.createSpan({ cls: "tm-section-count", text: String(group.length) });
+      if (this.plugin.settings.showGroupTaskCounts) title.createSpan({ cls: "tm-section-count", text: String(group.length) });
       const target = { destination: `${path}#${heading.name}` };
       this.renderGroupAddButton(title, heading.name, target);
       (_a = this.listDrag) == null ? void 0 : _a.group(section, target);
@@ -5845,7 +5845,7 @@ var TaskMainView = class extends import_obsidian10.ItemView {
     const section = container.createEl("section", { cls: `tm-section${variant ? ` is-${variant}` : ""}` });
     const heading = section.createEl("h2");
     heading.createSpan({ text: title });
-    heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
+    if (this.plugin.settings.showGroupTaskCounts) heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
     this.renderGroupAddButton(heading, title, target);
     if (target) (_a = this.listDrag) == null ? void 0 : _a.group(section, target);
     this.renderTaskList(section, tasks, target);
@@ -6043,7 +6043,7 @@ var TaskMainView = class extends import_obsidian10.ItemView {
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
     title.addEventListener("click", () => this.editTask(task));
     renderDescriptionIndicator(primary, task.description);
-    if (task.childIds.length) {
+    if (this.plugin.settings.showSubtaskCounts && task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child) => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
@@ -7753,6 +7753,8 @@ var DEFAULT_SETTINGS = {
   taskMode: false,
   linkDates: false,
   dateFormat: "",
+  showGroupTaskCounts: false,
+  showSubtaskCounts: false,
   taskHoverHighlight: "none",
   taskListRowHeightMultiplier: 1,
   wrapTaskTitles: true,
@@ -7852,6 +7854,20 @@ var TaskManagerSettingTab = class extends import_obsidian18.PluginSettingTab {
           });
         }
       },
+      ...[
+        ["showGroupTaskCounts", "Show task counts in group headings", "Show the number of tasks beside list group headings and Kanban column headings."],
+        ["showSubtaskCounts", "Show subtask counts", "Show completed and total subtask counts beside tasks that have subtasks."]
+      ].map(([key, name, desc]) => ({
+        name,
+        desc,
+        render: (setting) => {
+          setting.addToggle((toggle) => toggle.setValue(this.plugin.settings[key]).onChange(async (value) => {
+            this.plugin.settings[key] = value;
+            await this.plugin.saveSettings();
+            this.plugin.refreshViews();
+          }));
+        }
+      })),
       ...[
         ["wrapTaskTitles", "List"],
         ["wrapCalendarTaskTitles", "Calendar"],
@@ -8029,6 +8045,8 @@ var TaskManagerPlugin = class extends import_obsidian19.Plugin {
     }
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
+    this.settings.showGroupTaskCounts = this.settings.showGroupTaskCounts === true;
+    this.settings.showSubtaskCounts = this.settings.showSubtaskCounts === true;
     if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
     if (!Number.isFinite(this.settings.taskListRowHeightMultiplier) || this.settings.taskListRowHeightMultiplier < 1) this.settings.taskListRowHeightMultiplier = DEFAULT_SETTINGS.taskListRowHeightMultiplier;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
