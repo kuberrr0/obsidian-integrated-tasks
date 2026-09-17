@@ -1,3 +1,4 @@
+import { renderDescriptionIndicator } from "./task-description-indicator";
 import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
@@ -75,7 +76,8 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     const time = calendarTime(task);
     const card = parent.createEl("button", { cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
       attr: { title: `${task.title}${task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` } });
-    card.createSpan({ cls: "tm-calendar-task-title", text: `${time ? `${time} ` : ""}${task.title}` });
+    const title = card.createSpan({ cls: "tm-calendar-task-title", text: `${time ? `${time} ` : ""}${task.title}` });
+    renderDescriptionIndicator(title, task.description);
     card.draggable = true;
     card.addEventListener("click", event => {
       if (!options.bind || (event.target as HTMLElement).closest(".tm-calendar-task-title")) {

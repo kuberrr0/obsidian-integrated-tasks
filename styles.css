@@ -1119,3 +1119,13 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-main-view:not(.is-kanban-view):not(.is-calendar-view) .tm-task-row:not(.tm-project-row) {
   min-height: calc(var(--font-text-size, 16px) * var(--tm-task-row-height-multiplier, 1.0));
 }
+
+.tm-description-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+.tm-description-indicator svg { width: 1em; height: 1em; }
+.tm-calendar-task-title .tm-description-indicator { margin-inline-start: 0.35em; }

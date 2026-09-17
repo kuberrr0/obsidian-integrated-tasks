@@ -1,3 +1,4 @@
+import { renderDescriptionIndicator } from "./task-description-indicator";
 import type { ProjectDraft } from "./project-creator";
 import { cloneTaskFilters } from "./task-filters";
 import { renderPropertyFilter } from "./filter-editor";
@@ -763,6 +764,7 @@ export class TaskMainView extends ItemView {
     this.listDrag?.row(row, primary, task, target);
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
     title.addEventListener("click", () => this.editTask(task));
+    renderDescriptionIndicator(primary, task.description);
     if (task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
