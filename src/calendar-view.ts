@@ -2,7 +2,7 @@ import { renderDescriptionIndicator } from "./task-description-indicator";
 import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
-import { calendarDate, calendarDays, calendarTime, localDate, minuteTime, resizedRange, selectionPreset, shiftCalendar, timeMinutes, type CalendarPreset, type CalendarScope } from "./calendar";
+import { SLOT_MINUTES, calendarDate, calendarDays, calendarTime, localDate, minuteTime, resizedRange, selectionPreset, shiftCalendar, timeMinutes, type CalendarPreset, type CalendarScope } from "./calendar";
 import type { Task } from "./types";
 
 export interface CalendarOptions {
@@ -30,6 +30,7 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     byDate.set(key, group);
   }
   let dragged: Task | undefined;
+  let grabOffsetMinutes = 0;
   let moving = false;
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]] as const) {
@@ -88,6 +89,9 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     card.addEventListener("dragstart", event => {
       options.dragStart?.(task);
       dragged = task;
+      grabOffsetMinutes = card.hasClass("is-timed")
+        ? Math.max(0, (event.clientY - card.getBoundingClientRect().top) / parent.getBoundingClientRect().height * 1440)
+        : 0;
       event.stopPropagation();
       if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); }
     });
@@ -127,7 +131,11 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       const button = lane.createEl("button", { cls: "tm-calendar-slot", attr: { "aria-label": `Create task on ${day} at ${minuteTime(slot * 15)}` } });
       button.addEventListener("click", event => { if (event.detail === 0) options.create(selectionPreset(day, slot, slot)); });
     }
-    const slotAt = (clientY: number): number => Math.max(0, Math.min(95, Math.floor((clientY - lane.getBoundingClientRect().top) / 12)));
+    const minutesAt = (clientY: number): number => {
+      const bounds = lane.getBoundingClientRect();
+      return (clientY - bounds.top) / bounds.height * 1440;
+    };
+    const slotAt = (clientY: number): number => Math.max(0, Math.min(95, Math.floor(minutesAt(clientY) / SLOT_MINUTES)));
     let start: number | undefined;
     let selection: HTMLElement | undefined;
     const paint = (end: number): void => {
@@ -155,7 +163,10 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       options.create(preset);
     });
     lane.addEventListener("pointercancel", () => { start = undefined; selection?.remove(); });
-    dropTarget(lane, day, event => minuteTime(slotAt(event.clientY) * 15));
+    dropTarget(lane, day, event => {
+      const start = Math.round((minutesAt(event.clientY) - grabOffsetMinutes) / SLOT_MINUTES) * SLOT_MINUTES;
+      return minuteTime(Math.max(0, Math.min(1440 - SLOT_MINUTES, start)));
+    });
     // Separate columns keep overlapping tasks individually draggable and clickable.
     const timed = tasks.filter(task => calendarTime(task)).sort((a, b) => timeMinutes(calendarTime(a)!) - timeMinutes(calendarTime(b)!));
     const ends: number[] = [];
@@ -225,7 +236,7 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
           if (pointer !== event.pointerId) return;
           event.stopPropagation();
           if (Math.abs(event.clientY - initialY) < 3) return;
-          update((event.clientY - lane.getBoundingClientRect().top) / 12 * 15);
+          update(minutesAt(event.clientY));
         });
         handle.addEventListener("pointerup", event => {
           if (pointer !== event.pointerId) return;

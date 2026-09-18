@@ -5014,6 +5014,7 @@ function renderCalendar(container, options) {
     byDate.set(key, group);
   }
   let dragged;
+  let grabOffsetMinutes = 0;
   let moving = false;
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
@@ -5076,6 +5077,7 @@ function renderCalendar(container, options) {
       var _a3;
       (_a3 = options.dragStart) == null ? void 0 : _a3.call(options, task);
       dragged = task;
+      grabOffsetMinutes = card.hasClass("is-timed") ? Math.max(0, (event.clientY - card.getBoundingClientRect().top) / parent.getBoundingClientRect().height * 1440) : 0;
       event.stopPropagation();
       if (event.dataTransfer) {
         event.dataTransfer.effectAllowed = "move";
@@ -5126,7 +5128,11 @@ function renderCalendar(container, options) {
         if (event.detail === 0) options.create(selectionPreset(day, slot, slot));
       });
     }
-    const slotAt = (clientY) => Math.max(0, Math.min(95, Math.floor((clientY - lane.getBoundingClientRect().top) / 12)));
+    const minutesAt = (clientY) => {
+      const bounds = lane.getBoundingClientRect();
+      return (clientY - bounds.top) / bounds.height * 1440;
+    };
+    const slotAt = (clientY) => Math.max(0, Math.min(95, Math.floor(minutesAt(clientY) / SLOT_MINUTES)));
     let start;
     let selection;
     const paint = (end) => {
@@ -5157,7 +5163,10 @@ function renderCalendar(container, options) {
       start = void 0;
       selection == null ? void 0 : selection.remove();
     });
-    dropTarget(lane, day, (event) => minuteTime(slotAt(event.clientY) * 15));
+    dropTarget(lane, day, (event) => {
+      const start2 = Math.round((minutesAt(event.clientY) - grabOffsetMinutes) / SLOT_MINUTES) * SLOT_MINUTES;
+      return minuteTime(Math.max(0, Math.min(1440 - SLOT_MINUTES, start2)));
+    });
     const timed = tasks.filter((task) => calendarTime(task)).sort((a, b) => timeMinutes(calendarTime(a)) - timeMinutes(calendarTime(b)));
     const ends = [];
     const placements = timed.map((task) => {
@@ -5242,7 +5251,7 @@ function renderCalendar(container, options) {
           if (pointer !== event.pointerId) return;
           event.stopPropagation();
           if (Math.abs(event.clientY - initialY) < 3) return;
-          update((event.clientY - lane.getBoundingClientRect().top) / 12 * 15);
+          update(minutesAt(event.clientY));
         });
         handle.addEventListener("pointerup", (event) => {
           if (pointer !== event.pointerId) return;
