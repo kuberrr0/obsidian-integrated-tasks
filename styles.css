@@ -788,7 +788,7 @@ button.tm-filter-toggle { display: flex; align-items: center; }
 button.tm-calendar-date { border: 0; box-shadow: none; background: transparent; padding: 3px 7px; }
 .tm-calendar button.tm-calendar-task { border-radius: 4px; display: block; width: 100%; height: auto; min-height: 12px; padding: 0 4px; margin: 2px 0; box-sizing: border-box; line-height: 10px; text-align: left; white-space: normal; overflow-wrap: anywhere; box-shadow: none; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); font-size: 10px; cursor: grab; }
 button.tm-calendar-task.is-completed { text-decoration: line-through; opacity: .65; }
-.tm-calendar .is-drop-target { outline: 2px solid var(--interactive-accent); outline-offset: -2px; background-color: var(--background-modifier-hover); }
+.tm-calendar:is(.is-month-scope, .is-year-scope) .is-drop-target { outline: 2px solid var(--interactive-accent); outline-offset: -2px; background-color: var(--background-modifier-hover); }
 .tm-calendar-grid.is-week .tm-calendar-cell { min-height: 320px; }
 .tm-calendar-year { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; }
 .tm-calendar-year h3 { margin: 0 0 8px; }
