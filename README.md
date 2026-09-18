@@ -30,6 +30,8 @@ The sidebar uses a compact file-style tree. Its icon toolbar provides **Create t
 
 Use **Create new smart list** to save a named set of filters (including AND/OR conditions), sorting, and grouping. Saved lists appear under **Smart Lists** in the sidebar and update as tasks change. With a saved list open, **Edit smart list** changes its definition and **Delete smart list** removes the saved list without deleting tasks. Smart lists are stored in the plugin’s workspace settings.
 
+Open **Dashboard** from the sidebar or run **Open Task Dashboard** for Today and Upcoming cards in a 40/60 split, with Projects and Calendar cards in a 40/60 split below. Each card has an accent-colored border and a title above it. Cards stack on narrow screens.
+
 Today and Upcoming use the earlier of a task’s scheduled date and deadline. Undated tasks remain available in Inbox, All Tasks, and their source note’s task view.
 
 Search task titles, descriptions, and tags. Filter by title, status, scheduled date or time, deadline, duration, priority, tags, source note, or section. Filters support matching values, missing properties, and date or duration ranges where applicable. After completing a condition, use the inline AND / OR control to add another condition for that property. AND is evaluated before OR; separate property filters must all match.

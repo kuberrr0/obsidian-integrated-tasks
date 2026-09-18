@@ -1,3 +1,4 @@
+import { renderDashboard } from "./dashboard-view";
 import { renderDescriptionIndicator } from "./task-description-indicator";
 import type { ProjectDraft } from "./project-creator";
 import { cloneTaskFilters } from "./task-filters";
@@ -26,6 +27,7 @@ import type { TaskFilter, Project, ProjectProperties, Task, TaskQuery, TaskViewM
 export const TASK_MAIN_VIEW = "task-manager-main";
 
 const TITLES: Record<TaskViewMode, string> = {
+  dashboard: "Task Dashboard",
   inbox: "Inbox",
   today: "Today",
   upcoming: "Upcoming",
@@ -141,15 +143,21 @@ export class TaskMainView extends ItemView {
     this.visibleTasks = [];
     this.selectionRows.clear();
     container.addClass("tm-main-view");
+    container.classList.toggle("is-dashboard-view", this.state.mode === "dashboard");
     const hover = this.plugin.settings.taskHoverHighlight ?? "none";
     container.classList.toggle("tm-hover-title", hover === "title" || hover === "all");
     container.classList.toggle("tm-hover-background", hover === "background" || hover === "all");
     container.style.setProperty("--tm-task-row-height-multiplier", String(this.plugin.settings.taskListRowHeightMultiplier ?? 1.0));
-    const wrapTitles = this.layout === "calendar" ? this.plugin.settings.wrapCalendarTaskTitles
+    const wrapTitles = this.state.mode === "dashboard" ? this.plugin.settings.wrapTaskTitles : this.layout === "calendar" ? this.plugin.settings.wrapCalendarTaskTitles
       : this.layout === "kanban" ? this.plugin.settings.wrapKanbanTaskTitles : this.plugin.settings.wrapTaskTitles;
     container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
+    if (this.state.mode === "dashboard") {
+      container.classList.remove("is-calendar-view", "is-kanban-view");
+      this.renderTaskDashboard(container);
+      return;
+    }
     if (this.state.mode === "smartLists" && !this.state.smartListId) {
       container.classList.remove("is-calendar-view", "is-kanban-view");
       this.renderSmartLists(container);
@@ -176,7 +184,52 @@ export class TaskMainView extends ItemView {
     this.renderTaskResults();
   }
 
+  private renderTaskDashboard(container: HTMLElement): void {
+    this.renderSelectionBar(container);
+    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), true, task => this.prepareDrag(task));
+    const tasks = (mode: "today" | "upcoming" | "all"): Task[] => this.plugin.index.query({ mode, showCompleted: false });
+    const today = tasks("today");
+    const upcoming = tasks("upcoming");
+    this.selection.retain([...today, ...upcoming]);
+    renderDashboard(container, {
+      today: card => {
+        if (today.length) this.renderTaskList(card, today);
+        else card.createDiv({ cls: "tm-empty", text: "No tasks for today" });
+      },
+      upcoming: card => {
+        if (upcoming.length) this.renderTaskList(card, upcoming);
+        else card.createDiv({ cls: "tm-empty", text: "No upcoming tasks" });
+      },
+      projects: card => {
+        const projects = this.plugin.index.projects().filter(project => !project.archived);
+        if (projects.length) this.renderProjectGroup(card, "Active", projects);
+        else card.createDiv({ cls: "tm-empty", text: "No projects yet" });
+      },
+      calendar: card => {
+        card.classList.toggle("tm-dashboard-calendar-wrap", this.plugin.settings.wrapCalendarTaskTitles);
+        renderCalendar(card, {
+          anchor: this.calendarAnchor, scope: this.calendarScope, tasks: tasks("all"), dateFormat: this.plugin.dateFormat(),
+          navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.render(); },
+          create: preset => this.plugin.openEditor({ mode: "all", preset }),
+          edit: task => this.plugin.openEditor({ mode: "all", task }),
+          move: async (task, date, time) => {
+            await this.plugin.store.update(task, rescheduledDraft(task, date, time));
+            await this.plugin.index.refreshPath(task.path);
+          },
+          resize: async (task, date, time, duration) => {
+            await this.plugin.store.update(task, { ...rescheduledDraft(task, date, time), durationMinutes: duration });
+            await this.plugin.index.refreshPath(task.path);
+          }
+        });
+      },
+      createTask: mode => this.plugin.openEditor({ mode }),
+      createProject: () => this.plugin.openProjectCreator()
+    });
+    this.updateSelection();
+  }
+
   private renderTaskResults(): void {
+    if (this.state.mode === "dashboard") { this.render(); return; }
     const container = this.taskResults;
     if (!container) return;
     container.empty();

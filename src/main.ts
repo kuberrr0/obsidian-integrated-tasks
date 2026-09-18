@@ -52,6 +52,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
 
     const commands: Array<[TaskViewMode, string, string]> = [
+      ["dashboard", "Open Task Dashboard", "open-task-dashboard"],
       ["inbox", "Open Inbox", "open-inbox"],
       ["today", "Open Today", "open-today"],
       ["upcoming", "Open Upcoming", "open-upcoming"],
@@ -71,6 +72,7 @@ export default class TaskManagerPlugin extends Plugin {
             const view = this.app.workspace.getActiveViewOfType(TaskMainView);
             if (!view) return false;
             const state = view.getState();
+            if (state.mode === "dashboard") return false;
             const isProjects = state.mode === "projects" && !view.pagePath;
             if (isProjects !== (scope === "projects")) return false;
             if (!checking) {

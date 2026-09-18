@@ -1140,3 +1140,38 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-gantt-today[hidden] { display: none; }
 .tm-gantt-track .tm-gantt-jump,
 .tm-gantt-track .tm-gantt-undated { position: sticky; left: calc(var(--tm-gantt-label) + 8px); }
+
+/* Task dashboard: both rows use a 40/60 split. */
+.workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view.is-dashboard-view {
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 16px;
+}
+.is-dashboard-view > .tm-selection-bar { flex-shrink: 0; }
+.tm-dashboard { flex: 1; display: grid; grid-template-rows: minmax(0, 2fr) minmax(0, 3fr); gap: 20px; min-width: 0; min-height: 0; }
+.tm-dashboard-row { display: grid; gap: 20px; min-width: 0; min-height: 0; }
+.tm-dashboard-tasks { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+.tm-dashboard-planning { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+.tm-dashboard-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.tm-dashboard-heading { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.tm-dashboard-heading h2 { margin: 0; font-size: var(--font-ui-large); color: var(--text-accent); }
+.tm-dashboard-card { flex: 1; min-width: 0; min-height: 0; padding: 16px; border: 1px solid var(--interactive-accent); border-radius: 12px; overflow: auto; }
+.tm-dashboard-card .tm-empty { padding: 24px 8px; }
+.tm-dashboard-projects .tm-section > h2 { display: none; }
+.tm-dashboard-projects .tm-project-row .tm-task-content { display: flex; flex-wrap: wrap; gap: 6px; }
+.tm-dashboard-projects .tm-task-primary { flex-basis: 100%; }
+.tm-dashboard-projects .tm-project-metadata { justify-content: flex-start; }
+.tm-dashboard-card .tm-calendar-toolbar { flex-wrap: wrap; flex-shrink: 0; gap: 4px; margin-bottom: 8px; }
+.tm-dashboard-calendar > .tm-dashboard-card { overflow: hidden; }
+.tm-dashboard-calendar .tm-calendar { height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.tm-dashboard-calendar .tm-calendar-day-scroll { flex: 1; min-height: 0; max-height: none; }
+.tm-dashboard-calendar .tm-calendar-allday,
+.tm-dashboard-calendar .tm-calendar-unscheduled { flex-shrink: 0; max-height: 20%; overflow-y: auto; }
+.tm-dashboard-calendar .tm-calendar-unscheduled { margin-top: 8px; }
+.tm-dashboard-calendar .tm-calendar-unscheduled h3 { margin: 0 0 4px; font-size: var(--font-ui-small); }
+.tm-dashboard-calendar .tm-calendar-weekday { padding: 2px; }
+.tm-dashboard-calendar .is-month-scope .tm-calendar-cell { min-height: 0; padding: 1px; }
+.tm-dashboard-calendar .is-month-scope .tm-calendar-date { min-height: 0; height: 20px; padding: 0 4px; font-size: var(--font-ui-small); }
+.tm-main-view .tm-dashboard-calendar-wrap .tm-calendar .tm-calendar-task-title { white-space: normal; overflow-wrap: anywhere; }
+.tm-main-view .tm-dashboard-card:not(.tm-dashboard-calendar-wrap) .tm-calendar .tm-calendar-task-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+@media (max-width: 900px) {
+  .tm-dashboard-tasks, .tm-dashboard-planning { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+}

@@ -5,6 +5,7 @@ import { taskTagSummaries } from "./task-tags";
 
 export const TASK_NAV_VIEW = "task-manager-navigation";
 const NAV_ITEMS: Array<{ mode: TaskViewMode; label: string }> = [
+  { mode: "dashboard", label: "Dashboard" },
   { mode: "inbox", label: "Inbox" }, { mode: "today", label: "Today" },
   { mode: "upcoming", label: "Upcoming" }, { mode: "all", label: "All Tasks" },
   { mode: "projects", label: "Projects" }, { mode: "tags", label: "Tags" },

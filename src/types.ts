@@ -41,7 +41,7 @@ export interface Project extends ProjectProperties {
   archived: boolean;
 }
 
-export type TaskViewMode = "inbox" | "today" | "upcoming" | "all" | "projects" | "tags" | "smartLists";
+export type TaskViewMode = "dashboard" | "inbox" | "today" | "upcoming" | "all" | "projects" | "tags" | "smartLists";
 
 export interface TaskViewState {
   smartListId?: string;
