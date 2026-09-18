@@ -111,7 +111,7 @@ function selectionView() {
   const bulkDrop = vi.fn().mockResolvedValue([]);
   const openEditor = vi.fn();
   const openBulkEditor = vi.fn();
-  const plugin = { openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
+  const plugin = { settings: { hiddenListTaskProperties: [] as string[], hiddenKanbanTaskProperties: [] as string[] }, openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
   const view = new TaskMainView({} as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   const internals = view as unknown as {
@@ -149,7 +149,7 @@ function selectionView() {
     };
     return { row, classes, click, contextmenu, pointerdown };
   });
-  return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor };
+  return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor, plugin };
 }
 
 it("left-click opens task properties for a selection and the task editor otherwise", () => {
@@ -530,4 +530,19 @@ it("edits the task on the current editor line only when task mode is off", () =>
   plugin.settings.taskMode = false;
   expect(check.editCurrentLineTask(false, editor, null)).toBe(false);
   expect(open).toHaveBeenCalledOnce();
+});
+
+it.each(["list", "kanban", "dashboard"])("applies property visibility to %s without hiding the remaining date/time component", layout => {
+  const { view, internals, tasks, plugin } = selectionView();
+  Object.assign(view, { layout: layout === "list" ? "list" : "kanban", grouping: "none" });
+  if (layout === "dashboard") Object.assign(view, { state: { mode: "dashboard" } });
+  plugin.settings.hiddenListTaskProperties = ["tags", "scheduledDate", "deadlineTime"];
+  plugin.settings.hiddenKanbanTaskProperties = ["priority", "scheduledTime", "deadline"];
+  const labels: string[] = [];
+  internals.badge = (_parent, _icon, text) => {
+    labels.push(String(text));
+    return { setAttribute: vi.fn(), addEventListener: vi.fn() };
+  };
+  internals.renderProperties({}, { ...tasks[0], scheduledDate: "2026-09-18", scheduledTime: "09:00", deadline: "2026-09-20", deadlineTime: "10:00", priority: 1, tags: ["work"] });
+  expect(labels).toEqual(layout === "kanban" ? ["2026-09-18", "10:00", "work"] : ["09:00", "2026-09-20", "P1"]);
 });

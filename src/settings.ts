@@ -100,6 +100,28 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           this.plugin.refreshViews();
         })); }
       })),
+      ...([ ["hiddenListTaskProperties", "List"], ["hiddenKanbanTaskProperties", "Kanban"] ] as const).map(([key, layout]) => ({
+        name: `Task properties — ${layout}`,
+        desc: `Choose properties shown in ${layout.toLowerCase()} layout. Properties implied by the current view or grouping remain hidden.`,
+        render: (setting: Setting) => {
+          setting.settingEl.addClass("tm-property-visibility-setting");
+          const choices = setting.controlEl.createDiv({ cls: "tm-property-visibility-choices", attr: { role: "group", "aria-label": `Task properties — ${layout}` } });
+          for (const [property, label] of [
+            ["source", "Project / source note"], ["scheduledDate", "Scheduled date"], ["scheduledTime", "Scheduled time"],
+            ["deadline", "Deadline date"], ["deadlineTime", "Deadline time"], ["duration", "Duration"],
+            ["priority", "Priority"], ["tags", "Tags"]] as const) {
+            const choice = choices.createEl("label");
+            const checkbox = choice.createEl("input", { type: "checkbox" });
+            checkbox.checked = !(this.plugin.settings[key] ?? []).includes(property);
+            choice.createSpan({ text: label });
+            checkbox.addEventListener("change", () => {
+              const hidden = (this.plugin.settings[key] ?? []).filter(item => item !== property);
+              this.plugin.settings[key] = checkbox.checked ? hidden : [...hidden, property];
+              void this.plugin.saveSettings().then(() => this.plugin.refreshViews());
+            });
+          }
+        }
+      })),
       ...([
         ["wrapTaskTitles", "List"],
         ["wrapCalendarTaskTitles", "Calendar"],

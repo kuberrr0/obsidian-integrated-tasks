@@ -174,7 +174,7 @@ Drag a selected task to move the selection together, including subtasks and desc
 
 ## Settings and commands
 
-Settings let you choose your **Inbox note**, toggle **Task mode** and **Link dates**, set **New task position** to Top or Bottom, and control title wrapping separately for List, Calendar, and Kanban.
+Settings let you choose your **Inbox note**, toggle **Task mode** and **Link dates**, set **New task position** to Top or Bottom, and control title wrapping separately for List, Calendar, and Kanban. Separate List and Kanban checkbox groups control project/source note, scheduled date and time, deadline date and time, duration, priority, and tags. All are enabled by default; properties implied by the current view or grouping remain hidden. Dashboard task lists follow the List settings.
 
 From the command palette, you can open any main view, **Create new task**, **Convert to project**, **Toggle task mode**, **Edit task properties**, and switch task or project layouts. **Search task in list** focuses search in an active project task view while Task mode is on. Assign hotkeys through Obsidian’s Hotkeys settings.
 

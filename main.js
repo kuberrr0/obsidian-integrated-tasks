@@ -6138,6 +6138,11 @@ var TaskMainView = class extends import_obsidian11.ItemView {
     }
     return depth;
   }
+  showTaskProperty(property) {
+    const kanban = this.state.mode !== "dashboard" && this.layout === "kanban";
+    const hidden = kanban ? this.plugin.settings.hiddenKanbanTaskProperties : this.plugin.settings.hiddenListTaskProperties;
+    return !(hidden != null ? hidden : []).includes(property);
+  }
   get metadataGrouping() {
     if (this.layout === "calendar") return "none";
     if (this.grouping !== "default") return this.grouping;
@@ -6180,7 +6185,7 @@ var TaskMainView = class extends import_obsidian11.ItemView {
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const implicitSource = (_b = this.taskSourcePath) != null ? _b : this.state.mode === "inbox" ? this.plugin.settings.inboxPath : void 0;
-    if (task.path !== implicitSource && this.metadataGrouping !== "source") {
+    if (this.showTaskProperty("source") && task.path !== implicitSource && this.metadataGrouping !== "source") {
       const source = this.badge(metadata, "target", task.path.replace(/\.md$/i, ""));
       source.addClass("tm-source");
       source.setAttribute("title", task.path);
@@ -6227,6 +6232,7 @@ var TaskMainView = class extends import_obsidian11.ItemView {
     const grouping = "completed" in properties ? this.metadataGrouping : "none";
     const propertyBadge = (property, icon, text, variant) => {
       if (grouping === property && property !== "scheduledDate" && property !== "deadline" || property === "durationMinutes" && grouping === "duration") return;
+      if ("completed" in properties && property !== "endDate" && property !== "scheduledDate" && property !== "deadline" && !this.showTaskProperty(property === "durationMinutes" ? "duration" : property)) return;
       const badge = this.badge(parent, icon, text, variant);
       const label = { scheduledDate: "scheduled date and time", endDate: "end date", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
       if ("completed" in properties && property !== "endDate") {
@@ -6240,7 +6246,11 @@ var TaskMainView = class extends import_obsidian11.ItemView {
     const dateText = (field2, timeField) => {
       const date = properties[field2];
       const hideDate = grouping === field2 || grouping === "date" && "completed" in properties && date === actionDate(properties);
-      return [date && !hideDate ? formatDate(date, this.plugin.dateFormat()) : "", grouping !== timeField ? properties[timeField] : ""].filter(Boolean).join(" ");
+      const isTask = "completed" in properties;
+      return [
+        date && !hideDate && (!isTask || this.showTaskProperty(field2)) ? formatDate(date, this.plugin.dateFormat()) : "",
+        grouping !== timeField && (!isTask || this.showTaskProperty(timeField)) ? properties[timeField] : ""
+      ].filter(Boolean).join(" ");
     };
     const scheduled = dateText("scheduledDate", "scheduledTime");
     if (scheduled) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, scheduled, incompleteTask && properties.scheduledDate && properties.scheduledDate < todayIso() ? "danger" : void 0);
@@ -7924,6 +7934,8 @@ var DEFAULT_SETTINGS = {
   showSubtaskCounts: false,
   taskHoverHighlight: "none",
   taskListRowHeightMultiplier: 1,
+  hiddenListTaskProperties: [],
+  hiddenKanbanTaskProperties: [],
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: false,
   wrapKanbanTaskTitles: true,
@@ -8043,6 +8055,36 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
             await this.plugin.saveSettings();
             this.plugin.refreshViews();
           }));
+        }
+      })),
+      ...[["hiddenListTaskProperties", "List"], ["hiddenKanbanTaskProperties", "Kanban"]].map(([key, layout]) => ({
+        name: `Task properties \u2014 ${layout}`,
+        desc: `Choose properties shown in ${layout.toLowerCase()} layout. Properties implied by the current view or grouping remain hidden.`,
+        render: (setting) => {
+          var _a;
+          setting.settingEl.addClass("tm-property-visibility-setting");
+          const choices = setting.controlEl.createDiv({ cls: "tm-property-visibility-choices", attr: { role: "group", "aria-label": `Task properties \u2014 ${layout}` } });
+          for (const [property, label] of [
+            ["source", "Project / source note"],
+            ["scheduledDate", "Scheduled date"],
+            ["scheduledTime", "Scheduled time"],
+            ["deadline", "Deadline date"],
+            ["deadlineTime", "Deadline time"],
+            ["duration", "Duration"],
+            ["priority", "Priority"],
+            ["tags", "Tags"]
+          ]) {
+            const choice = choices.createEl("label");
+            const checkbox = choice.createEl("input", { type: "checkbox" });
+            checkbox.checked = !((_a = this.plugin.settings[key]) != null ? _a : []).includes(property);
+            choice.createSpan({ text: label });
+            checkbox.addEventListener("change", () => {
+              var _a2;
+              const hidden = ((_a2 = this.plugin.settings[key]) != null ? _a2 : []).filter((item) => item !== property);
+              this.plugin.settings[key] = checkbox.checked ? hidden : [...hidden, property];
+              void this.plugin.saveSettings().then(() => this.plugin.refreshViews());
+            });
+          }
         }
       })),
       ...[
@@ -8230,6 +8272,10 @@ var TaskManagerPlugin = class extends import_obsidian20.Plugin {
     this.settings.showSubtaskCounts = this.settings.showSubtaskCounts === true;
     if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
     if (!Number.isFinite(this.settings.taskListRowHeightMultiplier) || this.settings.taskListRowHeightMultiplier < 1) this.settings.taskListRowHeightMultiplier = DEFAULT_SETTINGS.taskListRowHeightMultiplier;
+    for (const key of ["hiddenListTaskProperties", "hiddenKanbanTaskProperties"]) {
+      const hidden = this.settings[key];
+      this.settings[key] = Array.isArray(hidden) ? hidden.filter((property) => ["source", "scheduledDate", "scheduledTime", "deadline", "deadlineTime", "duration", "priority", "tags"].includes(property)) : [];
+    }
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;

@@ -164,6 +164,11 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings.showSubtaskCounts = this.settings.showSubtaskCounts === true;
     if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
     if (!Number.isFinite(this.settings.taskListRowHeightMultiplier) || this.settings.taskListRowHeightMultiplier < 1) this.settings.taskListRowHeightMultiplier = DEFAULT_SETTINGS.taskListRowHeightMultiplier;
+    for (const key of ["hiddenListTaskProperties", "hiddenKanbanTaskProperties"] as const) {
+      const hidden = this.settings[key];
+      this.settings[key] = Array.isArray(hidden) ? hidden.filter(property =>
+        ["source", "scheduledDate", "scheduledTime", "deadline", "deadlineTime", "duration", "priority", "tags"].includes(property)) : [];
+    }
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;

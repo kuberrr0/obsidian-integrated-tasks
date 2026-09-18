@@ -22,7 +22,7 @@ import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { formatDuration } from "./parser";
 import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
-import type { TaskFilter, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
+import type { TaskProperty, TaskFilter, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
@@ -789,6 +789,12 @@ export class TaskMainView extends ItemView {
     return depth;
   }
 
+  private showTaskProperty(property: TaskProperty): boolean {
+    const kanban = this.state.mode !== "dashboard" && this.layout === "kanban";
+    const hidden = kanban ? this.plugin.settings.hiddenKanbanTaskProperties : this.plugin.settings.hiddenListTaskProperties;
+    return !(hidden ?? []).includes(property);
+  }
+
   private get metadataGrouping(): TaskGrouping {
     if (this.layout === "calendar") return "none";
     if (this.grouping !== "default") return this.grouping;
@@ -829,7 +835,7 @@ export class TaskMainView extends ItemView {
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
-    if (task.path !== implicitSource && this.metadataGrouping !== "source") {
+    if (this.showTaskProperty("source") && task.path !== implicitSource && this.metadataGrouping !== "source") {
       const source = this.badge(metadata, "target", task.path.replace(/\.md$/i, ""));
       source.addClass("tm-source");
       source.setAttribute("title", task.path);
@@ -870,6 +876,8 @@ export class TaskMainView extends ItemView {
     const grouping = "completed" in properties ? this.metadataGrouping : "none";
     const propertyBadge = (property: TaskEditorProperty | "endDate", icon: string, text: string, variant?: string): void => {
       if ((grouping === property && property !== "scheduledDate" && property !== "deadline") || (property === "durationMinutes" && grouping === "duration")) return;
+      if ("completed" in properties && property !== "endDate" && property !== "scheduledDate" && property !== "deadline"
+        && !this.showTaskProperty(property === "durationMinutes" ? "duration" : property)) return;
       const badge = this.badge(parent, icon, text, variant);
       const label = { scheduledDate: "scheduled date and time", endDate: "end date", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
       if ("completed" in properties && property !== "endDate") {
@@ -883,7 +891,9 @@ export class TaskMainView extends ItemView {
     const dateText = (field: "scheduledDate" | "deadline", timeField: "scheduledTime" | "deadlineTime"): string => {
       const date = properties[field];
       const hideDate = grouping === field || (grouping === "date" && "completed" in properties && date === actionDate(properties));
-      return [date && !hideDate ? formatDate(date, this.plugin.dateFormat()) : "", grouping !== timeField ? properties[timeField] : ""].filter(Boolean).join(" ");
+      const isTask = "completed" in properties;
+      return [date && !hideDate && (!isTask || this.showTaskProperty(field)) ? formatDate(date, this.plugin.dateFormat()) : "",
+        grouping !== timeField && (!isTask || this.showTaskProperty(timeField)) ? properties[timeField] : ""].filter(Boolean).join(" ");
     };
     const scheduled = dateText("scheduledDate", "scheduledTime");
     if (scheduled) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, scheduled, incompleteTask && properties.scheduledDate && properties.scheduledDate < todayIso() ? "danger" : undefined);

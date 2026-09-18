@@ -1175,3 +1175,9 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 @media (max-width: 900px) {
   .tm-dashboard-tasks, .tm-dashboard-planning { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); }
 }
+
+.tm-property-visibility-setting { flex-wrap: wrap; }
+.tm-property-visibility-setting .setting-item-control { flex: 1 1 100%; justify-content: flex-start; }
+.tm-property-visibility-choices { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+.tm-property-visibility-choices label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.tm-property-visibility-choices input[type="checkbox"] { margin: 0; }

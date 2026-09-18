@@ -112,6 +112,8 @@ export interface TaskManagerSettings {
   showSubtaskCounts: boolean;
   taskHoverHighlight: "none" | "title" | "background" | "all";
   taskListRowHeightMultiplier: number;
+  hiddenListTaskProperties: TaskProperty[];
+  hiddenKanbanTaskProperties: TaskProperty[];
   wrapTaskTitles: boolean;
   wrapCalendarTaskTitles: boolean;
   wrapKanbanTaskTitles: boolean;
@@ -130,6 +132,8 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   showSubtaskCounts: false,
   taskHoverHighlight: "none",
   taskListRowHeightMultiplier: 1.0,
+  hiddenListTaskProperties: [],
+  hiddenKanbanTaskProperties: [],
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: false,
   wrapKanbanTaskTitles: true,

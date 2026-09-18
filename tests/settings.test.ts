@@ -6,6 +6,7 @@ const { rows } = vi.hoisted(() => ({ rows: [] as Array<{
   name: string;
   desc: string;
   heading?: boolean;
+  choices?: Array<{ label: string; checked: boolean; change?: () => void }>;
   click?: () => Promise<void>;
   disabled?: boolean;
   value?: string | boolean;
@@ -17,6 +18,16 @@ vi.mock("obsidian", () => ({
   PluginSettingTab: class { containerEl = { empty: () => { rows.length = 0; } }; },
   Setting: class {
     row = { name: "", desc: "" } as typeof rows[number];
+    settingEl = { addClass: vi.fn() };
+    controlEl = { createDiv: () => ({ createEl: () => {
+      const item = { label: "", checked: false, change: undefined as (() => void) | undefined };
+      (this.row.choices ??= []).push(item);
+      return { createEl: () => ({
+        get checked() { return item.checked; },
+        set checked(value: boolean) { item.checked = value; },
+        addEventListener: (_event: string, callback: () => void) => { item.change = callback; }
+      }), createSpan: ({ text }: { text: string }) => { item.label = text; } };
+    } }) };
     constructor() { rows.push(this.row); }
     setName(name: string) { this.row.name = name; return this; }
     setDesc(desc: string) { this.row.desc = desc; return this; }
@@ -62,7 +73,7 @@ describe("settings compatibility", () => {
   it("provides searchable names and descriptions without rendering or saving during indexing", () => {
     const { tab, plugin } = setup();
     const definitions = tab.getSettingDefinitions();
-    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Task highlight on hover", "Task height in list view", "Show task counts in group headings", "Show subtask counts", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
+    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Task highlight on hover", "Task height in list view", "Show task counts in group headings", "Show subtask counts", "Task properties — List", "Task properties — Kanban", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();
@@ -140,4 +151,26 @@ describe("settings compatibility", () => {
     plugin.updateTaskDates.mockRejectedValueOnce(new Error("Write failed"));
     await update.click!();
     expect(update.disabled).toBe(false);
+ });
+
+ it("keeps list and Kanban property visibility independent and persists changes", async () => {
+   const { tab, plugin } = setup();
+   for (const definition of tab.getSettingDefinitions()) definition.render(new Setting({} as HTMLElement).setName(definition.name));
+   const list = rows.find(row => row.name === "Task properties — List")!.choices!.find(choice => choice.label === "Tags")!;
+   const kanban = rows.find(row => row.name === "Task properties — Kanban")!.choices!.find(choice => choice.label === "Tags")!;
+   expect(list.checked).toBe(true);
+   expect(kanban.checked).toBe(true);
+   list.checked = false;
+   await list.change!();
+   const settings = plugin.settings as unknown as TaskManagerPlugin["settings"];
+   expect(settings.hiddenListTaskProperties).toEqual(["tags"]);
+   expect(settings.hiddenKanbanTaskProperties).toBeUndefined();
+   kanban.checked = false;
+   await kanban.change!();
+   list.checked = true;
+   await list.change!();
+   expect(settings.hiddenListTaskProperties).toEqual([]);
+   expect(settings.hiddenKanbanTaskProperties).toEqual(["tags"]);
+   expect(plugin.saveSettings).toHaveBeenCalledTimes(3);
+   expect(plugin.refreshViews).toHaveBeenCalledTimes(3);
  });
