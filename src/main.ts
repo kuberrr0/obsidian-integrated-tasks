@@ -37,16 +37,16 @@ export default class TaskManagerPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat());
-    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates);
+    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates, () => this.settings.sectionHeadingLevel);
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
     this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
-    this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task })));
+    this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel));
     this.registerMarkdownPostProcessor((element, context) => {
       renderNoteTokens(element, this.dateFormat());
-      registerNoteTaskEdit(element, context, () => this.dateFormat(), task => this.openEditor({ mode: "all", task }));
+      registerNoteTaskEdit(element, context, () => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel);
     });
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
@@ -157,6 +157,7 @@ export default class TaskManagerPlugin extends Plugin {
     }
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
+    if (!Number.isInteger(this.settings.sectionHeadingLevel) || this.settings.sectionHeadingLevel < 1 || this.settings.sectionHeadingLevel > 6) this.settings.sectionHeadingLevel = 1;
     this.settings.showGroupTaskCounts = this.settings.showGroupTaskCounts === true;
     this.settings.showSubtaskCounts = this.settings.showSubtaskCounts === true;
     if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
@@ -310,7 +311,7 @@ export default class TaskManagerPlugin extends Plugin {
   private editCurrentLineTask(checking: boolean, editor: Editor, file: TFile | null): boolean {
     if (this.settings.taskMode || !file) return false;
     const line = editor.getCursor().line;
-    const task = scanTasks(file.path, editor.getValue(), new Date(), this.dateFormat()).find(task => task.line === line);
+    const task = scanTasks(file.path, editor.getValue(), new Date(), this.dateFormat(), this.settings.sectionHeadingLevel).find(task => task.line === line);
     if (!task) return false;
     if (!checking) this.openEditor({ mode: "all", task });
     return true;
@@ -408,6 +409,13 @@ export default class TaskManagerPlugin extends Plugin {
       const view = leaf.view;
       if (view instanceof TaskMainView) view.render();
     }
+  }
+
+  async setSectionHeadingLevel(level: number): Promise<void> {
+    if (!Number.isInteger(level) || level < 1 || level > 6) return;
+    this.settings.sectionHeadingLevel = level;
+    await this.saveSettings();
+    await this.refreshDateParsing();
   }
 
   async setDateFormat(value: string): Promise<void> {

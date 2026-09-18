@@ -107,6 +107,7 @@ export interface TaskManagerSettings {
   dateFormat: string;
   /** Format used before a pending date-token migration. */
   previousDateFormat?: string;
+  sectionHeadingLevel: number;
   showGroupTaskCounts: boolean;
   showSubtaskCounts: boolean;
   taskHoverHighlight: "none" | "title" | "background" | "all";
@@ -124,6 +125,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   taskMode: false,
   linkDates: false,
   dateFormat: "",
+  sectionHeadingLevel: 1,
   showGroupTaskCounts: false,
   showSubtaskCounts: false,
   taskHoverHighlight: "none",

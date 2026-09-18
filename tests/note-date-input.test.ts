@@ -76,3 +76,34 @@ it("keeps reordering disabled in task mode and during undo/redo", () => {
     expect(state(line).update({ changes: { from: line.length, insert: "\n" }, selection: { anchor: line.length + 1 }, userEvent }).newDoc.toString()).toBe(line + "\n");
   }
 });
+
+it("resolves unmarked dates, choosing only the last date in each category", () => {
+  const line = "- [ ] this is a task that was given to me yesterday tomorrow {next week} {next sunday}";
+  const resolved = "- [ ] this is a task that was given to me yesterday [[2026-09-09]] {next week} {[[2026-09-20]]}\n";
+  expect(enter(state(line)).doc.toString()).toBe(resolved);
+  expect(enter(state(resolved.trimEnd())).doc.toString()).toBe(resolved);
+});
+
+it("accepts dates without @ and preserves time and link-date preferences", () => {
+  expect(enter(state("- [ ] Task today at 9am {next sunday at noon}")).doc.toString())
+    .toBe("- [ ] Task [[2026-09-08]] 09:00 {[[2026-09-20]] 12:00}\n");
+  const line = "- [ ] Task yesterday tomorrow {next week} {next sunday}";
+  const editor = EditorState.create({ doc: line, selection: { anchor: line.length }, extensions: [noteDateInput(() => "DD.MM.YYYY", () => false, () => false)] });
+  const result = enter(editor).doc.toString();
+  expect(result).toBe("- [ ] Task yesterday 09.09.2026 {next week} {20.09.2026}\n");
+  const repeated = EditorState.create({ doc: result.trimEnd(), selection: { anchor: result.trimEnd().length }, extensions: [noteDateInput(() => "DD.MM.YYYY", () => false, () => false)] });
+  expect(enter(repeated).doc.toString()).toBe(result);
+});
+
+it("keeps earlier explicit dates, protected dates, and durations unchanged", () => {
+  expect(enter(state("- [ ] Task @yesterday @tomorrow {@next week} {@next sunday}")).doc.toString())
+    .toBe("- [ ] Task @yesterday [[2026-09-09]] {@next week} {[[2026-09-20]]}\n");
+  const line = "- [ ] Task `today` #[[tomorrow]] ~[[Friday]] [Sunday](url) user@today.com 45m";
+  expect(enter(state(line)).doc.toString()).not.toContain("[[2026-");
+});
+
+it("does not consume protected content between a date and a time", () => {
+  const result = enter(state("- [ ] Task tomorrow #[[work]] at 9am {next week}"));
+  expect(result.doc.toString()).toContain("#[[work]]");
+  expect(result.doc.toString()).toContain("at 9am");
+});

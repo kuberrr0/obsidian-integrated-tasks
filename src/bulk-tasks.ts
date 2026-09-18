@@ -16,6 +16,7 @@ export interface BulkTaskOptions {
   position?: TaskManagerSettings["newTaskPosition"];
   dateFormat?: string;
   linkDates?: boolean;
+  sectionHeadingLevel?: number;
 }
 
 /** Plan every write before touching the vault, using original offsets throughout. */
@@ -82,7 +83,7 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
     }
     for (const [destination, block] of destinations) {
       const { path, heading } = splitDestination(destination);
-      result.set(path, insertIntoDestination(result.get(path) ?? get(path), block, heading, options.position));
+      result.set(path, insertIntoDestination(result.get(path) ?? get(path), block, heading, options.position, options.sectionHeadingLevel));
     }
   }
   return new Map([...result].filter(([path, content]) => content !== get(path)));

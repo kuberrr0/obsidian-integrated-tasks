@@ -20,7 +20,8 @@ export class TaskStore {
     private readonly app: App,
     private readonly getDateFormat: () => string,
     private readonly getNewTaskPosition: () => TaskManagerSettings["newTaskPosition"] = () => "top",
-    private readonly getLinkDates: () => boolean = () => true
+    private readonly getLinkDates: () => boolean = () => true,
+    private readonly getSectionHeadingLevel: () => number = () => 1
   ) {}
 
   async updateDates(sourceFormats: string[]): Promise<string[]> {
@@ -54,7 +55,7 @@ export class TaskStore {
     const { path, heading } = splitDestination(draft.destination);
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);
     await this.app.vault.process(file, (content) =>
-      insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition())
+      insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel())
     );
   }
 
@@ -118,7 +119,7 @@ export class TaskStore {
       await this.app.vault.process(source, content => {
         const block = liveTaskBlock(content, task, this.getDateFormat());
         return insertIntoDestination(removeTaskBlockFromContent(content, task, block.lines.length),
-          rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition());
+          rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel());
       });
       return;
     }
@@ -128,7 +129,7 @@ export class TaskStore {
     let after = "";
     await this.app.vault.process(target, current => {
       before = current;
-      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition());
+      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel());
       return after;
     });
     try {
@@ -169,7 +170,7 @@ export class TaskStore {
       if (!files.has(path)) files.set(path, heading ? this.requireFile(path) : await this.ensureFile(path));
     }
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
-    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates() });
+    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates(), sectionHeadingLevel: this.getSectionHeadingLevel() });
     return this.commitChanges(files, before, after);
   }
 

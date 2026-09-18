@@ -110,7 +110,7 @@ Run **Convert to project** on a note, or add `#project` to its body or frontmatt
 
 Enable **Task mode** to open project notes as task views. Existing project tabs switch too, and turning it off restores their Markdown views. Ordinary notes stay in Markdown. Opening a project from Projects automatically enables Task mode and opens it in a new tab.
 
-Use headings to organize a project’s tasks into sections. Add properties to track the project itself:
+Use headings to organize a project’s tasks into sections. **Section heading level** selects Heading 1–6 for sections and task destinations; the default is Heading 1. Add properties to track the project itself:
 
 ```yaml
 ---
@@ -129,7 +129,7 @@ Projects show completion percentages, including subtasks. Add `#archived` to hid
 
 ### Plan projects on a timeline
 
-Choose **Gantt** in Projects to see the project hierarchy across a week, month, or quarter.
+Choose **Gantt** in Projects to see the project hierarchy with week, month, or quarter zoom. Scroll horizontally in either direction to explore dates beyond the current window; the timeline continues as you scroll, with project labels pinned on the left.
 
 - Drag a bar’s edges to change its start or finish date.
 - Bars finish at the deadline when one exists, otherwise at the end date.
@@ -145,13 +145,13 @@ Changes save to the project note’s properties.
 
 In Live Preview and Reading view, dates, durations, deadlines, and priorities appear as small badges. In Live Preview, placing the caret in a property reveals its original text. Date links still open their notes, and Source mode stays plain Markdown.
 
-With Task mode off, use `@` to enter natural dates directly in a checklist:
+With Task mode off, enter natural dates directly in a checklist (`@` is optional):
 
 ```markdown
-- [ ] Call the venue @tomorrow {@next Friday}
+- [ ] Call the venue tomorrow {next Friday}
 ```
 
-Press Enter or move to another line to convert recognized dates to your configured format and put task properties in a consistent order. Unrecognized date expressions remain unchanged.
+Press Enter or move to another line to convert recognized dates to your configured format and put task properties in a consistent order. Only the last scheduled-date expression and the last `{deadline}` expression are converted; earlier mentions and unrecognized expressions remain unchanged.
 
 **Cmd/Ctrl-click a checkbox** to open its task editor from a note. On mobile, **press and hold the checkbox**. Both work in Live Preview and Reading view.
 

@@ -94,13 +94,13 @@ export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElem
   };
 }
 
-export function noteTaskEditEditor(getDateFormat: () => string, open: OpenTask) {
+export function noteTaskEditEditor(getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1) {
   return ViewPlugin.fromClass(class {
     private resolve = (checkbox: HTMLElement): Task | undefined => {
       const path = this.view.state.field(editorInfoField, false)?.file?.path;
       if (!path) return;
       const line = this.view.state.doc.lineAt(this.view.posAtDOM(checkbox)).number - 1;
-      return scanTasks(path, this.view.state.doc.toString(), new Date(), getDateFormat()).find(task => task.line === line);
+      return scanTasks(path, this.view.state.doc.toString(), new Date(), getDateFormat(), getSectionHeadingLevel()).find(task => task.line === line);
     };
     private dispose: () => void;
 
@@ -112,7 +112,7 @@ export function noteTaskEditEditor(getDateFormat: () => string, open: OpenTask) 
   });
 }
 
-export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostProcessorContext, getDateFormat: () => string, open: OpenTask): void {
+export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostProcessorContext, getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1): void {
   const child = new MarkdownRenderChild(root);
   context.addChild(child);
   child.register(bindNoteTaskEdit(root, checkbox => {
@@ -124,6 +124,6 @@ export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostPro
     const relativeLine = item.getAttribute("data-line");
     if (relativeLine === null || !/^\d+$/.test(relativeLine)) return;
     const line = section.lineStart + Number(relativeLine);
-    return scanTasks(context.sourcePath, section.text, new Date(), getDateFormat()).find(task => task.line === line);
+    return scanTasks(context.sourcePath, section.text, new Date(), getDateFormat(), getSectionHeadingLevel()).find(task => task.line === line);
   }, open));
 }

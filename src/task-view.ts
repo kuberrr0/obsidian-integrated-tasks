@@ -513,6 +513,7 @@ export class TaskMainView extends ItemView {
         projects: this.showArchivedProjects ? projects : active,
         anchor: this.ganttAnchor, zoom: this.ganttZoom, dateFormat: this.plugin.dateFormat(),
         navigate: (anchor, zoom) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.render(); },
+        viewportChanged: anchor => { this.ganttAnchor = anchor; },
         open: project => { void this.plugin.openProject(project.path).catch(error => new Notice(String(error))); },
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);

@@ -3,34 +3,54 @@ import { formatDate, parseDateExpression, parseDateTimeExpression } from "./date
 import { parseTaskLine, type ParsedTokenRange } from "./parser";
 import { bodyLines } from "./structure";
 
-/** Resolve explicit @ dates while leaving links, code and ordinary prose alone. */
+/** Resolve only the last date in each category; earlier mentions remain prose. */
 export function noteDateChanges(text: string, dateFormat: string, reference = new Date(), linkDates = true): { from: number; to: number; insert: string }[] {
-  const prose = text.replace(/(`+)[\s\S]*?\1|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\{(?!@)[^}]*\}/g, match => " ".repeat(match.length));
-  const changes: { from: number; to: number; insert: string }[] = [];
-  const pattern = /(^|\s|\{)@/g;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(prose))) {
-    const from = match.index + match[1].length;
-    const braced = match[1] === "{";
-    const rest = prose.slice(from + 1);
-    const end = rest.search(braced ? /[{}]/ : /[@{}]/);
-    const candidate = rest.slice(0, end < 0 ? rest.length : end).trimEnd();
-    if (braced && (end < 0 || rest[end] !== "}")) continue;
-    // Longest complete expression wins, so “next week” is never committed as “next”.
-    for (let length = candidate.length; length > 0; length--) {
-      if (length < candidate.length && !/[\s.,;!?]/.test(candidate[length])) continue;
-      if (braced && length !== candidate.length) break;
-      const expression = candidate.slice(0, length);
-      const dateTime = parseDateTimeExpression(expression, reference, dateFormat);
-      const date = dateTime?.date ?? parseDateExpression(expression, reference, dateFormat);
-      if (!date) continue;
-      const label = formatDate(date, dateFormat);
-      changes.push({ from, to: from + 1 + length, insert: `${linkDates ? `[[${label}]]` : label}${dateTime?.time ? ` ${dateTime.time}` : ""}` });
-      pattern.lastIndex = from + 1 + length;
+  type Change = { from: number; to: number; insert: string };
+  const mask = (value: string): string => " ".repeat(value.length);
+  const protectedText = text.replace(/(`+)[\s\S]*?\1|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\S+@\S+\.\S+/g, mask);
+  const replacement = (expression: string): string | undefined => {
+    const value = expression.trim().replace(/^@/, "");
+    const dateTime = parseDateTimeExpression(value, reference, dateFormat);
+    const date = dateTime?.date ?? (expression.trim().startsWith("@") ? parseDateExpression(value, reference, dateFormat) : undefined);
+    if (!date) return undefined;
+    const label = formatDate(date, dateFormat);
+    return `${linkDates ? `[[${label}]]` : label}${dateTime?.time ? ` ${dateTime.time}` : ""}`;
+  };
+  let deadline: Change | undefined;
+  const withoutDeadlines = protectedText.replace(/\{([^{}]*)\}/g, (whole: string, expression: string, offset: number) => {
+    const insert = replacement(expression);
+    if (insert !== undefined) deadline = { from: offset + 1, to: offset + whole.length - 1, insert: expression.trim().startsWith("[[") ? expression : insert };
+    return mask(whole);
+  }).replace(/\{[^}]*$/, mask);
+  const scheduled: Change[] = [];
+  const prose = withoutDeadlines.replace(/[#~]?\[\[([^\]]+)\]\]/g, (whole: string, _target: string, offset: number) => {
+    // Existing date links participate in "last date wins" without being rewritten.
+    if (whole.startsWith("[[") && replacement(whole) !== undefined) scheduled.push({ from: offset, to: offset + whole.length, insert: whole });
+    return mask(whole);
+  });
+  const dateProse = prose.replace(/\b(?:\d+h(?:\d+m)?|\d+m)\b/g, mask);
+  const words = /\S+/g;
+  let word: RegExpExecArray | null;
+  while ((word = words.exec(dateProse))) {
+    const from = word.index;
+    // An @ marker is optional, but cannot be embedded in another word.
+    for (let end = dateProse.length; end > from; end--) {
+      if (end < dateProse.length && !/[\s.,;!?]/.test(dateProse[end])) continue;
+      if (/[.,;!?]/.test(dateProse[end] ?? "") && end + 1 < dateProse.length && !/\s/.test(dateProse[end + 1])) continue;
+      if (/\s/.test(dateProse[end - 1])) continue;
+      const expression = dateProse.slice(from, end);
+      if (expression !== text.slice(from, end)) continue;
+      const insert = replacement(expression);
+      if (insert === undefined) continue;
+      scheduled.push({ from, to: end, insert });
+      words.lastIndex = end;
       break;
     }
   }
-  return changes;
+  const lastScheduled = scheduled.sort((a, b) => a.from - b.from).pop();
+  return [lastScheduled, deadline].filter((change): change is Change => Boolean(change))
+    .filter(change => text.slice(change.from, change.to) !== change.insert)
+    .sort((a, b) => a.from - b.from);
 }
 
 /** Reorder recognized token slots, retaining source spelling, spacing and destinations. */

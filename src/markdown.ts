@@ -42,11 +42,11 @@ export function removeTaskBlockFromContent(content: string, task: Task, blockLen
   return lines.join(eol);
 }
 
-export function insertIntoDestination(content: string, block: string[], heading?: string, position: TaskManagerSettings["newTaskPosition"] = "top"): string {
+export function insertIntoDestination(content: string, block: string[], heading?: string, position: TaskManagerSettings["newTaskPosition"] = "top", sectionHeadingLevel = 1): string {
   const eol = lineEnding(content);
   const lines = content ? content.split(/\r?\n/) : [];
   let insertion = 0;
-  const headings = scanSections(content);
+  const headings = scanSections(content, sectionHeadingLevel);
   let scopeEnd = headings[0]?.line ?? lines.length;
   if (heading) {
     const target = headings.find((item) => item.name.toLocaleLowerCase() === heading.toLocaleLowerCase());

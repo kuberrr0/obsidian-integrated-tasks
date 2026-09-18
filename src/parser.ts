@@ -204,12 +204,12 @@ export function serializeTaskInput(draft: TaskDraft, dateFormat?: string, linkDa
   return `${serializeTask(draft, dateFormat, linkDates)} ~[[${destination}]]`;
 }
 
-export function scanTasks(path: string, content: string, reference = new Date(), dateFormat?: string): Task[] {
+export function scanTasks(path: string, content: string, reference = new Date(), dateFormat?: string, sectionHeadingLevel = 1): Task[] {
   const tasks: Task[] = [];
   const stack: Task[] = [];
   const sourceLines = content.split(/\r?\n/);
   const descriptions = new Map<Task, { lines: string[]; lineNumbers: number[]; bulletIndent: number }>();
-  const headings = new Map(scanSections(content).map((heading) => [heading.line, heading]));
+  const headings = new Map(scanSections(content, sectionHeadingLevel).map((heading) => [heading.line, heading]));
   let section: ReturnType<typeof scanSections>[number] | undefined;
 
   for (const { text: line, line: lineNumber } of bodyLines(content)) {

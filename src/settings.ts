@@ -14,6 +14,15 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.taskMode).onChange(value => this.plugin.setTaskMode(value))); }
       },
       {
+        name: "Section heading level",
+        desc: "Choose which heading level defines task sections and section destinations in task mode.",
+        render: (setting: Setting) => { setting.addDropdown(dropdown => {
+          for (let level = 1; level <= 6; level++) dropdown.addOption(String(level), `Heading ${level}`);
+          dropdown.setValue(String(this.plugin.settings.sectionHeadingLevel))
+            .onChange(value => this.plugin.setSectionHeadingLevel(Number(value)));
+        }); }
+      },
+      {
         name: "Date format",
         desc: "Moment date format for task dates, for example DD/MM/YYYY. Leave empty to use the Daily Notes format (YYYY-MM-DD if unset).",
         render: (setting: Setting) => { setting.addText(text => text

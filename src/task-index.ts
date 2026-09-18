@@ -154,8 +154,8 @@ export class TaskIndex {
 
   private async scanFile(file: TFile): Promise<void> {
     const content = await this.app.vault.cachedRead(file);
-    this.headingsByPath.set(file.path, scanSections(content));
-    this.tasksByPath.set(file.path, scanTasks(file.path, content, new Date(), this.getDateFormat()));
+    this.headingsByPath.set(file.path, scanSections(content, this.getSettings().sectionHeadingLevel));
+    this.tasksByPath.set(file.path, scanTasks(file.path, content, new Date(), this.getDateFormat(), this.getSettings().sectionHeadingLevel));
   }
 
   private refreshProjects(files: TFile[]): void {

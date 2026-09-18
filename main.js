@@ -101,8 +101,8 @@ function scanHeadings(content) {
   }
   return headings;
 }
-function scanSections(content) {
-  return scanHeadings(content).filter((heading) => heading.level === 1);
+function scanSections(content, level = 1) {
+  return scanHeadings(content).filter((heading) => heading.level === level);
 }
 function splitDestination(value) {
   const target = value.trim().replace(/^~?\[\[|\]\]$/g, "").split("|", 1)[0];
@@ -3266,13 +3266,13 @@ function serializeTaskInput(draft, dateFormat, linkDates = true) {
   const destination = destinationString(path.replace(/\.md$/i, ""), heading);
   return `${serializeTask(draft, dateFormat, linkDates)} ~[[${destination}]]`;
 }
-function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFormat) {
+function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFormat, sectionHeadingLevel = 1) {
   var _a, _b;
   const tasks = [];
   const stack = [];
   const sourceLines = content.split(/\r?\n/);
   const descriptions = /* @__PURE__ */ new Map();
-  const headings = new Map(scanSections(content).map((heading) => [heading.line, heading]));
+  const headings = new Map(scanSections(content, sectionHeadingLevel).map((heading) => [heading.line, heading]));
   let section;
   for (const { text: line, line: lineNumber } of bodyLines(content)) {
     const heading = headings.get(lineNumber);
@@ -4329,14 +4329,17 @@ function ganttSelection(first, last) {
 // src/gantt-view.ts
 function renderGantt(container, options) {
   const root = container.createDiv({ cls: "tm-gantt" });
-  const { days, width: width2 } = GANTT_ZOOMS[options.zoom];
-  const start = options.anchor;
-  const end = addDays(start, days - 1);
+  const { days: period, width: width2 } = GANTT_ZOOMS[options.zoom];
+  let anchor = options.anchor;
+  let start = anchor;
+  let days = period;
+  let interacting = false;
+  const painters = [];
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
     const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
     (0, import_obsidian7.setIcon)(button, icon);
-    button.addEventListener("click", () => options.navigate(addDays(start, delta * days), options.zoom));
+    button.addEventListener("click", () => options.navigate(addDays(anchor, delta * period), options.zoom));
   }
   const today2 = toolbar.createEl("button", { text: "Today" });
   today2.addEventListener("click", () => options.navigate(addDays(todayIso(), -2), options.zoom));
@@ -4346,22 +4349,47 @@ function renderGantt(container, options) {
   first.addEventListener("click", () => {
     if (earliest) options.navigate(addDays(earliest, -1), options.zoom);
   });
-  toolbar.createEl("h2", { text: `${formatDate(start, options.dateFormat)} \u2013 ${formatDate(end, options.dateFormat)}` });
+  const rangeHeading = toolbar.createEl("h2");
   const zoom = toolbar.createEl("select", { attr: { "aria-label": "Gantt zoom" } });
   for (const value of ["week", "month", "quarter"]) zoom.createEl("option", { value, text: value[0].toUpperCase() + value.slice(1) });
   zoom.value = options.zoom;
-  zoom.addEventListener("change", () => options.navigate(start, zoom.value));
-  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline" } });
+  zoom.addEventListener("change", () => options.navigate(anchor, zoom.value));
+  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0" } });
+  const buffer = Math.max(period, Math.ceil((scroll.clientWidth || 1200) / width2));
+  days = buffer * 5;
+  start = addDays(anchor, -buffer * 2);
   scroll.style.setProperty("--tm-gantt-width", `${days * width2}px`);
   scroll.style.setProperty("--tm-gantt-day", `${width2}px`);
   const header = scroll.createDiv({ cls: "tm-gantt-row tm-gantt-header" });
   header.createDiv({ cls: "tm-gantt-label", text: "Project" });
   const dates = header.createDiv({ cls: "tm-gantt-dates" });
-  for (let index = 0; index < days; index++) {
-    const day = addDays(start, index);
-    const label = options.zoom === "quarter" ? String(localDate(day).getDate()) : localDate(day).toLocaleDateString(void 0, { month: "short", day: "numeric" });
-    dates.createDiv({ cls: `tm-gantt-date${day === todayIso() ? " is-today" : ""}`, text: label, attr: { title: formatDate(day, options.dateFormat) } });
-  }
+  const paintDates = () => {
+    dates.empty();
+    for (let index = 0; index < days; index++) {
+      const day = addDays(start, index);
+      const label = options.zoom === "quarter" ? String(localDate(day).getDate()) : localDate(day).toLocaleDateString(void 0, { month: "short", day: "numeric" });
+      dates.createDiv({ cls: `tm-gantt-date${day === todayIso() ? " is-today" : ""}`, text: label, attr: { title: formatDate(day, options.dateFormat) } });
+    }
+  };
+  paintDates();
+  const syncViewport = () => {
+    var _a, _b, _c;
+    const labelWidth = (_b = (_a = header.firstElementChild) == null ? void 0 : _a.getBoundingClientRect().width) != null ? _b : 220;
+    const visibleDays = Math.max(1, Math.ceil((scroll.clientWidth - labelWidth) / width2));
+    anchor = addDays(start, Math.floor(scroll.scrollLeft / width2));
+    rangeHeading.setText(`${formatDate(anchor, options.dateFormat)} \u2013 ${formatDate(addDays(anchor, visibleDays - 1), options.dateFormat)}`);
+    (_c = options.viewportChanged) == null ? void 0 : _c.call(options, anchor);
+    if (interacting) return;
+    const offset = Math.floor(scroll.scrollLeft / width2);
+    if (offset < buffer || offset + visibleDays > days - buffer) {
+      const shift = offset - buffer * 2;
+      start = addDays(start, shift);
+      paintDates();
+      for (const paint of painters) paint();
+      scroll.scrollLeft -= shift * width2;
+    }
+  };
+  scroll.addEventListener("scroll", syncViewport);
   let busy = false;
   const persist = async (project, changes, rebuild = false) => {
     if (busy) return;
@@ -4371,13 +4399,13 @@ function renderGantt(container, options) {
       await options.update(project, changes);
       Object.assign(project, changes);
       if (rebuild && root.isConnected) {
-        const left = scroll.scrollLeft;
+        const fraction = scroll.scrollLeft % width2;
         const top = scroll.scrollTop;
         root.remove();
-        renderGantt(container, options);
+        renderGantt(container, { ...options, anchor });
         const next = container.querySelector(".tm-gantt-scroll");
         if (next) {
-          next.scrollLeft = left;
+          next.scrollLeft += fraction;
           next.scrollTop = top;
         }
       }
@@ -4394,11 +4422,14 @@ function renderGantt(container, options) {
     label.style.paddingLeft = `${12 + depth * 16}px`;
     label.addEventListener("click", () => options.open(project));
     const track = row.createDiv({ cls: "tm-gantt-track" });
-    const todayOffset = daysBetween(start, todayIso());
-    if (todayOffset >= 0 && todayOffset < days) {
-      const marker = track.createSpan({ cls: "tm-gantt-today" });
+    const marker = track.createSpan({ cls: "tm-gantt-today" });
+    const paintToday = () => {
+      const todayOffset = daysBetween(start, todayIso());
+      marker.hidden = todayOffset < 0 || todayOffset >= days;
       marker.style.left = `${todayOffset * width2}px`;
-    }
+    };
+    painters.push(paintToday);
+    paintToday();
     const range = ganttRange(project);
     if (!range && !project.scheduledDate && !project.endDate && !project.deadline) {
       track.addClass("is-unscheduled");
@@ -4419,6 +4450,7 @@ function renderGantt(container, options) {
       };
       const resetSelection = () => {
         pointer = void 0;
+        interacting = false;
         selection.hidden = true;
         hint.hidden = false;
       };
@@ -4426,6 +4458,7 @@ function renderGantt(container, options) {
         if (event.button !== 0 || busy) return;
         event.preventDefault();
         pointer = event.pointerId;
+        interacting = true;
         first2 = last = dateAt(event);
         hint.hidden = true;
         track.setPointerCapture(event.pointerId);
@@ -4495,12 +4528,15 @@ function renderGantt(container, options) {
       }
     };
     paint(project);
+    painters.push(() => paint(project));
     for (const [handle, button] of handles) {
       let pointer;
       let origin = 0;
+      let originScroll = 0;
       let delta = 0;
       const reset = () => {
         pointer = void 0;
+        interacting = false;
         delta = 0;
         preview.hidden = true;
         row.removeClass("is-resizing");
@@ -4517,13 +4553,15 @@ function renderGantt(container, options) {
         event.preventDefault();
         event.stopPropagation();
         pointer = event.pointerId;
+        interacting = true;
         origin = event.clientX;
+        originScroll = scroll.scrollLeft;
         delta = 0;
         button.setPointerCapture(event.pointerId);
       });
       button.addEventListener("pointermove", (event) => {
         if (pointer !== event.pointerId) return;
-        delta = Math.round((event.clientX - origin) / width2);
+        delta = Math.round((event.clientX - origin + scroll.scrollLeft - originScroll) / width2);
         const { field: field2, value } = resizeProjectDate(project, handle, delta);
         paint({ ...project, [field2]: value });
         row.addClass("is-resizing");
@@ -4548,6 +4586,8 @@ function renderGantt(container, options) {
       });
     }
   }
+  scroll.scrollLeft = buffer * 2 * width2;
+  syncViewport();
 }
 
 // src/query.ts
@@ -5774,6 +5814,9 @@ var TaskMainView = class extends import_obsidian10.ItemView {
           this.ganttZoom = zoom;
           this.render();
         },
+        viewportChanged: (anchor) => {
+          this.ganttAnchor = anchor;
+        },
         open: (project) => {
           void this.plugin.openProject(project.path).catch((error) => new import_obsidian10.Notice(String(error)));
         },
@@ -6225,31 +6268,48 @@ var TaskModeController = class {
 var import_state = require("@codemirror/state");
 function noteDateChanges(text, dateFormat, reference = /* @__PURE__ */ new Date(), linkDates = true) {
   var _a;
-  const prose = text.replace(/(`+)[\s\S]*?\1|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\{(?!@)[^}]*\}/g, (match2) => " ".repeat(match2.length));
-  const changes = [];
-  const pattern = /(^|\s|\{)@/g;
-  let match;
-  while (match = pattern.exec(prose)) {
-    const from = match.index + match[1].length;
-    const braced = match[1] === "{";
-    const rest = prose.slice(from + 1);
-    const end = rest.search(braced ? /[{}]/ : /[@{}]/);
-    const candidate = rest.slice(0, end < 0 ? rest.length : end).trimEnd();
-    if (braced && (end < 0 || rest[end] !== "}")) continue;
-    for (let length = candidate.length; length > 0; length--) {
-      if (length < candidate.length && !/[\s.,;!?]/.test(candidate[length])) continue;
-      if (braced && length !== candidate.length) break;
-      const expression = candidate.slice(0, length);
-      const dateTime = parseDateTimeExpression(expression, reference, dateFormat);
-      const date = (_a = dateTime == null ? void 0 : dateTime.date) != null ? _a : parseDateExpression(expression, reference, dateFormat);
-      if (!date) continue;
-      const label = formatDate(date, dateFormat);
-      changes.push({ from, to: from + 1 + length, insert: `${linkDates ? `[[${label}]]` : label}${(dateTime == null ? void 0 : dateTime.time) ? ` ${dateTime.time}` : ""}` });
-      pattern.lastIndex = from + 1 + length;
+  const mask = (value) => " ".repeat(value.length);
+  const protectedText = text.replace(/(`+)[\s\S]*?\1|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\S+@\S+\.\S+/g, mask);
+  const replacement = (expression) => {
+    var _a2;
+    const value = expression.trim().replace(/^@/, "");
+    const dateTime = parseDateTimeExpression(value, reference, dateFormat);
+    const date = (_a2 = dateTime == null ? void 0 : dateTime.date) != null ? _a2 : expression.trim().startsWith("@") ? parseDateExpression(value, reference, dateFormat) : void 0;
+    if (!date) return void 0;
+    const label = formatDate(date, dateFormat);
+    return `${linkDates ? `[[${label}]]` : label}${(dateTime == null ? void 0 : dateTime.time) ? ` ${dateTime.time}` : ""}`;
+  };
+  let deadline;
+  const withoutDeadlines = protectedText.replace(/\{([^{}]*)\}/g, (whole, expression, offset) => {
+    const insert = replacement(expression);
+    if (insert !== void 0) deadline = { from: offset + 1, to: offset + whole.length - 1, insert: expression.trim().startsWith("[[") ? expression : insert };
+    return mask(whole);
+  }).replace(/\{[^}]*$/, mask);
+  const scheduled = [];
+  const prose = withoutDeadlines.replace(/[#~]?\[\[([^\]]+)\]\]/g, (whole, _target, offset) => {
+    if (whole.startsWith("[[") && replacement(whole) !== void 0) scheduled.push({ from: offset, to: offset + whole.length, insert: whole });
+    return mask(whole);
+  });
+  const dateProse = prose.replace(/\b(?:\d+h(?:\d+m)?|\d+m)\b/g, mask);
+  const words = /\S+/g;
+  let word;
+  while (word = words.exec(dateProse)) {
+    const from = word.index;
+    for (let end = dateProse.length; end > from; end--) {
+      if (end < dateProse.length && !/[\s.,;!?]/.test(dateProse[end])) continue;
+      if (/[.,;!?]/.test((_a = dateProse[end]) != null ? _a : "") && end + 1 < dateProse.length && !/\s/.test(dateProse[end + 1])) continue;
+      if (/\s/.test(dateProse[end - 1])) continue;
+      const expression = dateProse.slice(from, end);
+      if (expression !== text.slice(from, end)) continue;
+      const insert = replacement(expression);
+      if (insert === void 0) continue;
+      scheduled.push({ from, to: end, insert });
+      words.lastIndex = end;
       break;
     }
   }
-  return changes;
+  const lastScheduled = scheduled.sort((a, b) => a.from - b.from).pop();
+  return [lastScheduled, deadline].filter((change) => Boolean(change)).filter((change) => text.slice(change.from, change.to) !== change.insert).sort((a, b) => a.from - b.from);
 }
 function orderNoteProperties(text, dateFormat, reference) {
   const ranges = [];
@@ -6531,7 +6591,7 @@ function bindNoteTaskEdit(root, resolve, open) {
     document2.removeEventListener("touchcancel", cancel, true);
   };
 }
-function noteTaskEditEditor(getDateFormat, open) {
+function noteTaskEditEditor(getDateFormat, open, getSectionHeadingLevel = () => 1) {
   return import_view2.ViewPlugin.fromClass(class {
     constructor(view) {
       this.view = view;
@@ -6540,7 +6600,7 @@ function noteTaskEditEditor(getDateFormat, open) {
         const path = (_b = (_a = this.view.state.field(import_obsidian13.editorInfoField, false)) == null ? void 0 : _a.file) == null ? void 0 : _b.path;
         if (!path) return;
         const line = this.view.state.doc.lineAt(this.view.posAtDOM(checkbox)).number - 1;
-        return scanTasks(path, this.view.state.doc.toString(), /* @__PURE__ */ new Date(), getDateFormat()).find((task) => task.line === line);
+        return scanTasks(path, this.view.state.doc.toString(), /* @__PURE__ */ new Date(), getDateFormat(), getSectionHeadingLevel()).find((task) => task.line === line);
       };
       this.dispose = bindNoteTaskEdit(view.dom, this.resolve, open);
     }
@@ -6549,7 +6609,7 @@ function noteTaskEditEditor(getDateFormat, open) {
     }
   });
 }
-function registerNoteTaskEdit(root, context, getDateFormat, open) {
+function registerNoteTaskEdit(root, context, getDateFormat, open, getSectionHeadingLevel = () => 1) {
   const child = new import_obsidian13.MarkdownRenderChild(root);
   context.addChild(child);
   child.register(bindNoteTaskEdit(root, (checkbox) => {
@@ -6560,7 +6620,7 @@ function registerNoteTaskEdit(root, context, getDateFormat, open) {
     const relativeLine = item.getAttribute("data-line");
     if (relativeLine === null || !/^\d+$/.test(relativeLine)) return;
     const line = section.lineStart + Number(relativeLine);
-    return scanTasks(context.sourcePath, section.text, /* @__PURE__ */ new Date(), getDateFormat()).find((task) => task.line === line);
+    return scanTasks(context.sourcePath, section.text, /* @__PURE__ */ new Date(), getDateFormat(), getSectionHeadingLevel()).find((task) => task.line === line);
   }, open));
 }
 
@@ -7174,8 +7234,8 @@ var TaskIndex = class {
   }
   async scanFile(file) {
     const content = await this.app.vault.cachedRead(file);
-    this.headingsByPath.set(file.path, scanSections(content));
-    this.tasksByPath.set(file.path, scanTasks(file.path, content, /* @__PURE__ */ new Date(), this.getDateFormat()));
+    this.headingsByPath.set(file.path, scanSections(content, this.getSettings().sectionHeadingLevel));
+    this.tasksByPath.set(file.path, scanTasks(file.path, content, /* @__PURE__ */ new Date(), this.getDateFormat(), this.getSettings().sectionHeadingLevel));
   }
   refreshProjects(files) {
     this.projectPaths.clear();
@@ -7403,12 +7463,12 @@ function removeTaskBlockFromContent(content, task, blockLength) {
   lines.splice(liveLine, blockLength);
   return lines.join(eol);
 }
-function insertIntoDestination(content, block, heading, position = "top") {
+function insertIntoDestination(content, block, heading, position = "top", sectionHeadingLevel = 1) {
   var _a, _b, _c, _d, _e;
   const eol = lineEnding(content);
   const lines = content ? content.split(/\r?\n/) : [];
   let insertion = 0;
-  const headings = scanSections(content);
+  const headings = scanSections(content, sectionHeadingLevel);
   let scopeEnd = (_b = (_a = headings[0]) == null ? void 0 : _a.line) != null ? _b : lines.length;
   if (heading) {
     const target = headings.find((item) => item.name.toLocaleLowerCase() === heading.toLocaleLowerCase());
@@ -7553,7 +7613,7 @@ function planBulkTasks(contents, changes, options = {}) {
     }
     for (const [destination, block] of destinations) {
       const { path, heading } = splitDestination(destination);
-      result.set(path, insertIntoDestination((_g = result.get(path)) != null ? _g : get(path), block, heading, options.position));
+      result.set(path, insertIntoDestination((_g = result.get(path)) != null ? _g : get(path), block, heading, options.position, options.sectionHeadingLevel));
     }
   }
   return new Map([...result].filter(([path, content]) => content !== get(path)));
@@ -7562,11 +7622,12 @@ function planBulkTasks(contents, changes, options = {}) {
 // src/task-store.ts
 var import_obsidian17 = require("obsidian");
 var TaskStore = class {
-  constructor(app, getDateFormat, getNewTaskPosition = () => "top", getLinkDates = () => true) {
+  constructor(app, getDateFormat, getNewTaskPosition = () => "top", getLinkDates = () => true, getSectionHeadingLevel = () => 1) {
     this.app = app;
     this.getDateFormat = getDateFormat;
     this.getNewTaskPosition = getNewTaskPosition;
     this.getLinkDates = getLinkDates;
+    this.getSectionHeadingLevel = getSectionHeadingLevel;
   }
   async updateDates(sourceFormats) {
     const format = this.getDateFormat();
@@ -7600,7 +7661,7 @@ var TaskStore = class {
     const file = heading ? this.requireFile(path) : await this.ensureFile(path);
     await this.app.vault.process(
       file,
-      (content) => insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition())
+      (content) => insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel())
     );
   }
   async update(task, draft) {
@@ -7664,7 +7725,8 @@ var TaskStore = class {
           removeTaskBlockFromContent(content2, task, block2.lines.length),
           rewriteBlock(block2, draft, 0, this.getDateFormat(), this.getLinkDates()),
           heading,
-          this.getNewTaskPosition()
+          this.getNewTaskPosition(),
+          this.getSectionHeadingLevel()
         );
       });
       return;
@@ -7675,7 +7737,7 @@ var TaskStore = class {
     let after = "";
     await this.app.vault.process(target, (current) => {
       before = current;
-      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition());
+      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel());
       return after;
     });
     try {
@@ -7712,7 +7774,7 @@ var TaskStore = class {
       if (!files.has(path)) files.set(path, heading ? this.requireFile(path) : await this.ensureFile(path));
     }
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)])));
-    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates() });
+    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates(), sectionHeadingLevel: this.getSectionHeadingLevel() });
     return this.commitChanges(files, before, after);
   }
   async commitChanges(files, before, after) {
@@ -7771,6 +7833,7 @@ var DEFAULT_SETTINGS = {
   taskMode: false,
   linkDates: false,
   dateFormat: "",
+  sectionHeadingLevel: 1,
   showGroupTaskCounts: false,
   showSubtaskCounts: false,
   taskHoverHighlight: "none",
@@ -7797,6 +7860,16 @@ var TaskManagerSettingTab = class extends import_obsidian18.PluginSettingTab {
         desc: "Open project notes in task view across all tabs. Turning this off restores their Markdown views.",
         render: (setting) => {
           setting.addToggle((toggle) => toggle.setValue(this.plugin.settings.taskMode).onChange((value) => this.plugin.setTaskMode(value)));
+        }
+      },
+      {
+        name: "Section heading level",
+        desc: "Choose which heading level defines task sections and section destinations in task mode.",
+        render: (setting) => {
+          setting.addDropdown((dropdown) => {
+            for (let level = 1; level <= 6; level++) dropdown.addOption(String(level), `Heading ${level}`);
+            dropdown.setValue(String(this.plugin.settings.sectionHeadingLevel)).onChange((value) => this.plugin.setSectionHeadingLevel(Number(value)));
+          });
         }
       },
       {
@@ -7946,15 +8019,15 @@ var TaskManagerPlugin = class extends import_obsidian19.Plugin {
   async onload() {
     await this.loadSettings();
     this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat());
-    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates);
+    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates, () => this.settings.sectionHeadingLevel);
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
     this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
-    this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), (task) => this.openEditor({ mode: "all", task })));
+    this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), (task) => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel));
     this.registerMarkdownPostProcessor((element, context) => {
       renderNoteTokens(element, this.dateFormat());
-      registerNoteTaskEdit(element, context, () => this.dateFormat(), (task) => this.openEditor({ mode: "all", task }));
+      registerNoteTaskEdit(element, context, () => this.dateFormat(), (task) => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel);
     });
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new import_obsidian19.Notice(String(error))));
@@ -8064,6 +8137,7 @@ var TaskManagerPlugin = class extends import_obsidian19.Plugin {
     }
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
+    if (!Number.isInteger(this.settings.sectionHeadingLevel) || this.settings.sectionHeadingLevel < 1 || this.settings.sectionHeadingLevel > 6) this.settings.sectionHeadingLevel = 1;
     this.settings.showGroupTaskCounts = this.settings.showGroupTaskCounts === true;
     this.settings.showSubtaskCounts = this.settings.showSubtaskCounts === true;
     if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
@@ -8225,7 +8299,7 @@ var TaskManagerPlugin = class extends import_obsidian19.Plugin {
   editCurrentLineTask(checking, editor, file) {
     if (this.settings.taskMode || !file) return false;
     const line = editor.getCursor().line;
-    const task = scanTasks(file.path, editor.getValue(), /* @__PURE__ */ new Date(), this.dateFormat()).find((task2) => task2.line === line);
+    const task = scanTasks(file.path, editor.getValue(), /* @__PURE__ */ new Date(), this.dateFormat(), this.settings.sectionHeadingLevel).find((task2) => task2.line === line);
     if (!task) return false;
     if (!checking) this.openEditor({ mode: "all", task });
     return true;
@@ -8330,6 +8404,12 @@ var TaskManagerPlugin = class extends import_obsidian19.Plugin {
       const view = leaf.view;
       if (view instanceof TaskMainView) view.render();
     }
+  }
+  async setSectionHeadingLevel(level) {
+    if (!Number.isInteger(level) || level < 1 || level > 6) return;
+    this.settings.sectionHeadingLevel = level;
+    await this.saveSettings();
+    await this.refreshDateParsing();
   }
   async setDateFormat(value) {
     var _a, _b;
