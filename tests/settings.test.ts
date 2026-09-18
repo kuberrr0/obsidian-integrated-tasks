@@ -15,7 +15,7 @@ const { rows } = vi.hoisted(() => ({ rows: [] as Array<{
 
 vi.mock("obsidian", () => ({
   Notice: class {},
-  PluginSettingTab: class { containerEl = { empty: () => { rows.length = 0; } }; },
+  PluginSettingTab: class { containerEl = { empty: () => { rows.length = 0; }, addClass: vi.fn(), createDiv: () => ({}) }; },
   Setting: class {
     row = { name: "", desc: "" } as typeof rows[number];
     settingEl = { addClass: vi.fn() };
@@ -72,8 +72,10 @@ function setup() {
 describe("settings compatibility", () => {
   it("provides searchable names and descriptions without rendering or saving during indexing", () => {
     const { tab, plugin } = setup();
-    const definitions = tab.getSettingDefinitions();
-    expect(definitions.map(({ name }) => name)).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Task highlight on hover", "Task height in list view", "Show task counts in group headings", "Show subtask counts", "Task properties — List", "Task properties — Kanban", "Wrap task titles — List", "Wrap task titles — Calendar", "Wrap task titles — Kanban"]);
+    const groups = tab.getSettingDefinitions();
+    expect(groups.map(group => group.heading)).toEqual(["Task defaults", "Appearance", "List layout", "Kanban layout", "Calendar layout", "Dates"]);
+    const definitions = groups.flatMap(group => group.items);
+    expect(definitions.map(({ name }) => name).sort()).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Task highlight on hover", "Task height in list view", "Show task counts in group headings", "Show subtask counts", "Task properties — List", "Task properties — Kanban", "Wrap task titles", "Wrap task titles", "Wrap task titles"].sort());
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();
@@ -85,7 +87,7 @@ describe("settings compatibility", () => {
       tab.display();
       expect(rows[0]).toMatchObject({ name: "Task defaults", heading: true });
     } else {
-      for (const definition of tab.getSettingDefinitions()) {
+      for (const definition of tab.getSettingDefinitions().flatMap(group => group.items)) {
         definition.render(new Setting({} as HTMLElement).setName(definition.name).setDesc(definition.desc));
       }
     }
@@ -108,14 +110,14 @@ describe("settings compatibility", () => {
     await position.change!("invalid");
     expect(plugin.settings.newTaskPosition).toBe("top");
     expect(plugin.saveSettings).toHaveBeenCalledTimes(4);
-    const wrap = rows.find(({ name }) => name === "Wrap task titles — List")!;
+    const wrap = rows.filter(({ name }) => name === "Wrap task titles")[0]!;
     expect(wrap.value).toBe(false);
     await wrap.change!(true);
     expect(plugin.settings.wrapTaskTitles).toBe(true);
     expect(plugin.saveSettings).toHaveBeenCalledTimes(5);
     expect(plugin.refreshViews).toHaveBeenCalledTimes(3);
-    const calendar = rows.find(({ name }) => name === "Wrap task titles — Calendar")!;
-    const kanban = rows.find(({ name }) => name === "Wrap task titles — Kanban")!;
+    const calendar = rows.filter(({ name }) => name === "Wrap task titles")[2]!;
+    const kanban = rows.filter(({ name }) => name === "Wrap task titles")[1]!;
     expect(calendar.value).toBe(true);
     expect(kanban.value).toBe(true);
     await calendar.change!(false);
@@ -155,7 +157,7 @@ describe("settings compatibility", () => {
 
  it("keeps list and Kanban property visibility independent and persists changes", async () => {
    const { tab, plugin } = setup();
-   for (const definition of tab.getSettingDefinitions()) definition.render(new Setting({} as HTMLElement).setName(definition.name));
+   for (const definition of tab.getSettingDefinitions().flatMap(group => group.items)) definition.render(new Setting({} as HTMLElement).setName(definition.name));
    const list = rows.find(row => row.name === "Task properties — List")!.choices!.find(choice => choice.label === "Tags")!;
    const kanban = rows.find(row => row.name === "Task properties — Kanban")!.choices!.find(choice => choice.label === "Tags")!;
    expect(list.checked).toBe(true);

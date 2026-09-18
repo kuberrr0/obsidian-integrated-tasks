@@ -1176,8 +1176,31 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
   .tm-dashboard-tasks, .tm-dashboard-planning { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); }
 }
 
+/* Settings follow the active Obsidian theme and remain scoped to this plugin. */
+.tm-settings-section { margin-bottom: 28px; container-type: inline-size; }
+.tm-settings-section .setting-item-heading { padding: 0 0 12px; margin-top: 0; border-top: 0; }
+.tm-settings-section .setting-item-heading .setting-item-name { color: var(--text-accent); font-size: var(--font-ui-medium); font-weight: 600; }
+.tm-settings-row { gap: 20px; padding: 16px 0; }
+.tm-settings-row .setting-item-info { min-width: 0; margin-right: 0; }
+.tm-settings-row .setting-item-name { font-weight: 500; }
+.tm-settings-row .setting-item-description { margin-top: 5px; line-height: 1.5; color: var(--text-muted); }
+.tm-settings-row .setting-item-control { gap: 8px; }
+.tm-settings-row input[type="text"], .tm-settings-row select { max-width: 100%; border-radius: 6px; }
+.tm-settings-row input[type="number"] { width: 80px; text-align: center; }
 .tm-property-visibility-setting { flex-wrap: wrap; }
 .tm-property-visibility-setting .setting-item-control { flex: 1 1 100%; justify-content: flex-start; }
-.tm-property-visibility-choices { display: flex; flex-wrap: wrap; gap: 10px 20px; }
-.tm-property-visibility-choices label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-.tm-property-visibility-choices input[type="checkbox"] { margin: 0; }
+.tm-property-visibility-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+.tm-property-visibility-choices label {
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border); border-radius: 7px;
+  background: var(--background-primary); color: var(--text-muted); font-size: var(--font-ui-small); cursor: pointer;
+}
+.tm-property-visibility-choices label:has(input:checked) { background: var(--background-secondary); color: var(--text-normal); }
+.tm-property-visibility-choices label:hover { border-color: var(--interactive-accent); }
+.tm-property-visibility-choices label:focus-within { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.tm-property-visibility-choices input[type="checkbox"] { flex-shrink: 0; margin: 0; accent-color: var(--interactive-accent); }
+@container (max-width: 420px) {
+  .tm-settings-row { flex-wrap: wrap; gap: 12px; }
+  .tm-settings-row .setting-item-control { max-width: 100%; }
+  .tm-property-visibility-choices { grid-template-columns: minmax(0, 1fr); }
+}

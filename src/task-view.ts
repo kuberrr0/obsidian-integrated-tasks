@@ -72,6 +72,15 @@ export class TaskMainView extends ItemView {
 
   get pagePath(): string | undefined { return this.state.pagePath ?? this.state.projectPath; }
 
+  get hasCalendar(): boolean {
+    if (this.state.mode === "dashboard") return true;
+    if (this.layout !== "calendar") return false;
+    if (this.state.mode === "projects" && !this.pagePath) return false;
+    if (this.state.mode === "tags" && !this.state.tag) return false;
+    if (this.state.mode === "smartLists" && !this.plugin.settings.smartLists.some(list => list.id === this.state.smartListId)) return false;
+    return true;
+  }
+
   private get taskSourcePath(): string | undefined { return this.state.mode === "tags" ? undefined : this.pagePath; }
 
   getViewType(): string { return TASK_MAIN_VIEW; }

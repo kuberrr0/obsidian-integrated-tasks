@@ -7,15 +7,34 @@ export class TaskManagerSettingTab extends PluginSettingTab {
   }
 
   getSettingDefinitions() {
+    const rows = this.getSettingRows();
+    return ["Task defaults", "Appearance", "List layout", "Kanban layout", "Calendar layout", "Dates"].map(heading => ({
+      type: "group" as const,
+      heading,
+      cls: "tm-settings-section",
+      items: rows.filter(row => row.section === heading).map(row => ({
+        name: row.name,
+        desc: row.desc,
+        render: (setting: Setting) => {
+          setting.settingEl.addClass("tm-settings-row");
+          row.render(setting);
+        }
+      }))
+    }));
+  }
+
+  private getSettingRows() {
     return [
       {
+        section: "Task defaults",
         name: "Task mode",
         desc: "Open project notes in task view across all tabs. Turning this off restores their Markdown views.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.taskMode).onChange(value => this.plugin.setTaskMode(value))); }
       },
       {
+        section: "Task defaults",
         name: "Section heading level",
-        desc: "Choose which heading level defines task sections and section destinations in task mode.",
+        desc: "Headings at this level become sections and task destinations. Default: Heading 1.",
         render: (setting: Setting) => { setting.addDropdown(dropdown => {
           for (let level = 1; level <= 6; level++) dropdown.addOption(String(level), `Heading ${level}`);
           dropdown.setValue(String(this.plugin.settings.sectionHeadingLevel))
@@ -23,6 +42,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         }); }
       },
       {
+        section: "Dates",
         name: "Date format",
         desc: "Moment date format for task dates, for example DD/MM/YYYY. Leave empty to use the Daily Notes format (YYYY-MM-DD if unset).",
         render: (setting: Setting) => { setting.addText(text => text
@@ -31,6 +51,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           .onChange(value => this.plugin.setDateFormat(value))); }
       },
       {
+        section: "Dates",
         name: "Link dates",
         desc: "Write scheduled and deadline dates as [[date]] links. When off, write plain dates. Applies when creating or editing tasks; existing notes are not rewritten automatically.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.linkDates).onChange(async value => {
@@ -39,6 +60,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         })); }
       },
       {
+        section: "Dates",
         name: "Update dates",
         desc: "Update scheduled and deadline date tokens in all Markdown tasks in the vault, including completed tasks, to follow Date format and Link dates.",
         render: (setting: Setting) => { setting.addButton(button => button
@@ -51,18 +73,21 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           })); }
       },
       {
+        section: "Task defaults",
         name: "Inbox note",
-        desc: "Quick-created tasks are inserted into this Markdown note’s checklist.",
+        desc: "The note where quick-created tasks are saved.",
         render: (setting: Setting) => this.renderInboxSetting(setting)
       },
       {
+        section: "Task defaults",
         name: "New task position",
         desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
         render: (setting: Setting) => this.renderPositionSetting(setting)
       },
       {
+        section: "Appearance",
         name: "Task highlight on hover",
-        desc: "Highlight the task title, background, both, or neither when hovering over a task.",
+        desc: "Choose how tasks respond when you hover over them.",
         render: (setting: Setting) => { setting.addDropdown(dropdown => dropdown
           .addOption("none", "None").addOption("title", "Title").addOption("background", "Background").addOption("all", "All")
           .setValue(this.plugin.settings.taskHoverHighlight)
@@ -74,8 +99,9 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           })); }
       },
       {
+        section: "List layout",
         name: "Task height in list view",
-        desc: "Minimum row height as a multiplier of the editor font size (minimum 1.0; default 1.0). Wrapped content and controls can make rows taller.",
+        desc: "Row height × editor font size. Minimum and default: 1.0. Wrapped content can make rows taller.",
         render: (setting: Setting) => { setting.addText(text => {
           text.inputEl.type = "number";
           text.inputEl.min = "1";
@@ -93,7 +119,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         ["showGroupTaskCounts", "Show task counts in group headings", "Show the number of tasks beside list group headings and Kanban column headings."],
         ["showSubtaskCounts", "Show subtask counts", "Show completed and total subtask counts beside tasks that have subtasks."]
       ] as const).map(([key, name, desc]) => ({
-        name, desc,
+        section: "Appearance", name, desc,
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
           this.plugin.settings[key] = value;
           await this.plugin.saveSettings();
@@ -101,8 +127,9 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         })); }
       })),
       ...([ ["hiddenListTaskProperties", "List"], ["hiddenKanbanTaskProperties", "Kanban"] ] as const).map(([key, layout]) => ({
+        section: `${layout} layout`,
         name: `Task properties — ${layout}`,
-        desc: `Choose properties shown in ${layout.toLowerCase()} layout. Properties implied by the current view or grouping remain hidden.`,
+        desc: `Select the details to show on tasks. Details already conveyed by the view or grouping stay hidden.`,
         render: (setting: Setting) => {
           setting.settingEl.addClass("tm-property-visibility-setting");
           const choices = setting.controlEl.createDiv({ cls: "tm-property-visibility-choices", attr: { role: "group", "aria-label": `Task properties — ${layout}` } });
@@ -127,27 +154,30 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         ["wrapCalendarTaskTitles", "Calendar"],
         ["wrapKanbanTaskTitles", "Kanban"]
       ] as const).map(([key, layout]) => ({
-        name: `Wrap task titles — ${layout}`,
-        desc: `Show long task titles on multiple lines in ${layout.toLowerCase()} layout. When off, show the beginning of the title with an ellipsis.`,
+        section: `${layout} layout`,
+        name: "Wrap task titles",
+        desc: `Let long titles wrap onto multiple lines. Turn off to shorten them with an ellipsis.`,
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
           this.plugin.settings[key] = value;
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
         })); }
       }))
-    ] satisfies SettingDefinitionRender[];
+    ] satisfies (SettingDefinitionRender & { section: string })[];
   }
 
   // Obsidian versions before 1.13 use this imperative settings page.
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName("Task defaults").setHeading();
-    for (const definition of this.getSettingDefinitions()) {
-      const setting = new Setting(containerEl)
-        .setName(definition.name)
-        .setDesc(definition.desc ?? "");
-      definition.render(setting);
+    containerEl.addClass("tm-settings");
+    for (const group of this.getSettingDefinitions()) {
+      const section = containerEl.createDiv({ cls: group.cls });
+      new Setting(section).setName(group.heading).setHeading();
+      for (const definition of group.items) {
+        const setting = new Setting(section).setName(definition.name).setDesc(definition.desc);
+        definition.render(setting);
+      }
     }
   }
 

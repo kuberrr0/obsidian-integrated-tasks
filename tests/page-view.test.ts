@@ -546,3 +546,40 @@ it.each(["list", "kanban", "dashboard"])("applies property visibility to %s with
   internals.renderProperties({}, { ...tasks[0], scheduledDate: "2026-09-18", scheduledTime: "09:00", deadline: "2026-09-20", deadlineTime: "10:00", priority: 1, tags: ["work"] });
   expect(labels).toEqual(layout === "kanban" ? ["2026-09-18", "10:00", "work"] : ["09:00", "2026-09-20", "P1"]);
 });
+
+ it.each(["day", "week", "month", "year"] as const)("switches an open calendar to %s without changing its date", async scope => {
+   const plugin = new TaskManagerPlugin({} as App, {} as never);
+   const view = new TaskMainView({} as WorkspaceLeaf, plugin);
+   vi.spyOn(view, "render").mockImplementation(() => {});
+   await view.setState({ mode: "all", layout: "calendar", calendarAnchor: "2026-09-19" });
+   const save = vi.fn();
+   const active = vi.fn(() => view as TaskMainView | null);
+   plugin.app = { workspace: { getActiveViewOfType: active, requestSaveLayout: save } } as unknown as App;
+   const command = plugin as unknown as { switchCalendarScope(scope: string, checking: boolean): boolean };
+   const change = vi.spyOn(view, "setState");
+   expect(command.switchCalendarScope(scope, true)).toBe(true);
+   expect(change).not.toHaveBeenCalled();
+   expect(command.switchCalendarScope(scope, false)).toBe(true);
+   await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+   expect(view.getState()).toMatchObject({ calendarScope: scope, calendarAnchor: "2026-09-19", layout: "calendar" });
+   active.mockReturnValue(null);
+   expect(command.switchCalendarScope(scope, false)).toBe(false);
+ });
+
+ it.each([
+   [{ mode: "all", layout: "list" }, false],
+   [{ mode: "all", layout: "kanban" }, false],
+   [{ mode: "projects", layout: "calendar" }, false],
+   [{ mode: "projects", pagePath: "Project.md", layout: "calendar" }, true],
+   [{ mode: "tags", layout: "calendar" }, false],
+   [{ mode: "tags", tag: "work", layout: "calendar" }, true],
+   [{ mode: "smartLists", layout: "calendar" }, false],
+   [{ mode: "smartLists", smartListId: "missing", layout: "calendar" }, false],
+   [{ mode: "dashboard", layout: "list" }, true]
+ ] as const)("enables calendar commands only for a rendered calendar: %j", async (state, expected) => {
+   const plugin = new TaskManagerPlugin({} as App, {} as never);
+   const view = new TaskMainView({} as WorkspaceLeaf, plugin);
+   vi.spyOn(view, "render").mockImplementation(() => {});
+   await view.setState(state);
+   expect(view.hasCalendar).toBe(expected);
+ });

@@ -5370,6 +5370,14 @@ var TaskMainView = class extends import_obsidian11.ItemView {
     var _a;
     return (_a = this.state.pagePath) != null ? _a : this.state.projectPath;
   }
+  get hasCalendar() {
+    if (this.state.mode === "dashboard") return true;
+    if (this.layout !== "calendar") return false;
+    if (this.state.mode === "projects" && !this.pagePath) return false;
+    if (this.state.mode === "tags" && !this.state.tag) return false;
+    if (this.state.mode === "smartLists" && !this.plugin.settings.smartLists.some((list) => list.id === this.state.smartListId)) return false;
+    return true;
+  }
   get taskSourcePath() {
     return this.state.mode === "tags" ? void 0 : this.pagePath;
   }
@@ -7952,8 +7960,25 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
     this.plugin = plugin;
   }
   getSettingDefinitions() {
+    const rows = this.getSettingRows();
+    return ["Task defaults", "Appearance", "List layout", "Kanban layout", "Calendar layout", "Dates"].map((heading) => ({
+      type: "group",
+      heading,
+      cls: "tm-settings-section",
+      items: rows.filter((row) => row.section === heading).map((row) => ({
+        name: row.name,
+        desc: row.desc,
+        render: (setting) => {
+          setting.settingEl.addClass("tm-settings-row");
+          row.render(setting);
+        }
+      }))
+    }));
+  }
+  getSettingRows() {
     return [
       {
+        section: "Task defaults",
         name: "Task mode",
         desc: "Open project notes in task view across all tabs. Turning this off restores their Markdown views.",
         render: (setting) => {
@@ -7961,8 +7986,9 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         }
       },
       {
+        section: "Task defaults",
         name: "Section heading level",
-        desc: "Choose which heading level defines task sections and section destinations in task mode.",
+        desc: "Headings at this level become sections and task destinations. Default: Heading 1.",
         render: (setting) => {
           setting.addDropdown((dropdown) => {
             for (let level = 1; level <= 6; level++) dropdown.addOption(String(level), `Heading ${level}`);
@@ -7971,6 +7997,7 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         }
       },
       {
+        section: "Dates",
         name: "Date format",
         desc: "Moment date format for task dates, for example DD/MM/YYYY. Leave empty to use the Daily Notes format (YYYY-MM-DD if unset).",
         render: (setting) => {
@@ -7978,6 +8005,7 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         }
       },
       {
+        section: "Dates",
         name: "Link dates",
         desc: "Write scheduled and deadline dates as [[date]] links. When off, write plain dates. Applies when creating or editing tasks; existing notes are not rewritten automatically.",
         render: (setting) => {
@@ -7988,6 +8016,7 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         }
       },
       {
+        section: "Dates",
         name: "Update dates",
         desc: "Update scheduled and deadline date tokens in all Markdown tasks in the vault, including completed tasks, to follow Date format and Link dates.",
         render: (setting) => {
@@ -8004,18 +8033,21 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         }
       },
       {
+        section: "Task defaults",
         name: "Inbox note",
-        desc: "Quick-created tasks are inserted into this Markdown note\u2019s checklist.",
+        desc: "The note where quick-created tasks are saved.",
         render: (setting) => this.renderInboxSetting(setting)
       },
       {
+        section: "Task defaults",
         name: "New task position",
         desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
         render: (setting) => this.renderPositionSetting(setting)
       },
       {
+        section: "Appearance",
         name: "Task highlight on hover",
-        desc: "Highlight the task title, background, both, or neither when hovering over a task.",
+        desc: "Choose how tasks respond when you hover over them.",
         render: (setting) => {
           setting.addDropdown((dropdown) => dropdown.addOption("none", "None").addOption("title", "Title").addOption("background", "Background").addOption("all", "All").setValue(this.plugin.settings.taskHoverHighlight).onChange(async (value) => {
             if (value !== "none" && value !== "title" && value !== "background" && value !== "all") return;
@@ -8026,8 +8058,9 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         }
       },
       {
+        section: "List layout",
         name: "Task height in list view",
-        desc: "Minimum row height as a multiplier of the editor font size (minimum 1.0; default 1.0). Wrapped content and controls can make rows taller.",
+        desc: "Row height \xD7 editor font size. Minimum and default: 1.0. Wrapped content can make rows taller.",
         render: (setting) => {
           setting.addText((text) => {
             text.inputEl.type = "number";
@@ -8047,6 +8080,7 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         ["showGroupTaskCounts", "Show task counts in group headings", "Show the number of tasks beside list group headings and Kanban column headings."],
         ["showSubtaskCounts", "Show subtask counts", "Show completed and total subtask counts beside tasks that have subtasks."]
       ].map(([key, name, desc]) => ({
+        section: "Appearance",
         name,
         desc,
         render: (setting) => {
@@ -8058,8 +8092,9 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         }
       })),
       ...[["hiddenListTaskProperties", "List"], ["hiddenKanbanTaskProperties", "Kanban"]].map(([key, layout]) => ({
+        section: `${layout} layout`,
         name: `Task properties \u2014 ${layout}`,
-        desc: `Choose properties shown in ${layout.toLowerCase()} layout. Properties implied by the current view or grouping remain hidden.`,
+        desc: `Select the details to show on tasks. Details already conveyed by the view or grouping stay hidden.`,
         render: (setting) => {
           var _a;
           setting.settingEl.addClass("tm-property-visibility-setting");
@@ -8092,8 +8127,9 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
         ["wrapCalendarTaskTitles", "Calendar"],
         ["wrapKanbanTaskTitles", "Kanban"]
       ].map(([key, layout]) => ({
-        name: `Wrap task titles \u2014 ${layout}`,
-        desc: `Show long task titles on multiple lines in ${layout.toLowerCase()} layout. When off, show the beginning of the title with an ellipsis.`,
+        section: `${layout} layout`,
+        name: "Wrap task titles",
+        desc: `Let long titles wrap onto multiple lines. Turn off to shorten them with an ellipsis.`,
         render: (setting) => {
           setting.addToggle((toggle) => toggle.setValue(this.plugin.settings[key]).onChange(async (value) => {
             this.plugin.settings[key] = value;
@@ -8106,13 +8142,16 @@ var TaskManagerSettingTab = class extends import_obsidian19.PluginSettingTab {
   }
   // Obsidian versions before 1.13 use this imperative settings page.
   display() {
-    var _a;
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian19.Setting(containerEl).setName("Task defaults").setHeading();
-    for (const definition of this.getSettingDefinitions()) {
-      const setting = new import_obsidian19.Setting(containerEl).setName(definition.name).setDesc((_a = definition.desc) != null ? _a : "");
-      definition.render(setting);
+    containerEl.addClass("tm-settings");
+    for (const group of this.getSettingDefinitions()) {
+      const section = containerEl.createDiv({ cls: group.cls });
+      new import_obsidian19.Setting(section).setName(group.heading).setHeading();
+      for (const definition of group.items) {
+        const setting = new import_obsidian19.Setting(section).setName(definition.name).setDesc(definition.desc);
+        definition.render(setting);
+      }
     }
   }
   renderInboxSetting(setting) {
@@ -8190,6 +8229,13 @@ var TaskManagerPlugin = class extends import_obsidian20.Plugin {
           }
         });
       }
+    }
+    for (const scope of ["day", "week", "month", "year"]) {
+      this.addCommand({
+        id: `switch-calendar-to-${scope}`,
+        name: `Switch calendar to ${scope}`,
+        checkCallback: (checking) => this.switchCalendarScope(scope, checking)
+      });
     }
     this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
     this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: (checking) => {
@@ -8442,6 +8488,14 @@ var TaskManagerPlugin = class extends import_obsidian20.Plugin {
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
     if (!(view == null ? void 0 : view.getSelectedTasks().length)) return false;
     if (!checking) this.openBulkEditor(view);
+    return true;
+  }
+  switchCalendarScope(scope, checking) {
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+    if (!(view == null ? void 0 : view.hasCalendar)) return false;
+    if (!checking) {
+      void view.setState({ ...view.getState(), calendarScope: scope }).then(() => this.app.workspace.requestSaveLayout()).catch((error) => new import_obsidian20.Notice(String(error)));
+    }
     return true;
   }
   focusProjectSearch(checking) {

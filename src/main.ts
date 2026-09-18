@@ -1,3 +1,4 @@
+import type { CalendarScope } from "./calendar";
 import { scanTasks } from "./parser";
 import { applyProjectDraft, projectEditDraft } from "./project-editor";
 import { cloneTaskFilters } from "./task-filters";
@@ -84,6 +85,13 @@ export default class TaskManagerPlugin extends Plugin {
           }
         });
       }
+    }
+    for (const scope of ["day", "week", "month", "year"] as const) {
+      this.addCommand({
+        id: `switch-calendar-to-${scope}`,
+        name: `Switch calendar to ${scope}`,
+        checkCallback: checking => this.switchCalendarScope(scope, checking)
+      });
     }
     this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
     this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: checking => {
@@ -328,6 +336,17 @@ export default class TaskManagerPlugin extends Plugin {
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
     if (!view?.getSelectedTasks().length) return false;
     if (!checking) this.openBulkEditor(view);
+    return true;
+  }
+
+  private switchCalendarScope(scope: CalendarScope, checking: boolean): boolean {
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+    if (!view?.hasCalendar) return false;
+    if (!checking) {
+      void view.setState({ ...view.getState(), calendarScope: scope })
+        .then(() => this.app.workspace.requestSaveLayout())
+        .catch(error => new Notice(String(error)));
+    }
     return true;
   }
 
