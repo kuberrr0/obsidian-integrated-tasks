@@ -1,220 +1,157 @@
 # Integrated Task Manager for Obsidian
 
-Keep your tasks where your work already lives: in your notes. Integrated Task Manager brings checklists from across your vault into lists, calendars, Kanban boards, and project timelines. Every change saves back to the original Markdown note.
+Keep your tasks alongside the notes that give them context. Integrated Task Manager brings checklists from across your vault into one place, with lists, calendars, Kanban boards, and project timelines. Complete or edit a task in any view, and the change is saved in its original note.
 
-Works on **desktop and mobile** with **Obsidian 1.7.2 or newer**. Tasks are indexed locally; the plugin does not upload your notes or task data to an external service.
+Start your day with a dashboard of today's work, upcoming tasks, projects, and your calendar.
 
-![A project’s tasks organized by note headings, with dates and the task navigation sidebar](resources/images/project-list.png)
+![Dashboard showing Today, Upcoming, Projects, and Calendar](resources/images/Dashboard.png)
+
+Works on **desktop and mobile**, with **Obsidian 1.7.2 or newer**. Your tasks stay in your vault; the plugin does not upload your notes or task data to an external service.
 
 ## Get started
 
-1. Copy `main.js`, `manifest.json`, and `styles.css` from this repository into your vault’s `.obsidian/plugins/integrated-task-manager/` folder.
-2. Reload Obsidian and enable **Integrated Task Manager** in **Settings → Community plugins**.
-3. Click **Open task manager** in the ribbon, or run **Open Inbox** from the command palette.
-4. Choose **Add task** and type something like `Send proposal tomorrow at 9am {next Friday} p1`.
+Once the plugin is enabled, click **Open task manager** in Obsidian's ribbon to open the task sidebar.
 
-Quick-created tasks go to `Inbox.md` by default. You can choose a different inbox note in the plugin settings.
+1. Open **Inbox** and choose **Add task**.
+2. Type something like `Call the venue tomorrow at 9am`.
+3. Add a deadline, priority, or other details if you need them, then save.
+4. Open **Today**, **Upcoming**, or **Dashboard** to see your plan.
 
-## Find the right tasks
+Quick-created tasks go to `Inbox.md` by default. You can choose another inbox note in settings. Checklists already in your notes appear in **All Tasks**.
 
-| View | What you’ll find |
+## Find what needs your attention
+
+| View | Use it to… |
 | --- | --- |
-| **Inbox** | Tasks in your chosen inbox note. |
-| **Today** | Tasks for today, with overdue work shown separately. |
-| **Upcoming** | Future tasks, organized by date. |
-| **All Tasks** | Tasks from Markdown notes throughout your vault. |
-| **Projects** | Notes tagged `#project`, with progress and project dates. |
-| **Tags** | Task tags with open and completed counts; open a tag to see its matching tasks. |
+| **Dashboard** | Get an overview of your day and projects. |
+| **Inbox** | Capture tasks and sort them out later. |
+| **Today** | Focus on today's tasks and catch overdue work. |
+| **Upcoming** | Look ahead at future tasks, organized by date. |
+| **All Tasks** | See tasks from across your vault, including those without dates. |
+| **Projects** | Review project progress and open a project's tasks. |
+| **Tags** | Bring related tasks together across different notes. |
+| **Smart Lists** | Return to your own saved views of the work. |
 
-The sidebar uses a compact file-style tree. Its icon toolbar provides **Create task**, **Create project**, and **Task mode**. Expand Projects or Tags for direct access, or click their labels to open the full lists. Creating a project makes a named Markdown note with the `project` frontmatter tag. Tag pages support the existing task layouts, filters, and editing tools; new tasks created there inherit the tag. With Task mode on, Markdown notes linked by task tags such as `#[[work]]` open as tag task views, showing matching tasks across the vault. Opening a tag from the sidebar or Tags list opens its note and enables Task mode; tags without an existing note still open as tag lists.
+Today and Upcoming consider both the scheduled date and the deadline, using whichever comes first. Tasks without either date remain available in All Tasks and their source notes.
 
-Use **Create new smart list** to save a named set of filters (including AND/OR conditions), sorting, and grouping. Saved lists appear under **Smart Lists** in the sidebar and update as tasks change. With a saved list open, **Edit smart list** changes its definition and **Delete smart list** removes the saved list without deleting tasks. Smart lists are stored in the plugin’s workspace settings.
+Search by task title, description, or tag. Narrow the results by priority, dates, duration, status, note, or section. Sort and group the results to suit the way you're working.
 
-Open **Dashboard** from the sidebar or run **Open Task Dashboard** for Today and Upcoming cards in a 40/60 split, with Projects and Calendar cards in a 40/60 split below. Each card has an accent-colored border and a title above it. Cards stack on narrow screens.
+For a view you'll use again, choose **Create new smart list**. Save a list such as “Quick wins,” “Waiting on others,” or “High-priority work.” Smart lists update as your tasks change. Deleting a smart list leaves its tasks intact.
 
-Today and Upcoming use the earlier of a task’s scheduled date and deadline. Undated tasks remain available in Inbox, All Tasks, and their source note’s task view.
+## Capture the task and its details
 
-Search task titles, descriptions, and tags. Filter by title, status, scheduled date or time, deadline, duration, priority, tags, source note, or section. Filters support matching values, missing properties, and date or duration ranges where applicable. After completing a condition, use the inline AND / OR control to add another condition for that property. AND is evaluated before OR; separate property filters must all match.
+Write dates naturally—such as “tomorrow,” “next Friday,” or “at noon”—or use the task editor's individual fields.
 
-Sort in either direction and group by task properties, or choose **None** for a flat list. **View default** keeps the view’s usual organization, including note headings in project views. Visible subtasks stay beside their parents. Search, filters, sorting, and grouping reset when you switch to a different view or page.
+![New task editor with scheduling, duration, deadline, priority, tags, destination, and description fields](resources/images/New%20Task.png)
 
-## Choose how you work
+A task can include:
 
-### List
+- A **scheduled date and time** for when you plan to work on it.
+- A **deadline**, with its own optional time, for when it needs to be finished.
+- A **duration** to help you make room for it.
+- A **priority**, **tags**, and a **description**.
+- A **destination** note or heading, so it lands in the right place.
 
-Task rows use two lines: the title, description/recurrence indicators, and a compact flag deadline badge above; the schedule, project/source, and tags below. Overdue schedules appear in red, with Today/Tomorrow labels and compact future dates. Priority colors the checkbox, and duration is kept in the task editor rather than displayed on the row. Source labels use an accent bar and open their original note.
+Break larger tasks into subtasks. You can also paste several tasks into the editor at once, one per line, with indented subtasks underneath. Press **Enter** for another line and **Cmd/Ctrl+Enter** to save.
 
-See tasks and their properties at a glance. Click a checkbox to complete a task, or click its title or body to edit it. Drag tasks to reorder them or move them between sections and notes. Subtasks and descriptions travel with their parent.
+## Choose a layout
 
-Use the **+** beside a group or heading to add a task with that destination or group’s properties already filled in—even when the section is empty.
+### List: work through the details
 
-### Calendar
+Click a checkbox to complete a task, or click its title to edit it. Drag tasks to reorder them or move them between sections and notes. Subtasks and descriptions travel with their parent.
 
-Use **4D, W, and M** to switch between four days, a week, and a month. Day and Year remain available through commands. Tasks appear on their scheduled date, falling back to their deadline when no scheduled date exists. Cards use your accent color.
+Use the **+** beside a group or heading to add a task there. Click a task's source label to return to the note it came from.
 
-- Drag a task to another date or time to reschedule it.
-- In Day, 4D, and Week, drag across time slots to create a task with a start time and duration.
-- Resize a timed task to adjust its start or finish in 15-minute steps.
-- Keep tasks without a time in the separate untimed area.
-- In the main calendar, toggle **Plan tasks** to open a right-hand sidebar of unscheduled tasks, then drag them onto a date or time slot.
+### Calendar: make time for your work
 
-In Today and Upcoming, switching to Calendar lets you browse the full dated task schedule.
+See your schedule across four days, a week, or a month. Day and year views are also available from the command palette.
 
-### Kanban
+![Weekly calendar with timed tasks and the unscheduled task planning sidebar](resources/images/All%20tasks%20calendar%20week%20plan%20tasks.png)
 
-Turn your task groups into columns. Use note sections for a project board, or group by status, priority, dates, or other properties. Drag cards between supported columns to update their property or destination. Grouping by **Status** gives you **Open** and **Completed** columns.
+Drag tasks to a new date or time to reschedule them. In the daily and weekly layouts, drag across empty time slots to create a task, or resize a timed task to change how much time it takes.
 
-![Kanban board with Preparation and During Exhibition columns](resources/images/kanban.png)
+Turn on **Plan tasks** to see unscheduled tasks beside the calendar, then drag them into your schedule. Tasks without a time stay in a separate area above the time slots.
 
-## Capture tasks naturally
+The calendar places a task on its scheduled date, or on its deadline if it has no scheduled date.
 
-Use the task editor’s text box for quick entry, or fill in the individual fields. Scheduled dates and deadlines can each have their own time.
+### Kanban: organize work into columns
 
-```text
-Call the venue tomorrow at 9am 30m p1
-Send invitations next Friday {next Monday at noon} #[[event]]
-Book tickets ~[[Exhibition 2026#Preparation]]
-```
+Use your note's sections as a board, or group tasks by properties such as priority or status. Drag between supported columns to update the task's section or property. Grouping by **Status** gives you Open and Completed columns.
 
-The editor understands dates such as `today`, `tomorrow`, and `next Friday`, plus times such as `9pm`, `21:00`, `noon`, and `midnight`. A time on its own, such as `Call at 9pm`, uses the next occurrence of that time.
-
-Paste several tasks at once, one per line. Indent subtasks; use indented plain bullets for descriptions. Each task’s dates and properties are parsed separately. The individual property fields apply to the first task, and the whole batch saves to the same destination. **Enter** adds a line; **Cmd/Ctrl+Enter** saves.
-
-![New task editor with fields for scheduling, duration, deadline, priority, tags, destination, and description](resources/images/task-editor.png)
-
-### Markdown syntax
-
-Tasks remain ordinary checklists with optional properties at the end:
-
-```markdown
-- [ ] Send proposal [[2026-09-11]] 09:00 1h30m {[[2026-09-14]] 12:00} p1 #[[work]]
-  - Include the revised estimate.
-  - [ ] Check the pricing 15m
-```
-
-| Property | Syntax |
-| --- | --- |
-| Scheduled date and time | `[[2026-09-11]] 09:00` |
-| Duration | `30m`, `2h`, or `1h30m` |
-| Deadline and optional time | `{[[2026-09-14]] 12:00}` |
-| Priority | `p1` (high), `p2` (medium), `p3` (low) |
-| Tags | `#[[work]] #[[client notes]]` |
-| Destination in the editor | `~[[Note]]` or `~[[Note#Heading]]` |
-
-Dates use **Date format** when set; it is empty by default and falls back to your **Daily Notes** date format, then `YYYY-MM-DD`. ISO dates are also supported. Turn off **Link dates** to save plain dates instead of links. These settings apply to new edits. Click **Update dates** in settings to convert scheduled and deadline tokens in all tasks across the vault, including completed tasks, to the selected format and link style. The updater preserves task text and times and skips frontmatter and fenced code blocks.
-
-Tags can contain spaces. They appear as badges and work with search, filters, sorting, and grouping. Duplicate tags are saved once.
-
-Indented checklists become subtasks. Indented plain bullets become a task’s description, which you can search and edit in the task editor. Descriptions stay hidden in task layouts to keep them compact.
-
-Choose a destination from the editor or type `~[[Note#Heading]]`. Tasks go at the top or bottom of the first checklist in that section, according to **New task position**. A note-only destination uses the area before the first heading. If there’s no checklist, one is started in that area; introductory prose and frontmatter are preserved.
+![Kanban board with tasks organized into note sections](resources/images/All%20tasks%20kanban.png)
 
 ## Turn notes into projects
 
-Run **Convert to project** on a note, or add `#project` to its body or frontmatter tags. The command adds missing project properties while preserving existing values and tags.
+Create a project from the task sidebar, or open an existing note and run **Convert to project** from the command palette. Use headings to divide its tasks into sections, and give the project dates, a deadline, and a priority.
 
-Enable **Task mode** to open project notes as task views. Existing project tabs switch too, and turning it off restores their Markdown views. Ordinary notes stay in Markdown. Opening a project from Projects automatically enables Task mode and opens it in a new tab.
+Projects show completion progress, including subtasks. Assign a parent project to organize related projects together.
 
-Use headings to organize a project’s tasks into sections. **Section heading level** selects Heading 1–6 for sections and task destinations; the default is Heading 1. Add properties to track the project itself:
+**Task mode** opens project notes as task views. Opening a project from the Projects list enables it automatically. Turn Task mode off whenever you want to return to the regular note view.
 
-```yaml
----
-tags: [project]
-date: 2026-09-10
-end date: 2026-09-18
-deadline: 2026-09-20
-priority: p2
-parent: "[[Business]]"
----
-```
+Add the `archived` tag to a project note to hide it from the default Projects list. **Show archived projects** brings it back; its tasks remain available in other task views.
 
-The optional `parent` link nests a project under another project. Start date, end date, deadline, and priority appear as badges. `start-date` and `end-date` aliases are supported, as are priorities written as `1`–`3` or `high`/`medium`/`low`.
+### See the bigger picture with Gantt
 
-Projects show completion percentages, including subtasks. Add `#archived` to hide a project from the default Projects list; **Show archived projects** brings it back. Its tasks still appear in other task views.
+Switch Projects to **Gantt** to see your projects on a timeline. Choose month, quarter, year, or five-year views to plan at different scales.
 
-### Plan projects on a timeline
+![Project timeline showing a parent project and its related projects](resources/images/Projects%20gantt.png)
 
-Choose **Gantt** in Projects to see the project hierarchy with week, month, or quarter zoom. Scroll horizontally in either direction to explore dates beyond the current window; the timeline continues as you scroll, with project labels pinned on the left.
-
-- Drag a bar’s edges to change its start or finish date.
-- Bars finish at the deadline when one exists, otherwise at the end date.
-- When both exist, a separate draggable marker lets you adjust the end date independently.
-- Click inside a bar to add a missing end date, or drag across an undated row to set start and end dates together.
-- Focus an edge handle and use the arrow keys to adjust it one day at a time.
-
-Changes save to the project note’s properties.
-
-![Project Gantt timeline showing a nested project and an undated row](resources/images/project-gantt.png)
+Drag a bar's edges to adjust a project's start and end dates. For a project without a date range, drag across its row to plan one. Changes are saved back to the project note.
 
 ## Keep working in your notes
 
-In Live Preview and Reading view, tasks use the same compact layout as Task mode: deadline flags beside the title, with scheduled dates, times, and tags underneath. Priority colors the checkbox, while priority labels and durations stay hidden. In Live Preview, placing the caret on a task line reveals its original text. Date links still open their notes, and Source mode stays plain Markdown.
+You can continue writing and checking off tasks directly in your notes. In Live Preview and Reading view, the plugin presents task dates, deadlines, and tags alongside the task, with checkbox colors indicating priority.
 
-With Task mode off, enter natural dates directly in a checklist (`@` is optional):
+**Cmd/Ctrl-click a checkbox** to open the task editor. On mobile, **press and hold the checkbox**.
 
-```markdown
-- [ ] Call the venue tomorrow {next Friday}
-```
+With Task mode off, you can type a natural date into a checklist, such as “Call the venue tomorrow.” Press Enter or move to another line to turn the recognized date into a saved schedule.
 
-Press Enter or move to another line to convert recognized dates to your configured format and put task properties in a consistent order. Only the last scheduled-date expression and the last `{deadline}` expression are converted; earlier mentions and unrecognized expressions remain unchanged.
+Tags connect related work across your vault. Open a tag from the sidebar to see its tasks; a task created in that view inherits the tag. When a tag has a linked note, Task mode can show that note as a tag task view too.
 
-**Cmd/Ctrl-click a checkbox** to open its task editor from a note. On mobile, **press and hold the checkbox**. Both work in Live Preview and Reading view.
+## Update several tasks at once
 
-![The same project in Markdown, with note properties and date badges beside tasks](resources/images/markdown-note.png)
+Select tasks to change their dates, priorities, tags, or other details together.
 
-## Edit several tasks together
+![Four selected tasks with the Edit task properties toolbar](resources/images/Selection.png)
 
 | Action | Gesture |
 | --- | --- |
 | Select a task | Right-click |
-| Select a visible range | Shift + right-click |
-| Add to the selection | Cmd/Ctrl + right-click |
-| Clear selection | Escape on a focused task, or **Clear selection** |
+| Select a range | Shift + right-click |
+| Add to your selection | Cmd/Ctrl + right-click |
+| Clear your selection | Choose **Clear selection** |
 
-Choose **Edit task properties** from the selection toolbar or command palette to change dates, times, duration, priority, tags, destination, or description together. Only fields you edit are applied. **Mixed — unchanged** means the selected tasks have different values; **Clear** removes a property explicitly.
+Choose **Edit task properties** to make a shared change. Only the fields you edit are applied; **Mixed — unchanged** preserves each task's existing value.
 
-Drag a selected task to move the selection together, including subtasks and descriptions. Calendar drops reschedule the selection. **Delete task** removes the selected tasks and their subtasks.
+You can also drag a selection to move tasks together, drop it onto the calendar to reschedule it, or delete selected tasks along with their subtasks.
 
-## Recurring tasks
+## Build recurring routines
 
-Create a Markdown note tagged `recurring-task` with a `repeat` property containing one rule or a list:
+Use recurring tasks for daily habits, weekly reviews, or occasional reminders.
 
-```markdown
----
-tags: recurring-task
-repeat:
-  - every saturday
-  - every tuesday
----
-```
+1. Create a note for the routine, such as **Weekly review**.
+2. In that note's properties, add the tag `recurring-task` and a text property named `repeat`, with a value such as `every friday`.
+3. In any checklist, link to that note and give the task a scheduled date.
 
-Link that note from a dated checklist item in any note:
+Check off the recurring task to record its completion and advance it to the next occurrence. The task stays open for next time, and its routine note keeps the history.
 
-```markdown
-- [ ] [[Recurring Task]] 2026-09-19
-```
+You can also use **Skip recurring task** or **Fail recurring task** from the command palette. In a regular note, place your cursor on the task first; in Task mode, select one recurring task.
 
-Run **Complete recurring task**, **Skip recurring task**, or **Fail recurring task**. With Task mode off, place the caret on the checklist line. With Task mode on, select exactly one recurring task. Checking a recurring task's checkbox in a task view, Live Preview, or Reading view also logs completion and advances its current instance. The native toggle-checkbox command in Markdown mode does the same, including when toggling multiple tasks. Modifier-click and long-press still open the task editor.
+Repeat rules include every day, every week, every other week, every month, every year, and named weekdays. Overdue routines advance one occurrence at a time.
 
-Each action appends `COMPLETED: 2026-09-19`, `SKIPPED: 2026-09-19`, or `FAILED: 2026-09-19` to the recurring note's body. The logged date is the instance's scheduled date, written using the plugin's Date format and Link dates settings. The checklist stays unchecked and advances to the earliest repeat date strictly after that date—for this example, `2026-09-22`. Overdue instances advance one occurrence at a time. All other properties, descriptions, subtasks, and formatting are preserved.
+## Make it fit your workflow
 
-Supported rules include `every monday`, `every day`, `every week`, `every other week`, `every 3 weeks`, `every third monday` (every three weeks on Monday), `every month`, and `every year`. `every` is optional: `monday`, `2 days`, `5 days`, `week`, `month`, and `third monday` also work, including mixed lists of shorthand and full rules. Interval rules are relative to the instance's scheduled date. Month and year intervals clamp to the last day when necessary. Unsupported or empty rules leave both notes unchanged and show an error.
+In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Adjust title wrapping, row height, hover highlighting, task counts, and the details shown in lists and boards.
 
-## Settings and commands
+Choose your preferred date format and whether dates link to notes. These choices apply to new edits; use **Update dates** to apply them to existing tasks and recurring-task history.
 
-Settings let you choose your **Inbox note**, toggle **Task mode** and **Link dates**, set **New task position** to Top or Bottom, and control title wrapping separately for List, Calendar, and Kanban. Separate List and Kanban checkbox groups control project/source note, scheduled date and time, deadline date and time, duration, priority, and tags. All are enabled by default; properties implied by the current view or grouping remain hidden. Dashboard task lists follow the List settings.
+Search for **Integrated Task Manager** in Obsidian's command palette to open views, create tasks, switch layouts, and access other actions. Assign hotkeys to your favorites in Obsidian's Hotkeys settings.
 
-From the command palette, you can open any main view, **Create new task**, **Convert to project**, **Toggle task mode**, **Edit task properties**, and switch task or project layouts. **Search task in list** focuses search in an active project task view while Task mode is on. Assign hotkeys through Obsidian’s Hotkeys settings.
+## Manual installation
 
-## Development
-
-```bash
-npm install
-npm test
-npm run build
-```
-
-Use `npm run dev` to rebuild as you work. Copy the built plugin files into a test vault using the installation steps above.
+1. Place `main.js`, `manifest.json`, and `styles.css` in your vault's `.obsidian/plugins/integrated-task-manager/` folder.
+2. Reload Obsidian.
+3. Enable **Integrated Task Manager** under **Settings → Community plugins**.
 
 ## License
 
