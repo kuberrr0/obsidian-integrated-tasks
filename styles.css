@@ -981,9 +981,17 @@ button.tm-list-drag-handle { touch-action: none; }
 
 .tm-editor-actions button.tm-delete-task { margin-right: auto; flex: 0 0 auto; color: var(--text-error); }
 
-.tm-gantt-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--background-modifier-border); border-radius: 8px; --tm-gantt-label: 220px; }
+.tm-gantt-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--background-modifier-border); border-radius: 8px; --tm-gantt-label: 440px; }
 .tm-gantt-row { display: grid; grid-template-columns: var(--tm-gantt-label) var(--tm-gantt-width); width: max-content; min-height: 36px; }
 .tm-gantt-label { position: sticky; left: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-start; padding: 4px 12px; background: var(--background-primary); border: 0; border-right: 1px solid var(--background-modifier-border); border-radius: 0; box-shadow: none; text-align: left; height: auto; white-space: normal; overflow-wrap: anywhere; }
+.tm-gantt-project { align-items: flex-start; gap: 8px; padding-block: 9px; }
+.tm-gantt-project .tm-project-icon { flex-shrink: 0; padding-top: 3px; }
+.tm-gantt-project-content { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.tm-main-view .tm-gantt-project button.tm-task-title { height: auto; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+.tm-main-view .tm-gantt-project .tm-project-header-metadata { display: flex; margin: 0; gap: 4px 8px; }
+.tm-gantt-project .tm-project-header-metadata[hidden] { display: none; }
+.tm-main-view.tm-hover-title .tm-gantt-project:hover button.tm-task-title { color: var(--text-accent-hover); }
+.tm-main-view.tm-hover-background .tm-gantt-project:hover { background: var(--background-primary); box-shadow: inset 0 0 0 999px var(--background-modifier-hover); }
 .tm-gantt-header { position: sticky; top: 0; z-index: 4; background: var(--background-secondary); }
 .tm-gantt-header .tm-gantt-label, .tm-gantt-group .tm-gantt-label { background: var(--background-secondary); font-weight: 600; }
 .tm-gantt-group { background: var(--background-secondary); min-height: 32px; }
@@ -997,9 +1005,7 @@ button.tm-gantt-bar.is-overdue { box-shadow: inset 0 -3px var(--text-error); }
 .tm-gantt-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--interactive-accent); pointer-events: none; }
 .tm-gantt-undated { display: inline-block; padding: 4px 12px; font-size: var(--font-ui-small); color: var(--text-muted); }
 button.tm-gantt-jump { margin: 4px 8px; height: 28px; font-size: var(--font-ui-small); }
-.tm-gantt-preview { position: absolute; right: 4px; top: 0; font-size: 10px; background: var(--background-primary); pointer-events: none; }
-.tm-gantt-preview[hidden] { display: none; }
-@media (max-width: 700px) { .tm-gantt-scroll { --tm-gantt-label: 150px; } }
+@media (max-width: 700px) { .tm-gantt-scroll { --tm-gantt-label: 300px; } }
 
 .tm-gantt-date { box-sizing: border-box; text-align: center; }
 .tm-gantt-bar[hidden], .tm-gantt-handle[hidden], .tm-gantt-jump[hidden] { display: none; }
@@ -1009,7 +1015,6 @@ button.tm-gantt-handle.is-end::after { content: ""; position: absolute; left: 5p
 button.tm-gantt-handle:hover, button.tm-gantt-handle:focus-visible { opacity: 1; outline: 2px solid var(--text-accent); }
 .tm-gantt-row.is-resizing .tm-gantt-bar { opacity: .8; }
 .tm-gantt-row.is-archived .tm-gantt-label { color: var(--text-muted); }
-.tm-gantt-preview { z-index: 3; }
 
 /* Edge grips stay unobtrusive until the project row is hovered or focused. */
 button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; }
@@ -1362,3 +1367,24 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 }
 /* Prevent an unprioritized nested task from inheriting its parent's priority. */
 li.task-list-item { --tm-note-priority: initial; }
+
+/* Gantt rows retain one line for the title and one for its properties. */
+.tm-gantt-row { border-bottom: 1px solid var(--background-modifier-border); }
+.tm-main-view .tm-gantt-project button.tm-task-title { display: block; width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-main-view .tm-gantt-project .tm-project-header-metadata { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.tm-gantt-project .tm-project-date-range { flex-wrap: nowrap; flex-shrink: 0; }
+.tm-gantt-project .tm-task-source { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-gantt-project .tm-task-due { flex-shrink: 0; }
+.tm-gantt-date { flex-shrink: 0; border-left: 1px solid var(--background-modifier-border); white-space: nowrap; overflow: hidden; text-overflow: clip; text-align: left; padding-left: 8px; }
+.tm-gantt-grid { position: absolute; inset: 0; pointer-events: none; }
+.tm-gantt-grid-line { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--background-modifier-border); }
+
+/* Compact single-line Gantt labels and independent date controls. */
+.tm-gantt-row { border-bottom: 0; }
+.tm-gantt-project-content { flex-direction: row; align-items: center; gap: 10px; }
+.tm-main-view .tm-gantt-project button.tm-task-title { flex: 1 1 45%; width: auto; }
+.tm-main-view .tm-gantt-project .tm-project-header-metadata { flex: 0 1 auto; min-width: 0; }
+.tm-gantt-date { font-size: var(--font-ui-medium); }
+button.tm-gantt-bar { background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary)); color: var(--text-normal); border: 1px solid color-mix(in srgb, var(--interactive-accent) 40%, transparent); border-radius: 10px; padding-inline: 14px; font-size: var(--font-ui-small); }
+button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { top: 10px; height: 16px; width: 10px; background: transparent; border-radius: 2px; }
+button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: var(--interactive-accent); }

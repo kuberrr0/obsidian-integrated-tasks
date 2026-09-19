@@ -4649,9 +4649,10 @@ function projectHierarchy(projects) {
 
 // src/gantt.ts
 var GANTT_ZOOMS = {
-  week: { days: 14, width: 64 },
   month: { days: 35, width: 32 },
-  quarter: { days: 91, width: 18 }
+  quarter: { days: 91, width: 12 },
+  year: { days: 366, width: 3 },
+  "five-year": { days: 1827, width: 0.7 }
 };
 function daysBetween(start, end) {
   const utc = (iso) => {
@@ -4661,15 +4662,14 @@ function daysBetween(start, end) {
   return Math.round((utc(end) - utc(start)) / 864e5);
 }
 function ganttRange(project) {
-  var _a;
   const start = project.scheduledDate;
-  const end = (_a = project.deadline) != null ? _a : project.endDate;
+  const end = project.endDate;
   if (!start || !end || end < start) return void 0;
-  return { start, end, finishField: project.deadline ? "deadline" : "endDate", ...project.deadline && project.endDate ? { marker: project.endDate } : {} };
+  return { start, end, finishField: "endDate" };
 }
 function resizeProjectDate(project, handle, delta) {
   const range = ganttRange(project);
-  if (!range) throw new Error("Set a start date and a valid end date or deadline first.");
+  if (!range) throw new Error("Set a start date and a valid end date first.");
   const field2 = handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : range.finishField;
   const original = project[field2];
   if (!original) throw new Error("This project has no end date to move.");
@@ -4686,6 +4686,20 @@ function ganttDateAt(anchor, offset, dayWidth, days) {
 function ganttSelection(first, last) {
   return first <= last ? { scheduledDate: first, endDate: last } : { scheduledDate: last, endDate: first };
 }
+function ganttSegments(start, days, zoom) {
+  const segments = [];
+  for (let offset = 0; offset < days; offset++) {
+    const iso = addDays(start, offset), date = localDate(iso);
+    const boundary = zoom === "month" ? date.getDay() === 1 : zoom === "five-year" ? date.getMonth() === 0 && date.getDate() === 1 : date.getDate() === 1;
+    if (offset === 0 || boundary) {
+      const weekStart = localDate(addDays(iso, -((date.getDay() + 6) % 7)));
+      const label = zoom === "month" ? weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : zoom === "five-year" ? String(date.getFullYear()) : date.toLocaleDateString("en-US", { month: "short" });
+      segments.push({ start: iso, offset, days: 0, label });
+    }
+    segments[segments.length - 1].days++;
+  }
+  return segments;
+}
 
 // src/gantt-view.ts
 function renderGantt(container, options) {
@@ -4696,6 +4710,7 @@ function renderGantt(container, options) {
   let days = period;
   let interacting = false;
   const painters = [];
+  const detailPainters = /* @__PURE__ */ new Map();
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
     const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
@@ -4712,7 +4727,7 @@ function renderGantt(container, options) {
   });
   const rangeHeading = toolbar.createEl("h2");
   const zoom = toolbar.createEl("select", { attr: { "aria-label": "Gantt zoom" } });
-  for (const value of ["week", "month", "quarter"]) zoom.createEl("option", { value, text: value[0].toUpperCase() + value.slice(1) });
+  for (const value of ["month", "quarter", "year", "five-year"]) zoom.createEl("option", { value, text: value === "five-year" ? "5 years" : value[0].toUpperCase() + value.slice(1) });
   zoom.value = options.zoom;
   zoom.addEventListener("change", () => options.navigate(anchor, zoom.value));
   const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0" } });
@@ -4724,18 +4739,20 @@ function renderGantt(container, options) {
   const header = scroll.createDiv({ cls: "tm-gantt-row tm-gantt-header" });
   header.createDiv({ cls: "tm-gantt-label", text: "Project" });
   const dates = header.createDiv({ cls: "tm-gantt-dates" });
+  let segments = ganttSegments(start, days, options.zoom);
   const paintDates = () => {
+    segments = ganttSegments(start, days, options.zoom);
     dates.empty();
-    for (let index = 0; index < days; index++) {
-      const day = addDays(start, index);
-      const label = options.zoom === "quarter" ? String(localDate(day).getDate()) : localDate(day).toLocaleDateString(void 0, { month: "short", day: "numeric" });
-      dates.createDiv({ cls: `tm-gantt-date${day === todayIso() ? " is-today" : ""}`, text: label, attr: { title: formatDate(day, options.dateFormat) } });
+    for (const segment of segments) {
+      const cell = dates.createDiv({ cls: "tm-gantt-date", text: segment.label, attr: { title: formatDate(segment.start, options.dateFormat) } });
+      cell.style.width = `${segment.days * width2}px`;
+      cell.style.flexBasis = `${segment.days * width2}px`;
     }
   };
   paintDates();
   const syncViewport = () => {
     var _a, _b, _c;
-    const labelWidth = (_b = (_a = header.firstElementChild) == null ? void 0 : _a.getBoundingClientRect().width) != null ? _b : 220;
+    const labelWidth = (_b = (_a = header.firstElementChild) == null ? void 0 : _a.getBoundingClientRect().width) != null ? _b : 440;
     const visibleDays = Math.max(1, Math.ceil((scroll.clientWidth - labelWidth) / width2));
     anchor = addDays(start, Math.floor(scroll.scrollLeft / width2));
     rangeHeading.setText(`${formatDate(anchor, options.dateFormat)} \u2013 ${formatDate(addDays(anchor, visibleDays - 1), options.dateFormat)}`);
@@ -4753,12 +4770,14 @@ function renderGantt(container, options) {
   scroll.addEventListener("scroll", syncViewport);
   let busy = false;
   const persist = async (project, changes, rebuild = false) => {
+    var _a;
     if (busy) return;
     busy = true;
     root.setAttribute("aria-busy", "true");
     try {
       await options.update(project, changes);
       Object.assign(project, changes);
+      (_a = detailPainters.get(project)) == null ? void 0 : _a();
       if (rebuild && root.isConnected) {
         const fraction = scroll.scrollLeft % width2;
         const top = scroll.scrollTop;
@@ -4779,10 +4798,32 @@ function renderGantt(container, options) {
   };
   for (const { project, depth } of projectHierarchy(options.projects)) {
     const row = scroll.createDiv({ cls: `tm-gantt-row${project.archived ? " is-archived" : ""}` });
-    const label = row.createEl("button", { cls: "tm-gantt-label", text: project.name, attr: { title: project.path, "aria-label": `Open ${project.name} project note` } });
+    const label = row.createDiv({ cls: "tm-gantt-label tm-gantt-project" });
     label.style.paddingLeft = `${12 + depth * 16}px`;
-    label.addEventListener("click", () => options.open(project));
+    const icon = label.createSpan({ cls: "tm-project-icon" });
+    renderProjectProgress(icon, project, false);
+    const content = label.createDiv({ cls: "tm-gantt-project-content" });
+    const title = content.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path, "aria-label": `Open ${project.name} project note` } });
+    title.addEventListener("click", () => options.open(project));
+    const metadata = content.createDiv({ cls: "tm-project-header-metadata" });
+    const paintDetails = () => {
+      metadata.empty();
+      renderProjectHeaderDetails(metadata, project, (field2) => options.edit ? options.edit(project, field2) : options.open(project), options.dateFormat);
+      metadata.hidden = !metadata.childElementCount;
+    };
+    detailPainters.set(project, paintDetails);
+    paintDetails();
     const track = row.createDiv({ cls: "tm-gantt-track" });
+    const grid = track.createDiv({ cls: "tm-gantt-grid", attr: { "aria-hidden": "true" } });
+    const paintGrid = () => {
+      grid.empty();
+      for (const segment of segments) {
+        const line = grid.createSpan({ cls: "tm-gantt-grid-line" });
+        line.style.left = `${segment.offset * width2}px`;
+      }
+    };
+    painters.push(paintGrid);
+    paintGrid();
     const marker = track.createSpan({ cls: "tm-gantt-today" });
     const paintToday = () => {
       const todayOffset = daysBetween(start, todayIso());
@@ -4807,7 +4848,6 @@ function renderGantt(container, options) {
         selection.hidden = false;
         selection.style.left = `${daysBetween(start, dates2.scheduledDate) * width2 + 2}px`;
         selection.style.width = `${(daysBetween(dates2.scheduledDate, dates2.endDate) + 1) * width2 - 4}px`;
-        selection.setText(`${formatDate(dates2.scheduledDate, options.dateFormat)} \u2013 ${formatDate(dates2.endDate, options.dateFormat)}`);
       };
       const resetSelection = () => {
         pointer = void 0;
@@ -4845,30 +4885,21 @@ function renderGantt(container, options) {
       continue;
     }
     if (!range) {
-      const missing = !project.scheduledDate ? "Set start date" : !project.deadline && !project.endDate ? "Set end date or deadline" : "Finish is before start";
+      const missing = !project.scheduledDate ? "Set start date" : !project.endDate ? "Set end date" : "Finish is before start";
       const edit = track.createEl("button", { cls: "tm-gantt-jump", text: missing });
       edit.addEventListener("click", () => options.open(project));
       continue;
     }
-    const bar = track.createEl("button", { cls: "tm-gantt-bar", text: project.name });
-    bar.addEventListener("click", (event) => {
-      if (busy) return;
-      if (project.endDate || event.detail === 0) {
-        options.open(project);
-        return;
-      }
-      const clicked = ganttDateAt(start, event.clientX - track.getBoundingClientRect().left, width2, days);
-      const date = clicked < range.start ? range.start : clicked > range.end ? range.end : clicked;
-      void persist(project, { endDate: date }, true);
+    const bar = track.createEl("button", { cls: "tm-gantt-bar" });
+    bar.addEventListener("click", () => {
+      if (!busy) options.open(project);
     });
     const jump = track.createEl("button", { cls: "tm-gantt-jump", text: `Show ${formatDate(range.start, options.dateFormat)}` });
     jump.addEventListener("click", () => options.navigate(addDays(project.scheduledDate, -1), options.zoom));
-    const preview = track.createSpan({ cls: "tm-gantt-preview" });
-    preview.hidden = true;
     const handles = /* @__PURE__ */ new Map();
-    const fieldFor = (handle) => handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : project.deadline ? "deadline" : "endDate";
-    for (const handle of ["start", "finish", ...range.marker ? ["end"] : []]) {
-      const button = track.createEl("button", { cls: `tm-gantt-handle is-${handle}`, attr: { "aria-label": `${project.name}: change ${handle === "start" ? "start date" : handle === "end" || !project.deadline ? "end date" : "deadline"}` } });
+    const fieldFor = (handle) => handle === "start" ? "scheduledDate" : "endDate";
+    for (const handle of ["start", "finish"]) {
+      const button = track.createEl("button", { cls: `tm-gantt-handle is-${handle}`, attr: { "aria-label": `${project.name}: change ${handle === "start" ? "start date" : "end date"}` } });
       handles.set(handle, button);
     }
     const paint = (candidate) => {
@@ -4879,6 +4910,7 @@ function renderGantt(container, options) {
       jump.hidden = !bar.hidden;
       bar.style.left = `${Math.max(0, from) * width2 + 2}px`;
       bar.style.width = `${Math.max(8, (Math.min(days, to) - Math.max(0, from)) * width2 - 4)}px`;
+      bar.setText(`${formatDate(span.start, options.dateFormat)} \u2013 ${formatDate(span.end, options.dateFormat)}`);
       bar.setAttribute("title", `${project.name}: ${formatDate(span.start, options.dateFormat)} \u2013 ${formatDate(span.end, options.dateFormat)} (${span.finishField === "deadline" ? "deadline" : "end date"})`);
       for (const [handle, button] of handles) {
         const date = candidate[fieldFor(handle)];
@@ -4899,7 +4931,6 @@ function renderGantt(container, options) {
         pointer = void 0;
         interacting = false;
         delta = 0;
-        preview.hidden = true;
         row.removeClass("is-resizing");
         paint(project);
       };
@@ -4926,8 +4957,6 @@ function renderGantt(container, options) {
         const { field: field2, value } = resizeProjectDate(project, handle, delta);
         paint({ ...project, [field2]: value });
         row.addClass("is-resizing");
-        preview.hidden = false;
-        preview.setText(`${field2 === "scheduledDate" ? "Start" : field2 === "deadline" ? "Deadline" : "End"}: ${formatDate(value, options.dateFormat)}`);
       });
       button.addEventListener("pointerup", (event) => {
         if (pointer !== event.pointerId) return;
@@ -5747,7 +5776,8 @@ var TaskMainView = class extends import_obsidian14.ItemView {
   async setState(state) {
     const mode = state.mode;
     if (state.projectLayout === "list" || state.projectLayout === "gantt") this.projectLayout = state.projectLayout;
-    if (state.ganttZoom === "week" || state.ganttZoom === "month" || state.ganttZoom === "quarter") this.ganttZoom = state.ganttZoom;
+    if (state.ganttZoom === "month" || state.ganttZoom === "quarter" || state.ganttZoom === "year" || state.ganttZoom === "five-year") this.ganttZoom = state.ganttZoom;
+    else if (state.ganttZoom === "week") this.ganttZoom = "month";
     if (typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor)) this.ganttAnchor = state.ganttAnchor;
     if (state.layout === "list" || state.layout === "calendar" || state.layout === "kanban") this.layout = state.layout;
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
@@ -6256,6 +6286,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
         open: (project) => {
           void this.plugin.openProject(project.path).catch((error) => new import_obsidian14.Notice(String(error)));
         },
+        edit: (project, field2) => this.plugin.openProjectEditor(project.path, field2),
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
           if (!(file instanceof import_obsidian14.TFile)) throw new Error("Project note no longer exists.");

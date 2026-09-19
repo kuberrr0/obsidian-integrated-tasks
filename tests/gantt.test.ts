@@ -3,21 +3,21 @@ import { daysBetween, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate
 import { parseProjectProperties, updateProjectDate, updateProjectDates } from "../src/project-properties";
 const project = { scheduledDate: "2026-09-06", endDate: "2026-09-09", deadline: "2026-09-10" };
 describe("project Gantt", () => {
-  it("spans start to deadline and marks the independent end date", () => {
-    expect(ganttRange(project)).toEqual({ start: project.scheduledDate, end: project.deadline, finishField: "deadline", marker: project.endDate });
-    expect(ganttRange({ ...project, endDate: undefined })).toEqual({ start: project.scheduledDate, end: project.deadline, finishField: "deadline" });
+  it("spans start to end independently of the deadline", () => {
+    expect(ganttRange(project)).toEqual({ start: project.scheduledDate, end: project.endDate, finishField: "endDate" });
+    expect(ganttRange({ ...project, endDate: undefined })).toBeUndefined();
   });
-  it("falls back to end date only when there is no deadline", () => {
+  it("uses the end date without a deadline", () => {
     expect(ganttRange({ ...project, deadline: undefined })).toEqual({ start: project.scheduledDate, end: project.endDate, finishField: "endDate" });
   });
   it("does not invent ranges for missing or reversed dates", () => {
     expect(ganttRange({ deadline: "2026-09-10" })).toBeUndefined();
     expect(ganttRange({ scheduledDate: "2026-09-10" })).toBeUndefined();
-    expect(ganttRange({ ...project, deadline: "2026-09-01" })).toBeUndefined();
+    expect(ganttRange({ ...project, endDate: "2026-09-01" })).toBeUndefined();
   });
   it("edits the correct property for each handle", () => {
     expect(resizeProjectDate(project, "start", -2)).toEqual({ field: "scheduledDate", value: "2026-09-04" });
-    expect(resizeProjectDate(project, "finish", 2)).toEqual({ field: "deadline", value: "2026-09-12" });
+    expect(resizeProjectDate(project, "finish", 2)).toEqual({ field: "endDate", value: "2026-09-11" });
     expect(resizeProjectDate({ ...project, deadline: undefined }, "finish", 2)).toEqual({ field: "endDate", value: "2026-09-11" });
     expect(resizeProjectDate(project, "end", 3)).toEqual({ field: "endDate", value: "2026-09-12" });
     expect(project.deadline).toBe("2026-09-10");

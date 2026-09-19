@@ -98,7 +98,8 @@ export class TaskMainView extends ItemView {
   async setState(state: Record<string, unknown>): Promise<void> {
     const mode = state.mode;
     if (state.projectLayout === "list" || state.projectLayout === "gantt") this.projectLayout = state.projectLayout;
-    if (state.ganttZoom === "week" || state.ganttZoom === "month" || state.ganttZoom === "quarter") this.ganttZoom = state.ganttZoom;
+    if (state.ganttZoom === "month" || state.ganttZoom === "quarter" || state.ganttZoom === "year" || state.ganttZoom === "five-year") this.ganttZoom = state.ganttZoom;
+    else if (state.ganttZoom === "week") this.ganttZoom = "month";
     if (typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor)) this.ganttAnchor = state.ganttAnchor;
     if (state.layout === "list" || state.layout === "calendar" || state.layout === "kanban") this.layout = state.layout;
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
@@ -575,6 +576,7 @@ export class TaskMainView extends ItemView {
         navigate: (anchor, zoom) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.render(); },
         viewportChanged: anchor => { this.ganttAnchor = anchor; },
         open: project => { void this.plugin.openProject(project.path).catch(error => new Notice(String(error))); },
+        edit: (project, field) => this.plugin.openProjectEditor(project.path, field),
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
           if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
