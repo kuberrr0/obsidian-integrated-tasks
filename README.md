@@ -147,7 +147,7 @@ Changes save to the project note’s properties.
 
 ## Keep working in your notes
 
-In Live Preview and Reading view, dates, durations, deadlines, and priorities appear as small badges. In Live Preview, placing the caret in a property reveals its original text. Date links still open their notes, and Source mode stays plain Markdown.
+In Live Preview and Reading view, tasks use the same compact layout as Task mode: deadline flags beside the title, with scheduled dates, times, and tags underneath. Priority colors the checkbox, while priority labels and durations stay hidden. In Live Preview, placing the caret on a task line reveals its original text. Date links still open their notes, and Source mode stays plain Markdown.
 
 With Task mode off, enter natural dates directly in a checklist (`@` is optional):
 

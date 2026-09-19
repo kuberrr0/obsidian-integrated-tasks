@@ -1,3 +1,4 @@
+import { noteTaskPresentation, renderNoteTaskDetails, type NoteTaskPresentation } from "./note-task-presentation";
 import { notePropertyIconStyle } from "./task-property-icons";
 import { editorLivePreviewField, editorInfoField, Platform } from "obsidian";
 import { type Range } from "@codemirror/state";
@@ -31,6 +32,35 @@ export class DateLabelWidget extends WidgetType {
     }
     return element;
   }
+}
+
+export class NoteTaskDetailsWidget extends WidgetType {
+  constructor(private readonly presentation: NoteTaskPresentation, private readonly from: number) { super(); }
+  eq(other: NoteTaskDetailsWidget): boolean { return this.from === other.from && JSON.stringify(this.presentation) === JSON.stringify(other.presentation); }
+  get lineBreaks(): number { return this.presentation.tokens.some(token => token.kind === "scheduledDate" || token.kind === "tags") ? 1 : 0; }
+  toDOM(view: EditorView): HTMLElement {
+    const root = view.dom.ownerDocument.createElement("span");
+    renderNoteTaskDetails(root, this.presentation, (token, label) => new DateLabelWidget(label, token.linkText).toDOM(view));
+    root.addEventListener("click", event => {
+      if ((event.target as HTMLElement).closest("a")) return;
+      event.preventDefault();
+      view.dispatch({ selection: { anchor: this.from }, scrollIntoView: true });
+      view.focus();
+    });
+    return root;
+  }
+}
+
+export interface NoteTaskSpan { from: number; to: number; lineFrom: number; lineTo: number; presentation: NoteTaskPresentation }
+
+export function noteTaskDecorations(tasks: NoteTaskSpan[], selections: readonly { from: number; to: number }[]): Range<Decoration>[] {
+  const decorations: Range<Decoration>[] = [];
+  for (const task of tasks) {
+    decorations.push(Decoration.line({ attributes: { class: "tm-note-task-line", "data-tm-priority": String(task.presentation.priority ?? "") } }).range(task.lineFrom));
+    if (selections.some(selection => selection.from <= task.lineTo && selection.to >= task.lineFrom)) continue;
+    decorations.push(Decoration.replace({ widget: new NoteTaskDetailsWidget(task.presentation, task.from) }).range(task.from, task.to));
+  }
+  return decorations;
 }
 
 /** Retain native text when already formatted; reveal source text while editing. */
@@ -69,6 +99,7 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
     pills: DecorationSet = Decoration.none;
     syntax: DecorationSet = Decoration.none;
     private tokens: NoteTokenSpan[] = [];
+    private tasks: NoteTaskSpan[] = [];
     private format = "";
 
     constructor(view: EditorView) { this.rebuildTokens(view); this.decorate(view); }
@@ -82,9 +113,12 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
     private rebuildTokens(view: EditorView): void {
       this.format = getDateFormat();
       this.tokens = [];
+      this.tasks = [];
       for (const { text, line } of bodyLines(view.state.doc.toString())) {
         const offset = view.state.doc.line(line + 1).from;
-        for (const token of [...taskTokens(text, this.format), ...recurringLogTokens(text, this.format)]) this.tokens.push({ from: offset + token.from, to: offset + token.to, token });
+        const presentation = noteTaskPresentation(text, this.format);
+        if (presentation) this.tasks.push({ from: offset + presentation.from, to: offset + presentation.to, lineFrom: offset, lineTo: offset + text.length, presentation });
+        for (const token of [...(presentation ? [] : taskTokens(text, this.format)), ...recurringLogTokens(text, this.format)]) this.tokens.push({ from: offset + token.from, to: offset + token.to, token });
       }
     }
 
@@ -95,7 +129,7 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
       }
       const marks = noteTokenMarks(this.tokens, view.viewport, view.state.selection.ranges);
       this.pills = marks.pills;
-      this.syntax = marks.syntax;
+      this.syntax = marks.syntax.update({ add: noteTaskDecorations(this.tasks, view.state.selection.ranges), sort: true });
     }
   }, {
     decorations: (plugin) => plugin.syntax,

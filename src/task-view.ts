@@ -1,3 +1,4 @@
+import { taskTitleLabel } from "./task-title";
 import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { renderTaskDetails } from "./task-row-details";
@@ -820,7 +821,7 @@ export class TaskMainView extends ItemView {
     const content = row.createDiv({ cls: "tm-task-content" });
     const primary = content.createDiv({ cls: "tm-task-primary" });
     this.listDrag?.row(row, primary, task, target);
-    const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
+    const title = primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title) } });
     title.addEventListener("click", () => this.editTask(task));
     renderDescriptionIndicator(primary, task.description);
     try {

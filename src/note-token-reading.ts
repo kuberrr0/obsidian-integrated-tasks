@@ -1,3 +1,4 @@
+import { noteTaskPresentation, renderNoteTaskDetails } from "./note-task-presentation";
 import { notePropertyIconStyle } from "./task-property-icons";
 import { taskTokens, recurringLogTokens, tokenClass } from "./task-tokens";
 
@@ -10,7 +11,7 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
   if (root.matches("li.task-list-item")) items.unshift(root);
   for (const item of items) {
     const content = Array.from(item.children).find((child) => child.tagName === "P") ?? item;
-    if (Array.from(content.querySelectorAll(".tm-note-token")).some((pill) => pill.closest("li") === item)) continue;
+    if (Array.from(content.querySelectorAll(".tm-note-token, .tm-note-task-details")).some((pill) => pill.closest("li") === item)) continue;
     const completed = item.getAttribute("data-task")?.toLowerCase() === "x" || item.classList.contains("is-checked");
     let source = completed ? "- [x] " : "- [ ] ";
     const segments: Segment[] = [];
@@ -33,6 +34,29 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
       }
     };
     for (const child of Array.from(content.childNodes)) walk(child);
+    const presentation = noteTaskPresentation(source, dateFormat);
+    if (presentation) {
+      const first = segments.find(segment => segment.from <= presentation.from && segment.to > presentation.from);
+      const last = segments.find(segment => segment.from < presentation.to && segment.to >= presentation.to);
+      if (first && last) {
+        const document = item.ownerDocument;
+        const range = document.createRange();
+        if (first.atomic) range.setStartBefore(first.node); else range.setStart(first.node, presentation.from - first.from);
+        if (last.atomic) range.setEndAfter(last.node); else range.setEnd(last.node, presentation.to - last.from);
+        const original = range.extractContents();
+        const details = document.createElement("span");
+        renderNoteTaskDetails(details, presentation, (token, label) => {
+          const anchor = Array.from(original.querySelectorAll<HTMLAnchorElement>("a.internal-link")).find(anchor =>
+            (anchor.getAttribute("data-href") ?? anchor.getAttribute("href")) === token.linkText);
+          if (anchor) anchor.textContent = label;
+          return anchor;
+        });
+        item.classList.add("tm-note-task-item");
+        item.setAttribute("data-tm-priority", String(presentation.priority ?? ""));
+        range.insertNode(details);
+        continue;
+      }
+    }
     for (const token of taskTokens(source, dateFormat).reverse()) {
       const first = segments.find((segment) => segment.from <= token.from && segment.to > token.from);
       const last = segments.find((segment) => segment.from < token.to && segment.to >= token.to);

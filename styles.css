@@ -1223,6 +1223,8 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content {
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
@@ -1232,6 +1234,7 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
   min-width: 0;
 }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary {
+  font-size: inherit;
   display: flex;
   flex: initial;
   flex-wrap: wrap;
@@ -1260,7 +1263,7 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
   overflow: visible;
   color: var(--text-muted);
   font-family: var(--font-interface);
-  font-size: var(--font-ui-small);
+  font-size: inherit;
   line-height: 1.4;
 }
 .tm-task-schedule, .tm-task-source, .tm-task-tag { cursor: pointer; }
@@ -1292,6 +1295,8 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
   cursor: pointer;
   white-space: nowrap;
 }
+.tm-main-view .tm-task-item :is(.tm-task-due, .tm-task-schedule, .tm-task-source, .tm-task-tag),
+.tm-main-view .tm-task-item :is(.tm-task-due, .tm-task-schedule, .tm-task-source, .tm-task-tag) > span { font-size: inherit; }
 .tm-task-due .tm-task-detail-icon svg { fill: currentColor; }
 .tm-task-schedule:hover, .tm-task-source:hover, .tm-task-tag:hover { color: var(--text-normal); }
 .tm-task-checkbox.is-p1 { --tm-priority-color: var(--text-error); }
@@ -1330,3 +1335,32 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-project-header-metadata > .tm-project-progress:not(:first-child) { margin-inline-start: 4px; }
 
 .tm-task-due.is-overdue { color: var(--text-error); }
+
+/* Native Markdown tasks keep their title/checkbox and share the task-view hierarchy. */
+.tm-note-task-details { font-family: var(--font-interface); font-size: 0.85em; color: var(--text-muted); }
+.tm-note-task-secondary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 3px; }
+.cm-line .tm-note-task-secondary { margin-inline-start: var(--list-indent, 2em); }
+.tm-note-task-details a.internal-link { color: inherit; text-decoration: none; }
+.tm-note-task-details a.internal-link:hover { color: var(--text-accent-hover); }
+.tm-note-task-scheduledDate.is-overdue, .tm-note-task-deadline.is-overdue { color: var(--text-error); }
+.tm-note-task-deadline { display: inline-block; margin-inline-start: 4px; padding: 2px 5px; border-radius: 5px; background: var(--background-modifier-hover); color: var(--color-orange); font-weight: 600; white-space: nowrap; }
+.tm-note-task-tags { display: inline-block; }
+.tm-note-task-tags::before, .tm-note-task-deadline::before {
+  content: ""; display: inline-block; width: 0.95em; height: 0.95em; margin-inline-end: 4px; vertical-align: -0.12em;
+  background: currentColor;
+  -webkit-mask: var(--tm-note-token-icon) center / contain no-repeat;
+  mask: var(--tm-note-token-icon) center / contain no-repeat;
+}
+:is(.tm-note-task-item, .tm-note-task-line)[data-tm-priority="1"] { --tm-note-priority: var(--text-error); }
+:is(.tm-note-task-item, .tm-note-task-line)[data-tm-priority="2"] { --tm-note-priority: var(--color-orange); }
+:is(.tm-note-task-item, .tm-note-task-line)[data-tm-priority="3"] { --tm-note-priority: var(--color-blue); }
+:is(.tm-note-task-item, .tm-note-task-line) input[type="checkbox"] {
+  --checkbox-color: var(--tm-note-priority, var(--interactive-accent));
+  --checkbox-color-hover: var(--tm-note-priority, var(--interactive-accent-hover));
+  --checkbox-border-color: var(--tm-note-priority, var(--background-modifier-border-hover));
+  --checkbox-border-color-hover: var(--tm-note-priority, var(--interactive-accent));
+  accent-color: var(--tm-note-priority, var(--interactive-accent));
+  border-color: var(--checkbox-border-color);
+}
+/* Prevent an unprioritized nested task from inheriting its parent's priority. */
+li.task-list-item { --tm-note-priority: initial; }

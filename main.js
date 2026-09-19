@@ -4230,6 +4230,14 @@ var BulkTaskEditorModal = class extends import_obsidian6.Modal {
 // src/task-mode.ts
 var import_obsidian16 = require("obsidian");
 
+// src/task-title.ts
+function taskTitleLabel(title) {
+  return title.replace(/\[\[([^\[\]\n]+)\]\]/g, (_match, target) => {
+    const separator = target.indexOf("|");
+    return separator < 0 ? target : target.slice(separator + 1);
+  });
+}
+
 // src/project-progress.ts
 function renderProjectProgress(parent, project, showPercentage = true) {
   const total = project.openTasks + project.completedTasks;
@@ -5419,7 +5427,7 @@ function renderCalendar(container, options) {
       cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
       attr: { title: `${task.title}${task.durationMinutes ? ` \xB7 ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` }
     });
-    const title2 = card.createSpan({ cls: "tm-calendar-task-title", text: `${time ? `${time} ` : ""}${task.title}` });
+    const title2 = card.createSpan({ cls: "tm-calendar-task-title", text: `${time ? `${time} ` : ""}${taskTitleLabel(task.title)}` });
     renderDescriptionIndicator(title2, task.description);
     card.draggable = true;
     card.addEventListener("click", (event) => {
@@ -6529,7 +6537,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     const content = row.createDiv({ cls: "tm-task-content" });
     const primary = content.createDiv({ cls: "tm-task-primary" });
     (_a = this.listDrag) == null ? void 0 : _a.row(row, primary, task, target);
-    const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
+    const title = primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title) } });
     title.addEventListener("click", () => this.editTask(task));
     renderDescriptionIndicator(primary, task.description);
     try {
@@ -6803,10 +6811,6 @@ function noteDateInput(getDateFormat, isTaskMode, getLinkDates = () => true) {
   });
 }
 
-// src/note-token-editor.ts
-var import_obsidian18 = require("obsidian");
-var import_view2 = require("@codemirror/view");
-
 // src/recurring-log.ts
 var import_obsidian17 = require("obsidian");
 var moment2 = import_obsidian17.moment;
@@ -6909,7 +6913,56 @@ function recurringLogTokens(line, dateFormat) {
   }];
 }
 
+// src/note-task-presentation.ts
+function noteTaskPresentation(line, dateFormat, now2 = /* @__PURE__ */ new Date()) {
+  const task = parseTaskLine(line, now2, dateFormat);
+  const tokens = taskTokens(line, dateFormat);
+  if (!task || !tokens.length) return void 0;
+  for (let index = 1; index < tokens.length; index++) {
+    if (line.slice(tokens[index - 1].to, tokens[index].from).trim()) return void 0;
+  }
+  return { from: tokens[0].from, to: tokens[tokens.length - 1].to, priority: task.priority, tokens: tokens.map((token) => {
+    if (token.kind !== "scheduledDate" && token.kind !== "deadline") return token;
+    const date = token.kind === "deadline" ? task.deadline : task.scheduledDate;
+    const rawTime = token.kind === "deadline" ? task.deadlineTime : task.scheduledTime;
+    const time = rawTime ? taskTimeLabel(rawTime) : void 0;
+    const dateLabel = token.kind === "deadline" ? taskDeadlineLabel(date, now2) : taskScheduleLabel(date, now2);
+    return {
+      ...token,
+      dateLabel,
+      time,
+      label: [dateLabel, time].filter(Boolean).join(", "),
+      overdue: !task.completed && (token.kind === "deadline" ? deadlineIsOverdue(date, rawTime, now2) : date < `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, "0")}-${String(now2.getDate()).padStart(2, "0")}`)
+    };
+  }) };
+}
+function renderNoteTaskDetails(root, presentation, link) {
+  var _a;
+  const document2 = root.ownerDocument;
+  root.classList.add("tm-note-task-details");
+  const secondary = document2.createElement("span");
+  secondary.className = "tm-note-task-secondary";
+  for (const kind of ["deadline", "scheduledDate", "tags"]) {
+    for (const token of presentation.tokens.filter((token2) => token2.kind === kind)) {
+      const item = document2.createElement("span");
+      item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}`;
+      item.setAttribute("title", token.description);
+      item.setAttribute("aria-label", token.description);
+      if (kind !== "scheduledDate") item.setAttribute("style", notePropertyIconStyle(kind));
+      const label = (_a = token.dateLabel) != null ? _a : token.label;
+      const anchor = token.linkText ? link(token, label) : void 0;
+      if (anchor) item.appendChild(anchor);
+      else item.appendChild(document2.createTextNode(label));
+      if (token.time) item.appendChild(document2.createTextNode(`, ${token.time}`));
+      (kind === "deadline" ? root : secondary).appendChild(item);
+    }
+  }
+  if (secondary.childNodes.length) root.appendChild(secondary);
+}
+
 // src/note-token-editor.ts
+var import_obsidian18 = require("obsidian");
+var import_view2 = require("@codemirror/view");
 var DateLabelWidget = class extends import_view2.WidgetType {
   constructor(label, linkText) {
     super();
@@ -6941,6 +6994,40 @@ var DateLabelWidget = class extends import_view2.WidgetType {
     return element;
   }
 };
+var NoteTaskDetailsWidget = class extends import_view2.WidgetType {
+  constructor(presentation, from) {
+    super();
+    this.presentation = presentation;
+    this.from = from;
+  }
+  eq(other) {
+    return this.from === other.from && JSON.stringify(this.presentation) === JSON.stringify(other.presentation);
+  }
+  get lineBreaks() {
+    return this.presentation.tokens.some((token) => token.kind === "scheduledDate" || token.kind === "tags") ? 1 : 0;
+  }
+  toDOM(view) {
+    const root = view.dom.ownerDocument.createElement("span");
+    renderNoteTaskDetails(root, this.presentation, (token, label) => new DateLabelWidget(label, token.linkText).toDOM(view));
+    root.addEventListener("click", (event) => {
+      if (event.target.closest("a")) return;
+      event.preventDefault();
+      view.dispatch({ selection: { anchor: this.from }, scrollIntoView: true });
+      view.focus();
+    });
+    return root;
+  }
+};
+function noteTaskDecorations(tasks, selections) {
+  var _a;
+  const decorations = [];
+  for (const task of tasks) {
+    decorations.push(import_view2.Decoration.line({ attributes: { class: "tm-note-task-line", "data-tm-priority": String((_a = task.presentation.priority) != null ? _a : "") } }).range(task.lineFrom));
+    if (selections.some((selection) => selection.from <= task.lineTo && selection.to >= task.lineFrom)) continue;
+    decorations.push(import_view2.Decoration.replace({ widget: new NoteTaskDetailsWidget(task.presentation, task.from) }).range(task.from, task.to));
+  }
+  return decorations;
+}
 function noteTokenMarks(tokens, viewport, selections) {
   const pills = [];
   const syntax = [];
@@ -6970,6 +7057,7 @@ function noteTokenEditor(getDateFormat) {
       this.pills = import_view2.Decoration.none;
       this.syntax = import_view2.Decoration.none;
       this.tokens = [];
+      this.tasks = [];
       this.format = "";
       this.rebuildTokens(view);
       this.decorate(view);
@@ -6982,9 +7070,12 @@ function noteTokenEditor(getDateFormat) {
     rebuildTokens(view) {
       this.format = getDateFormat();
       this.tokens = [];
+      this.tasks = [];
       for (const { text, line } of bodyLines(view.state.doc.toString())) {
         const offset = view.state.doc.line(line + 1).from;
-        for (const token of [...taskTokens(text, this.format), ...recurringLogTokens(text, this.format)]) this.tokens.push({ from: offset + token.from, to: offset + token.to, token });
+        const presentation = noteTaskPresentation(text, this.format);
+        if (presentation) this.tasks.push({ from: offset + presentation.from, to: offset + presentation.to, lineFrom: offset, lineTo: offset + text.length, presentation });
+        for (const token of [...presentation ? [] : taskTokens(text, this.format), ...recurringLogTokens(text, this.format)]) this.tokens.push({ from: offset + token.from, to: offset + token.to, token });
       }
     }
     decorate(view) {
@@ -6994,7 +7085,7 @@ function noteTokenEditor(getDateFormat) {
       }
       const marks = noteTokenMarks(this.tokens, view.viewport, view.state.selection.ranges);
       this.pills = marks.pills;
-      this.syntax = marks.syntax;
+      this.syntax = marks.syntax.update({ add: noteTaskDecorations(this.tasks, view.state.selection.ranges), sort: true });
     }
   }, {
     decorations: (plugin) => plugin.syntax,
@@ -7142,13 +7233,13 @@ function registerNoteTaskEdit(root, context, getDateFormat, open, getSectionHead
 
 // src/note-token-reading.ts
 function renderNoteTokens(root, dateFormat) {
-  var _a, _b, _c;
+  var _a, _b, _c, _d;
   renderRecurringLogTokens(root, dateFormat);
   const items = Array.from(root.querySelectorAll("li.task-list-item"));
   if (root.matches("li.task-list-item")) items.unshift(root);
   for (const item of items) {
     const content = (_a = Array.from(item.children).find((child) => child.tagName === "P")) != null ? _a : item;
-    if (Array.from(content.querySelectorAll(".tm-note-token")).some((pill) => pill.closest("li") === item)) continue;
+    if (Array.from(content.querySelectorAll(".tm-note-token, .tm-note-task-details")).some((pill) => pill.closest("li") === item)) continue;
     const completed = ((_b = item.getAttribute("data-task")) == null ? void 0 : _b.toLowerCase()) === "x" || item.classList.contains("is-checked");
     let source = completed ? "- [x] " : "- [ ] ";
     const segments = [];
@@ -7171,6 +7262,33 @@ function renderNoteTokens(root, dateFormat) {
       }
     };
     for (const child of Array.from(content.childNodes)) walk(child);
+    const presentation = noteTaskPresentation(source, dateFormat);
+    if (presentation) {
+      const first = segments.find((segment) => segment.from <= presentation.from && segment.to > presentation.from);
+      const last = segments.find((segment) => segment.from < presentation.to && segment.to >= presentation.to);
+      if (first && last) {
+        const document2 = item.ownerDocument;
+        const range = document2.createRange();
+        if (first.atomic) range.setStartBefore(first.node);
+        else range.setStart(first.node, presentation.from - first.from);
+        if (last.atomic) range.setEndAfter(last.node);
+        else range.setEnd(last.node, presentation.to - last.from);
+        const original = range.extractContents();
+        const details = document2.createElement("span");
+        renderNoteTaskDetails(details, presentation, (token, label) => {
+          const anchor = Array.from(original.querySelectorAll("a.internal-link")).find((anchor2) => {
+            var _a2;
+            return ((_a2 = anchor2.getAttribute("data-href")) != null ? _a2 : anchor2.getAttribute("href")) === token.linkText;
+          });
+          if (anchor) anchor.textContent = label;
+          return anchor;
+        });
+        item.classList.add("tm-note-task-item");
+        item.setAttribute("data-tm-priority", String((_c = presentation.priority) != null ? _c : ""));
+        range.insertNode(details);
+        continue;
+      }
+    }
     for (const token of taskTokens(source, dateFormat).reverse()) {
       const first = segments.find((segment) => segment.from <= token.from && segment.to > token.from);
       const last = segments.find((segment) => segment.from < token.to && segment.to >= token.to);
@@ -7190,7 +7308,7 @@ function renderNoteTokens(root, dateFormat) {
       });
       const link = fragment.querySelector("a.internal-link");
       if (link) {
-        link.textContent = (_c = token.dateLabel) != null ? _c : link.textContent;
+        link.textContent = (_d = token.dateLabel) != null ? _d : link.textContent;
         pill.appendChild(link);
         if (token.time) pill.appendChild(document2.createTextNode(` ${token.time}`));
       } else pill.textContent = token.kind === "deadline" ? token.label.replace(/^Due /, "") : token.label;
