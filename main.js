@@ -4712,25 +4712,26 @@ function renderGantt(container, options) {
   let interacting = false;
   const painters = [];
   const detailPainters = /* @__PURE__ */ new Map();
-  const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
+  const toolbar = root.createDiv({ cls: "tm-calendar-toolbar tm-gantt-toolbar" });
+  const controls = toolbar.createDiv({ cls: "tm-calendar-controls" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
-    const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
+    const button = controls.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
     (0, import_obsidian11.setIcon)(button, icon);
     button.addEventListener("click", () => options.navigate(addDays(anchor, delta * period), options.zoom));
   }
-  const today2 = toolbar.createEl("button", { text: "Today" });
+  const today2 = controls.createEl("button", { text: "Today" });
   today2.addEventListener("click", () => options.navigate(addDays(todayIso(), -2), options.zoom));
-  const first = toolbar.createEl("button", { text: "First project" });
+  const first = toolbar.createEl("button", { cls: "tm-gantt-first", text: "First project" });
   const earliest = options.projects.map((project) => project.scheduledDate).filter((date) => Boolean(date)).sort()[0];
   first.disabled = !earliest;
   first.addEventListener("click", () => {
     if (earliest) options.navigate(addDays(earliest, -1), options.zoom);
   });
-  const rangeHeading = toolbar.createEl("h2");
-  const zoom = toolbar.createEl("select", { attr: { "aria-label": "Gantt zoom" } });
-  for (const value of ["month", "quarter", "year", "five-year"]) zoom.createEl("option", { value, text: value === "five-year" ? "5 years" : value[0].toUpperCase() + value.slice(1) });
-  zoom.value = options.zoom;
-  zoom.addEventListener("change", () => options.navigate(anchor, zoom.value));
+  const scopes = controls.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Gantt date range" } });
+  for (const [value, label] of [["month", "M"], ["quarter", "Q"], ["year", "Y"], ["five-year", "5Y"]]) {
+    const button = scopes.createEl("button", { text: label, attr: { "aria-label": value === "five-year" ? "5 years" : value[0].toUpperCase() + value.slice(1), "aria-pressed": String(options.zoom === value) } });
+    button.addEventListener("click", () => options.navigate(anchor, value));
+  }
   const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0" } });
   const buffer = Math.max(period, Math.ceil((scroll.clientWidth || 1200) / width2));
   days = buffer * 5;
@@ -4753,10 +4754,9 @@ function renderGantt(container, options) {
   paintDates();
   const syncViewport = () => {
     var _a, _b, _c;
-    const labelWidth = (_b = (_a = header.firstElementChild) == null ? void 0 : _a.getBoundingClientRect().width) != null ? _b : 440;
+    const labelWidth = (_b = (_a = header.firstElementChild) == null ? void 0 : _a.getBoundingClientRect().width) != null ? _b : 330;
     const visibleDays = Math.max(1, Math.ceil((scroll.clientWidth - labelWidth) / width2));
     anchor = addDays(start, Math.floor(scroll.scrollLeft / width2));
-    rangeHeading.setText(`${formatDate(anchor, options.dateFormat)} \u2013 ${formatDate(addDays(anchor, visibleDays - 1), options.dateFormat)}`);
     (_c = options.viewportChanged) == null ? void 0 : _c.call(options, anchor);
     if (interacting) return;
     const offset = Math.floor(scroll.scrollLeft / width2);

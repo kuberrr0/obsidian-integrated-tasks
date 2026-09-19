@@ -981,7 +981,7 @@ button.tm-list-drag-handle { touch-action: none; }
 
 .tm-editor-actions button.tm-delete-task { margin-right: auto; flex: 0 0 auto; color: var(--text-error); }
 
-.tm-gantt-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--background-modifier-border); border-radius: 8px; --tm-gantt-label: 440px; }
+.tm-gantt-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--background-modifier-border); border-radius: 8px; --tm-gantt-label: 330px; }
 .tm-gantt-row { display: grid; grid-template-columns: var(--tm-gantt-label) var(--tm-gantt-width); width: max-content; min-height: 36px; }
 .tm-gantt-label { position: sticky; left: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-start; padding: 4px 12px; background: var(--background-primary); border: 0; border-right: 1px solid var(--background-modifier-border); border-radius: 0; box-shadow: none; text-align: left; height: auto; white-space: normal; overflow-wrap: anywhere; }
 .tm-gantt-project { align-items: flex-start; gap: 8px; padding-block: 9px; }
@@ -998,30 +998,33 @@ button.tm-list-drag-handle { touch-action: none; }
 .tm-gantt-dates { display: flex; }
 .tm-gantt-date { flex: 0 0 var(--tm-gantt-day); width: var(--tm-gantt-day); font-size: 10px; white-space: normal; padding: 4px 0; border: 0; border-radius: 0; box-shadow: none; height: auto; background: var(--background-secondary); }
 .tm-gantt-date.is-today { background: var(--interactive-accent); color: var(--text-on-accent); }
-.tm-gantt-track { position: relative; min-height: 36px; overflow: hidden; }
+.tm-gantt-track { position: relative; isolation: isolate; min-height: 36px; overflow: hidden; }
 button.tm-gantt-bar { position: absolute; top: 4px; height: 28px; min-width: 0; padding: 3px 6px; border: none; border-radius: 6px; background: var(--interactive-accent); color: var(--text-on-accent); text-align: left; justify-content: flex-start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 button.tm-gantt-bar.is-overdue { box-shadow: inset 0 -3px var(--text-error); }
 .tm-gantt-row.is-completed .tm-gantt-bar { opacity: .55; text-decoration: line-through; }
-.tm-gantt-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--interactive-accent); pointer-events: none; }
+.tm-gantt-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--text-error); pointer-events: none; z-index: 3; }
 .tm-gantt-undated { display: inline-block; padding: 4px 12px; font-size: var(--font-ui-small); color: var(--text-muted); }
 button.tm-gantt-jump { margin: 4px 8px; height: 28px; font-size: var(--font-ui-small); }
-@media (max-width: 700px) { .tm-gantt-scroll { --tm-gantt-label: 300px; } }
+@media (max-width: 700px) { .tm-gantt-scroll { --tm-gantt-label: 225px; } }
 
 .tm-gantt-date { box-sizing: border-box; text-align: center; }
 .tm-gantt-bar[hidden], .tm-gantt-handle[hidden], .tm-gantt-jump[hidden] { display: none; }
 button.tm-gantt-handle { position: absolute; top: 4px; height: 28px; width: 8px; min-width: 0; padding: 0; border: 0; border-radius: 2px; box-shadow: none; background: var(--text-on-accent); opacity: .65; cursor: ew-resize; touch-action: none; z-index: 2; }
 button.tm-gantt-handle.is-end { width: 12px; top: 0; height: 36px; background: transparent; opacity: 1; }
 button.tm-gantt-handle.is-end::after { content: ""; position: absolute; left: 5px; top: 0; bottom: 0; width: 2px; background: var(--text-normal); box-shadow: 0 0 0 1px var(--background-primary); }
-button.tm-gantt-handle:hover, button.tm-gantt-handle:focus-visible { opacity: 1; outline: 2px solid var(--text-accent); }
+button.tm-gantt-handle:hover { opacity: 1; outline: none; box-shadow: none; }
+button.tm-gantt-handle:focus-visible { opacity: 1; outline: 2px solid var(--text-accent); }
 .tm-gantt-row.is-resizing .tm-gantt-bar { opacity: .8; }
 .tm-gantt-row.is-archived .tm-gantt-label { color: var(--text-muted); }
 
 /* Edge grips stay unobtrusive until the project row is hovered or focused. */
 button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; }
-.tm-gantt-track:hover > .tm-gantt-handle.is-start,
-.tm-gantt-track:hover > .tm-gantt-handle.is-finish,
-.tm-gantt-track:focus-within > .tm-gantt-handle.is-start,
-.tm-gantt-track:focus-within > .tm-gantt-handle.is-finish,
+.tm-gantt-bar:hover ~ .tm-gantt-handle.is-start,
+.tm-gantt-bar:hover ~ .tm-gantt-handle.is-finish,
+button.tm-gantt-handle.is-start:hover,
+button.tm-gantt-handle.is-finish:hover,
+button.tm-gantt-handle.is-start:focus-visible,
+button.tm-gantt-handle.is-finish:focus-visible,
 .tm-gantt-row.is-resizing .tm-gantt-handle.is-start,
 .tm-gantt-row.is-resizing .tm-gantt-handle.is-finish { opacity: .85; }
 .tm-gantt-track.is-unscheduled { cursor: crosshair; touch-action: none; }
@@ -1478,4 +1481,17 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
   .tm-calendar .tm-calendar-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
   .tm-calendar .tm-calendar-controls { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
   .tm-calendar .tm-calendar-toolbar > .tm-calendar-plan-toggle { grid-column: 2; }
+}
+
+/* Gantt navigation mirrors the centered calendar controls. */
+.tm-gantt-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.tm-gantt-toolbar h2 { grid-column: 1; grid-row: 1; min-width: 0; margin: 0; font-size: var(--font-ui-medium); }
+.tm-gantt-toolbar .tm-gantt-first { grid-column: 3; grid-row: 1; justify-self: end; }
+.tm-gantt-toolbar .tm-calendar-scopes { height: var(--input-height, 30px); box-sizing: border-box; padding: 2px; gap: 2px; align-items: center; }
+.tm-gantt-toolbar .tm-calendar-scopes button { height: 100%; min-height: 0; padding: 0 10px; line-height: normal; }
+.tm-gantt-toolbar button:hover { background: var(--background-modifier-hover); }
+@media (max-width: 700px) {
+  .tm-gantt-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .tm-gantt-toolbar .tm-calendar-controls { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
+  .tm-gantt-toolbar .tm-gantt-first { grid-column: 2; }
 }
