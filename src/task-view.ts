@@ -5,12 +5,10 @@ import { renderTaskDetails } from "./task-row-details";
 import { recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderDescriptionIndicator } from "./task-description-indicator";
-import type { ProjectDraft } from "./project-creator";
 import { cloneTaskFilters } from "./task-filters";
 import { renderPropertyFilter } from "./filter-editor";
 import { taskTagSummaries } from "./task-tags";
 import type { TaskEditorProperty } from "./task-editor";
-import { TASK_PROPERTY_ICONS } from "./task-property-icons";
 import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
@@ -24,10 +22,9 @@ import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { TASK_PROPERTIES } from "./task-properties";
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
-import { formatDuration } from "./parser";
 import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
-import type { TaskProperty, TaskFilter, Project, ProjectProperties, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
+import type { TaskProperty, TaskFilter, Project, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
@@ -606,8 +603,8 @@ export class TaskMainView extends ItemView {
       const primary = content.createDiv({ cls: "tm-task-primary" });
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
       button.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
-      const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
-      this.renderProperties(metadata, project);
+      const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
+      renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat());
       if (!metadata.childElementCount) metadata.remove();
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
       setIcon(open, "chevron-right");
@@ -850,68 +847,6 @@ export class TaskMainView extends ItemView {
     const menuButton = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": "Task actions" } });
     setIcon(menuButton, "more-horizontal");
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
-  }
-
-  private makePropertyEditable(badge: HTMLElement, label: string, edit: () => void): void {
-    badge.setAttribute("role", "button");
-    badge.setAttribute("tabindex", "0");
-    badge.setAttribute("aria-label", `Edit ${label}: ${badge.textContent ?? ""}`);
-    badge.addEventListener("click", event => {
-      event.preventDefault(); event.stopPropagation(); edit();
-    });
-    badge.addEventListener("keydown", event => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault(); event.stopPropagation(); edit();
-    });
-  }
-
-  private renderProperties(parent: HTMLElement, properties: ProjectProperties | Task, editProject?: (property: keyof ProjectDraft) => void): void {
-    const grouping = "completed" in properties ? this.metadataGrouping : "none";
-    const propertyBadge = (property: TaskEditorProperty | "endDate", icon: string, text: string, variant?: string): void => {
-      if ((grouping === property && property !== "scheduledDate" && property !== "deadline") || (property === "durationMinutes" && grouping === "duration")) return;
-      if ("completed" in properties && property !== "endDate" && property !== "scheduledDate" && property !== "deadline"
-        && !this.showTaskProperty(property === "durationMinutes" ? "duration" : property)) return;
-      const badge = this.badge(parent, icon, text, variant);
-      const label = { scheduledDate: "scheduled date and time", endDate: "end date", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
-      if ("completed" in properties && property !== "endDate") {
-        this.makePropertyEditable(badge, label, () => this.editTask(properties, property));
-      } else if (editProject && property !== "durationMinutes") {
-        const field = property === "scheduledDate" ? "date" : property;
-        this.makePropertyEditable(badge, label, () => editProject(field));
-      }
-    };
-    const incompleteTask = "completed" in properties && !properties.completed;
-    const dateText = (field: "scheduledDate" | "deadline", timeField: "scheduledTime" | "deadlineTime"): string => {
-      const date = properties[field];
-      const hideDate = grouping === field || (grouping === "date" && "completed" in properties && date === actionDate(properties));
-      const isTask = "completed" in properties;
-      return [date && !hideDate && (!isTask || this.showTaskProperty(field)) ? formatDate(date, this.plugin.dateFormat()) : "",
-        grouping !== timeField && (!isTask || this.showTaskProperty(timeField)) ? properties[timeField] : ""].filter(Boolean).join(" ");
-    };
-    const scheduled = dateText("scheduledDate", "scheduledTime");
-    if (scheduled) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, scheduled, incompleteTask && properties.scheduledDate && properties.scheduledDate < todayIso() ? "danger" : undefined);
-    if ("endDate" in properties && properties.endDate) propertyBadge("endDate", "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
-    if ("durationMinutes" in properties && properties.durationMinutes) propertyBadge("durationMinutes", TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
-    const deadline = dateText("deadline", "deadlineTime");
-    if (deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, deadline, (!("completed" in properties) || incompleteTask) && properties.deadline && properties.deadline < todayIso() ? "danger" : undefined);
-    if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
-    if ("tags" in properties) for (const tag of properties.tags ?? []) {
-      if (this.state.mode === "tags" && "completed" in properties) {
-        const currentTag = this.pagePath
-          ? this.app.metadataCache.getFirstLinkpathDest(tag, properties.path)?.path === this.pagePath
-          : tag === this.state.tag;
-        if (currentTag) continue;
-      }
-      propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
-    }
-  }
-
-  private badge(parent: HTMLElement, iconName: string, text: string, variant?: string): HTMLElement {
-    const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
-    const icon = badge.createSpan({ cls: "tm-meta-icon" });
-    setIcon(icon, iconName);
-    badge.createSpan({ text });
-    return badge;
   }
 
   private openMenu(event: MouseEvent, task: Task): void {

@@ -17,7 +17,7 @@ vi.mock("../src/note-token-editor", () => ({ noteTokenEditor: vi.fn() }));
 import TaskManagerPlugin from "../src/main";
 import { TaskMainView } from "../src/task-view";
 import { scanTasks } from "../src/parser";
-import type { Task, ProjectProperties, TaskViewState } from "../src/types";
+import type { Task, TaskViewState } from "../src/types";
 
 describe("page task view", () => {
   it.each(["navigation", "tasks"])("waits for %s reveal and propagates reveal failures", async (target) => {
@@ -119,8 +119,6 @@ function selectionView() {
     prepareDrag(task: Task): void;
     editTask(task: Task, focusProperty?: string): void;
     clearSelectionOutside(event: unknown): void;
-    renderProperties(parent: unknown, task: Task | ProjectProperties, editProject?: (property: string) => void): void;
-    badge: (...args: unknown[]) => unknown;
     dropListTask(task: Task, group?: unknown, anchor?: Task, placement?: string): Promise<void>;
   };
   const rows = tasks.map(task => {
@@ -371,28 +369,6 @@ it.each(["scheduledDate", "deadline", "durationMinutes", "priority", "tags"])("p
   expect(view.getSelectedTasks()).toHaveLength(2);
 });
 
-it("binds each rendered property badge to its field without opening the row editor", () => {
-  const { internals, tasks, openEditor, openBulkEditor } = selectionView();
-  const badges: Array<{ handlers: Map<string, (event: unknown) => void> }> = [];
-  internals.badge = () => {
-    const badge = { handlers: new Map<string, (event: unknown) => void>(), setAttribute: vi.fn(),
-      addEventListener(type: string, callback: (event: unknown) => void) { this.handlers.set(type, callback); } };
-    badges.push(badge);
-    return badge;
-  };
-  const task = { ...tasks[0], scheduledDate: "2026-09-16", deadline: "2026-09-17", durationMinutes: 60, priority: 1 as const, tags: ["Work"] };
-  internals.renderProperties({}, task);
-  expect(badges).toHaveLength(5);
-  for (const [index, property] of ["scheduledDate", "durationMinutes", "deadline", "priority", "tags"].entries()) {
-    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() };
-    badges[index].handlers.get("click")!(event);
-    expect(event.stopPropagation).toHaveBeenCalledOnce();
-    expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task, focusProperty: property }));
-  }
-  expect(openEditor).toHaveBeenCalledTimes(5);
-  expect(openBulkEditor).not.toHaveBeenCalled();
-});
-
 it("restores tag page state and clears it when navigating to All Tasks", async () => {
   const view = new TaskMainView({} as WorkspaceLeaf, {} as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
@@ -402,27 +378,6 @@ it("restores tag page state and clears it when navigating to All Tasks", async (
   await view.setState({ mode: "all" });
   expect(view.getState().tag).toBeUndefined();
   expect(view.getDisplayText()).toBe("All Tasks");
-});
-
-it("routes project date and priority pills to the matching editor fields", () => {
-  const { internals, openEditor } = selectionView();
-  const badges: Array<Map<string, (event: unknown) => void>> = [];
-  internals.badge = () => {
-    const handlers = new Map<string, (event: unknown) => void>();
-    badges.push(handlers);
-    return { setAttribute: vi.fn(), addEventListener: (type: string, callback: (event: unknown) => void) => handlers.set(type, callback) };
-  };
-  const edit = vi.fn();
-  internals.renderProperties({}, { scheduledDate: "2026-09-18", endDate: "2026-09-20", deadline: "2026-09-21", priority: 1 }, edit);
-  for (const [index, field] of ["date", "endDate", "deadline", "priority"].entries()) {
-    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), key: "Enter" };
-    badges[index].get("click")!(event);
-    expect(edit).toHaveBeenLastCalledWith(field);
-    badges[index].get("keydown")!(event);
-    expect(edit).toHaveBeenLastCalledWith(field);
-    expect(event.stopPropagation).toHaveBeenCalledTimes(2);
-  }
-  expect(openEditor).not.toHaveBeenCalled();
 });
 
 it.each([false, true])("opens a tag note and enables task mode (already enabled: %s)", async enabled => {
@@ -474,42 +429,6 @@ it("queries a file-backed tag across the vault instead of restricting results to
   expect(view.navigation).toBe(true);
 });
 
-it.each([
-  ["tags", ["09:00", "10:00", "1h", "P1"], ["work"]],
-  ["priority", ["work", "1h"], ["P1"]],
-  ["duration", ["work", "P1"], ["1h"]],
-  ["scheduledDate", ["09:00", "2026-09-20 10:00"], ["2026-09-18"]],
-  ["scheduledTime", ["2026-09-18", "10:00"], ["09:00"]],
-  ["deadline", ["10:00", "2026-09-18 09:00"], ["2026-09-20"]],
-  ["deadlineTime", ["2026-09-20", "09:00"], ["10:00"]],
-  ["date", ["09:00", "2026-09-20 10:00"], ["2026-09-18"]],
-  ["none", ["2026-09-18 09:00", "2026-09-20 10:00", "1h", "P1", "work"], []]
-])("hides only metadata represented by %s grouping", (grouping, present, absent) => {
-  const { view, internals, tasks } = selectionView();
-  Object.assign(view, { grouping });
-  const labels: string[] = [];
-  internals.badge = (_parent, _icon, text) => {
-    labels.push(String(text));
-    return { setAttribute: vi.fn(), addEventListener: vi.fn() };
-  };
-  internals.renderProperties({}, { ...tasks[0], scheduledDate: "2026-09-18", scheduledTime: "09:00", deadline: "2026-09-20", deadlineTime: "10:00", durationMinutes: 60, priority: 1, tags: ["work"] });
-  for (const text of present) expect(labels.some(label => label.includes(text))).toBe(true);
-  for (const text of absent) expect(labels.some(label => label.includes(text))).toBe(false);
-});
-
-it.each([false, true])("hides the current tag but retains other tag pills (file-backed: %s)", async fileBacked => {
-  const { view, internals, tasks } = selectionView();
-  view.app = { metadataCache: { getFirstLinkpathDest: (tag: string) => ({ path: ["work", "Tags/work"].includes(tag) ? "Tags/work.md" : "Tags/other.md" }) } } as unknown as App;
-  await view.setState({ mode: "tags", tag: "work", ...(fileBacked ? { pagePath: "Tags/work.md" } : {}) });
-  const labels: string[] = [];
-  internals.badge = (_parent, _icon, text) => {
-    labels.push(String(text));
-    return { setAttribute: vi.fn(), addEventListener: vi.fn() };
-  };
-  internals.renderProperties({}, { ...tasks[0], tags: ["work", "Tags/work", "other"] });
-  expect(labels).toEqual(fileBacked ? ["other"] : ["Tags/work", "other"]);
-});
-
 it("edits the task on the current editor line only when task mode is off", () => {
   const plugin = new TaskManagerPlugin({} as App, {} as never);
   plugin.settings = { ...plugin.settings, taskMode: false };
@@ -530,21 +449,6 @@ it("edits the task on the current editor line only when task mode is off", () =>
   plugin.settings.taskMode = false;
   expect(check.editCurrentLineTask(false, editor, null)).toBe(false);
   expect(open).toHaveBeenCalledOnce();
-});
-
-it.each(["list", "kanban", "dashboard"])("applies property visibility to %s without hiding the remaining date/time component", layout => {
-  const { view, internals, tasks, plugin } = selectionView();
-  Object.assign(view, { layout: layout === "list" ? "list" : "kanban", grouping: "none" });
-  if (layout === "dashboard") Object.assign(view, { state: { mode: "dashboard" } });
-  plugin.settings.hiddenListTaskProperties = ["tags", "scheduledDate", "deadlineTime"];
-  plugin.settings.hiddenKanbanTaskProperties = ["priority", "scheduledTime", "deadline"];
-  const labels: string[] = [];
-  internals.badge = (_parent, _icon, text) => {
-    labels.push(String(text));
-    return { setAttribute: vi.fn(), addEventListener: vi.fn() };
-  };
-  internals.renderProperties({}, { ...tasks[0], scheduledDate: "2026-09-18", scheduledTime: "09:00", deadline: "2026-09-20", deadlineTime: "10:00", priority: 1, tags: ["work"] });
-  expect(labels).toEqual(layout === "kanban" ? ["2026-09-18", "10:00", "work"] : ["09:00", "2026-09-20", "P1"]);
 });
 
  it.each(["day", "week", "month", "year"] as const)("switches an open calendar to %s without changing its date", async scope => {

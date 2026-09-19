@@ -193,10 +193,6 @@
   transition: background-color 120ms ease;
 }
 
-.tm-project-row:hover {
-  background: var(--background-modifier-hover);
-}
-
 .tm-task-checkbox {
   align-self: center;
   margin-top: 0;
@@ -241,8 +237,7 @@ button.tm-task-title {
   white-space: nowrap;
 }
 
-.tm-project-row:hover button.tm-task-title,
-.tm-hover-title .tm-task-row:not(.tm-project-row):hover button.tm-task-title,
+.tm-hover-title .tm-task-row:hover button.tm-task-title,
 .tm-hover-title .tm-calendar-task:hover .tm-calendar-task-title,
 button.tm-source:hover {
   color: var(--text-accent-hover);
@@ -536,12 +531,15 @@ button.tm-source,
 
 
 .tm-project-row .tm-task-content {
-  grid-template-columns: minmax(100px, 1fr) minmax(0, auto);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 
-/* Explicit columns also work when the optional metadata element is absent. */
-.tm-project-row .tm-task-primary { grid-column: 1; }
-.tm-project-row .tm-project-metadata { grid-column: 2; }
+.tm-main-view .tm-project-row .tm-project-header-metadata { margin-top: 0; }
+.tm-project-row .tm-project-icon,
+.tm-project-row .tm-row-menu { align-self: start; }
 
 .tm-project-metadata .tm-meta {
   flex-shrink: 0;
@@ -1116,7 +1114,7 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-smart-list-filters .tm-property-name { min-width: 130px; }
 
 /* Task appearance preferences; selection and drag feedback remain independent. */
-.tm-main-view.tm-hover-background .tm-task-row:not(.tm-project-row):not(.is-selected):not([data-drop-position]):hover,
+.tm-main-view.tm-hover-background .tm-task-row:not(.is-selected):not([data-drop-position]):hover,
 .tm-main-view.tm-hover-background .tm-calendar button.tm-calendar-task:not(.is-selected):hover {
   background: var(--background-modifier-hover);
 }

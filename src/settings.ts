@@ -87,7 +87,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       {
         section: "Appearance",
         name: "Task highlight on hover",
-        desc: "Choose how tasks respond when you hover over them.",
+        desc: "Choose how tasks and projects in the Projects list respond when you hover over them.",
         render: (setting: Setting) => { setting.addDropdown(dropdown => dropdown
           .addOption("none", "None").addOption("title", "Title").addOption("background", "Background").addOption("all", "All")
           .setValue(this.plugin.settings.taskHoverHighlight)

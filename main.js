@@ -4228,7 +4228,7 @@ var BulkTaskEditorModal = class extends import_obsidian6.Modal {
 };
 
 // src/task-mode.ts
-var import_obsidian16 = require("obsidian");
+var import_obsidian15 = require("obsidian");
 
 // src/task-title.ts
 function taskTitleLabel(title) {
@@ -4426,32 +4426,6 @@ function renderDescriptionIndicator(parent, description) {
   (0, import_obsidian10.setIcon)(icon, "align-left");
 }
 
-// src/task-property-icons.ts
-var import_obsidian11 = require("obsidian");
-var TASK_PROPERTY_ICONS = {
-  scheduledDate: "calendar-days",
-  deadline: "flag",
-  durationMinutes: "clock-3",
-  priority: "signal",
-  tags: "tag",
-  completed: "circle-check",
-  skipped: "skip-forward",
-  failed: "circle-x"
-};
-var masks = /* @__PURE__ */ new Map();
-function notePropertyIconStyle(property) {
-  const name = TASK_PROPERTY_ICONS[property];
-  const cached = masks.get(name);
-  if (cached) return cached;
-  const icon = (0, import_obsidian11.getIcon)(name);
-  if (!icon) return "";
-  icon.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  icon.setAttribute("stroke", "black");
-  const style = `--tm-note-token-icon: url("data:image/svg+xml,${encodeURIComponent(icon.outerHTML)}")`;
-  masks.set(name, style);
-  return style;
-}
-
 // src/task-selection.ts
 var TaskSelection = class {
   constructor() {
@@ -4568,7 +4542,7 @@ function updateProjectDates(frontmatter, changes, expected, dateFormat) {
 }
 
 // src/gantt-view.ts
-var import_obsidian12 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 
 // src/calendar.ts
 var SLOT_MINUTES = 15;
@@ -4725,7 +4699,7 @@ function renderGantt(container, options) {
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
     const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-    (0, import_obsidian12.setIcon)(button, icon);
+    (0, import_obsidian11.setIcon)(button, icon);
     button.addEventListener("click", () => options.navigate(addDays(anchor, delta * period), options.zoom));
   }
   const today2 = toolbar.createEl("button", { text: "Today" });
@@ -4797,7 +4771,7 @@ function renderGantt(container, options) {
         }
       }
     } catch (cause) {
-      new import_obsidian12.Notice(cause instanceof Error ? cause.message : "Could not update project dates.");
+      new import_obsidian11.Notice(cause instanceof Error ? cause.message : "Could not update project dates.");
     } finally {
       busy = false;
       root.removeAttribute("aria-busy");
@@ -5151,7 +5125,7 @@ function kanbanColumns(tasks, grouping) {
 }
 
 // src/list-drag-view.ts
-var import_obsidian13 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 var ListDragController = class {
   constructor(getTask, drop, allowNesting = true, dragStart = () => {
   }) {
@@ -5203,7 +5177,7 @@ var ListDragController = class {
   }
   row(row, primary, task, group) {
     const handle = primary.createEl("button", { cls: "clickable-icon tm-list-drag-handle", attr: { "aria-label": `Drag ${task.title}`, title: "Drag to reorder; drop to the right to nest, or to the left to outdent" } });
-    (0, import_obsidian13.setIcon)(handle, "grip-vertical");
+    (0, import_obsidian12.setIcon)(handle, "grip-vertical");
     primary.prepend(handle);
     row.draggable = true;
     let suppressClickUntil = 0;
@@ -5269,7 +5243,7 @@ var ListDragController = class {
       return void 0;
     };
     row.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || import_obsidian13.Platform.isMacOS && event.ctrlKey || this.busy) return;
+      if (event.button !== 0 || import_obsidian12.Platform.isMacOS && event.ctrlKey || this.busy) return;
       const target = event.target;
       if (target.closest("input, label, select, textarea, a, button") && !target.closest(".tm-task-title, .tm-list-drag-handle")) return;
       event.stopPropagation();
@@ -5366,7 +5340,7 @@ var ListDragController = class {
 };
 
 // src/calendar-view.ts
-var import_obsidian14 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 function renderCalendar(container, options) {
   var _a, _b, _c, _d, _e;
   const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope` });
@@ -5383,7 +5357,7 @@ function renderCalendar(container, options) {
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
     const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-    (0, import_obsidian14.setIcon)(button, icon);
+    (0, import_obsidian13.setIcon)(button, icon);
     button.addEventListener("click", () => options.navigate(shiftCalendar(options.anchor, options.scope, delta), options.scope));
   }
   const today2 = toolbar.createEl("button", { text: "Today" });
@@ -5414,7 +5388,7 @@ function renderCalendar(container, options) {
       dragged = void 0;
       moving = true;
       void options.move(task, targetDate, getTime == null ? void 0 : getTime(event)).catch((cause) => {
-        new import_obsidian14.Notice(cause instanceof Error ? cause.message : "Could not reschedule task.");
+        new import_obsidian13.Notice(cause instanceof Error ? cause.message : "Could not reschedule task.");
       }).finally(() => {
         moving = false;
       });
@@ -5589,7 +5563,7 @@ function renderCalendar(container, options) {
           card.setAttribute("aria-busy", "true");
           void options.resize(task, day, minuteTime(range.start), range.duration).catch((cause) => {
             restore();
-            new import_obsidian14.Notice(cause instanceof Error ? cause.message : "Could not resize task.");
+            new import_obsidian13.Notice(cause instanceof Error ? cause.message : "Could not resize task.");
           }).finally(() => {
             moving = false;
             card.removeAttribute("aria-busy");
@@ -5701,7 +5675,7 @@ function renderCalendar(container, options) {
 }
 
 // src/task-view.ts
-var import_obsidian15 = require("obsidian");
+var import_obsidian14 = require("obsidian");
 var TASK_MAIN_VIEW = "task-manager-main";
 var TITLES = {
   dashboard: "Task Dashboard",
@@ -5713,7 +5687,7 @@ var TITLES = {
   tags: "Tags",
   smartLists: "Smart Lists"
 };
-var TaskMainView = class extends import_obsidian15.ItemView {
+var TaskMainView = class extends import_obsidian14.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -6066,12 +6040,12 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     const titleGroup = header.createDiv({ cls: "tm-title-group" });
     if (this.state.mode === "tags" && this.state.tag) {
       const back = titleGroup.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Back to tags" } });
-      (0, import_obsidian15.setIcon)(back, "arrow-left");
+      (0, import_obsidian14.setIcon)(back, "arrow-left");
       back.addEventListener("click", () => void this.plugin.openTaskView({ mode: "tags" }));
     }
     if (this.state.projectPath && !this.state.pagePath) {
       const back = titleGroup.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Back to projects" } });
-      (0, import_obsidian15.setIcon)(back, "arrow-left");
+      (0, import_obsidian14.setIcon)(back, "arrow-left");
       back.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects" }));
     }
     const heading = titleGroup.createDiv();
@@ -6086,7 +6060,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Task view layout" } });
     for (const [layout, icon2, label] of [["list", "list", "List"], ["calendar", "calendar-days", "Calendar"], ["kanban", "columns-3", "Kanban"]]) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${label} view`, title: `${label} view`, "aria-pressed": String(this.layout === layout) } });
-      (0, import_obsidian15.setIcon)(button, icon2);
+      (0, import_obsidian14.setIcon)(button, icon2);
       button.addEventListener("click", () => {
         this.layout = layout;
         this.render();
@@ -6094,7 +6068,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     }
     const add = actions.createEl("button", { cls: "mod-cta tm-add-task" });
     const icon = add.createSpan();
-    (0, import_obsidian15.setIcon)(icon, "plus");
+    (0, import_obsidian14.setIcon)(icon, "plus");
     add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
   }
@@ -6152,12 +6126,12 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     const ordering = filters.createDiv({ cls: "tm-order-controls" });
     const iconButton = (icon, label) => {
       const button = ordering.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-      (0, import_obsidian15.setIcon)(button, icon);
+      (0, import_obsidian14.setIcon)(button, icon);
       return button;
     };
     const sort = iconButton("list-filter", `Sort: ${this.sort}`);
     sort.addEventListener("click", (event) => {
-      const options = new import_obsidian15.Menu();
+      const options = new import_obsidian14.Menu();
       for (const property of [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES.filter((property2) => property2.key !== "scheduledTime" && property2.key !== "deadlineTime").map((property2) => ({ ...property2, label: property2.key === "scheduledDate" ? "Scheduled date and time" : property2.key === "deadline" ? "Deadline date and time" : property2.label }))]) {
         options.addItem((item) => item.setTitle(property.label).setChecked(this.sort === property.key).onClick(() => {
           this.sort = property.key;
@@ -6171,14 +6145,14 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     const direction = iconButton(this.descending ? "arrow-down" : "arrow-up", this.descending ? "Descending" : "Ascending");
     direction.addEventListener("click", () => {
       this.descending = !this.descending;
-      (0, import_obsidian15.setIcon)(direction, this.descending ? "arrow-down" : "arrow-up");
+      (0, import_obsidian14.setIcon)(direction, this.descending ? "arrow-down" : "arrow-up");
       direction.setAttribute("aria-label", this.descending ? "Descending" : "Ascending");
       direction.setAttribute("title", this.descending ? "Descending" : "Ascending");
       this.renderTaskResults();
     });
     const grouping = iconButton("group", `Group: ${this.grouping}`);
     grouping.addEventListener("click", (event) => {
-      const options = new import_obsidian15.Menu();
+      const options = new import_obsidian14.Menu();
       for (const property of [{ key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES]) {
         options.addItem((item) => item.setTitle(property.label).setChecked(this.grouping === property.key).onClick(() => {
           this.grouping = property.key;
@@ -6200,7 +6174,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     for (const list of lists) {
       const row = entries.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
       const icon = row.createSpan({ cls: "tm-project-icon" });
-      (0, import_obsidian15.setIcon)(icon, "list-filter");
+      (0, import_obsidian14.setIcon)(icon, "list-filter");
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
       primary.createEl("button", { cls: "tm-task-title", text: list.name, attr: { title: list.name } }).addEventListener("click", () => void this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }));
@@ -6218,10 +6192,10 @@ var TaskMainView = class extends import_obsidian15.ItemView {
       for (const tag of tags) {
         const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
         const icon = row.createSpan({ cls: "tm-project-icon" });
-        (0, import_obsidian15.setIcon)(icon, "tag");
+        (0, import_obsidian14.setIcon)(icon, "tag");
         const content = row.createDiv({ cls: "tm-task-content" });
         const title = content.createEl("button", { cls: "tm-task-title", text: tag.name });
-        title.addEventListener("click", () => void this.plugin.openTag(tag.name).catch((error) => new import_obsidian15.Notice(String(error))));
+        title.addEventListener("click", () => void this.plugin.openTag(tag.name).catch((error) => new import_obsidian14.Notice(String(error))));
         content.createDiv({ cls: "tm-task-metadata", text: `${tag.openTasks} open \xB7 ${tag.completedTasks} completed` });
       }
     };
@@ -6239,7 +6213,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Projects layout" } });
     for (const [layout, icon] of [["list", "list"], ["gantt", "chart-gantt"]]) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${layout === "gantt" ? "Gantt" : "List"} projects view`, "aria-pressed": String(this.projectLayout === layout), title: `${layout === "gantt" ? "Gantt" : "List"} view` } });
-      (0, import_obsidian15.setIcon)(button, icon);
+      (0, import_obsidian14.setIcon)(button, icon);
       button.addEventListener("click", () => {
         this.projectLayout = layout;
         this.render();
@@ -6260,7 +6234,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     if (!active.length && (!this.showArchivedProjects || !archived.length)) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
-      (0, import_obsidian15.setIcon)(icon, "target");
+      (0, import_obsidian14.setIcon)(icon, "target");
       empty.createEl("h3", { text: archived.length ? "No active projects" : "No projects yet" });
       empty.createEl("p", { text: archived.length ? "Enable Show archived projects to see your archived projects." : "Add #project to a note or include project in its frontmatter tags." });
       return;
@@ -6280,11 +6254,11 @@ var TaskMainView = class extends import_obsidian15.ItemView {
           this.ganttAnchor = anchor;
         },
         open: (project) => {
-          void this.plugin.openProject(project.path).catch((error) => new import_obsidian15.Notice(String(error)));
+          void this.plugin.openProject(project.path).catch((error) => new import_obsidian14.Notice(String(error)));
         },
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
-          if (!(file instanceof import_obsidian15.TFile)) throw new Error("Project note no longer exists.");
+          if (!(file instanceof import_obsidian14.TFile)) throw new Error("Project note no longer exists.");
           await this.app.fileManager.processFrontMatter(file, (frontmatter) => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()));
           await this.plugin.index.refreshPath(project.path);
         }
@@ -6308,13 +6282,13 @@ var TaskMainView = class extends import_obsidian15.ItemView {
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
-      button.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian15.Notice(String(error))));
-      const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
-      this.renderProperties(metadata, project);
+      button.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian14.Notice(String(error))));
+      const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
+      renderProjectHeaderDetails(metadata, project, (property) => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat());
       if (!metadata.childElementCount) metadata.remove();
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
-      (0, import_obsidian15.setIcon)(open, "chevron-right");
-      open.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian15.Notice(String(error))));
+      (0, import_obsidian14.setIcon)(open, "chevron-right");
+      open.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian14.Notice(String(error))));
     }
   }
   renderGroupAddButton(parent, title, target) {
@@ -6323,7 +6297,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
       "aria-label": `Add task to ${title}`,
       title: `Add task to ${title}`
     } });
-    (0, import_obsidian15.setIcon)(add, "plus");
+    (0, import_obsidian14.setIcon)(add, "plus");
     add.addEventListener("click", (event) => {
       var _a;
       event.stopPropagation();
@@ -6377,7 +6351,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
       for (const path of paths) await this.plugin.index.refreshPath(path);
       this.render();
     } catch (cause) {
-      new import_obsidian15.Notice(cause instanceof Error ? cause.message : "Could not move selected tasks.");
+      new import_obsidian14.Notice(cause instanceof Error ? cause.message : "Could not move selected tasks.");
     } finally {
       this.draggedTasks = [];
     }
@@ -6391,7 +6365,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
   }
   clearSelectionOutside(event) {
     var _a;
-    if (event.button !== 0 || import_obsidian15.Platform.isMacOS && event.ctrlKey || !this.getSelectedTasks().length) return;
+    if (event.button !== 0 || import_obsidian14.Platform.isMacOS && event.ctrlKey || !this.getSelectedTasks().length) return;
     const target = event.target;
     if (target && ((_a = this.selectionBar) == null ? void 0 : _a.contains(target)) && target.closest("button")) return;
     const selected = this.getSelectedTasks().some((task) => {
@@ -6426,7 +6400,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
       return Boolean(control && control !== row);
     };
     const selectForContextMenu = (event) => {
-      const additive = import_obsidian15.Platform.isMacOS ? event.metaKey : event.ctrlKey;
+      const additive = import_obsidian14.Platform.isMacOS ? event.metaKey : event.ctrlKey;
       if (!this.selection.has(task) || event.shiftKey || additive) {
         this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
       }
@@ -6434,7 +6408,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
       this.updateSelection();
     };
     row.addEventListener("pointerdown", (event) => {
-      this.contextSelectionOnPress = event.button === 2 || import_obsidian15.Platform.isMacOS && event.button === 0 && event.ctrlKey;
+      this.contextSelectionOnPress = event.button === 2 || import_obsidian14.Platform.isMacOS && event.button === 0 && event.ctrlKey;
       if (this.contextSelectionOnPress) {
         selectForContextMenu(event);
       }
@@ -6528,7 +6502,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
       } catch (cause) {
         checkbox.checked = !checkbox.checked;
         checkbox.disabled = false;
-        new import_obsidian15.Notice(cause instanceof Error ? cause.message : "Could not update the task.");
+        new import_obsidian14.Notice(cause instanceof Error ? cause.message : "Could not update the task.");
       }
     };
     checkbox.addEventListener("change", () => {
@@ -6543,7 +6517,7 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     try {
       if (recurringFile(this.app, task)) {
         const icon = primary.createSpan({ cls: "tm-task-recurring", attr: { role: "img", "aria-label": "Recurring task", title: "Recurring task" } });
-        (0, import_obsidian15.setIcon)(icon, "repeat-2");
+        (0, import_obsidian14.setIcon)(icon, "repeat-2");
       }
     } catch (e) {
     }
@@ -6571,89 +6545,25 @@ var TaskMainView = class extends import_obsidian15.ItemView {
     });
     if (!metadata.childElementCount) metadata.remove();
     const menuButton = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": "Task actions" } });
-    (0, import_obsidian15.setIcon)(menuButton, "more-horizontal");
+    (0, import_obsidian14.setIcon)(menuButton, "more-horizontal");
     menuButton.addEventListener("click", (event) => this.openMenu(event, task));
   }
-  makePropertyEditable(badge, label, edit) {
-    var _a;
-    badge.setAttribute("role", "button");
-    badge.setAttribute("tabindex", "0");
-    badge.setAttribute("aria-label", `Edit ${label}: ${(_a = badge.textContent) != null ? _a : ""}`);
-    badge.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      edit();
-    });
-    badge.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      event.stopPropagation();
-      edit();
-    });
-  }
-  renderProperties(parent, properties, editProject) {
-    var _a, _b;
-    const grouping = "completed" in properties ? this.metadataGrouping : "none";
-    const propertyBadge = (property, icon, text, variant) => {
-      if (grouping === property && property !== "scheduledDate" && property !== "deadline" || property === "durationMinutes" && grouping === "duration") return;
-      if ("completed" in properties && property !== "endDate" && property !== "scheduledDate" && property !== "deadline" && !this.showTaskProperty(property === "durationMinutes" ? "duration" : property)) return;
-      const badge = this.badge(parent, icon, text, variant);
-      const label = { scheduledDate: "scheduled date and time", endDate: "end date", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[property];
-      if ("completed" in properties && property !== "endDate") {
-        this.makePropertyEditable(badge, label, () => this.editTask(properties, property));
-      } else if (editProject && property !== "durationMinutes") {
-        const field2 = property === "scheduledDate" ? "date" : property;
-        this.makePropertyEditable(badge, label, () => editProject(field2));
-      }
-    };
-    const incompleteTask = "completed" in properties && !properties.completed;
-    const dateText = (field2, timeField) => {
-      const date = properties[field2];
-      const hideDate = grouping === field2 || grouping === "date" && "completed" in properties && date === actionDate(properties);
-      const isTask = "completed" in properties;
-      return [
-        date && !hideDate && (!isTask || this.showTaskProperty(field2)) ? formatDate(date, this.plugin.dateFormat()) : "",
-        grouping !== timeField && (!isTask || this.showTaskProperty(timeField)) ? properties[timeField] : ""
-      ].filter(Boolean).join(" ");
-    };
-    const scheduled = dateText("scheduledDate", "scheduledTime");
-    if (scheduled) propertyBadge("scheduledDate", TASK_PROPERTY_ICONS.scheduledDate, scheduled, incompleteTask && properties.scheduledDate && properties.scheduledDate < todayIso() ? "danger" : void 0);
-    if ("endDate" in properties && properties.endDate) propertyBadge("endDate", "calendar-check", `End: ${formatDate(properties.endDate, this.plugin.dateFormat())}`);
-    if ("durationMinutes" in properties && properties.durationMinutes) propertyBadge("durationMinutes", TASK_PROPERTY_ICONS.durationMinutes, formatDuration(properties.durationMinutes));
-    const deadline = dateText("deadline", "deadlineTime");
-    if (deadline) propertyBadge("deadline", TASK_PROPERTY_ICONS.deadline, deadline, (!("completed" in properties) || incompleteTask) && properties.deadline && properties.deadline < todayIso() ? "danger" : void 0);
-    if (properties.priority) propertyBadge("priority", TASK_PROPERTY_ICONS.priority, `P${properties.priority}`, `p${properties.priority}`);
-    if ("tags" in properties) for (const tag of (_a = properties.tags) != null ? _a : []) {
-      if (this.state.mode === "tags" && "completed" in properties) {
-        const currentTag = this.pagePath ? ((_b = this.app.metadataCache.getFirstLinkpathDest(tag, properties.path)) == null ? void 0 : _b.path) === this.pagePath : tag === this.state.tag;
-        if (currentTag) continue;
-      }
-      propertyBadge("tags", TASK_PROPERTY_ICONS.tags, tag);
-    }
-  }
-  badge(parent, iconName, text, variant) {
-    const badge = parent.createSpan({ cls: `tm-meta${variant ? ` is-${variant}` : ""}` });
-    const icon = badge.createSpan({ cls: "tm-meta-icon" });
-    (0, import_obsidian15.setIcon)(icon, iconName);
-    badge.createSpan({ text });
-    return badge;
-  }
   openMenu(event, task) {
-    const menu = new import_obsidian15.Menu();
+    const menu = new import_obsidian14.Menu();
     menu.addItem((item) => item.setTitle("Edit task").setIcon("pencil").onClick(() => this.plugin.openEditor({ ...this.state, task })));
     menu.addItem((item) => item.setTitle("Open source note").setIcon("file-text").onClick(() => void this.openSource(task)));
     menu.showAtMouseEvent(event);
   }
   async openSource(task) {
     const file = this.app.vault.getAbstractFileByPath(task.path);
-    if (file instanceof import_obsidian15.TFile) {
+    if (file instanceof import_obsidian14.TFile) {
       await this.app.workspace.getLeaf("tab").openFile(file, { eState: { line: task.line } });
     }
   }
   renderEmpty(container) {
     const empty = container.createDiv({ cls: "tm-empty" });
     const icon = empty.createDiv({ cls: "tm-empty-icon" });
-    (0, import_obsidian15.setIcon)(icon, "circle-check-big");
+    (0, import_obsidian14.setIcon)(icon, "circle-check-big");
     empty.createEl("h3", { text: "Nothing here" });
     empty.createEl("p", { text: this.search || this.propertyFilters.length ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
   }
@@ -6691,7 +6601,7 @@ var TaskModeController = class {
       for (const leaf of leaves) {
         if (this.disposed) return;
         const view = leaf.view;
-        if (view instanceof import_obsidian16.MarkdownView && view.file && this.enabled() && (this.isProject(view.file.path) || this.tagForPath(view.file.path))) {
+        if (view instanceof import_obsidian15.MarkdownView && view.file && this.enabled() && (this.isProject(view.file.path) || this.tagForPath(view.file.path))) {
           const path = view.file.path;
           const markdownState = view.getState();
           const saved = this.savedViews.get(leaf);
@@ -6713,7 +6623,7 @@ var TaskModeController = class {
             continue;
           }
           const file = this.app.vault.getAbstractFileByPath(path);
-          if (!(file instanceof import_obsidian16.TFile)) continue;
+          if (!(file instanceof import_obsidian15.TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState : {};
           this.savedViews.set(leaf, { ...state, pagePath: path, projectPath: void 0 });
           await leaf.setViewState({ type: "markdown", state: { ...markdownState, file: file.path } });
@@ -6812,8 +6722,8 @@ function noteDateInput(getDateFormat, isTaskMode, getLinkDates = () => true) {
 }
 
 // src/recurring-log.ts
-var import_obsidian17 = require("obsidian");
-var moment2 = import_obsidian17.moment;
+var import_obsidian16 = require("obsidian");
+var moment2 = import_obsidian16.moment;
 function parseRecurringLog(line, formats = ["YYYY-MM-DD"]) {
   const match = /^([ \t]*)(COMPLETED|SKIPPED|FAILED):([ \t]+)(\[\[[^\]\r\n]+\]\]|\S(?:.*?\S)?)([ \t]*)$/.exec(line);
   if (!match) return void 0;
@@ -6911,6 +6821,32 @@ function recurringLogTokens(line, dateFormat) {
     dateLabel,
     display: entry.linked || line.slice(entry.dateFrom, entry.dateTo) !== dateLabel ? { from: entry.dateFrom, to: entry.dateTo, label: dateLabel, linkText: entry.linkText } : void 0
   }];
+}
+
+// src/task-property-icons.ts
+var import_obsidian17 = require("obsidian");
+var TASK_PROPERTY_ICONS = {
+  scheduledDate: "calendar-days",
+  deadline: "flag",
+  durationMinutes: "clock-3",
+  priority: "signal",
+  tags: "tag",
+  completed: "circle-check",
+  skipped: "skip-forward",
+  failed: "circle-x"
+};
+var masks = /* @__PURE__ */ new Map();
+function notePropertyIconStyle(property) {
+  const name = TASK_PROPERTY_ICONS[property];
+  const cached = masks.get(name);
+  if (cached) return cached;
+  const icon = (0, import_obsidian17.getIcon)(name);
+  if (!icon) return "";
+  icon.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  icon.setAttribute("stroke", "black");
+  const style = `--tm-note-token-icon: url("data:image/svg+xml,${encodeURIComponent(icon.outerHTML)}")`;
+  masks.set(name, style);
+  return style;
 }
 
 // src/note-task-presentation.ts
@@ -8572,7 +8508,7 @@ var TaskManagerSettingTab = class extends import_obsidian24.PluginSettingTab {
       {
         section: "Appearance",
         name: "Task highlight on hover",
-        desc: "Choose how tasks respond when you hover over them.",
+        desc: "Choose how tasks and projects in the Projects list respond when you hover over them.",
         render: (setting) => {
           setting.addDropdown((dropdown) => dropdown.addOption("none", "None").addOption("title", "Title").addOption("background", "Background").addOption("all", "All").setValue(this.plugin.settings.taskHoverHighlight).onChange(async (value) => {
             if (value !== "none" && value !== "title" && value !== "background" && value !== "all") return;
