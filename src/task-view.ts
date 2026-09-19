@@ -45,6 +45,7 @@ export class TaskMainView extends ItemView {
   private projectLayout: "list" | "gantt" = "list";
   private ganttAnchor = addDays(todayIso(), -2);
   private ganttZoom: GanttZoom = "month";
+  private calendarPlanningOpen = false;
   private calendarScope: CalendarScope = "month";
   private calendarAnchor = todayIso();
   private showCompleted = false;
@@ -103,7 +104,7 @@ export class TaskMainView extends ItemView {
     if (typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor)) this.ganttAnchor = state.ganttAnchor;
     if (state.layout === "list" || state.layout === "calendar" || state.layout === "kanban") this.layout = state.layout;
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
-    if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
+    if (["day", "four-day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId) {
       this.smartListVersion = undefined;
@@ -224,6 +225,7 @@ export class TaskMainView extends ItemView {
           navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.render(); },
           create: preset => this.plugin.openEditor({ mode: "all", preset }),
           edit: task => this.plugin.openEditor({ mode: "all", task }),
+          toggle: (task, completed) => this.plugin.store.toggle(task, completed),
           move: async (task, date, time) => {
             await this.plugin.store.update(task, rescheduledDraft(task, date, time));
             await this.plugin.index.refreshPath(task.path);
@@ -268,10 +270,13 @@ export class TaskMainView extends ItemView {
   private renderTaskLayouts(container: HTMLElement, tasks: Task[]): void {
     if (this.layout === "calendar") {
       renderCalendar(container, {
+        planning: true, planningOpen: this.calendarPlanningOpen,
+        planningChanged: open => { this.calendarPlanningOpen = open; },
         anchor: this.calendarAnchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
         navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.renderTaskResults(); },
         create: preset => this.plugin.openEditor({ ...this.state, preset }),
         edit: task => this.editTask(task),
+        toggle: (task, completed) => this.plugin.store.toggle(task, completed),
         bind: (card, task) => this.bindSelection(card, task),
         dragStart: task => this.prepareDrag(task),
         resize: async (task, date, time, duration) => {

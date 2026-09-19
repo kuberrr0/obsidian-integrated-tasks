@@ -1,12 +1,16 @@
+import { taskTimeLabel } from "./task-row-details";
 import { taskTitleLabel } from "./task-title";
 import { renderDescriptionIndicator } from "./task-description-indicator";
 import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
-import { SLOT_MINUTES, calendarDate, calendarDays, calendarTime, localDate, minuteTime, resizedRange, selectionPreset, shiftCalendar, timeMinutes, type CalendarPreset, type CalendarScope } from "./calendar";
+import { addDays, SLOT_MINUTES, calendarDate, calendarDays, calendarTime, localDate, minuteTime, resizedRange, selectionPreset, shiftCalendar, timeMinutes, type CalendarPreset, type CalendarScope } from "./calendar";
 import type { Task } from "./types";
 
 export interface CalendarOptions {
+  planning?: boolean;
+  planningOpen?: boolean;
+  planningChanged?: (open: boolean) => void;
   anchor: string;
   scope: CalendarScope;
   tasks: Task[];
@@ -14,6 +18,7 @@ export interface CalendarOptions {
   navigate: (anchor: string, scope: CalendarScope) => void;
   create: (preset: CalendarPreset) => void;
   edit: (task: Task) => void;
+  toggle?: (task: Task, completed: boolean) => Promise<void>;
   bind?: (card: HTMLElement, task: Task) => void;
   dragStart?: (task: Task) => void;
   resize: (task: Task, date: string, time: string, duration: number) => Promise<void>;
@@ -22,7 +27,23 @@ export interface CalendarOptions {
 
 /** Render inside the task view; all writes go through its existing task store. */
 export function renderCalendar(container: HTMLElement, options: CalendarOptions): void {
-  const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope` });
+  const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope`, attr: { tabindex: "0" } });
+  root.addEventListener("keydown", event => {
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) return;
+    const target = event.target as HTMLElement;
+    if (target.closest?.("input, textarea, select, [contenteditable=true], [role=slider]")) return;
+    const key = event.key.toLowerCase();
+    const scope = key === "d" ? "four-day" : key === "w" ? "week" : key === "m" ? "month" : undefined;
+    if (scope) { event.preventDefault(); options.navigate(options.anchor, scope); container.querySelector?.<HTMLElement>(".tm-calendar")?.focus(); }
+    else if (key === "t") {
+      event.preventDefault(); options.navigate(todayIso(), options.scope);
+      container.querySelector?.<HTMLElement>(".tm-calendar")?.focus();
+    }
+    else if (key === "arrowleft" || key === "arrowright") {
+      event.preventDefault(); options.navigate(shiftCalendar(options.anchor, options.scope, key === "arrowleft" ? -1 : 1), options.scope);
+      container.querySelector?.<HTMLElement>(".tm-calendar")?.focus();
+    }
+  });
   const byDate = new Map<string, Task[]>();
   for (const task of options.tasks) {
     const key = calendarDate(task) ?? "";
@@ -34,23 +55,35 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   let grabOffsetMinutes = 0;
   let moving = false;
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
+  const controls = toolbar.createDiv({ cls: "tm-calendar-controls" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]] as const) {
-    const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
+    const button = controls.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
     setIcon(button, icon);
     button.addEventListener("click", () => options.navigate(shiftCalendar(options.anchor, options.scope, delta), options.scope));
   }
-  const today = toolbar.createEl("button", { text: "Today" });
+  const today = controls.createEl("button", { text: "Today" });
   today.addEventListener("click", () => options.navigate(todayIso(), options.scope));
   const date = localDate(options.anchor);
-  const days = options.scope === "week" ? calendarDays(options.anchor, "week") : [];
-  const title = options.scope === "day" ? formatDate(options.anchor, options.dateFormat)
-    : options.scope === "week" ? `${formatDate(days[0], options.dateFormat)} – ${formatDate(days[6], options.dateFormat)}`
-    : options.scope === "year" ? String(date.getFullYear()) : date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const days = options.scope === "four-day" ? Array.from({ length: 4 }, (_, i) => addDays(options.anchor, i)) : options.scope === "week" ? calendarDays(options.anchor, "week") : [];
+  const title = options.scope === "year" ? String(date.getFullYear()) : date.toLocaleDateString(undefined, { month: "long", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "numeric" as const } : {}) });
   toolbar.createEl("h2", { text: title });
-  const scopes = toolbar.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Calendar scope" } });
-  for (const scope of ["day", "week", "month", "year"] as const) {
-    const button = scopes.createEl("button", { text: scope[0].toUpperCase() + scope.slice(1), attr: { "aria-pressed": String(options.scope === scope) } });
+  const scopes = controls.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Calendar scope" } });
+  for (const [scope, label] of [["four-day", "4D"], ["week", "W"], ["month", "M"]] as const) {
+    const button = scopes.createEl("button", { text: label, attr: { "aria-label": scope === "four-day" ? "4 days" : scope === "week" ? "Week" : "Month", "aria-pressed": String(options.scope === scope) } });
     button.addEventListener("click", () => options.navigate(options.anchor, scope));
+  }
+  const body = root.createDiv({ cls: "tm-calendar-body" });
+  const surface = body.createDiv({ cls: "tm-calendar-surface" });
+  const planner = options.planning ? body.createEl("aside", { cls: "tm-calendar-planner", attr: { "aria-label": "Plan tasks" } }) : undefined;
+  if (planner) {
+    planner.hidden = !options.planningOpen;
+    const plan = toolbar.createEl("button", { cls: "tm-calendar-plan-toggle", text: "Plan tasks", attr: { "aria-expanded": String(!planner.hidden) } });
+    const icon = plan.createSpan(); setIcon(icon, "panel-right");
+    plan.addEventListener("click", () => {
+      planner.hidden = !planner.hidden;
+      plan.setAttribute("aria-expanded", String(!planner.hidden));
+      options.planningChanged?.(!planner.hidden);
+    });
   }
 
   const dropTarget = (element: HTMLElement, targetDate: string, getTime?: (event: DragEvent) => string): void => {
@@ -74,11 +107,33 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       }).finally(() => { moving = false; });
     });
   };
-  const taskCard = (parent: HTMLElement, task: Task): HTMLButtonElement => {
+  const taskCard = (parent: HTMLElement, task: Task): HTMLElement => {
     const time = calendarTime(task);
-    const card = parent.createEl("button", { cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
-      attr: { title: `${task.title}${task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` } });
-    const title = card.createSpan({ cls: "tm-calendar-task-title", text: `${time ? `${time} ` : ""}${taskTitleLabel(task.title)}` });
+    const card = parent.createDiv({ cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
+      attr: { role: "button", tabindex: "0", title: `${task.title}${task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` } });
+    const checkbox = card.createEl("input", { cls: "tm-calendar-check", type: "checkbox", attr: { "aria-label": `Complete ${taskTitleLabel(task.title)}` } });
+    checkbox.checked = task.completed;
+    checkbox.disabled = !options.toggle;
+    checkbox.addEventListener("click", event => event.stopPropagation());
+    checkbox.addEventListener("pointerdown", event => event.stopPropagation());
+    checkbox.addEventListener("keydown", event => event.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      checkbox.disabled = true;
+      void options.toggle?.(task, checkbox.checked).catch(cause => {
+        checkbox.checked = task.completed;
+        new Notice(cause instanceof Error ? cause.message : "Could not complete task.");
+      }).finally(() => { checkbox.disabled = false; });
+    });
+    card.addEventListener("keydown", event => {
+      if (!options.bind && event.target === card && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault(); event.stopPropagation(); options.edit(task);
+      }
+    });
+    const title = card.createSpan({ cls: "tm-calendar-task-title", text: taskTitleLabel(task.title) });
+    if (time) card.createSpan({ cls: "tm-calendar-task-time", text: `${taskTimeLabel(time)} – ${taskTimeLabel(minuteTime(Math.min(1440, timeMinutes(time) + (task.durationMinutes ?? 30))))}` });
+    if (task.deadline && calendarDate(task) === task.deadline && (time ?? "") === (task.deadlineTime ?? "")) {
+      setIcon(card.createSpan({ cls: "tm-calendar-task-flag", attr: { "aria-label": "Deadline" } }), "flag");
+    }
     renderDescriptionIndicator(title, task.description);
     card.draggable = true;
     card.addEventListener("click", event => {
@@ -121,15 +176,20 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
 
   const renderHours = (timeline: HTMLElement): void => {
     for (let hour = 0; hour < 24; hour++) {
-      const label = timeline.createDiv({ cls: "tm-calendar-hour", text: minuteTime(hour * 60) });
+      const label = timeline.createDiv({ cls: "tm-calendar-hour", text: taskTimeLabel(minuteTime(hour * 60)).replace(" ", "").toLowerCase() });
       label.style.top = `${hour * 48}px`;
     }
   };
   const renderDayLane = (timeline: HTMLElement, day: string): void => {
     const tasks = byDate.get(day) ?? [];
     const lane = timeline.createDiv({ cls: "tm-calendar-lane", attr: { "aria-label": `Daily schedule for ${day}` } });
+    if (day === todayIso()) {
+      const now = new Date();
+      const marker = lane.createSpan({ cls: "tm-calendar-now", attr: { "aria-hidden": "true" } });
+      marker.style.top = `${(now.getHours() * 60 + now.getMinutes()) / 15 * 12}px`;
+    }
     for (let slot = 0; slot < 96; slot++) {
-      const button = lane.createEl("button", { cls: "tm-calendar-slot", attr: { "aria-label": `Create task on ${day} at ${minuteTime(slot * 15)}` } });
+      const button = lane.createEl("button", { cls: `tm-calendar-slot${slot > 0 && slot % 4 === 0 ? " is-hour-start" : ""}`, attr: { "aria-label": `Create task on ${day} at ${minuteTime(slot * 15)}` } });
       button.addEventListener("click", event => { if (event.detail === 0) options.create(selectionPreset(day, slot, slot)); });
     }
     const minutesAt = (clientY: number): number => {
@@ -184,8 +244,8 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       card.addClass("is-timed");
       card.style.top = `${begin / 15 * 12}px`;
       card.style.height = `${Math.max(12, (end - begin) / 15 * 12)}px`;
-      card.style.left = `calc(${column / ends.length * 85}% + 2px)`;
-      card.style.width = `calc(${85 / ends.length}% - 4px)`;
+      card.style.left = `calc(${column / ends.length * 100}% + 2px)`;
+      card.style.width = `calc(${100 / ends.length}% - 4px)`;
       const preview = card.createSpan({ cls: "tm-calendar-resize-preview" });
       const restore = (): void => {
         card.style.top = `${begin / 15 * 12}px`;
@@ -261,24 +321,24 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       }
     }
   };
-  if (options.scope === "day" || options.scope === "week") {
+  if (options.scope === "day" || options.scope === "week" || options.scope === "four-day") {
     if (options.scope === "day") {
-      const allDay = root.createDiv({ cls: "tm-calendar-allday" });
-      allDay.createSpan({ text: "No time" });
+      const allDay = surface.createDiv({ cls: "tm-calendar-allday" });
+      allDay.createSpan({ text: "all-day" });
       for (const task of (byDate.get(options.anchor) ?? []).filter(task => !calendarTime(task))) taskCard(allDay, task);
-      const scroll = root.createDiv({ cls: "tm-calendar-day-scroll" });
+      const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll" });
       const timeline = scroll.createDiv({ cls: "tm-calendar-timeline" });
       renderHours(timeline);
       renderDayLane(timeline, options.anchor);
     } else {
       // One scroll surface keeps all seven timelines and the hour labels aligned.
-      const scroll = root.createDiv({ cls: "tm-calendar-day-scroll tm-calendar-week-scroll" });
-      const week = scroll.createDiv({ cls: "tm-calendar-week" });
+      const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll tm-calendar-week-scroll" });
+      const week = scroll.createDiv({ cls: `tm-calendar-week${options.scope === "four-day" ? " is-four-day" : ""}` });
       const header = week.createDiv({ cls: "tm-calendar-week-header" });
-      header.createSpan({ cls: "tm-calendar-week-gutter", text: "No time" });
+      header.createSpan({ cls: "tm-calendar-week-gutter", text: "all-day" });
       for (const day of days) {
         const column = header.createDiv({ cls: `tm-calendar-week-heading${day === todayIso() ? " is-today" : ""}` });
-        const button = column.createEl("button", { cls: "tm-calendar-date", text: localDate(day).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }), attr: { "aria-label": `New task on ${formatDate(day, options.dateFormat)}` } });
+        const button = column.createEl("button", { cls: "tm-calendar-date", text: localDate(day).toLocaleDateString(undefined, { weekday: "short", day: "numeric" }), attr: { "aria-label": `New task on ${formatDate(day, options.dateFormat)}` } });
         button.addEventListener("click", () => options.create({ scheduledDate: day }));
         for (const task of (byDate.get(day) ?? []).filter(task => !calendarTime(task))) taskCard(column, task);
         dropTarget(column, day);
@@ -291,9 +351,9 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         renderDayLane(column, day);
       }
     }
-  } else if (options.scope === "month") monthGrid(root, options.anchor, false);
+  } else if (options.scope === "month") monthGrid(surface, options.anchor, false);
   else {
-    const year = root.createDiv({ cls: "tm-calendar-year" });
+    const year = surface.createDiv({ cls: "tm-calendar-year" });
     for (let month = 0; month < 12; month++) {
       const section = year.createDiv();
       const anchor = `${date.getFullYear()}-${String(month + 1).padStart(2, "0")}-01`;
@@ -308,9 +368,10 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     }
   }
   const unscheduled = byDate.get("") ?? [];
-  if (unscheduled.length) {
-    const tray = root.createEl("section", { cls: "tm-calendar-unscheduled" });
-    tray.createEl("h3", { text: "Unscheduled — drag onto a date" });
+  if (unscheduled.length || planner) {
+    const tray = (planner ?? surface).createEl("section", { cls: "tm-calendar-unscheduled" });
+    tray.createEl("h3", { text: "Unscheduled" });
+    tray.createEl("p", { cls: "tm-calendar-plan-hint", text: unscheduled.length ? "Drag a task onto the calendar to schedule it." : "No unscheduled tasks." });
     for (const task of unscheduled) taskCard(tray, task);
   }
 }

@@ -50,12 +50,13 @@ Use the **+** beside a group or heading to add a task with that destination or g
 
 ### Calendar
 
-Switch between **Day, Week, Month, and Year**. Tasks appear on their scheduled date, falling back to their deadline when no scheduled date exists.
+Use **4D, W, and M** to switch between four days, a week, and a month. Day and Year remain available through commands. Tasks appear on their scheduled date, falling back to their deadline when no scheduled date exists. Cards use your accent color.
 
 - Drag a task to another date or time to reschedule it.
-- In Day and Week, drag across time slots to create a task with a start time and duration.
+- In Day, 4D, and Week, drag across time slots to create a task with a start time and duration.
 - Resize a timed task to adjust its start or finish in 15-minute steps.
 - Keep tasks without a time in the separate untimed area.
+- In the main calendar, toggle **Plan tasks** to open a right-hand sidebar of unscheduled tasks, then drag them onto a date or time slot.
 
 In Today and Upcoming, switching to Calendar lets you browse the full dated task schedule.
 

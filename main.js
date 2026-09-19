@@ -3546,6 +3546,70 @@ function appendRecurringLog(content, outcome, date, dateFormat = "YYYY-MM-DD", l
   return content + (content.endsWith("\n") ? "" : eol) + `${outcome}: ${linkDates ? `[[${label}]]` : label}${eol}`;
 }
 
+// src/calendar.ts
+var SLOT_MINUTES = 15;
+function localDate(iso) {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+function addDays(iso, days) {
+  const date = localDate(iso);
+  date.setDate(date.getDate() + days);
+  return formatLocalDate(date);
+}
+function calendarDate(task) {
+  var _a;
+  return (_a = task.scheduledDate) != null ? _a : task.deadline;
+}
+function calendarTime(task) {
+  return task.scheduledDate ? task.scheduledTime : task.deadlineTime;
+}
+function timeMinutes(time) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+function minuteTime(minutes) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+function selectionPreset(date, first, last) {
+  const start = Math.max(0, Math.min(95, Math.min(first, last))) * SLOT_MINUTES;
+  const end = (Math.max(0, Math.min(95, Math.max(first, last))) + 1) * SLOT_MINUTES;
+  return { scheduledDate: date, scheduledTime: minuteTime(start), durationMinutes: end - start };
+}
+function calendarDays(anchor, scope) {
+  const date = localDate(anchor);
+  if (scope === "month") date.setDate(1);
+  date.setDate(date.getDate() - (date.getDay() + 6) % 7);
+  const start = formatLocalDate(date);
+  return Array.from({ length: scope === "week" ? 7 : 42 }, (_, index) => addDays(start, index));
+}
+function shiftCalendar(anchor, scope, direction) {
+  if (scope === "four-day") return addDays(anchor, direction * 4);
+  if (scope === "day" || scope === "week") return addDays(anchor, direction * (scope === "week" ? 7 : 1));
+  const date = localDate(anchor);
+  const day = date.getDate();
+  date.setDate(1);
+  if (scope === "month") date.setMonth(date.getMonth() + direction);
+  else date.setFullYear(date.getFullYear() + direction);
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(day, lastDay));
+  return formatLocalDate(date);
+}
+function rescheduledDraft(task, date, time) {
+  return {
+    ...task,
+    scheduledDate: date,
+    scheduledTime: time != null ? time : task.scheduledTime,
+    destination: destinationString(task.path, task.section)
+  };
+}
+function resizedRange(begin, end, edge, target) {
+  const snapped = Math.round(target / SLOT_MINUTES) * SLOT_MINUTES;
+  const start = edge === "start" ? Math.max(0, Math.min(end - SLOT_MINUTES, snapped)) : begin;
+  const finish = edge === "end" ? Math.min(1440, Math.max(begin + SLOT_MINUTES, snapped)) : end;
+  return { start, duration: finish - start };
+}
+
 // src/project-creator.ts
 var import_obsidian4 = require("obsidian");
 
@@ -4544,69 +4608,6 @@ function updateProjectDates(frontmatter, changes, expected, dateFormat) {
 // src/gantt-view.ts
 var import_obsidian11 = require("obsidian");
 
-// src/calendar.ts
-var SLOT_MINUTES = 15;
-function localDate(iso) {
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year, month - 1, day, 12);
-}
-function addDays(iso, days) {
-  const date = localDate(iso);
-  date.setDate(date.getDate() + days);
-  return formatLocalDate(date);
-}
-function calendarDate(task) {
-  var _a;
-  return (_a = task.scheduledDate) != null ? _a : task.deadline;
-}
-function calendarTime(task) {
-  return task.scheduledDate ? task.scheduledTime : task.deadlineTime;
-}
-function timeMinutes(time) {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
-}
-function minuteTime(minutes) {
-  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-}
-function selectionPreset(date, first, last) {
-  const start = Math.max(0, Math.min(95, Math.min(first, last))) * SLOT_MINUTES;
-  const end = (Math.max(0, Math.min(95, Math.max(first, last))) + 1) * SLOT_MINUTES;
-  return { scheduledDate: date, scheduledTime: minuteTime(start), durationMinutes: end - start };
-}
-function calendarDays(anchor, scope) {
-  const date = localDate(anchor);
-  if (scope === "month") date.setDate(1);
-  date.setDate(date.getDate() - (date.getDay() + 6) % 7);
-  const start = formatLocalDate(date);
-  return Array.from({ length: scope === "week" ? 7 : 42 }, (_, index) => addDays(start, index));
-}
-function shiftCalendar(anchor, scope, direction) {
-  if (scope === "day" || scope === "week") return addDays(anchor, direction * (scope === "week" ? 7 : 1));
-  const date = localDate(anchor);
-  const day = date.getDate();
-  date.setDate(1);
-  if (scope === "month") date.setMonth(date.getMonth() + direction);
-  else date.setFullYear(date.getFullYear() + direction);
-  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  date.setDate(Math.min(day, lastDay));
-  return formatLocalDate(date);
-}
-function rescheduledDraft(task, date, time) {
-  return {
-    ...task,
-    scheduledDate: date,
-    scheduledTime: time != null ? time : task.scheduledTime,
-    destination: destinationString(task.path, task.section)
-  };
-}
-function resizedRange(begin, end, edge, target) {
-  const snapped = Math.round(target / SLOT_MINUTES) * SLOT_MINUTES;
-  const start = edge === "start" ? Math.max(0, Math.min(end - SLOT_MINUTES, snapped)) : begin;
-  const finish = edge === "end" ? Math.min(1440, Math.max(begin + SLOT_MINUTES, snapped)) : end;
-  return { start, duration: finish - start };
-}
-
 // src/project-hierarchy.ts
 function projectHierarchy(projects) {
   var _a, _b, _c;
@@ -5372,7 +5373,28 @@ var ListDragController = class {
 var import_obsidian13 = require("obsidian");
 function renderCalendar(container, options) {
   var _a, _b, _c, _d, _e;
-  const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope` });
+  const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope`, attr: { tabindex: "0" } });
+  root.addEventListener("keydown", (event) => {
+    var _a2, _b2, _c2, _d2, _e2, _f, _g;
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) return;
+    const target = event.target;
+    if ((_a2 = target.closest) == null ? void 0 : _a2.call(target, "input, textarea, select, [contenteditable=true], [role=slider]")) return;
+    const key = event.key.toLowerCase();
+    const scope = key === "d" ? "four-day" : key === "w" ? "week" : key === "m" ? "month" : void 0;
+    if (scope) {
+      event.preventDefault();
+      options.navigate(options.anchor, scope);
+      (_c2 = (_b2 = container.querySelector) == null ? void 0 : _b2.call(container, ".tm-calendar")) == null ? void 0 : _c2.focus();
+    } else if (key === "t") {
+      event.preventDefault();
+      options.navigate(todayIso(), options.scope);
+      (_e2 = (_d2 = container.querySelector) == null ? void 0 : _d2.call(container, ".tm-calendar")) == null ? void 0 : _e2.focus();
+    } else if (key === "arrowleft" || key === "arrowright") {
+      event.preventDefault();
+      options.navigate(shiftCalendar(options.anchor, options.scope, key === "arrowleft" ? -1 : 1), options.scope);
+      (_g = (_f = container.querySelector) == null ? void 0 : _f.call(container, ".tm-calendar")) == null ? void 0 : _g.focus();
+    }
+  });
   const byDate = /* @__PURE__ */ new Map();
   for (const task of options.tasks) {
     const key = (_a = calendarDate(task)) != null ? _a : "";
@@ -5384,21 +5406,37 @@ function renderCalendar(container, options) {
   let grabOffsetMinutes = 0;
   let moving = false;
   const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
+  const controls = toolbar.createDiv({ cls: "tm-calendar-controls" });
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]]) {
-    const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
+    const button = controls.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
     (0, import_obsidian13.setIcon)(button, icon);
     button.addEventListener("click", () => options.navigate(shiftCalendar(options.anchor, options.scope, delta), options.scope));
   }
-  const today2 = toolbar.createEl("button", { text: "Today" });
+  const today2 = controls.createEl("button", { text: "Today" });
   today2.addEventListener("click", () => options.navigate(todayIso(), options.scope));
   const date = localDate(options.anchor);
-  const days = options.scope === "week" ? calendarDays(options.anchor, "week") : [];
-  const title = options.scope === "day" ? formatDate(options.anchor, options.dateFormat) : options.scope === "week" ? `${formatDate(days[0], options.dateFormat)} \u2013 ${formatDate(days[6], options.dateFormat)}` : options.scope === "year" ? String(date.getFullYear()) : date.toLocaleDateString(void 0, { month: "long", year: "numeric" });
+  const days = options.scope === "four-day" ? Array.from({ length: 4 }, (_, i) => addDays(options.anchor, i)) : options.scope === "week" ? calendarDays(options.anchor, "week") : [];
+  const title = options.scope === "year" ? String(date.getFullYear()) : date.toLocaleDateString(void 0, { month: "long", ...date.getFullYear() !== (/* @__PURE__ */ new Date()).getFullYear() ? { year: "numeric" } : {} });
   toolbar.createEl("h2", { text: title });
-  const scopes = toolbar.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Calendar scope" } });
-  for (const scope of ["day", "week", "month", "year"]) {
-    const button = scopes.createEl("button", { text: scope[0].toUpperCase() + scope.slice(1), attr: { "aria-pressed": String(options.scope === scope) } });
+  const scopes = controls.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Calendar scope" } });
+  for (const [scope, label] of [["four-day", "4D"], ["week", "W"], ["month", "M"]]) {
+    const button = scopes.createEl("button", { text: label, attr: { "aria-label": scope === "four-day" ? "4 days" : scope === "week" ? "Week" : "Month", "aria-pressed": String(options.scope === scope) } });
     button.addEventListener("click", () => options.navigate(options.anchor, scope));
+  }
+  const body = root.createDiv({ cls: "tm-calendar-body" });
+  const surface = body.createDiv({ cls: "tm-calendar-surface" });
+  const planner = options.planning ? body.createEl("aside", { cls: "tm-calendar-planner", attr: { "aria-label": "Plan tasks" } }) : void 0;
+  if (planner) {
+    planner.hidden = !options.planningOpen;
+    const plan = toolbar.createEl("button", { cls: "tm-calendar-plan-toggle", text: "Plan tasks", attr: { "aria-expanded": String(!planner.hidden) } });
+    const icon = plan.createSpan();
+    (0, import_obsidian13.setIcon)(icon, "panel-right");
+    plan.addEventListener("click", () => {
+      var _a2;
+      planner.hidden = !planner.hidden;
+      plan.setAttribute("aria-expanded", String(!planner.hidden));
+      (_a2 = options.planningChanged) == null ? void 0 : _a2.call(options, !planner.hidden);
+    });
   }
   const dropTarget = (element, targetDate, getTime) => {
     element.addEventListener("dragover", (event) => {
@@ -5424,13 +5462,40 @@ function renderCalendar(container, options) {
     });
   };
   const taskCard = (parent, task) => {
-    var _a2;
+    var _a2, _b2, _c2;
     const time = calendarTime(task);
-    const card = parent.createEl("button", {
+    const card = parent.createDiv({
       cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
-      attr: { title: `${task.title}${task.durationMinutes ? ` \xB7 ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` }
+      attr: { role: "button", tabindex: "0", title: `${task.title}${task.durationMinutes ? ` \xB7 ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` }
     });
-    const title2 = card.createSpan({ cls: "tm-calendar-task-title", text: `${time ? `${time} ` : ""}${taskTitleLabel(task.title)}` });
+    const checkbox = card.createEl("input", { cls: "tm-calendar-check", type: "checkbox", attr: { "aria-label": `Complete ${taskTitleLabel(task.title)}` } });
+    checkbox.checked = task.completed;
+    checkbox.disabled = !options.toggle;
+    checkbox.addEventListener("click", (event) => event.stopPropagation());
+    checkbox.addEventListener("pointerdown", (event) => event.stopPropagation());
+    checkbox.addEventListener("keydown", (event) => event.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      var _a3;
+      checkbox.disabled = true;
+      void ((_a3 = options.toggle) == null ? void 0 : _a3.call(options, task, checkbox.checked).catch((cause) => {
+        checkbox.checked = task.completed;
+        new import_obsidian13.Notice(cause instanceof Error ? cause.message : "Could not complete task.");
+      }).finally(() => {
+        checkbox.disabled = false;
+      }));
+    });
+    card.addEventListener("keydown", (event) => {
+      if (!options.bind && event.target === card && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        event.stopPropagation();
+        options.edit(task);
+      }
+    });
+    const title2 = card.createSpan({ cls: "tm-calendar-task-title", text: taskTitleLabel(task.title) });
+    if (time) card.createSpan({ cls: "tm-calendar-task-time", text: `${taskTimeLabel(time)} \u2013 ${taskTimeLabel(minuteTime(Math.min(1440, timeMinutes(time) + ((_a2 = task.durationMinutes) != null ? _a2 : 30))))}` });
+    if (task.deadline && calendarDate(task) === task.deadline && (time != null ? time : "") === ((_b2 = task.deadlineTime) != null ? _b2 : "")) {
+      (0, import_obsidian13.setIcon)(card.createSpan({ cls: "tm-calendar-task-flag", attr: { "aria-label": "Deadline" } }), "flag");
+    }
     renderDescriptionIndicator(title2, task.description);
     card.draggable = true;
     card.addEventListener("click", (event) => {
@@ -5439,7 +5504,7 @@ function renderCalendar(container, options) {
         options.edit(task);
       }
     });
-    (_a2 = options.bind) == null ? void 0 : _a2.call(options, card, task);
+    (_c2 = options.bind) == null ? void 0 : _c2.call(options, card, task);
     card.addEventListener("dragstart", (event) => {
       var _a3;
       (_a3 = options.dragStart) == null ? void 0 : _a3.call(options, task);
@@ -5481,7 +5546,7 @@ function renderCalendar(container, options) {
   };
   const renderHours = (timeline) => {
     for (let hour = 0; hour < 24; hour++) {
-      const label = timeline.createDiv({ cls: "tm-calendar-hour", text: minuteTime(hour * 60) });
+      const label = timeline.createDiv({ cls: "tm-calendar-hour", text: taskTimeLabel(minuteTime(hour * 60)).replace(" ", "").toLowerCase() });
       label.style.top = `${hour * 48}px`;
     }
   };
@@ -5489,8 +5554,13 @@ function renderCalendar(container, options) {
     var _a2;
     const tasks = (_a2 = byDate.get(day)) != null ? _a2 : [];
     const lane = timeline.createDiv({ cls: "tm-calendar-lane", attr: { "aria-label": `Daily schedule for ${day}` } });
+    if (day === todayIso()) {
+      const now2 = /* @__PURE__ */ new Date();
+      const marker = lane.createSpan({ cls: "tm-calendar-now", attr: { "aria-hidden": "true" } });
+      marker.style.top = `${(now2.getHours() * 60 + now2.getMinutes()) / 15 * 12}px`;
+    }
     for (let slot = 0; slot < 96; slot++) {
-      const button = lane.createEl("button", { cls: "tm-calendar-slot", attr: { "aria-label": `Create task on ${day} at ${minuteTime(slot * 15)}` } });
+      const button = lane.createEl("button", { cls: `tm-calendar-slot${slot > 0 && slot % 4 === 0 ? " is-hour-start" : ""}`, attr: { "aria-label": `Create task on ${day} at ${minuteTime(slot * 15)}` } });
       button.addEventListener("click", (event) => {
         if (event.detail === 0) options.create(selectionPreset(day, slot, slot));
       });
@@ -5550,8 +5620,8 @@ function renderCalendar(container, options) {
       card.addClass("is-timed");
       card.style.top = `${begin / 15 * 12}px`;
       card.style.height = `${Math.max(12, (end - begin) / 15 * 12)}px`;
-      card.style.left = `calc(${column / ends.length * 85}% + 2px)`;
-      card.style.width = `calc(${85 / ends.length}% - 4px)`;
+      card.style.left = `calc(${column / ends.length * 100}% + 2px)`;
+      card.style.width = `calc(${100 / ends.length}% - 4px)`;
       const preview = card.createSpan({ cls: "tm-calendar-resize-preview" });
       const restore = () => {
         card.style.top = `${begin / 15 * 12}px`;
@@ -5647,23 +5717,23 @@ function renderCalendar(container, options) {
       }
     }
   };
-  if (options.scope === "day" || options.scope === "week") {
+  if (options.scope === "day" || options.scope === "week" || options.scope === "four-day") {
     if (options.scope === "day") {
-      const allDay = root.createDiv({ cls: "tm-calendar-allday" });
-      allDay.createSpan({ text: "No time" });
+      const allDay = surface.createDiv({ cls: "tm-calendar-allday" });
+      allDay.createSpan({ text: "all-day" });
       for (const task of ((_c = byDate.get(options.anchor)) != null ? _c : []).filter((task2) => !calendarTime(task2))) taskCard(allDay, task);
-      const scroll = root.createDiv({ cls: "tm-calendar-day-scroll" });
+      const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll" });
       const timeline = scroll.createDiv({ cls: "tm-calendar-timeline" });
       renderHours(timeline);
       renderDayLane(timeline, options.anchor);
     } else {
-      const scroll = root.createDiv({ cls: "tm-calendar-day-scroll tm-calendar-week-scroll" });
-      const week = scroll.createDiv({ cls: "tm-calendar-week" });
+      const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll tm-calendar-week-scroll" });
+      const week = scroll.createDiv({ cls: `tm-calendar-week${options.scope === "four-day" ? " is-four-day" : ""}` });
       const header = week.createDiv({ cls: "tm-calendar-week-header" });
-      header.createSpan({ cls: "tm-calendar-week-gutter", text: "No time" });
+      header.createSpan({ cls: "tm-calendar-week-gutter", text: "all-day" });
       for (const day of days) {
         const column = header.createDiv({ cls: `tm-calendar-week-heading${day === todayIso() ? " is-today" : ""}` });
-        const button = column.createEl("button", { cls: "tm-calendar-date", text: localDate(day).toLocaleDateString(void 0, { weekday: "short", day: "numeric", month: "short" }), attr: { "aria-label": `New task on ${formatDate(day, options.dateFormat)}` } });
+        const button = column.createEl("button", { cls: "tm-calendar-date", text: localDate(day).toLocaleDateString(void 0, { weekday: "short", day: "numeric" }), attr: { "aria-label": `New task on ${formatDate(day, options.dateFormat)}` } });
         button.addEventListener("click", () => options.create({ scheduledDate: day }));
         for (const task of ((_d = byDate.get(day)) != null ? _d : []).filter((task2) => !calendarTime(task2))) taskCard(column, task);
         dropTarget(column, day);
@@ -5676,9 +5746,9 @@ function renderCalendar(container, options) {
         renderDayLane(column, day);
       }
     }
-  } else if (options.scope === "month") monthGrid(root, options.anchor, false);
+  } else if (options.scope === "month") monthGrid(surface, options.anchor, false);
   else {
-    const year = root.createDiv({ cls: "tm-calendar-year" });
+    const year = surface.createDiv({ cls: "tm-calendar-year" });
     for (let month = 0; month < 12; month++) {
       const section = year.createDiv();
       const anchor = `${date.getFullYear()}-${String(month + 1).padStart(2, "0")}-01`;
@@ -5696,9 +5766,10 @@ function renderCalendar(container, options) {
     }
   }
   const unscheduled = (_e = byDate.get("")) != null ? _e : [];
-  if (unscheduled.length) {
-    const tray = root.createEl("section", { cls: "tm-calendar-unscheduled" });
-    tray.createEl("h3", { text: "Unscheduled \u2014 drag onto a date" });
+  if (unscheduled.length || planner) {
+    const tray = (planner != null ? planner : surface).createEl("section", { cls: "tm-calendar-unscheduled" });
+    tray.createEl("h3", { text: "Unscheduled" });
+    tray.createEl("p", { cls: "tm-calendar-plan-hint", text: unscheduled.length ? "Drag a task onto the calendar to schedule it." : "No unscheduled tasks." });
     for (const task of unscheduled) taskCard(tray, task);
   }
 }
@@ -5725,6 +5796,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     this.projectLayout = "list";
     this.ganttAnchor = addDays(todayIso(), -2);
     this.ganttZoom = "month";
+    this.calendarPlanningOpen = false;
     this.calendarScope = "month";
     this.calendarAnchor = todayIso();
     this.showCompleted = false;
@@ -5781,7 +5853,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     if (typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor)) this.ganttAnchor = state.ganttAnchor;
     if (state.layout === "list" || state.layout === "calendar" || state.layout === "kanban") this.layout = state.layout;
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
-    if (["day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope;
+    if (["day", "four-day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId) {
       this.smartListVersion = void 0;
@@ -5906,6 +5978,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
           },
           create: (preset) => this.plugin.openEditor({ mode: "all", preset }),
           edit: (task) => this.plugin.openEditor({ mode: "all", task }),
+          toggle: (task, completed) => this.plugin.store.toggle(task, completed),
           move: async (task, date, time) => {
             await this.plugin.store.update(task, rescheduledDraft(task, date, time));
             await this.plugin.index.refreshPath(task.path);
@@ -5952,6 +6025,11 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     var _a, _b;
     if (this.layout === "calendar") {
       renderCalendar(container, {
+        planning: true,
+        planningOpen: this.calendarPlanningOpen,
+        planningChanged: (open) => {
+          this.calendarPlanningOpen = open;
+        },
         anchor: this.calendarAnchor,
         scope: this.calendarScope,
         tasks,
@@ -5963,6 +6041,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
         },
         create: (preset) => this.plugin.openEditor({ ...this.state, preset }),
         edit: (task) => this.editTask(task),
+        toggle: (task, completed) => this.plugin.store.toggle(task, completed),
         bind: (card, task) => this.bindSelection(card, task),
         dragStart: (task) => this.prepareDrag(task),
         resize: async (task, date, time, duration) => {
@@ -8734,12 +8813,23 @@ var TaskManagerPlugin = class extends import_obsidian25.Plugin {
         });
       }
     }
-    for (const scope of ["day", "week", "month", "year"]) {
+    for (const scope of ["day", "four-day", "week", "month", "year"]) {
       this.addCommand({
         id: `switch-calendar-to-${scope}`,
-        name: `Switch calendar to ${scope}`,
+        name: `Switch calendar to ${scope === "four-day" ? "4 days" : scope}`,
         checkCallback: (checking) => this.switchCalendarScope(scope, checking)
       });
+    }
+    for (const [direction, name] of [[-1, "previous"], [1, "next"]]) {
+      this.addCommand({ id: `calendar-${name}-period`, name: `Calendar: ${name} period`, checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+        if (!(view == null ? void 0 : view.hasCalendar)) return false;
+        if (!checking) {
+          const state = view.getState();
+          void view.setState({ ...state, calendarAnchor: shiftCalendar(String(state.calendarAnchor), state.calendarScope, direction) }).then(() => this.app.workspace.requestSaveLayout()).catch((error) => new import_obsidian25.Notice(String(error)));
+        }
+        return true;
+      } });
     }
     this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
     this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: (checking) => {

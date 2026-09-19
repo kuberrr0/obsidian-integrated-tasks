@@ -1,6 +1,6 @@
 import { noteRecurringCompletion } from "./note-recurring-completion";
 import { recurringFile, type RecurringOutcome } from "./recurring-task";
-import type { CalendarScope } from "./calendar";
+import { shiftCalendar, type CalendarScope } from "./calendar";
 import { scanTasks } from "./parser";
 import { applyProjectDraft, projectEditDraft } from "./project-editor";
 import { cloneTaskFilters } from "./task-filters";
@@ -92,12 +92,24 @@ export default class TaskManagerPlugin extends Plugin {
         });
       }
     }
-    for (const scope of ["day", "week", "month", "year"] as const) {
+    for (const scope of ["day", "four-day", "week", "month", "year"] as const) {
       this.addCommand({
         id: `switch-calendar-to-${scope}`,
-        name: `Switch calendar to ${scope}`,
+        name: `Switch calendar to ${scope === "four-day" ? "4 days" : scope}`,
         checkCallback: checking => this.switchCalendarScope(scope, checking)
       });
+    }
+    for (const [direction, name] of [[-1, "previous"], [1, "next"]] as const) {
+      this.addCommand({ id: `calendar-${name}-period`, name: `Calendar: ${name} period`, checkCallback: checking => {
+        const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+        if (!view?.hasCalendar) return false;
+        if (!checking) {
+          const state = view.getState();
+          void view.setState({ ...state, calendarAnchor: shiftCalendar(String(state.calendarAnchor), state.calendarScope as CalendarScope, direction) })
+            .then(() => this.app.workspace.requestSaveLayout()).catch(error => new Notice(String(error)));
+        }
+        return true;
+      } });
     }
     this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
     this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: checking => {

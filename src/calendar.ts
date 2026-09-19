@@ -2,7 +2,7 @@ import { formatLocalDate } from "./date";
 import { destinationString } from "./structure";
 import type { Task, TaskDraft } from "./types";
 
-export type CalendarScope = "day" | "week" | "month" | "year";
+export type CalendarScope = "day" | "four-day" | "week" | "month" | "year";
 export type CalendarPreset = Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "durationMinutes">;
 export const SLOT_MINUTES = 15;
 
@@ -37,6 +37,7 @@ export function calendarDays(anchor: string, scope: "week" | "month"): string[] 
   return Array.from({ length: scope === "week" ? 7 : 42 }, (_, index) => addDays(start, index));
 }
 export function shiftCalendar(anchor: string, scope: CalendarScope, direction: number): string {
+  if (scope === "four-day") return addDays(anchor, direction * 4);
   if (scope === "day" || scope === "week") return addDays(anchor, direction * (scope === "week" ? 7 : 1));
   const date = localDate(anchor);
   const day = date.getDate();
