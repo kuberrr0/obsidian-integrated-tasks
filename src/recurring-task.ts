@@ -77,7 +77,8 @@ export function advanceRecurringTask(content: string, task: Task, next: string, 
     return lines.join("");
 }
 
-export function appendRecurringLog(content: string, outcome: RecurringOutcome, date: string): string {
+export function appendRecurringLog(content: string, outcome: RecurringOutcome, date: string, dateFormat = "YYYY-MM-DD", linkDates = false): string {
     const eol = content.includes("\r\n") ? "\r\n" : "\n";
-    return content + (content.endsWith("\n") ? "" : eol) + `${outcome}: ${date}${eol}`;
+    const label = formatDate(date, dateFormat);
+    return content + (content.endsWith("\n") ? "" : eol) + `${outcome}: ${linkDates ? `[[${label}]]` : label}${eol}`;
 }

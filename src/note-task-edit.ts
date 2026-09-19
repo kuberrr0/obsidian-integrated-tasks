@@ -18,8 +18,19 @@ export function handleTaskEditClick(event: MouseEvent, resolve: (checkbox: HTMLE
   open(task);
 }
 
+/** Claim ordinary recurring-task clicks before the native checkbox write. */
+export function handleRecurringTaskClick(event: MouseEvent, resolve: (checkbox: HTMLElement) => Task | undefined, complete?: (task: Task) => boolean): void {
+  if (!complete || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+  const checkbox = (event.target as HTMLElement | null)?.closest?.<HTMLElement>('input[type="checkbox"]');
+  if (!checkbox) return;
+  const task = resolve(checkbox);
+  if (!task || task.completed || !complete(task)) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+
 /** Share gesture handling between Live Preview and Reading view. */
-export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElement) => Task | undefined, open: OpenTask): () => void {
+export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElement) => Task | undefined, open: OpenTask, complete?: (task: Task) => boolean): () => void {
   const window = root.win;
   let timer: number | undefined;
   let press: { checkbox: HTMLElement; id: number; x: number; y: number } | undefined;
@@ -71,6 +82,7 @@ export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElem
       return;
     }
     handleTaskEditClick(event, resolve, open);
+    handleRecurringTaskClick(event, resolve, complete);
   };
   const contextMenu = (event: MouseEvent): void => {
     if (event.target === press?.checkbox || (event.target === held && Date.now() <= suppressUntil)) block(event);
@@ -94,7 +106,7 @@ export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElem
   };
 }
 
-export function noteTaskEditEditor(getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1) {
+export function noteTaskEditEditor(getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1, complete?: (task: Task) => boolean) {
   return ViewPlugin.fromClass(class {
     private resolve = (checkbox: HTMLElement): Task | undefined => {
       const path = this.view.state.field(editorInfoField, false)?.file?.path;
@@ -105,14 +117,14 @@ export function noteTaskEditEditor(getDateFormat: () => string, open: OpenTask, 
     private dispose: () => void;
 
     constructor(private view: EditorView) {
-      this.dispose = bindNoteTaskEdit(view.dom, this.resolve, open);
+      this.dispose = bindNoteTaskEdit(view.dom, this.resolve, open, complete);
     }
 
     destroy(): void { this.dispose(); }
   });
 }
 
-export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostProcessorContext, getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1): void {
+export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostProcessorContext, getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1, complete?: (task: Task) => boolean): void {
   const child = new MarkdownRenderChild(root);
   context.addChild(child);
   child.register(bindNoteTaskEdit(root, checkbox => {
@@ -125,5 +137,5 @@ export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostPro
     if (relativeLine === null || !/^\d+$/.test(relativeLine)) return;
     const line = section.lineStart + Number(relativeLine);
     return scanTasks(context.sourcePath, section.text, new Date(), getDateFormat(), getSectionHeadingLevel()).find(task => task.line === line);
-  }, open));
+  }, open, complete));
 }

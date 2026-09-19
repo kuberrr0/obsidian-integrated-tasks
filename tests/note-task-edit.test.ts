@@ -1,6 +1,6 @@
 import { Platform } from "obsidian";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bindNoteTaskEdit, handleTaskEditClick } from "../src/note-task-edit";
+import { bindNoteTaskEdit, handleTaskEditClick, handleRecurringTaskClick } from "../src/note-task-edit";
 import { scanTasks } from "../src/parser";
 
 function click(metaKey: boolean, isCheckbox = true) {
@@ -109,5 +109,29 @@ describe("long press task editing in notes", () => {
     vi.advanceTimersByTime(600);
     expect(open).not.toHaveBeenCalled();
     dispose();
+  });
+});
+
+
+describe("recurring checkbox completion in notes", () => {
+  const recurring = scanTasks("Project.md", "- [ ] [[Habit]] 2026-09-19")[0];
+  it("claims an ordinary checkbox click before the native toggle", () => {
+    const event = click(false);
+    const complete = vi.fn(() => true);
+    handleRecurringTaskClick(event as unknown as MouseEvent, () => recurring, complete);
+    expect(complete).toHaveBeenCalledExactlyOnceWith(recurring);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+  });
+  it("leaves non-recurring tasks to Obsidian", () => {
+    const event = click(false);
+    handleRecurringTaskClick(event as unknown as MouseEvent, () => recurring, () => false);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+  it("does not complete an already checked task or a modifier-click", () => {
+    const complete = vi.fn(() => true);
+    handleRecurringTaskClick(click(false) as unknown as MouseEvent, () => ({ ...recurring, completed: true }), complete);
+    handleRecurringTaskClick(click(true) as unknown as MouseEvent, () => recurring, complete);
+    expect(complete).not.toHaveBeenCalled();
   });
 });

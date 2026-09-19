@@ -53,7 +53,7 @@ it.each(["2026-09-19", "[[2026-09-19]]", "19/09/2026", "[[19/09/2026]]"])("prese
     expect(advanceRecurringTask(content, task, "2026-09-22", "DD/MM/YYYY")).toBe(content.replace(date, replacement));
 });
 
-function setup(source = "- [ ] [[Habit]] 2026-09-19\n", sameFile = false) {
+function setup(source = "- [ ] [[Habit]] 2026-09-19\n", sameFile = false, dateFormat = "YYYY-MM-DD", linkDates = false) {
     const habit = Object.assign(new TFile(), { path: "Habit.md" });
     const project = sameFile ? habit : Object.assign(new TFile(), { path: "Project.md" });
     const definition = "---\ntags: recurring-task\nrepeat:\n  - every saturday\n  - every tuesday\n---\n\nCOMPLETED: 2026-09-15\n";
@@ -64,7 +64,7 @@ function setup(source = "- [ ] [[Habit]] 2026-09-19\n", sameFile = false) {
         getFirstLinkpathDest: (link: string) => link === "Habit" ? habit : null,
         getFileCache: () => ({ frontmatter: { tags: "recurring-task" } })
     }, vault: { getAbstractFileByPath: (path: string) => files.get(path), read: async (file: TFile) => texts.get(file.path)!, process } } as unknown as App;
-    return { store: new TaskStore(app, () => "YYYY-MM-DD"), texts, process, task: scanTasks(project.path, texts.get(project.path)!)[0], project, habit };
+    return { store: new TaskStore(app, () => dateFormat, () => "top", () => linkDates), texts, process, task: scanTasks(project.path, texts.get(project.path)!)[0], project, habit };
 }
 
 describe("recurring task transactions", () => {
@@ -100,4 +100,14 @@ describe("recurring task transactions", () => {
         await expect(store.resolveRecurring(task, "COMPLETED")).rejects.toThrow("changed");
         expect(texts).toEqual(before);
     });
+});
+
+
+it.each(["COMPLETED", "SKIPPED", "FAILED"] as const)("writes %s using the configured format and link setting", async outcome => {
+    for (const linked of [false, true]) {
+        const { store, task, texts } = setup(undefined, false, "MMM D, YYYY", linked);
+        await store.resolveRecurring(task, outcome);
+        expect(texts.get("Habit.md")).toContain(`${outcome}: ${linked ? "[[Sep 19, 2026]]" : "Sep 19, 2026"}\n`);
+        expect(texts.get("Project.md")).toBe("- [ ] [[Habit]] 2026-09-22\n");
+    }
 });

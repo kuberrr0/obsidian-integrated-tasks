@@ -1,3 +1,4 @@
+import { noteRecurringCompletion } from "./note-recurring-completion";
 import { recurringFile, type RecurringOutcome } from "./recurring-task";
 import type { CalendarScope } from "./calendar";
 import { scanTasks } from "./parser";
@@ -44,11 +45,15 @@ export default class TaskManagerPlugin extends Plugin {
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
     this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
+    this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => {
+      if (this.settings.taskMode) return false;
+      try { return Boolean(recurringFile(this.app, task)); } catch { return false; }
+    }, task => { this.completeRecurringTaskFromNote(task); }));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
-    this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel));
+    this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel, task => this.completeRecurringTaskFromNote(task)));
     this.registerMarkdownPostProcessor((element, context) => {
       renderNoteTokens(element, this.dateFormat());
-      registerNoteTaskEdit(element, context, () => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel);
+      registerNoteTaskEdit(element, context, () => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel, task => this.completeRecurringTaskFromNote(task));
     });
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
@@ -326,6 +331,26 @@ export default class TaskManagerPlugin extends Plugin {
     for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
       if (navLeaf.view instanceof TaskNavigationView) navLeaf.view.setActive("tags", tag);
     }
+  }
+
+  private pendingRecurringNotes = new Set<string>();
+  private recurringNoteQueue: Promise<void> = Promise.resolve();
+
+  private completeRecurringTaskFromNote(task: Task): boolean {
+    if (this.settings.taskMode || task.completed) return false;
+    try { if (!recurringFile(this.app, task)) return false; }
+    catch (error) { new Notice(String(error)); return true; }
+    const key = `${task.path}:${task.line}:${task.raw}`;
+    if (this.pendingRecurringNotes.has(key)) return true;
+    this.pendingRecurringNotes.add(key);
+    this.recurringNoteQueue = this.recurringNoteQueue.then(async () => {
+      const markdown = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (markdown?.file?.path === task.path) await markdown.save();
+      const paths = await this.store.resolveRecurring(task, "COMPLETED");
+      for (const path of paths) await this.index.refreshPath(path);
+    }).catch(error => { new Notice(error instanceof Error ? error.message : "Could not complete recurring task."); })
+      .finally(() => this.pendingRecurringNotes.delete(key));
+    return true;
   }
 
   private recurringTaskCommand(checking: boolean, outcome: RecurringOutcome): boolean {

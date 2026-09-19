@@ -64,7 +64,7 @@ export class TaskStore {
     const next = nextRepeatDate(repeatRules(before.get(recurring.path)!), task.scheduledDate);
     const after = new Map(before);
     after.set(source.path, advanceRecurringTask(before.get(source.path)!, task, next, this.getDateFormat()));
-    after.set(recurring.path, appendRecurringLog(after.get(recurring.path)!, outcome, task.scheduledDate));
+    after.set(recurring.path, appendRecurringLog(after.get(recurring.path)!, outcome, task.scheduledDate, this.getDateFormat(), this.getLinkDates()));
     return this.commitChanges(files, before, after);
   }
 
