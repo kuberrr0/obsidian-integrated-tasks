@@ -3,7 +3,7 @@ import { editorLivePreviewField, editorInfoField, Platform } from "obsidian";
 import { type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
 import { bodyLines } from "./structure";
-import { taskTokens, tokenClass, type TaskToken } from "./task-tokens";
+import { taskTokens, recurringLogTokens, tokenClass, type TaskToken } from "./task-tokens";
 
 export interface NoteTokenSpan { from: number; to: number; token: TaskToken }
 
@@ -83,9 +83,8 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
       this.format = getDateFormat();
       this.tokens = [];
       for (const { text, line } of bodyLines(view.state.doc.toString())) {
-        if (!/^\s*-\s+\[[ xX]\]/.test(text)) continue;
         const offset = view.state.doc.line(line + 1).from;
-        for (const token of taskTokens(text, this.format)) this.tokens.push({ from: offset + token.from, to: offset + token.to, token });
+        for (const token of [...taskTokens(text, this.format), ...recurringLogTokens(text, this.format)]) this.tokens.push({ from: offset + token.from, to: offset + token.to, token });
       }
     }
 

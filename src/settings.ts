@@ -62,7 +62,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       {
         section: "Dates",
         name: "Update dates",
-        desc: "Update scheduled and deadline date tokens in all Markdown tasks in the vault, including completed tasks, to follow Date format and Link dates.",
+        desc: "Update task dates and completed, skipped, and failed history dates in recurring-task notes to follow Date format and Link dates.",
         render: (setting: Setting) => { setting.addButton(button => button
           .setButtonText("Update dates")
           .onClick(async () => {

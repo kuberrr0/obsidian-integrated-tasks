@@ -1,3 +1,4 @@
+import { recurringFile, type RecurringOutcome } from "./recurring-task";
 import type { CalendarScope } from "./calendar";
 import { scanTasks } from "./parser";
 import { applyProjectDraft, projectEditDraft } from "./project-editor";
@@ -113,6 +114,10 @@ export default class TaskManagerPlugin extends Plugin {
       if (!checking) this.openProjectEditor(path);
       return true;
     } });
+    for (const [action, outcome] of [["complete", "COMPLETED"], ["skip", "SKIPPED"], ["fail", "FAILED"]] as const) {
+      this.addCommand({ id: `${action}-recurring-task`, name: `${action[0].toUpperCase()}${action.slice(1)} recurring task`,
+        checkCallback: checking => this.recurringTaskCommand(checking, outcome) });
+    }
     this.addCommand({ id: "edit-task", name: "Edit task", editorCheckCallback: (checking, editor, view) =>
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
@@ -321,6 +326,32 @@ export default class TaskManagerPlugin extends Plugin {
     for (const navLeaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
       if (navLeaf.view instanceof TaskNavigationView) navLeaf.view.setActive("tags", tag);
     }
+  }
+
+  private recurringTaskCommand(checking: boolean, outcome: RecurringOutcome): boolean {
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+    const markdown = this.app.workspace.getActiveViewOfType(MarkdownView);
+    let task: Task | undefined;
+    if (this.settings.taskMode) {
+      const selected = view?.getSelectedTasks() ?? [];
+      if (selected.length === 1) task = selected[0];
+    } else if (markdown?.file) {
+      task = scanTasks(markdown.file.path, markdown.editor.getValue(), new Date(), this.dateFormat(), this.settings.sectionHeadingLevel)
+        .find(candidate => candidate.line === markdown.editor.getCursor().line);
+    }
+    if (!task || task.completed || !task.scheduledDate) return false;
+    try { if (!recurringFile(this.app, task)) return false; }
+    catch (error) { if (!checking) new Notice(String(error)); return false; }
+    if (!checking) {
+      const selected = task;
+      void (async () => {
+        if (!this.settings.taskMode && markdown) await markdown.save();
+        const paths = await this.store.resolveRecurring(selected, outcome);
+        view?.clearSelection();
+        for (const path of paths) await this.index.refreshPath(path);
+      })().catch(error => new Notice(error instanceof Error ? error.message : "Could not resolve recurring task."));
+    }
+    return true;
   }
 
   private editCurrentLineTask(checking: boolean, editor: Editor, file: TFile | null): boolean {

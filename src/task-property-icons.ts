@@ -6,7 +6,10 @@ export const TASK_PROPERTY_ICONS = {
   deadline: "flag",
   durationMinutes: "clock-3",
   priority: "signal",
-  tags: "tag"
+  tags: "tag",
+  completed: "circle-check",
+  skipped: "skip-forward",
+  failed: "circle-x"
 } as const;
 
 const masks = new Map<string, string>();

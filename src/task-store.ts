@@ -1,3 +1,5 @@
+import { updateRecurringLogDates } from "./recurring-log";
+import { recurringFile, repeatRules, nextRepeatDate, advanceRecurringTask, appendRecurringLog, type RecurringOutcome } from "./recurring-task";
 import { TASK_INDENT } from "./task-indentation";
 import { updateTaskDateTokens } from "./task-date-update";
 import { newTaskLines } from "./task-description";
@@ -32,15 +34,38 @@ export class TaskStore {
     const after = new Map<string, string>();
     for (const [path, file] of files) {
       const content = await this.app.vault.read(file);
-      const updated = updateTaskDateTokens(content, sourceFormats, format, linkDates);
+      const cache = this.app.metadataCache?.getFileCache(file);
+      const rawTags = cache?.frontmatter?.tags;
+      const tags = [...(Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? rawTags.split(/[\s,]+/) : []), ...(cache?.tags ?? []).map(tag => tag.tag)];
+      const recurring = tags.some(tag => String(tag).replace(/^#/, "") === "recurring-task");
+      const tasksUpdated = updateTaskDateTokens(content, sourceFormats, format, linkDates);
+      const updated = recurring ? updateRecurringLogDates(tasksUpdated, sourceFormats, format, linkDates) : tasksUpdated;
       if (updated !== content) { before.set(path, content); after.set(path, updated); }
     }
     return this.commitChanges(files, before, after);
   }
 
   async toggle(task: Task, completed: boolean): Promise<void> {
+    if (completed && recurringFile(this.app, task)) {
+      await this.resolveRecurring(task, "COMPLETED");
+      return;
+    }
     const file = this.requireFile(task.path);
     await this.app.vault.process(file, (content) => toggleTaskInContent(content, task, completed));
+  }
+
+  async resolveRecurring(task: Task, outcome: RecurringOutcome): Promise<string[]> {
+    const recurring = recurringFile(this.app, task);
+    if (!recurring) throw new Error("Task does not link to a recurring-task note.");
+    if (task.completed || !task.scheduledDate) throw new Error("Select an open recurring task with a scheduled date.");
+    const source = this.requireFile(task.path);
+    const files = new Map([[recurring.path, recurring], [source.path, source]]);
+    const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
+    const next = nextRepeatDate(repeatRules(before.get(recurring.path)!), task.scheduledDate);
+    const after = new Map(before);
+    after.set(source.path, advanceRecurringTask(before.get(source.path)!, task, next, this.getDateFormat()));
+    after.set(recurring.path, appendRecurringLog(after.get(recurring.path)!, outcome, task.scheduledDate));
+    return this.commitChanges(files, before, after);
   }
 
   async delete(task: Task): Promise<void> {

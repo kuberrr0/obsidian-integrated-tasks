@@ -1,10 +1,11 @@
 import { notePropertyIconStyle } from "./task-property-icons";
-import { taskTokens, tokenClass } from "./task-tokens";
+import { taskTokens, recurringLogTokens, tokenClass } from "./task-tokens";
 
 interface Segment { node: Node; from: number; to: number; atomic: boolean }
 
 /** Wrap only recognized trailing metadata and retain Obsidian's existing link elements. */
 export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
+  renderRecurringLogTokens(root, dateFormat);
   const items = Array.from(root.querySelectorAll<HTMLElement>("li.task-list-item"));
   if (root.matches("li.task-list-item")) items.unshift(root);
   for (const item of items) {
@@ -56,6 +57,52 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
         pill.appendChild(link);
         if (token.time) pill.appendChild(document.createTextNode(` ${token.time}`));
       } else pill.textContent = token.kind === "deadline" ? token.label.replace(/^Due /, "") : token.label;
+      range.insertNode(pill);
+    }
+  }
+}
+
+/** Generated logs are plain text lines, which Markdown may combine in one paragraph. */
+export function renderRecurringLogTokens(root: HTMLElement, dateFormat?: string): void {
+  const document = root.ownerDocument;
+  const paragraphs = Array.from(root.querySelectorAll<HTMLElement>("p"));
+  if (root.matches("p")) paragraphs.unshift(root);
+  for (const paragraph of paragraphs) {
+    if (paragraph.closest("pre, li") || paragraph.querySelector("code, strong, em, .tm-note-token")) continue;
+    const walker = document.createTreeWalker(paragraph, 4 /* SHOW_TEXT */);
+    const segments: Array<{ node: Text; from: number; to: number }> = [];
+    let source = "";
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      const value = node.textContent ?? "";
+      segments.push({ node, from: source.length, to: source.length + value.length });
+      source += value;
+    }
+    let offset = 0;
+    const tokens = [];
+    for (const part of source.split(/(\r?\n)/)) {
+      for (const token of recurringLogTokens(part, dateFormat)) tokens.push({ ...token, from: token.from + offset, to: token.to + offset });
+      offset += part.length;
+    }
+    for (const token of tokens.reverse()) {
+      const first = segments.find(segment => segment.from <= token.from && segment.to > token.from);
+      const last = segments.find(segment => segment.from < token.to && segment.to >= token.to);
+      if (!first || !last) continue;
+      const range = document.createRange();
+      range.setStart(first.node, token.from - first.from);
+      // Include the anchor itself to retain its native link behavior.
+      const anchor = last.node.parentElement?.closest("a.internal-link");
+      if (anchor && token.to === last.to) range.setEndAfter(anchor);
+      else range.setEnd(last.node, token.to - last.from);
+      const content = range.extractContents();
+      const pill = document.createElement("span");
+      pill.className = tokenClass(token);
+      pill.setAttribute("title", token.description);
+      pill.setAttribute("aria-label", token.description);
+      pill.setAttribute("style", notePropertyIconStyle(token.kind));
+      const link = content.querySelector("a.internal-link");
+      if (link) { link.textContent = token.dateLabel!; pill.appendChild(content); }
+      else pill.textContent = token.label;
       range.insertNode(pill);
     }
   }

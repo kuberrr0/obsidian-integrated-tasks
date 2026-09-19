@@ -1,7 +1,9 @@
+import { parseRecurringLog } from "./recurring-log";
 import { formatDate, todayIso } from "./date";
 import { formatDuration, parseTaskLine, type ParsedTokenRange } from "./parser";
 
-export interface TaskToken extends ParsedTokenRange {
+export interface TaskToken extends Omit<ParsedTokenRange, "kind"> {
+  kind: ParsedTokenRange["kind"] | "completed" | "skipped" | "failed";
   label: string;
   description: string;
   linkText?: string;
@@ -48,4 +50,16 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
 
 export function tokenClass(token: TaskToken): string {
   return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}`;
+}
+
+/** Standalone recurrence history entries, outside checklist metadata. */
+export function recurringLogTokens(line: string, dateFormat?: string): TaskToken[] {
+  const entry = parseRecurringLog(line, [dateFormat ?? "YYYY-MM-DD"]);
+  if (!entry) return [];
+  const { from, to } = entry;
+  const dateLabel = formatDate(entry.date, dateFormat);
+  const label = `${entry.outcome}: ${dateLabel}`;
+  return [{ from, to, kind: entry.outcome.toLowerCase() as "completed" | "skipped" | "failed", label, description: label, dateLabel,
+    display: entry.linked || line.slice(entry.dateFrom, entry.dateTo) !== dateLabel
+      ? { from: entry.dateFrom, to: entry.dateTo, label: dateLabel, linkText: entry.linkText } : undefined }];
 }

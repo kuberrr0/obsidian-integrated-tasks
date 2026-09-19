@@ -1205,3 +1205,8 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
   .tm-settings-row .setting-item-control { max-width: 100%; }
   .tm-property-visibility-choices { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Recurring-instance outcomes share the task-property pill shape. */
+.tm-note-token-completed { color: var(--color-green); }
+.tm-note-token-skipped { color: var(--color-orange); }
+.tm-note-token-failed { color: var(--text-error); }

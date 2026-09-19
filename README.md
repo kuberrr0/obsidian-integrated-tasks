@@ -172,6 +172,31 @@ Choose **Edit task properties** from the selection toolbar or command palette to
 
 Drag a selected task to move the selection together, including subtasks and descriptions. Calendar drops reschedule the selection. **Delete task** removes the selected tasks and their subtasks.
 
+## Recurring tasks
+
+Create a Markdown note tagged `recurring-task` with a `repeat` property containing one rule or a list:
+
+```markdown
+---
+tags: recurring-task
+repeat:
+  - every saturday
+  - every tuesday
+---
+```
+
+Link that note from a dated checklist item in any note:
+
+```markdown
+- [ ] [[Recurring Task]] 2026-09-19
+```
+
+Run **Complete recurring task**, **Skip recurring task**, or **Fail recurring task**. With Task mode off, place the caret on the checklist line. With Task mode on, select exactly one recurring task. Checking a recurring task's checkbox in a task view also completes its current instance.
+
+Each action appends `COMPLETED: 2026-09-19`, `SKIPPED: 2026-09-19`, or `FAILED: 2026-09-19` to the recurring note's body. The logged date is the instance's scheduled date. The checklist stays unchecked and advances to the earliest repeat date strictly after that date—for this example, `2026-09-22`. Overdue instances advance one occurrence at a time. All other properties, descriptions, subtasks, and formatting are preserved.
+
+Supported rules include `every monday`, `every day`, `every week`, `every other week`, `every 3 weeks`, `every third monday` (every three weeks on Monday), `every month`, and `every year`. `every` is optional: `monday`, `2 days`, `5 days`, `week`, `month`, and `third monday` also work, including mixed lists of shorthand and full rules. Interval rules are relative to the instance's scheduled date. Month and year intervals clamp to the last day when necessary. Unsupported or empty rules leave both notes unchanged and show an error.
+
 ## Settings and commands
 
 Settings let you choose your **Inbox note**, toggle **Task mode** and **Link dates**, set **New task position** to Top or Bottom, and control title wrapping separately for List, Calendar, and Kanban. Separate List and Kanban checkbox groups control project/source note, scheduled date and time, deadline date and time, duration, priority, and tags. All are enabled by default; properties implied by the current view or grouping remain hidden. Dashboard task lists follow the List settings.
