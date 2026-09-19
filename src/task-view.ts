@@ -1,3 +1,7 @@
+import { renderProjectProgress } from "./project-progress";
+import { renderProjectHeaderDetails } from "./project-header-details";
+import { renderTaskDetails } from "./task-row-details";
+import { recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderDescriptionIndicator } from "./task-description-indicator";
 import type { ProjectDraft } from "./project-creator";
@@ -386,12 +390,8 @@ export class TaskMainView extends ItemView {
     const project = this.taskSourcePath ? this.plugin.index.projects().find(project => project.path === this.taskSourcePath) : undefined;
     if (project) {
       const metadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
-      this.renderProperties(metadata, project, property => this.plugin.openProjectEditor(project.path, property));
-      if (project.parent) {
-        const badge = this.badge(metadata, "target", `Parent: ${project.parent.replace(/\.md$/i, "")}`);
-        this.makePropertyEditable(badge, "parent project", () => this.plugin.openProjectEditor(project.path, "parent"));
-      }
-      this.renderProjectProgress(metadata, project);
+      renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat());
+      renderProjectProgress(metadata, project);
     }
 
     const actions = header.createDiv({ cls: "tm-header-actions" });
@@ -600,7 +600,7 @@ export class TaskMainView extends ItemView {
       const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
       row.style.setProperty("--tm-depth", String(depth));
       const icon = row.createSpan({ cls: "tm-project-icon" });
-      setIcon(icon, project.archived ? "archive" : "target");
+      renderProjectProgress(icon, project, false);
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
@@ -608,25 +608,10 @@ export class TaskMainView extends ItemView {
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata" });
       this.renderProperties(metadata, project);
       if (!metadata.childElementCount) metadata.remove();
-      this.renderProjectProgress(content, project);
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
       setIcon(open, "chevron-right");
       open.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
     }
-  }
-
-  private renderProjectProgress(parent: HTMLElement, project: Project): void {
-    const total = project.openTasks + project.completedTasks;
-    const percentage = total ? Math.round(project.completedTasks / total * 100) : 0;
-    const progress = parent.createDiv({ cls: "tm-project-progress", attr: {
-      role: "progressbar",
-      "aria-label": `${project.name}: ${project.completedTasks} of ${total} tasks completed`,
-      "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(percentage),
-      title: `${project.completedTasks} of ${total} tasks completed`
-    } });
-    const track = progress.createSpan({ cls: "tm-project-progress-track" });
-    track.createSpan({ cls: "tm-project-progress-fill" }).style.width = `${percentage}%`;
-    progress.createSpan({ cls: "tm-project-percentage", text: `${percentage}%` });
   }
 
   private renderGroupAddButton(parent: HTMLElement, title: string, target?: ListDropGroup): void {
@@ -815,11 +800,11 @@ export class TaskMainView extends ItemView {
   }
 
   private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup): void {
-    const row = list.createDiv({ cls: `tm-task-row${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
+    const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
     this.bindSelection(row, task);
     const checkboxTarget = row.createEl("label", { cls: "tm-checkbox-target" });
-    const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: "tm-task-checkbox", attr: { "aria-label": `Complete ${task.title}` } });
+    const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}`, attr: { "aria-label": `Complete ${task.title}${task.priority ? ` (priority ${task.priority})` : ""}` } });
     checkbox.checked = task.completed;
     const toggleTask = async (): Promise<void> => {
       checkbox.disabled = true;
@@ -838,30 +823,28 @@ export class TaskMainView extends ItemView {
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title, attr: { title: task.title } });
     title.addEventListener("click", () => this.editTask(task));
     renderDescriptionIndicator(primary, task.description);
+    try {
+      if (recurringFile(this.app, task)) {
+        const icon = primary.createSpan({ cls: "tm-task-recurring", attr: { role: "img", "aria-label": "Recurring task", title: "Recurring task" } });
+        setIcon(icon, "repeat-2");
+      }
+    } catch { /* Ambiguous recurring links remain editable through the task editor. */ }
+
     if (this.plugin.settings.showSubtaskCounts && task.childIds.length) {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
-    if (this.showTaskProperty("source") && task.path !== implicitSource && this.metadataGrouping !== "source") {
-      const source = this.badge(metadata, "target", task.path.replace(/\.md$/i, ""));
-      source.addClass("tm-source");
-      source.setAttribute("title", task.path);
-      source.setAttribute("role", "button");
-      source.setAttribute("tabindex", "0");
-      source.setAttribute("aria-label", `Open source note: ${task.path.replace(/\.md$/i, "")}`);
-      source.addEventListener("click", event => {
-        event.preventDefault(); event.stopPropagation();
-        void this.openSource(task);
-      });
-      source.addEventListener("keydown", event => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault(); event.stopPropagation();
-        void this.openSource(task);
-      });
-    }
-    this.renderProperties(metadata, task);
+    const tags = (task.tags ?? []).filter(tag => {
+      if (this.state.mode !== "tags") return true;
+      return this.pagePath ? this.app.metadataCache.getFirstLinkpathDest(tag, task.path)?.path !== this.pagePath : tag !== this.state.tag;
+    });
+    renderTaskDetails(primary, metadata, task, {
+      grouping: this.metadataGrouping, show: property => this.showTaskProperty(property), dateFormat: this.plugin.dateFormat(),
+      source: task.path !== implicitSource ? task.path : undefined, tags,
+      edit: property => this.editTask(task, property), openSource: () => { void this.openSource(task); }
+    });
     if (!metadata.childElementCount) metadata.remove();
     const menuButton = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": "Task actions" } });
     setIcon(menuButton, "more-horizontal");

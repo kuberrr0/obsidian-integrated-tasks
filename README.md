@@ -42,6 +42,8 @@ Sort in either direction and group by task properties, or choose **None** for a 
 
 ### List
 
+Task rows use two lines: the title, description/recurrence indicators, and a compact flag deadline badge above; the schedule, project/source, and tags below. Overdue schedules appear in red, with Today/Tomorrow labels and compact future dates. Priority colors the checkbox, and duration is kept in the task editor rather than displayed on the row. Source labels use an accent bar and open their original note.
+
 See tasks and their properties at a glance. Click a checkbox to complete a task, or click its title or body to edit it. Drag tasks to reorder them or move them between sections and notes. Subtasks and descriptions travel with their parent.
 
 Use the **+** beside a group or heading to add a task with that destination or group’s properties already filled in—even when the section is empty.

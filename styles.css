@@ -344,20 +344,26 @@ button.tm-source,
   font-size: var(--font-ui-smaller);
 }
 
-.tm-project-progress-track {
-  width: clamp(40px, 8vw, 72px);
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--background-modifier-hover);
+.tm-project-progress-circle {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 1.05em;
+  height: 1.05em;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
 }
-
-.tm-project-progress-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--text-accent);
+.tm-project-progress-circle::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: conic-gradient(currentColor var(--tm-project-progress, 0%), transparent 0);
 }
+.tm-project-icon .tm-project-progress { min-height: 0; font-size: var(--font-ui-medium); }
+.tm-project-icon:has(.tm-project-progress) { align-items: center; justify-content: center; }
+.tm-project-header-metadata .tm-project-progress { font-size: inherit; gap: 5px; }
 
 .tm-project-percentage {
   min-width: 4ch;
@@ -530,13 +536,12 @@ button.tm-source,
 
 
 .tm-project-row .tm-task-content {
-  grid-template-columns: minmax(100px, 1fr) minmax(0, auto) auto;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, auto);
 }
 
 /* Explicit columns also work when the optional metadata element is absent. */
 .tm-project-row .tm-task-primary { grid-column: 1; }
 .tm-project-row .tm-project-metadata { grid-column: 2; }
-.tm-project-row .tm-project-progress { grid-column: 3; }
 
 .tm-project-metadata .tm-meta {
   flex-shrink: 0;
@@ -561,7 +566,6 @@ button.tm-source,
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .tm-project-row .tm-project-progress { grid-column: 2; grid-row: 1; }
 
   .tm-project-row .tm-project-metadata {
     grid-column: 1 / -1;
@@ -670,7 +674,6 @@ button.tm-filter-toggle { display: none; }
   .tm-project-row > .tm-project-icon { margin: 13px; }
   .tm-project-row .tm-task-content { grid-template-columns: minmax(0, 1fr) auto; }
   .tm-project-progress { align-self: start; min-height: 44px; }
-  .tm-project-progress-track { display: none; }
   .tm-section h2 { overflow-wrap: anywhere; }
   .tm-section-count { flex-shrink: 0; }
   .tm-empty { min-height: 220px; }
@@ -1133,7 +1136,6 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 
 .tm-project-header-metadata .tm-project-progress { flex-shrink: 0; align-self: center; min-height: 0; }
 .tm-project-header-metadata .tm-meta + .tm-project-progress { margin-inline-start: 16px; }
-.tm-project-header-metadata .tm-project-progress-track { display: block; }
 
 .tm-task-metadata .tm-source.tm-meta { cursor: pointer; }
 
@@ -1210,3 +1212,121 @@ button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; 
 .tm-note-token-completed { color: var(--color-green); }
 .tm-note-token-skipped { color: var(--color-orange); }
 .tm-note-token-failed { color: var(--text-error); }
+
+/* Reference task rows: a title line and a quiet, left-aligned detail line. */
+.tm-main-view .tm-task-row.tm-task-item {
+  grid-template-columns: 22px minmax(0, 1fr) 24px;
+  align-items: start;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  column-gap: 8px;
+}
+.tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
+.tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0;
+  min-width: 0;
+}
+.tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary {
+  display: flex;
+  flex: initial;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) button.tm-task-title {
+  flex: 0 1 auto;
+  color: var(--text-normal);
+  font-family: var(--font-interface);
+  font-weight: 400;
+  font-size: var(--font-ui-medium);
+  line-height: 1.4;
+  max-width: 100%;
+}
+.tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-metadata {
+  display: flex;
+  flex: initial;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 4px 8px;
+  max-width: 100%;
+  overflow: visible;
+  color: var(--text-muted);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+}
+.tm-task-schedule, .tm-task-source, .tm-task-tag { cursor: pointer; }
+.tm-task-schedule .is-overdue { color: var(--text-error); }
+.tm-task-source { overflow-wrap: anywhere; }
+.tm-task-source::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  margin-inline-end: 5px;
+  border-radius: 2px;
+  vertical-align: -0.12em;
+  background: var(--interactive-accent);
+}
+.tm-task-tag, .tm-task-due { display: inline-flex; align-items: center; gap: 4px; }
+.tm-task-tag { max-width: 100%; overflow-wrap: anywhere; }
+.tm-task-detail-icon, .tm-task-recurring { display: inline-flex; align-items: center; flex-shrink: 0; }
+.tm-task-detail-icon svg, .tm-task-recurring svg { width: 0.95em; height: 0.95em; }
+.tm-task-recurring { color: var(--text-muted); }
+.tm-task-due {
+  border-radius: 5px;
+  padding: 2px 5px;
+  background: var(--background-modifier-hover);
+  color: var(--color-orange);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tm-task-due .tm-task-detail-icon svg { fill: currentColor; }
+.tm-task-schedule:hover, .tm-task-source:hover, .tm-task-tag:hover { color: var(--text-normal); }
+.tm-task-checkbox.is-p1 { --tm-priority-color: var(--text-error); }
+.tm-task-checkbox.is-p2 { --tm-priority-color: var(--color-orange); }
+.tm-task-checkbox.is-p3 { --tm-priority-color: var(--color-blue); }
+.tm-main-view input.tm-task-checkbox:is(.is-p1, .is-p2, .is-p3) {
+  --checkbox-color: var(--tm-priority-color);
+  --checkbox-color-hover: var(--tm-priority-color);
+  --checkbox-border-color: var(--tm-priority-color);
+  --checkbox-border-color-hover: var(--tm-priority-color);
+  accent-color: var(--tm-priority-color);
+  border-color: var(--tm-priority-color);
+}
+.tm-main-view input.tm-task-checkbox:is(.is-p1, .is-p2, .is-p3):checked { background: var(--tm-priority-color); }
+.tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-row-menu { margin-top: 0; }
+@media (max-width: 700px) {
+  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { width: 22px; min-height: 24px; }
+  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary,
+  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-metadata { flex-basis: auto; }
+}
+
+/* Project headers share the task row's quiet metadata and compact deadline badge. */
+.tm-main-view .tm-project-header-metadata {
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.tm-project-date-range { display: inline-flex; flex-wrap: wrap; column-gap: 4px; align-items: baseline; }
+.tm-project-date-range [role="button"] { cursor: pointer; }
+.tm-project-date-range [role="button"]:hover { color: var(--text-normal); }
+.tm-project-header-metadata > .tm-project-progress:not(:first-child) { margin-inline-start: 4px; }
+
+.tm-task-due.is-overdue { color: var(--text-error); }
