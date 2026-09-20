@@ -39,7 +39,7 @@ export class NoteTaskDetailsWidget extends WidgetType {
   eq(other: NoteTaskDetailsWidget): boolean { return this.from === other.from && JSON.stringify(this.presentation) === JSON.stringify(other.presentation); }
   get lineBreaks(): number { return this.presentation.tokens.some(token => token.kind === "scheduledDate" || token.kind === "tags") ? 1 : 0; }
   toDOM(view: EditorView): HTMLElement {
-    const root = view.dom.ownerDocument.createElement("span");
+    const root = view.dom.ownerDocument.createDocumentFragment().createSpan();
     renderNoteTaskDetails(root, this.presentation, (token, label) => new DateLabelWidget(label, token.linkText).toDOM(view));
     root.addEventListener("click", event => {
       if ((event.target as HTMLElement).closest("a")) return;

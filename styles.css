@@ -357,7 +357,7 @@ button.tm-source,
   background: conic-gradient(currentColor var(--tm-project-progress, 0%), transparent 0);
 }
 .tm-project-icon .tm-project-progress { min-height: 0; font-size: var(--font-ui-medium); }
-.tm-project-icon:has(.tm-project-progress) { align-items: center; justify-content: center; }
+.tm-project-icon { align-items: center; justify-content: center; }
 .tm-project-header-metadata .tm-project-progress { font-size: inherit; gap: 5px; }
 
 .tm-project-percentage {
@@ -1204,7 +1204,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
   border: 1px solid var(--background-modifier-border); border-radius: 7px;
   background: var(--background-primary); color: var(--text-muted); font-size: var(--font-ui-small); cursor: pointer;
 }
-.tm-property-visibility-choices label:has(input:checked) { background: var(--background-secondary); color: var(--text-normal); }
+.tm-property-visibility-choices label.is-checked { background: var(--background-secondary); color: var(--text-normal); }
 .tm-property-visibility-choices label:hover { border-color: var(--interactive-accent); }
 .tm-property-visibility-choices label:focus-within { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 .tm-property-visibility-choices input[type="checkbox"] { flex-shrink: 0; margin: 0; accent-color: var(--interactive-accent); }

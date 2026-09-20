@@ -44,7 +44,7 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
         if (first.atomic) range.setStartBefore(first.node); else range.setStart(first.node, presentation.from - first.from);
         if (last.atomic) range.setEndAfter(last.node); else range.setEnd(last.node, presentation.to - last.from);
         const original = range.extractContents();
-        const details = document.createElement("span");
+        const details = document.createDocumentFragment().createSpan();
         renderNoteTaskDetails(details, presentation, (token, label) => {
           const anchor = Array.from(original.querySelectorAll<HTMLAnchorElement>("a.internal-link")).find(anchor =>
             (anchor.getAttribute("data-href") ?? anchor.getAttribute("href")) === token.linkText);
@@ -119,7 +119,7 @@ export function renderRecurringLogTokens(root: HTMLElement, dateFormat?: string)
       if (anchor && token.to === last.to) range.setEndAfter(anchor);
       else range.setEnd(last.node, token.to - last.from);
       const content = range.extractContents();
-      const pill = document.createElement("span");
+      const pill = document.createDocumentFragment().createSpan();
       pill.className = tokenClass(token);
       pill.setAttribute("title", token.description);
       pill.setAttribute("aria-label", token.description);

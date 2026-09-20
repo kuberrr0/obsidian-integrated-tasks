@@ -35,8 +35,9 @@ export class TaskStore {
     for (const [path, file] of files) {
       const content = await this.app.vault.read(file);
       const cache = this.app.metadataCache?.getFileCache(file);
-      const rawTags = cache?.frontmatter?.tags;
-      const tags = [...(Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? rawTags.split(/[\s,]+/) : []), ...(cache?.tags ?? []).map(tag => tag.tag)];
+      const rawTags: unknown = cache?.frontmatter?.tags;
+      const frontmatterTags: unknown[] = Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? rawTags.split(/[\s,]+/) : [];
+      const tags: unknown[] = [...frontmatterTags, ...(cache?.tags ?? []).map(tag => tag.tag)];
       const recurring = tags.some(tag => String(tag).replace(/^#/, "") === "recurring-task");
       const tasksUpdated = updateTaskDateTokens(content, sourceFormats, format, linkDates);
       const updated = recurring ? updateRecurringLogDates(tasksUpdated, sourceFormats, format, linkDates) : tasksUpdated;

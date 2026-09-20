@@ -24,7 +24,8 @@ interface ProjectCreatorOptions {
 
 export class ProjectCreatorModal extends Modal {
   private actions?: HTMLElement;
-  private focusTimer?: ReturnType<typeof setTimeout>;
+  private focusTimer?: number;
+  private focusWindow: Window | null = null;
   private stopViewportTracking?: () => void;
   constructor(app: App, private readonly options: ProjectCreatorOptions) { super(app); }
   onOpen(): void {
@@ -87,14 +88,18 @@ export class ProjectCreatorModal extends Modal {
       if (!event.repeat) void submit();
     };
     this.stopViewportTracking = trackModalViewport(this.modalEl, content);
-    this.focusTimer = setTimeout(() => {
+    const window = content.ownerDocument.defaultView;
+    this.focusWindow = window;
+    this.focusTimer = window?.setTimeout(() => {
       const input = fields[this.options.focusProperty ?? "name"];
       input.focus();
       if ("select" in input && input.type !== "checkbox") input.select();
     }, 0);
   }
   onClose(): void {
-    clearTimeout(this.focusTimer);
+    const window = this.focusWindow;
+    window?.clearTimeout(this.focusTimer);
+    this.focusWindow = null;
     this.stopViewportTracking?.();
     this.actions?.remove();
     this.contentEl.onkeydown = null;

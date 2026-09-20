@@ -16,8 +16,9 @@ export function recurringFile(app: App, task: Task): TFile | undefined {
         const file = app.metadataCache?.getFirstLinkpathDest(match[1], task.path);
         if (!file) continue;
         const cache = app.metadataCache.getFileCache(file);
-        const tags = cache?.frontmatter?.tags;
-        const all = [...(Array.isArray(tags) ? tags : typeof tags === "string" ? tags.split(/[\s,]+/) : []), ...(cache?.tags ?? []).map(tag => tag.tag)];
+        const tags: unknown = cache?.frontmatter?.tags;
+        const frontmatterTags: unknown[] = Array.isArray(tags) ? tags : typeof tags === "string" ? tags.split(/[\s,]+/) : [];
+        const all: unknown[] = [...frontmatterTags, ...(cache?.tags ?? []).map(tag => tag.tag)];
         if (all.some(tag => String(tag).replace(/^#/, "") === "recurring-task")) files.set(file.path, file);
     }
     if (files.size > 1) throw new Error("A task must link to only one recurring-task note.");
@@ -26,8 +27,9 @@ export function recurringFile(app: App, task: Task): TFile | undefined {
 
 export function repeatRules(content: string): string[] {
     const match = /^---\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)(?:\r?\n|$)/.exec(content);
-    const repeat: unknown = match ? parseYaml(match[1])?.repeat : undefined;
-    const rules = Array.isArray(repeat) ? repeat : [repeat];
+    const parsed: unknown = match ? parseYaml(match[1]) : undefined;
+    const repeat: unknown = parsed && typeof parsed === "object" && "repeat" in parsed ? parsed.repeat : undefined;
+    const rules: unknown[] = Array.isArray(repeat) ? repeat : [repeat];
     if (!rules.length || rules.some(rule => typeof rule !== "string" || !rule.trim())) throw new Error("Recurring task needs a repeat property containing text or a list of rules.");
     return rules as string[];
 }

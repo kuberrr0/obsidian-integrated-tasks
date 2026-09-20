@@ -26,7 +26,7 @@ class Element extends EventTarget {
   children: Element[] = [];
   attrs: Record<string, string> = {};
   text = ""; value = ""; checked = false; disabled = false;
-  ownerDocument = { defaultView: null };
+  ownerDocument = { defaultView: { setTimeout, clearTimeout } };
   onkeydown?: (event: KeyboardEvent) => void;
   createEl(_tag: string, options: { text?: string; attr?: Record<string, string> } = {}): Element {
     const child = new Element(); child.text = options.text ?? ""; child.attrs = options.attr ?? {}; this.children.push(child); return child;

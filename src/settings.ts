@@ -140,8 +140,10 @@ export class TaskManagerSettingTab extends PluginSettingTab {
             const choice = choices.createEl("label");
             const checkbox = choice.createEl("input", { type: "checkbox" });
             checkbox.checked = !(this.plugin.settings[key] ?? []).includes(property);
+            choice.classList.toggle("is-checked", checkbox.checked);
             choice.createSpan({ text: label });
             checkbox.addEventListener("change", () => {
+              choice.classList.toggle("is-checked", checkbox.checked);
               const hidden = (this.plugin.settings[key] ?? []).filter(item => item !== property);
               this.plugin.settings[key] = checkbox.checked ? hidden : [...hidden, property];
               void this.plugin.saveSettings().then(() => this.plugin.refreshViews());

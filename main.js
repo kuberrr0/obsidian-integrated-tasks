@@ -3483,16 +3483,17 @@ function recurringFile(app, task) {
     if (!file) continue;
     const cache = app.metadataCache.getFileCache(file);
     const tags = (_b = cache == null ? void 0 : cache.frontmatter) == null ? void 0 : _b.tags;
-    const all = [...Array.isArray(tags) ? tags : typeof tags === "string" ? tags.split(/[\s,]+/) : [], ...((_c = cache == null ? void 0 : cache.tags) != null ? _c : []).map((tag) => tag.tag)];
+    const frontmatterTags = Array.isArray(tags) ? tags : typeof tags === "string" ? tags.split(/[\s,]+/) : [];
+    const all = [...frontmatterTags, ...((_c = cache == null ? void 0 : cache.tags) != null ? _c : []).map((tag) => tag.tag)];
     if (all.some((tag) => String(tag).replace(/^#/, "") === "recurring-task")) files.set(file.path, file);
   }
   if (files.size > 1) throw new Error("A task must link to only one recurring-task note.");
   return [...files.values()][0];
 }
 function repeatRules(content) {
-  var _a;
   const match = /^---\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)(?:\r?\n|$)/.exec(content);
-  const repeat = match ? (_a = (0, import_obsidian3.parseYaml)(match[1])) == null ? void 0 : _a.repeat : void 0;
+  const parsed = match ? (0, import_obsidian3.parseYaml)(match[1]) : void 0;
+  const repeat = parsed && typeof parsed === "object" && "repeat" in parsed ? parsed.repeat : void 0;
   const rules = Array.isArray(repeat) ? repeat : [repeat];
   if (!rules.length || rules.some((rule) => typeof rule !== "string" || !rule.trim())) throw new Error("Recurring task needs a repeat property containing text or a list of rules.");
   return rules;
@@ -3659,6 +3660,7 @@ var ProjectCreatorModal = class extends import_obsidian4.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
+    this.focusWindow = null;
   }
   onOpen() {
     this.modalEl.addClass("tm-editor-modal");
@@ -3730,7 +3732,9 @@ var ProjectCreatorModal = class extends import_obsidian4.Modal {
       if (!event.repeat) void submit();
     };
     this.stopViewportTracking = trackModalViewport(this.modalEl, content);
-    this.focusTimer = setTimeout(() => {
+    const window2 = content.ownerDocument.defaultView;
+    this.focusWindow = window2;
+    this.focusTimer = window2 == null ? void 0 : window2.setTimeout(() => {
       var _a;
       const input = fields[(_a = this.options.focusProperty) != null ? _a : "name"];
       input.focus();
@@ -3739,7 +3743,9 @@ var ProjectCreatorModal = class extends import_obsidian4.Modal {
   }
   onClose() {
     var _a, _b;
-    clearTimeout(this.focusTimer);
+    const window2 = this.focusWindow;
+    window2 == null ? void 0 : window2.clearTimeout(this.focusTimer);
+    this.focusWindow = null;
     (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
     (_b = this.actions) == null ? void 0 : _b.remove();
     this.contentEl.onkeydown = null;
@@ -4296,7 +4302,7 @@ var import_obsidian15 = require("obsidian");
 
 // src/task-title.ts
 function taskTitleLabel(title) {
-  return title.replace(/\[\[([^\[\]\n]+)\]\]/g, (_match, target) => {
+  return title.replace(/\[\[([^\][\n]+)\]\]/g, (_match, target) => {
     const separator = target.indexOf("|");
     return separator < 0 ? target : target.slice(separator + 1);
   });
@@ -6980,11 +6986,11 @@ function renderNoteTaskDetails(root, presentation, link) {
   var _a;
   const document2 = root.ownerDocument;
   root.classList.add("tm-note-task-details");
-  const secondary = document2.createElement("span");
+  const secondary = document2.createDocumentFragment().createSpan();
   secondary.className = "tm-note-task-secondary";
   for (const kind of ["deadline", "scheduledDate", "tags"]) {
     for (const token of presentation.tokens.filter((token2) => token2.kind === kind)) {
-      const item = document2.createElement("span");
+      const item = document2.createDocumentFragment().createSpan();
       item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}`;
       item.setAttribute("title", token.description);
       item.setAttribute("aria-label", token.description);
@@ -7047,7 +7053,7 @@ var NoteTaskDetailsWidget = class extends import_view2.WidgetType {
     return this.presentation.tokens.some((token) => token.kind === "scheduledDate" || token.kind === "tags") ? 1 : 0;
   }
   toDOM(view) {
-    const root = view.dom.ownerDocument.createElement("span");
+    const root = view.dom.ownerDocument.createDocumentFragment().createSpan();
     renderNoteTaskDetails(root, this.presentation, (token, label) => new DateLabelWidget(label, token.linkText).toDOM(view));
     root.addEventListener("click", (event) => {
       if (event.target.closest("a")) return;
@@ -7314,7 +7320,7 @@ function renderNoteTokens(root, dateFormat) {
         if (last.atomic) range.setEndAfter(last.node);
         else range.setEnd(last.node, presentation.to - last.from);
         const original = range.extractContents();
-        const details = document2.createElement("span");
+        const details = document2.createDocumentFragment().createSpan();
         renderNoteTaskDetails(details, presentation, (token, label) => {
           const anchor = Array.from(original.querySelectorAll("a.internal-link")).find((anchor2) => {
             var _a2;
@@ -7392,7 +7398,7 @@ function renderRecurringLogTokens(root, dateFormat) {
       if (anchor && token.to === last.to) range.setEndAfter(anchor);
       else range.setEnd(last.node, token.to - last.from);
       const content = range.extractContents();
-      const pill = document2.createElement("span");
+      const pill = document2.createDocumentFragment().createSpan();
       pill.className = tokenClass(token);
       pill.setAttribute("title", token.description);
       pill.setAttribute("aria-label", token.description);
@@ -8286,7 +8292,8 @@ var TaskStore = class {
       const content = await this.app.vault.read(file);
       const cache = (_a = this.app.metadataCache) == null ? void 0 : _a.getFileCache(file);
       const rawTags = (_b = cache == null ? void 0 : cache.frontmatter) == null ? void 0 : _b.tags;
-      const tags = [...Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? rawTags.split(/[\s,]+/) : [], ...((_c = cache == null ? void 0 : cache.tags) != null ? _c : []).map((tag) => tag.tag)];
+      const frontmatterTags = Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? rawTags.split(/[\s,]+/) : [];
+      const tags = [...frontmatterTags, ...((_c = cache == null ? void 0 : cache.tags) != null ? _c : []).map((tag) => tag.tag)];
       const recurring = tags.some((tag) => String(tag).replace(/^#/, "") === "recurring-task");
       const tasksUpdated = updateTaskDateTokens(content, sourceFormats, format, linkDates);
       const updated = recurring ? updateRecurringLogDates(tasksUpdated, sourceFormats, format, linkDates) : tasksUpdated;
@@ -8677,9 +8684,11 @@ var TaskManagerSettingTab = class extends import_obsidian24.PluginSettingTab {
             const choice = choices.createEl("label");
             const checkbox = choice.createEl("input", { type: "checkbox" });
             checkbox.checked = !((_a = this.plugin.settings[key]) != null ? _a : []).includes(property);
+            choice.classList.toggle("is-checked", checkbox.checked);
             choice.createSpan({ text: label });
             checkbox.addEventListener("change", () => {
               var _a2;
+              choice.classList.toggle("is-checked", checkbox.checked);
               const hidden = ((_a2 = this.plugin.settings[key]) != null ? _a2 : []).filter((item) => item !== property);
               this.plugin.settings[key] = checkbox.checked ? hidden : [...hidden, property];
               void this.plugin.saveSettings().then(() => this.plugin.refreshViews());

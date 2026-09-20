@@ -22,7 +22,7 @@ vi.mock("obsidian", () => ({
     controlEl = { createDiv: () => ({ createEl: () => {
       const item = { label: "", checked: false, change: undefined as (() => void) | undefined };
       (this.row.choices ??= []).push(item);
-      return { createEl: () => ({
+      return { classList: { toggle: vi.fn() }, createEl: () => ({
         get checked() { return item.checked; },
         set checked(value: boolean) { item.checked = value; },
         addEventListener: (_event: string, callback: () => void) => { item.change = callback; }

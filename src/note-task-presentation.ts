@@ -33,11 +33,11 @@ export function noteTaskPresentation(line: string, dateFormat?: string, now = ne
 export function renderNoteTaskDetails(root: HTMLElement, presentation: NoteTaskPresentation, link: (token: TaskToken, label: string) => HTMLElement | undefined): void {
     const document = root.ownerDocument;
     root.classList.add("tm-note-task-details");
-    const secondary = document.createElement("span");
+    const secondary = document.createDocumentFragment().createSpan();
     secondary.className = "tm-note-task-secondary";
     for (const kind of ["deadline", "scheduledDate", "tags"] as const) {
         for (const token of presentation.tokens.filter(token => token.kind === kind)) {
-            const item = document.createElement("span");
+            const item = document.createDocumentFragment().createSpan();
             item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}`;
             item.setAttribute("title", token.description);
             item.setAttribute("aria-label", token.description);

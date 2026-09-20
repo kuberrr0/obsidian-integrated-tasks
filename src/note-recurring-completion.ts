@@ -39,7 +39,7 @@ export function noteRecurringCompletion(
         }),
         EditorView.updateListener.of(update => {
             const tasks = update.transactions.flatMap(transaction => transaction.effects
-                .filter(effect => effect.is(recurringCompletion)).flatMap(effect => effect.value as Task[]));
+                .filter(effect => effect.is(recurringCompletion)).flatMap(effect => effect.value));
             if (tasks.length) void Promise.resolve().then(() => tasks.forEach(task => complete(task)));
         })
     ];
