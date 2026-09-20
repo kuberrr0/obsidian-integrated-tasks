@@ -1319,7 +1319,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-main-view input.tm-task-checkbox:is(.is-p1, .is-p2, .is-p3):checked { background: var(--tm-priority-color); }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-row-menu { margin-top: 0; }
 @media (max-width: 700px) {
-  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { width: 22px; min-height: 24px; }
+  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { width: 22px; height: 44px; min-height: 44px; padding-top: 0; }
   .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary,
   .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-metadata { flex-basis: auto; }
 }
