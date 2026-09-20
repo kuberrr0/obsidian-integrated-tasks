@@ -330,13 +330,7 @@ export class TaskMainView extends ItemView {
       const groups = new Map<string, Task[]>();
       for (const task of tasks) groups.set(task.path, [...(groups.get(task.path) ?? []), task]);
       for (const [path, group] of groups) {
-        if (this.plugin.index.isProject(path)) {
-          const project = container.createEl("section", { cls: "tm-section" });
-          const heading = project.createEl("h2", { text: path.replace(/\.md$/i, "") });
-          this.renderGroupAddButton(heading, path.replace(/\.md$/i, ""), { destination: path });
-          this.listDrag?.group(project, { destination: path });
-          this.renderProjectSections(project, path, group);
-        } else this.renderSection(container, path.replace(/\.md$/i, ""), group, undefined, { destination: path });
+        this.renderSection(container, path.replace(/\.md$/i, ""), group, undefined, { destination: path });
       }
     } else {
       this.renderTaskList(container, tasks);
@@ -344,14 +338,14 @@ export class TaskMainView extends ItemView {
   }
 
   private renderKanban(container: HTMLElement, tasks: Task[]): void {
-    const columns = kanbanColumns(tasks, this.grouping);
+    const columns = kanbanColumns(tasks, this.grouping === "default" && this.state.mode === "all" && !this.taskSourcePath ? "source" : this.grouping);
     if (!columns.length) { this.renderEmpty(container); return; }
     const board = container.createDiv({ cls: "tm-kanban", attr: { "aria-label": "Task board" } });
     for (const column of columns) {
       const section = board.createEl("section", { cls: "tm-kanban-column" });
       const header = section.createDiv({ cls: "tm-kanban-column-header" });
       const title = column.target?.property && ["date", "scheduledDate", "deadline"].includes(column.target.property) && typeof column.target.value === "string"
-        ? formatDate(column.target.value, this.plugin.dateFormat()) : column.title;
+        ? formatDate(column.target.value, this.plugin.dateFormat()) : column.target?.property === "source" ? column.title.replace(/\.md$/i, "") : column.title;
       header.createEl("h2", { text: title });
       if (this.plugin.settings.showGroupTaskCounts) header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
       this.renderGroupAddButton(header, title, column.target);
@@ -797,7 +791,7 @@ export class TaskMainView extends ItemView {
   private get metadataGrouping(): TaskGrouping {
     if (this.layout === "calendar") return "none";
     if (this.grouping !== "default") return this.grouping;
-    if (this.layout === "kanban") return "section";
+    if (this.layout === "kanban" && !(this.state.mode === "all" && !this.taskSourcePath)) return "section";
     if (this.taskSourcePath) return "section";
     if (this.state.mode === "all") return "source";
     if (this.state.mode === "upcoming") return "date";

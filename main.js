@@ -6022,7 +6022,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     this.updateSelection();
   }
   renderTaskLayouts(container, tasks) {
-    var _a, _b;
+    var _a;
     if (this.layout === "calendar") {
       renderCalendar(container, {
         planning: true,
@@ -6097,21 +6097,15 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       const groups = /* @__PURE__ */ new Map();
       for (const task of tasks) groups.set(task.path, [...(_a = groups.get(task.path)) != null ? _a : [], task]);
       for (const [path, group] of groups) {
-        if (this.plugin.index.isProject(path)) {
-          const project = container.createEl("section", { cls: "tm-section" });
-          const heading = project.createEl("h2", { text: path.replace(/\.md$/i, "") });
-          this.renderGroupAddButton(heading, path.replace(/\.md$/i, ""), { destination: path });
-          (_b = this.listDrag) == null ? void 0 : _b.group(project, { destination: path });
-          this.renderProjectSections(project, path, group);
-        } else this.renderSection(container, path.replace(/\.md$/i, ""), group, void 0, { destination: path });
+        this.renderSection(container, path.replace(/\.md$/i, ""), group, void 0, { destination: path });
       }
     } else {
       this.renderTaskList(container, tasks);
     }
   }
   renderKanban(container, tasks) {
-    var _a, _b;
-    const columns = kanbanColumns(tasks, this.grouping);
+    var _a, _b, _c;
+    const columns = kanbanColumns(tasks, this.grouping === "default" && this.state.mode === "all" && !this.taskSourcePath ? "source" : this.grouping);
     if (!columns.length) {
       this.renderEmpty(container);
       return;
@@ -6120,11 +6114,11 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     for (const column of columns) {
       const section = board.createEl("section", { cls: "tm-kanban-column" });
       const header = section.createDiv({ cls: "tm-kanban-column-header" });
-      const title = ((_a = column.target) == null ? void 0 : _a.property) && ["date", "scheduledDate", "deadline"].includes(column.target.property) && typeof column.target.value === "string" ? formatDate(column.target.value, this.plugin.dateFormat()) : column.title;
+      const title = ((_a = column.target) == null ? void 0 : _a.property) && ["date", "scheduledDate", "deadline"].includes(column.target.property) && typeof column.target.value === "string" ? formatDate(column.target.value, this.plugin.dateFormat()) : ((_b = column.target) == null ? void 0 : _b.property) === "source" ? column.title.replace(/\.md$/i, "") : column.title;
       header.createEl("h2", { text: title });
       if (this.plugin.settings.showGroupTaskCounts) header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
       this.renderGroupAddButton(header, title, column.target);
-      if (column.target) (_b = this.listDrag) == null ? void 0 : _b.group(section, column.target);
+      if (column.target) (_c = this.listDrag) == null ? void 0 : _c.group(section, column.target);
       this.renderTaskList(section, column.tasks, column.target);
       if (!column.tasks.length) section.createDiv({ cls: "tm-kanban-empty", text: "No tasks" });
     }
@@ -6591,7 +6585,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
   get metadataGrouping() {
     if (this.layout === "calendar") return "none";
     if (this.grouping !== "default") return this.grouping;
-    if (this.layout === "kanban") return "section";
+    if (this.layout === "kanban" && !(this.state.mode === "all" && !this.taskSourcePath)) return "section";
     if (this.taskSourcePath) return "section";
     if (this.state.mode === "all") return "source";
     if (this.state.mode === "upcoming") return "date";
