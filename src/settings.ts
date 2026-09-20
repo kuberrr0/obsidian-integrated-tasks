@@ -98,23 +98,6 @@ export class TaskManagerSettingTab extends PluginSettingTab {
             this.plugin.refreshViews();
           })); }
       },
-      {
-        section: "List layout",
-        name: "Task height in list view",
-        desc: "Row height × editor font size. Minimum and default: 1.0. Wrapped content can make rows taller.",
-        render: (setting: Setting) => { setting.addText(text => {
-          text.inputEl.type = "number";
-          text.inputEl.min = "1";
-          text.inputEl.step = "0.1";
-          text.setValue(String(this.plugin.settings.taskListRowHeightMultiplier)).onChange(async value => {
-            const height = Number(value);
-            if (!Number.isFinite(height) || height < 1) return;
-            this.plugin.settings.taskListRowHeightMultiplier = height;
-            await this.plugin.saveSettings();
-            this.plugin.refreshViews();
-          });
-        }); }
-      },
       ...([
         ["showGroupTaskCounts", "Show task counts in group headings", "Show the number of tasks beside list group headings and Kanban column headings."],
         ["showSubtaskCounts", "Show subtask counts", "Show completed and total subtask counts beside tasks that have subtasks."]
@@ -125,31 +108,6 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
         })); }
-      })),
-      ...([ ["hiddenListTaskProperties", "List"], ["hiddenKanbanTaskProperties", "Kanban"] ] as const).map(([key, layout]) => ({
-        section: `${layout} layout`,
-        name: `Task properties — ${layout}`,
-        desc: `Select the details to show on tasks. Details already conveyed by the view or grouping stay hidden.`,
-        render: (setting: Setting) => {
-          setting.settingEl.addClass("tm-property-visibility-setting");
-          const choices = setting.controlEl.createDiv({ cls: "tm-property-visibility-choices", attr: { role: "group", "aria-label": `Task properties — ${layout}` } });
-          for (const [property, label] of [
-            ["source", "Project / source note"], ["scheduledDate", "Scheduled date"], ["scheduledTime", "Scheduled time"],
-            ["deadline", "Deadline date"], ["deadlineTime", "Deadline time"], ["duration", "Duration"],
-            ["priority", "Priority"], ["tags", "Tags"]] as const) {
-            const choice = choices.createEl("label");
-            const checkbox = choice.createEl("input", { type: "checkbox" });
-            checkbox.checked = !(this.plugin.settings[key] ?? []).includes(property);
-            choice.classList.toggle("is-checked", checkbox.checked);
-            choice.createSpan({ text: label });
-            checkbox.addEventListener("change", () => {
-              choice.classList.toggle("is-checked", checkbox.checked);
-              const hidden = (this.plugin.settings[key] ?? []).filter(item => item !== property);
-              this.plugin.settings[key] = checkbox.checked ? hidden : [...hidden, property];
-              void this.plugin.saveSettings().then(() => this.plugin.refreshViews());
-            });
-          }
-        }
       })),
       ...([
         ["wrapTaskTitles", "List"],
