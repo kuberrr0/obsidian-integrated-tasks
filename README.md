@@ -112,16 +112,14 @@ Tags connect related work across your vault. Open a tag from the sidebar to see 
 
 Select tasks to change their dates, priorities, tags, or other details together.
 
-![Four selected tasks with the Edit task properties toolbar](resources/images/Selection.png)
-
 | Action | Gesture |
 | --- | --- |
 | Select a task | Right-click |
 | Select a range | Shift + right-click |
 | Add to your selection | Cmd/Ctrl + right-click |
-| Clear your selection | Choose **Clear selection** |
+| Clear your selection | Click outside the selected tasks, or press Escape while a selected task is focused |
 
-Choose **Edit task properties** to make a shared change. Only the fields you edit are applied; **Mixed — unchanged** preserves each task's existing value.
+Click a selected task title or run **Edit task properties** to make a shared change. Only the fields you edit are applied; **Mixed — unchanged** preserves each task's existing value.
 
 You can also drag a selection to move tasks together, drop it onto the calendar to reschedule it, or delete selected tasks along with their subtasks.
 

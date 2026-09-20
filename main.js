@@ -4526,8 +4526,13 @@ var TaskSelection = class {
       for (const item of visible.slice(Math.min(start, end), Math.max(start, end) + 1)) this.selected.set(item.id, item);
     } else {
       if (!additive) this.selected.clear();
-      this.selected.set(task.id, task);
-      this.anchor = task.id;
+      if (additive && this.has(task)) {
+        this.selected.delete(task.id);
+        if (this.anchor === task.id) this.anchor = void 0;
+      } else {
+        this.selected.set(task.id, task);
+        this.anchor = task.id;
+      }
     }
   }
 };
@@ -5906,8 +5911,6 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     }
     container.empty();
     this.taskResults = void 0;
-    this.selectionBar = void 0;
-    this.selectionCount = void 0;
     this.visibleTasks = [];
     this.selectionRows.clear();
     container.addClass("tm-main-view");
@@ -5945,12 +5948,10 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     }
     this.renderHeader(container);
     this.renderFilters(container);
-    this.renderSelectionBar(container);
     this.taskResults = container.createDiv({ cls: "tm-task-results" });
     this.renderTaskResults();
   }
   renderTaskDashboard(container) {
-    this.renderSelectionBar(container);
     this.listDrag = new ListDragController((id) => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), true, (task) => this.prepareDrag(task));
     const tasks = (mode) => this.plugin.index.query({ mode, showCompleted: false });
     const today2 = tasks("today");
@@ -6474,13 +6475,11 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     this.updateSelection();
   }
   clearSelectionOutside(event) {
-    var _a;
     if (event.button !== 0 || import_obsidian14.Platform.isMacOS && event.ctrlKey || !this.getSelectedTasks().length) return;
     const target = event.target;
-    if (target && ((_a = this.selectionBar) == null ? void 0 : _a.contains(target)) && target.closest("button")) return;
     const selected = this.getSelectedTasks().some((task) => {
-      var _a2;
-      return (_a2 = this.selectionRows.get(task.id)) == null ? void 0 : _a2.some((row) => target && row.contains(target));
+      var _a;
+      return (_a = this.selectionRows.get(task.id)) == null ? void 0 : _a.some((row) => target && row.contains(target));
     });
     if (!selected) this.clearSelection();
   }
@@ -6531,11 +6530,18 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       this.contextSelectionOnPress = false;
     });
     row.addEventListener("click", (event) => {
+      if ((import_obsidian14.Platform.isMacOS ? event.metaKey : event.ctrlKey) && this.selection.has(task)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.selection.click(task, this.visibleTasks, false, true);
+        this.updateSelection();
+        return;
+      }
       if (interactive(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
       this.editTask(task);
-    });
+    }, true);
     row.addEventListener("keydown", (event) => {
       this.contextSelectionOnPress = false;
       if (interactive(event.target)) return;
@@ -6551,27 +6557,12 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     });
   }
   updateSelection() {
-    var _a, _b;
+    var _a;
     for (const task of this.visibleTasks) for (const row of (_a = this.selectionRows.get(task.id)) != null ? _a : []) {
       const selected = this.selection.has(task);
       row.classList.toggle("is-selected", selected);
       row.setAttribute("aria-label", `${task.title}${selected ? ", selected" : ""}`);
     }
-    const count = this.getSelectedTasks().length;
-    if (this.selectionBar) this.selectionBar.hidden = count === 0;
-    (_b = this.selectionCount) == null ? void 0 : _b.setText(`${count} selected`);
-  }
-  renderSelectionBar(container) {
-    this.selectionBar = container.createDiv({ cls: "tm-selection-bar" });
-    this.selectionBar.hidden = true;
-    this.selectionCount = this.selectionBar.createSpan({ attr: { role: "status", "aria-live": "polite" } });
-    const edit = this.selectionBar.createEl("button", { text: "Edit task properties" });
-    edit.addEventListener("click", () => {
-      this.plugin.openBulkEditor(this);
-      this.clearSelection();
-    });
-    const clear = this.selectionBar.createEl("button", { text: "Clear selection" });
-    clear.addEventListener("click", () => this.clearSelection());
   }
   depthWithin(task, visibleIds) {
     var _a;

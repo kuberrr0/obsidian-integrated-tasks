@@ -5,12 +5,12 @@ const tasks = scanTasks("Work.md", "- [ ] A\n- [ ] B\n- [ ] C\n- [ ] D");
 const ids = (selection: TaskSelection, visible = tasks) => selection.tasks(visible).map(task => task.title);
 
 describe("task block selection", () => {
-  it("replaces on click and adds on Mod-click without toggling selected tasks off", () => {
+  it("replaces on click and toggles selected tasks off on Mod-click", () => {
     const selection = new TaskSelection();
     selection.click(tasks[0], tasks);
     selection.click(tasks[2], tasks, false, true);
     selection.click(tasks[0], tasks, false, true);
-    expect(ids(selection)).toEqual(["A", "C"]);
+    expect(ids(selection)).toEqual(["C"]);
     selection.click(tasks[1], tasks);
     expect(ids(selection)).toEqual(["B"]);
   });

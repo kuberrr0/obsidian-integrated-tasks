@@ -833,8 +833,7 @@ button.tm-calendar-slot:hover { background: var(--background-modifier-hover); }
 }
 
 .is-calendar-view > .tm-view-header,
-.is-calendar-view > .tm-filters,
-.is-calendar-view > .tm-selection-bar { flex-shrink: 0; }
+.is-calendar-view > .tm-filters { flex-shrink: 0; }
 .is-calendar-view > .tm-task-results { flex: 1; min-height: 0; overflow: hidden; }
 .is-calendar-view .tm-calendar { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .is-calendar-view .tm-calendar-toolbar { flex-shrink: 0; }
@@ -1085,9 +1084,6 @@ button.tm-gantt-handle.is-finish:focus-visible,
   border-color: transparent;
   border-radius: 6px;
 }
-.tm-selection-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 8px; }
-.tm-selection-bar[hidden] { display: none; }
-.tm-selection-bar > span { color: var(--text-muted); margin-right: auto; }
 .tm-bulk-field { grid-template-columns: 120px minmax(0, 1fr) auto; }
 .tm-bulk-help { color: var(--text-muted); font-size: var(--font-ui-small); }
 @media (max-width: 700px) { .tm-bulk-field { grid-template-columns: minmax(0, 1fr) auto; } .tm-bulk-field > label { grid-column: 1 / -1; } }
@@ -1154,7 +1150,6 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view.is-dashboard-view {
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 16px;
 }
-.is-dashboard-view > .tm-selection-bar { flex-shrink: 0; }
 .tm-dashboard { flex: 1; display: grid; grid-template-rows: minmax(0, 2fr) minmax(0, 3fr); gap: 20px; min-width: 0; min-height: 0; }
 .tm-dashboard-row { display: grid; gap: 20px; min-width: 0; min-height: 0; }
 .tm-dashboard-tasks { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }

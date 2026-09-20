@@ -46,13 +46,11 @@ describe("page task view", () => {
       containerEl: { children: unknown[] };
       renderHeader: () => void;
       renderFilters: () => void;
-      renderSelectionBar: () => void;
       renderTaskResults: () => void;
     };
     internals.containerEl = { children: [{}, { empty: vi.fn(), addClass: vi.fn(), style: { setProperty: vi.fn() }, classList: { toggle: vi.fn() }, createDiv: vi.fn() }] };
     vi.spyOn(internals, "renderHeader").mockImplementation(() => {});
     const filters = vi.spyOn(internals, "renderFilters").mockImplementation(() => {});
-    vi.spyOn(internals, "renderSelectionBar").mockImplementation(() => {});
     vi.spyOn(internals, "renderTaskResults").mockImplementation(() => {});
     await view.setState({ ...state });
     expect(filters).toHaveBeenCalledOnce();
@@ -131,7 +129,7 @@ function selectionView() {
     };
     internals.bindSelection(row as unknown as HTMLElement, task);
     const click = (options: Record<string, unknown> = {}) => {
-      const event = { target: row, preventDefault: vi.fn(), stopPropagation: vi.fn(), ...options };
+      const event = { target: row, preventDefault: vi.fn(), stopPropagation: vi.fn(), stopImmediatePropagation: vi.fn(), ...options };
       handlers.get("click")!(event);
       return event;
     };
@@ -487,3 +485,17 @@ it("edits the task on the current editor line only when task mode is off", () =>
    await view.setState(state);
    expect(view.hasCalendar).toBe(expected);
  });
+
+
+it("Mod-clicking a selected title deselects only that task without opening an editor", () => {
+  const { view, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  rows[0].contextmenu(); rows[2].contextmenu(undefined, { metaKey: true });
+  const title = { closest: () => ({ tagName: "BUTTON" }) };
+  const event = rows[0].click({ metaKey: true, target: title });
+  expect(view.getSelectedTasks()).toEqual([tasks[2]]);
+  expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+  expect(openEditor).not.toHaveBeenCalled();
+  expect(openBulkEditor).not.toHaveBeenCalled();
+  rows[2].click({ metaKey: true });
+  expect(view.getSelectedTasks()).toEqual([]);
+});

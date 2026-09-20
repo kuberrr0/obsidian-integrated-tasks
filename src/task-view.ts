@@ -64,8 +64,6 @@ export class TaskMainView extends ItemView {
   private contextSelectionOnPress = false;
   private visibleTasks: Task[] = [];
   private selectionRows = new Map<string, HTMLElement[]>();
-  private selectionBar?: HTMLElement;
-  private selectionCount?: HTMLElement;
   private draggedTasks: Task[] = [];
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
@@ -151,8 +149,6 @@ export class TaskMainView extends ItemView {
     }
     container.empty();
     this.taskResults = undefined;
-    this.selectionBar = undefined;
-    this.selectionCount = undefined;
     this.visibleTasks = [];
     this.selectionRows.clear();
     container.addClass("tm-main-view");
@@ -192,13 +188,11 @@ export class TaskMainView extends ItemView {
 
     this.renderHeader(container);
     this.renderFilters(container);
-    this.renderSelectionBar(container);
     this.taskResults = container.createDiv({ cls: "tm-task-results" });
     this.renderTaskResults();
   }
 
   private renderTaskDashboard(container: HTMLElement): void {
-    this.renderSelectionBar(container);
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), true, task => this.prepareDrag(task));
     const tasks = (mode: "today" | "upcoming" | "all"): Task[] => this.plugin.index.query({ mode, showCompleted: false });
     const today = tasks("today");
@@ -679,8 +673,6 @@ export class TaskMainView extends ItemView {
   private clearSelectionOutside(event: MouseEvent): void {
     if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || !this.getSelectedTasks().length) return;
     const target = event.target as HTMLElement | null;
-    // Let the toolbar act on the selection before clearing it.
-    if (target && this.selectionBar?.contains(target) && target.closest("button")) return;
     const selected = this.getSelectedTasks().some(task =>
       this.selectionRows.get(task.id)?.some(row => target && row.contains(target)));
     if (!selected) this.clearSelection();
@@ -729,17 +721,23 @@ export class TaskMainView extends ItemView {
     });
     // Also support keyboard context-menu requests and other non-pointer input.
     row.addEventListener("contextmenu", event => {
-      // The selection toolbar can move rows beneath the pointer after press.
+      // Consume the context gesture even if the row moved after press.
       // Consume the gesture across the view, even if its menu targets another row.
       if (!this.contextSelectionOnPress) selectForContextMenu(event);
       this.contextSelectionOnPress = false;
     });
     row.addEventListener("pointercancel", () => { this.contextSelectionOnPress = false; });
     row.addEventListener("click", event => {
+      if ((Platform.isMacOS ? event.metaKey : event.ctrlKey) && this.selection.has(task)) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        this.selection.click(task, this.visibleTasks, false, true);
+        this.updateSelection();
+        return;
+      }
       if (interactive(event.target)) return;
       event.preventDefault(); event.stopPropagation();
       this.editTask(task);
-    });
+    }, true);
     row.addEventListener("keydown", event => {
       this.contextSelectionOnPress = false;
       if (interactive(event.target)) return;
@@ -757,19 +755,6 @@ export class TaskMainView extends ItemView {
       row.classList.toggle("is-selected", selected);
       row.setAttribute("aria-label", `${task.title}${selected ? ", selected" : ""}`);
     }
-    const count = this.getSelectedTasks().length;
-    if (this.selectionBar) this.selectionBar.hidden = count === 0;
-    this.selectionCount?.setText(`${count} selected`);
-  }
-
-  private renderSelectionBar(container: HTMLElement): void {
-    this.selectionBar = container.createDiv({ cls: "tm-selection-bar" });
-    this.selectionBar.hidden = true;
-    this.selectionCount = this.selectionBar.createSpan({ attr: { role: "status", "aria-live": "polite" } });
-    const edit = this.selectionBar.createEl("button", { text: "Edit task properties" });
-    edit.addEventListener("click", () => { this.plugin.openBulkEditor(this); this.clearSelection(); });
-    const clear = this.selectionBar.createEl("button", { text: "Clear selection" });
-    clear.addEventListener("click", () => this.clearSelection());
   }
 
   private depthWithin(task: Task, visibleIds: Set<string>): number {

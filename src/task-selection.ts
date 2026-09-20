@@ -20,8 +20,13 @@ export class TaskSelection {
       for (const item of visible.slice(Math.min(start, end), Math.max(start, end) + 1)) this.selected.set(item.id, item);
     } else {
       if (!additive) this.selected.clear();
-      this.selected.set(task.id, task);
-      this.anchor = task.id;
+      if (additive && this.has(task)) {
+        this.selected.delete(task.id);
+        if (this.anchor === task.id) this.anchor = undefined;
+      } else {
+        this.selected.set(task.id, task);
+        this.anchor = task.id;
+      }
     }
   }
 }
