@@ -1,4 +1,4 @@
-import { taskTimeLabel } from "./task-row-details";
+import { taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
 import { taskTitleLabel } from "./task-title";
 import { renderDescriptionIndicator } from "./task-description-indicator";
 import { Notice, setIcon } from "obsidian";
@@ -130,7 +130,8 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       }
     });
     const title = card.createSpan({ cls: "tm-calendar-task-title", text: taskTitleLabel(task.title) });
-    if (time) card.createSpan({ cls: "tm-calendar-task-time", text: `${taskTimeLabel(time)} – ${taskTimeLabel(minuteTime(Math.min(1440, timeMinutes(time) + (task.durationMinutes ?? 30))))}` });
+    const timeLabel = taskTimeDurationLabel(time, task.durationMinutes);
+    if (timeLabel) card.createSpan({ cls: "tm-calendar-task-time", text: timeLabel });
     if (task.deadline && calendarDate(task) === task.deadline && (time ?? "") === (task.deadlineTime ?? "")) {
       setIcon(card.createSpan({ cls: "tm-calendar-task-flag", attr: { "aria-label": "Deadline" } }), "flag");
     }

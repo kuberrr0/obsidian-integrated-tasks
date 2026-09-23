@@ -1,3 +1,4 @@
+import { formatDuration } from "./parser";
 import { setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import type { TaskEditorProperty } from "./task-editor";
@@ -39,6 +40,19 @@ export function taskTimeLabel(time: string): string {
     return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
 }
 
+/** Compact clock ranges keep both meridiems when crossing noon or midnight. */
+export function taskTimeDurationLabel(time?: string, duration?: number): string {
+    if (!time) return duration ? formatDuration(duration) : "";
+    const start = taskTimeLabel(time);
+    if (!duration) return start;
+    const [hour, minute] = time.split(":").map(Number);
+    const total = hour * 60 + minute + duration;
+    const endMinute = total % 1440;
+    const end = taskTimeLabel(`${Math.floor(endMinute / 60)}:${endMinute % 60}`);
+    const samePeriod = start.slice(-2) === end.slice(-2) && total < 1440;
+    return `${samePeriod ? start.slice(0, -3) : start}-${end}${total >= 1440 ? ` (+${Math.floor(total / 1440)}d)` : ""}`;
+}
+
 interface TaskDetailsOptions {
     grouping: TaskGrouping;
     show: (property: TaskProperty) => boolean;
@@ -67,7 +81,10 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
     const actionDate = task.scheduledDate && task.deadline ? (task.scheduledDate < task.deadline ? task.scheduledDate : task.deadline) : task.scheduledDate ?? task.deadline;
     const showDate = (field: "scheduledDate" | "deadline") => show(field) && grouping !== field && !(grouping === "date" && task[field] === actionDate);
     const date = task.scheduledDate && showDate("scheduledDate") ? taskScheduleLabel(task.scheduledDate, now) : "";
-    const time = task.scheduledTime && show("scheduledTime") && grouping !== "scheduledTime" ? taskTimeLabel(task.scheduledTime) : "";
+    const time = taskTimeDurationLabel(
+        show("scheduledTime") && grouping !== "scheduledTime" ? task.scheduledTime : undefined,
+        show("duration") && grouping !== "duration" ? task.durationMinutes : undefined
+    );
     if (date || time) {
         const schedule = metadata.createSpan({ cls: "tm-task-schedule", attr: { title: [task.scheduledDate && formatDate(task.scheduledDate, options.dateFormat), task.scheduledTime].filter(Boolean).join(", ") } });
         if (date) schedule.createSpan({ cls: !task.completed && task.scheduledDate! < todayIso(now) ? "is-overdue" : "", text: date });

@@ -8,7 +8,7 @@ it("presents compact schedules and deadlines without changing source ranges or l
     const result = noteTaskPresentation(source, "YYYY-MM-DD", now)!;
     expect(source.slice(result.from, result.to)).toBe("[[2026-09-20]] 21:00 30m {[[2026-09-23]] 17:00} p2 #[[Deep Work]]");
     expect(result.priority).toBe(2);
-    expect(result.tokens.find(token => token.kind === "scheduledDate")).toMatchObject({ label: "Tomorrow, 9:00 PM", linkText: "2026-09-20" });
+    expect(result.tokens.find(token => token.kind === "scheduledDate")).toMatchObject({ label: "Tomorrow, 9:00-9:30 PM", linkText: "2026-09-20" });
     expect(result.tokens.find(token => token.kind === "deadline")).toMatchObject({ label: "4d, 5:00 PM", linkText: "2026-09-23", overdue: false });
 });
 it("uses red overdue labels only for open tasks", () => {
@@ -66,4 +66,13 @@ it("places the caret at the clicked property on a later document line", () => {
     expect(view.focus).toHaveBeenCalledTimes(4);
     events.get("click")!({ target: { closest: () => ({}) } });
     expect(view.dispatch).toHaveBeenCalledTimes(4);
+});
+
+it("retains standalone duration and combines timed duration into the schedule", () => {
+    const untimed = noteTaskPresentation("- [ ] Task 2026-09-20 30m", "YYYY-MM-DD", now)!;
+    expect(untimed.tokens.find(token => token.kind === "scheduledDate")).toMatchObject({ label: "Tomorrow", time: "" });
+    expect(untimed.tokens.find(token => token.kind === "durationMinutes")?.label).toBe("30m");
+    const timed = noteTaskPresentation("- [ ] Task 2026-09-20 17:00 30m", "YYYY-MM-DD", now)!;
+    expect(timed.tokens.find(token => token.kind === "scheduledDate")).toMatchObject({ label: "Tomorrow, 5:00-5:30 PM", time: "5:00-5:30 PM" });
+    expect(timed.tokens.find(token => token.kind === "durationMinutes")?.label).toBe("");
 });

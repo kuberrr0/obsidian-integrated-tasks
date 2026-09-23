@@ -4361,6 +4361,17 @@ function taskTimeLabel(time) {
   const [hour, minute] = time.split(":").map(Number);
   return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
 }
+function taskTimeDurationLabel(time, duration) {
+  if (!time) return duration ? formatDuration(duration) : "";
+  const start = taskTimeLabel(time);
+  if (!duration) return start;
+  const [hour, minute] = time.split(":").map(Number);
+  const total = hour * 60 + minute + duration;
+  const endMinute = total % 1440;
+  const end = taskTimeLabel(`${Math.floor(endMinute / 60)}:${endMinute % 60}`);
+  const samePeriod = start.slice(-2) === end.slice(-2) && total < 1440;
+  return `${samePeriod ? start.slice(0, -3) : start}-${end}${total >= 1440 ? ` (+${Math.floor(total / 1440)}d)` : ""}`;
+}
 function editable(element, label, action) {
   element.setAttribute("role", "button");
   element.setAttribute("tabindex", "0");
@@ -4384,7 +4395,10 @@ function renderTaskDetails(primary, metadata, task, options) {
   const actionDate2 = task.scheduledDate && task.deadline ? task.scheduledDate < task.deadline ? task.scheduledDate : task.deadline : (_b = task.scheduledDate) != null ? _b : task.deadline;
   const showDate = (field2) => show(field2) && grouping !== field2 && !(grouping === "date" && task[field2] === actionDate2);
   const date = task.scheduledDate && showDate("scheduledDate") ? taskScheduleLabel(task.scheduledDate, now2) : "";
-  const time = task.scheduledTime && show("scheduledTime") && grouping !== "scheduledTime" ? taskTimeLabel(task.scheduledTime) : "";
+  const time = taskTimeDurationLabel(
+    show("scheduledTime") && grouping !== "scheduledTime" ? task.scheduledTime : void 0,
+    show("duration") && grouping !== "duration" ? task.durationMinutes : void 0
+  );
   if (date || time) {
     const schedule = metadata.createSpan({ cls: "tm-task-schedule", attr: { title: [task.scheduledDate && formatDate(task.scheduledDate, options.dateFormat), task.scheduledTime].filter(Boolean).join(", ") } });
     if (date) schedule.createSpan({ cls: !task.completed && task.scheduledDate < todayIso(now2) ? "is-overdue" : "", text: date });
@@ -5473,7 +5487,7 @@ function renderCalendar(container, options) {
     });
   };
   const taskCard = (parent, task) => {
-    var _a2, _b2, _c2;
+    var _a2, _b2;
     const time = calendarTime(task);
     const card = parent.createDiv({
       cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
@@ -5503,8 +5517,9 @@ function renderCalendar(container, options) {
       }
     });
     const title2 = card.createSpan({ cls: "tm-calendar-task-title", text: taskTitleLabel(task.title) });
-    if (time) card.createSpan({ cls: "tm-calendar-task-time", text: `${taskTimeLabel(time)} \u2013 ${taskTimeLabel(minuteTime(Math.min(1440, timeMinutes(time) + ((_a2 = task.durationMinutes) != null ? _a2 : 30))))}` });
-    if (task.deadline && calendarDate(task) === task.deadline && (time != null ? time : "") === ((_b2 = task.deadlineTime) != null ? _b2 : "")) {
+    const timeLabel = taskTimeDurationLabel(time, task.durationMinutes);
+    if (timeLabel) card.createSpan({ cls: "tm-calendar-task-time", text: timeLabel });
+    if (task.deadline && calendarDate(task) === task.deadline && (time != null ? time : "") === ((_a2 = task.deadlineTime) != null ? _a2 : "")) {
       (0, import_obsidian13.setIcon)(card.createSpan({ cls: "tm-calendar-task-flag", attr: { "aria-label": "Deadline" } }), "flag");
     }
     renderDescriptionIndicator(title2, task.description);
@@ -5515,7 +5530,7 @@ function renderCalendar(container, options) {
         options.edit(task);
       }
     });
-    (_c2 = options.bind) == null ? void 0 : _c2.call(options, card, task);
+    (_b2 = options.bind) == null ? void 0 : _b2.call(options, card, task);
     card.addEventListener("dragstart", (event) => {
       var _a3;
       (_a3 = options.dragStart) == null ? void 0 : _a3.call(options, task);
@@ -6959,10 +6974,11 @@ function noteTaskPresentation(line, dateFormat, now2 = /* @__PURE__ */ new Date(
     if (line.slice(tokens[index - 1].to, tokens[index].from).trim()) return void 0;
   }
   return { from: tokens[0].from, to: tokens[tokens.length - 1].to, priority: task.priority, tokens: tokens.map((token) => {
+    if (token.kind === "durationMinutes" && task.scheduledTime) return { ...token, label: "" };
     if (token.kind !== "scheduledDate" && token.kind !== "deadline") return token;
     const date = token.kind === "deadline" ? task.deadline : task.scheduledDate;
     const rawTime = token.kind === "deadline" ? task.deadlineTime : task.scheduledTime;
-    const time = rawTime ? taskTimeLabel(rawTime) : void 0;
+    const time = token.kind === "scheduledDate" ? taskTimeDurationLabel(rawTime, rawTime ? task.durationMinutes : void 0) : rawTime ? taskTimeLabel(rawTime) : void 0;
     const dateLabel = token.kind === "deadline" ? taskDeadlineLabel(date, now2) : taskScheduleLabel(date, now2);
     return {
       ...token,
@@ -6977,15 +6993,15 @@ function renderNoteTaskDetails(root, presentation, link) {
   var _a;
   const document2 = root.ownerDocument;
   root.classList.add("tm-note-task-details");
-  for (const kind of ["deadline", "scheduledDate", "tags"]) {
-    for (const token of presentation.tokens.filter((token2) => token2.kind === kind)) {
+  for (const kind of ["deadline", "scheduledDate", "durationMinutes", "tags"]) {
+    for (const token of presentation.tokens.filter((token2) => token2.kind === kind && token2.label)) {
       const item = document2.createDocumentFragment().createSpan();
       item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}`;
       item.setAttribute("data-tm-property-offset", String(token.from - presentation.from));
       item.setAttribute("title", token.description);
       item.setAttribute("aria-label", token.description);
-      if (kind !== "scheduledDate") item.setAttribute("style", notePropertyIconStyle(kind));
-      const label = (_a = token.dateLabel) != null ? _a : token.label;
+      if (kind !== "scheduledDate" && kind !== "durationMinutes") item.setAttribute("style", notePropertyIconStyle(kind));
+      const label = kind === "durationMinutes" && presentation.tokens.some((token2) => token2.kind === "scheduledDate") ? `, ${token.label}` : (_a = token.dateLabel) != null ? _a : token.label;
       const anchor = token.linkText ? link(token, label) : void 0;
       if (anchor) item.appendChild(anchor);
       else item.appendChild(document2.createTextNode(label));

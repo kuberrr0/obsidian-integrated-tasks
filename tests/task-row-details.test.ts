@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
-import { deadlineIsOverdue, renderTaskDetails, taskScheduleLabel, taskDeadlineLabel, taskDayDistance, taskTimeLabel } from "../src/task-row-details";
+import { deadlineIsOverdue, renderTaskDetails, taskScheduleLabel, taskDeadlineLabel, taskDayDistance, taskTimeLabel, taskTimeDurationLabel } from "../src/task-row-details";
 import { scanTasks } from "../src/parser";
 
 const now = new Date(2026, 8, 19, 12);
@@ -40,7 +40,7 @@ it("puts deadlines beside titles and schedules, source and plain tags below; kee
     expect(primary.children.map(child => child.cls)).toEqual(["tm-task-due"]);
     expect(primary.children[0].children[1].text).toBe("4d");
     expect(metadata.children.map(child => child.cls)).toEqual(["tm-task-schedule", "tm-task-source", "tm-task-tag"]);
-    expect(metadata.children[0].children.map(child => child.text).join("")).toBe("Tomorrow, 9:00 PM");
+    expect(metadata.children[0].children.map(child => child.text).join("")).toBe("Tomorrow, 9:00-9:30 PM");
     expect(metadata.children[1].text).toBe("Launch");
     const event = { key: "Enter", preventDefault: vi.fn(), stopPropagation: vi.fn() };
     primary.children[0].handlers.get("click")!(event);
@@ -64,4 +64,24 @@ it("marks past dates and elapsed times today overdue, but not undated or all-day
     expect(deadlineIsOverdue("2026-09-19", "13:00", now)).toBe(false);
     expect(deadlineIsOverdue("2026-09-19", undefined, now)).toBe(false);
     expect(deadlineIsOverdue("2026-09-20", "09:00", now)).toBe(false);
+});
+
+it.each([
+    ["17:00", 30, "5:00-5:30 PM"],
+    ["11:45", 30, "11:45 AM-12:15 PM"],
+    ["23:45", 30, "11:45 PM-12:15 AM (+1d)"],
+    [undefined, 30, "30m"],
+    ["17:00", undefined, "5:00 PM"],
+    [undefined, undefined, ""]
+])("formats time %s with duration %s", (time, duration, expected) => {
+    expect(taskTimeDurationLabel(time, duration)).toBe(expected);
+});
+
+it("shows duration after the date without a start time, or alone without a date", () => {
+    for (const date of ["2026-09-20", ""]) {
+        const primary = new Element(), metadata = new Element();
+        const task = scanTasks("Note.md", `- [ ] Task ${date} 30m`)[0];
+        renderTaskDetails(primary as never, metadata as never, task, { now, grouping: "none", show: () => true, dateFormat: "YYYY-MM-DD", tags: [], edit: vi.fn(), openSource: vi.fn() });
+        expect(metadata.children[0].children.map(child => child.text).join("")).toBe(date ? "Tomorrow, 30m" : "30m");
+    }
 });
