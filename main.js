@@ -4431,7 +4431,7 @@ function renderTaskDetails(primary, metadata, task, options) {
 function projectDateLabel(date, now2 = /* @__PURE__ */ new Date()) {
   return formatDate(date, date.slice(0, 4) === String(now2.getFullYear()) ? "MMM D" : "MMM D, YYYY");
 }
-function renderProjectHeaderDetails(parent, project, edit, dateFormat, now2 = /* @__PURE__ */ new Date()) {
+function renderProjectHeaderDetails(parent, project, edit, dateFormat, now2 = /* @__PURE__ */ new Date(), deadlineParent = parent) {
   const editable2 = (element, label, field2) => {
     element.setAttribute("role", "button");
     element.setAttribute("tabindex", "0");
@@ -4463,7 +4463,7 @@ function renderProjectHeaderDetails(parent, project, edit, dateFormat, now2 = /*
     }
   }
   if (project.deadline) {
-    const due = parent.createSpan({ cls: `tm-task-due${deadlineIsOverdue(project.deadline, project.deadlineTime, now2) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
+    const due = deadlineParent.createSpan({ cls: `tm-task-due${deadlineIsOverdue(project.deadline, project.deadlineTime, now2) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
     (0, import_obsidian8.setIcon)(due.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
     due.createSpan({ text: [taskDeadlineLabel(project.deadline, now2), project.deadlineTime && taskTimeLabel(project.deadlineTime)].filter(Boolean).join(", ") });
     editable2(due, `project deadline: ${formatDate(project.deadline, dateFormat)}`, "deadline");
@@ -6410,7 +6410,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
       button.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian14.Notice(String(error))));
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
-      renderProjectHeaderDetails(metadata, project, (property) => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat());
+      renderProjectHeaderDetails(metadata, project, (property) => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat(), void 0, primary);
       if (!metadata.childElementCount) metadata.remove();
       const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
       (0, import_obsidian14.setIcon)(open, "chevron-right");

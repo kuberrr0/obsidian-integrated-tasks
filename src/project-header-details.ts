@@ -8,7 +8,7 @@ export function projectDateLabel(date: string, now = new Date()): string {
     return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "MMM D" : "MMM D, YYYY");
 }
 
-export function renderProjectHeaderDetails(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date()): void {
+export function renderProjectHeaderDetails(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date(), deadlineParent = parent): void {
     const editable = (element: HTMLElement, label: string, field: keyof ProjectDraft): void => {
         element.setAttribute("role", "button");
         element.setAttribute("tabindex", "0");
@@ -34,7 +34,7 @@ export function renderProjectHeaderDetails(parent: HTMLElement, project: Project
         }
     }
     if (project.deadline) {
-        const due = parent.createSpan({ cls: `tm-task-due${deadlineIsOverdue(project.deadline, project.deadlineTime, now) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
+        const due = deadlineParent.createSpan({ cls: `tm-task-due${deadlineIsOverdue(project.deadline, project.deadlineTime, now) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
         setIcon(due.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
         due.createSpan({ text: [taskDeadlineLabel(project.deadline, now), project.deadlineTime && taskTimeLabel(project.deadlineTime)].filter(Boolean).join(", ") });
         editable(due, `project deadline: ${formatDate(project.deadline, dateFormat)}`, "deadline");

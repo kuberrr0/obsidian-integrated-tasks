@@ -1428,6 +1428,7 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-calendar-task.is-timed .tm-calendar-task-title { flex: 0 0 auto; }
 
 /* Align progress with the title line and keep percentages snug. */
+.tm-main-view .tm-project-row .tm-task-primary > .tm-task-due { flex-shrink: 0; }
 .tm-main-view .tm-project-row button.tm-task-title { height: auto; min-height: 0; padding-block: 0; line-height: 1.4; }
 .tm-main-view .tm-project-row > .tm-project-icon { margin: 0; height: 1.4em; font-size: var(--font-ui-medium); align-items: center; }
 .tm-project-header-metadata .tm-project-progress { gap: 4px; min-height: 0; }

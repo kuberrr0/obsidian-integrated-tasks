@@ -46,3 +46,15 @@ it("marks overdue project deadlines and hides project priority", () => {
     renderProjectHeaderDetails(root as never, { ...project, deadline: "2026-09-18", priority: 1 }, vi.fn(), "YYYY-MM-DD", now);
     expect(root.children.map(child => child.cls)).toEqual(["tm-task-due is-overdue"]);
 });
+
+it("places list deadlines beside the title while retaining metadata and edit actions", () => {
+    const metadata = new Element(), primary = new Element(), edit = vi.fn();
+    primary.createSpan({ text: project.name });
+    renderProjectHeaderDetails(metadata as never, { ...project, scheduledDate: "2026-09-20", deadline: "2026-09-23", parent: "Studio.md" }, edit, "YYYY-MM-DD", now, primary as never);
+    expect(primary.children.map(child => child.cls)).toEqual(["", "tm-task-due"]);
+    expect(metadata.children.map(child => child.cls)).toEqual(["tm-project-date-range", "tm-task-source"]);
+    const deadline = primary.children[1];
+    expect(deadline.children[1].text).toBe("4d");
+    deadline.handlers.get("click")!({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    expect(edit).toHaveBeenCalledWith("deadline");
+});
