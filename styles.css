@@ -488,6 +488,8 @@ button.tm-source,
     justify-content: space-between;
   }
 
+  .tm-header-actions > .tm-filter-toggle { margin-inline-start: auto; }
+
   .tm-filters {
     grid-template-columns: 1fr 1fr;
   }

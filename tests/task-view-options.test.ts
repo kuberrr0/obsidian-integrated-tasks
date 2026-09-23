@@ -24,14 +24,17 @@ class Element extends EventTarget {
 
 it("keeps sorting, grouping, and filters behind one toggle and applies each control", () => {
   const view = new TaskMainView({} as WorkspaceLeaf, { index: { allTasks: () => [] } } as unknown as TaskManagerPlugin);
-  const internal = view as unknown as { renderFilters(root: HTMLElement): void; renderTaskResults(): void; sort: string; descending: boolean; grouping: string; propertyFilters: unknown[] };
+  const internal = view as unknown as { renderHeader(root: HTMLElement): HTMLButtonElement; renderFilters(root: HTMLElement, toggle: HTMLButtonElement): void; renderTaskResults(): void; sort: string; descending: boolean; grouping: string; propertyFilters: unknown[] };
   const render = vi.spyOn(internal, "renderTaskResults").mockImplementation(() => {});
   const root = new Element();
-  internal.renderFilters(root as never);
-  const toolbar = root.children[0];
-  const toggle = toolbar.children.find(el => el.tag === "button")!;
+  const toggle = internal.renderHeader(root as never) as unknown as Element;
+  internal.renderFilters(root as never, toggle as never);
+  const toolbar = root.children[1];
+  const actions = root.children[0].children[1];
+  expect(actions.children.at(-2)).toBe(toggle);
+  expect(actions.children.at(-1)!.attrs["aria-label"]).toBe("Add task");
   const panel = toolbar.children.find(el => el.tag === "div")!;
-  expect(toolbar.children.filter(el => el.tag === "button")).toHaveLength(1);
+  expect(toolbar.children.filter(el => el.tag === "button")).toHaveLength(0);
   expect(toggle.text).toBe("");
   expect(toggle.attrs["aria-label"]).toBe("View options: filter, sort, and group");
   expect(panel.hidden).toBe(true);
@@ -53,4 +56,21 @@ it("keeps sorting, grouping, and filters behind one toggle and applies each cont
   panel.dispatchEvent(Object.assign(new Event("keydown"), { key: "Escape" }));
   expect(panel.hidden).toBe(true);
   expect(toggle.focus).toHaveBeenCalledOnce();
+});
+
+it.each([true, false])("lists archived projects without an opt-in checkbox (active projects: %s)", hasActive => {
+  const archived = { path: "Archive.md", name: "Archive", archived: true, openTasks: 0, completedTasks: 1 };
+  const active = { ...archived, path: "Active.md", name: "Active", archived: false };
+  const openProjectCreator = vi.fn();
+  const view = new TaskMainView({} as WorkspaceLeaf, { openProjectCreator, index: { projects: () => hasActive ? [active, archived] : [archived] } } as unknown as TaskManagerPlugin);
+  const internal = view as unknown as { renderProjectList(root: HTMLElement): void; renderProjectGroup(root: HTMLElement, title: string, projects: unknown[]): void };
+  const groups = vi.spyOn(internal, "renderProjectGroup").mockImplementation(() => {});
+  const root = new Element();
+  internal.renderProjectList(root as never);
+  expect(groups).toHaveBeenCalledWith(root, "Archived", [archived]);
+  expect(root.all().some(el => el.tag === "label")).toBe(false);
+  const create = root.all().find(el => el.attrs["aria-label"] === "Create new project")!;
+  expect(create.text).toBe("");
+  create.dispatchEvent(new Event("click"));
+  expect(openProjectCreator).toHaveBeenCalledOnce();
 });

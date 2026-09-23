@@ -186,8 +186,8 @@ export class TaskMainView extends ItemView {
       return;
     }
 
-    this.renderHeader(container);
-    this.renderFilters(container);
+    const viewOptions = this.renderHeader(container);
+    this.renderFilters(container, viewOptions);
     this.taskResults = container.createDiv({ cls: "tm-task-results" });
     this.renderTaskResults();
   }
@@ -364,7 +364,7 @@ export class TaskMainView extends ItemView {
     if (!tasks.length && !this.plugin.index.headingsForPath(path).length) this.renderEmpty(container);
   }
 
-  private renderHeader(container: HTMLElement): void {
+  private renderHeader(container: HTMLElement): HTMLButtonElement {
     const header = container.createDiv({ cls: "tm-view-header" });
     const titleGroup = header.createDiv({ cls: "tm-title-group" });
     if (this.state.mode === "tags" && this.state.tag) {
@@ -393,11 +393,13 @@ export class TaskMainView extends ItemView {
       setIcon(button, icon);
       button.addEventListener("click", () => { this.layout = layout; this.render(); });
     }
-    const add = actions.createEl("button", { cls: "mod-cta tm-add-task" });
+    const toggle = actions.createEl("button", { cls: "tm-filter-toggle clickable-icon", attr: { "aria-label": "View options: filter, sort, and group" } });
+    const add = actions.createEl("button", { cls: project ? "clickable-icon" : "mod-cta tm-add-task", attr: { "aria-label": "Add task", title: "Add task" } });
     const icon = add.createSpan();
     setIcon(icon, "plus");
-    add.createSpan({ text: "Add task" });
+    if (!project) add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
+    return toggle;
   }
 
   focusSearch(): void {
@@ -406,7 +408,7 @@ export class TaskMainView extends ItemView {
     input?.select();
   }
 
-  private renderFilters(container: HTMLElement): void {
+  private renderFilters(container: HTMLElement, toggle: HTMLButtonElement): void {
     const filters = container.createDiv({ cls: "tm-filters" });
     const search = filters.createEl("input", { type: "search", attr: { placeholder: "Search tasks…", "aria-label": "Search tasks" } });
     search.value = this.search;
@@ -414,7 +416,6 @@ export class TaskMainView extends ItemView {
       this.search = search.value;
       this.renderTaskResults();
     });
-    const toggle = filters.createEl("button", { cls: "tm-filter-toggle clickable-icon", attr: { "aria-label": "View options: filter, sort, and group" } });
     const menu = filters.createDiv({ cls: "tm-property-menu" });
     const sync = (): void => {
       setIcon(toggle, "sliders-vertical");
@@ -519,20 +520,23 @@ export class TaskMainView extends ItemView {
       setIcon(button, icon);
       button.addEventListener("click", () => { this.projectLayout = layout; this.render(); });
     }
-    const toggle = actions.createEl("label", { cls: "tm-completed-toggle" });
-    const checkbox = toggle.createEl("input", { type: "checkbox" });
-    checkbox.checked = this.showArchivedProjects;
-    toggle.createSpan({ text: "Show archived projects" });
-    checkbox.addEventListener("change", () => {
-      this.showArchivedProjects = checkbox.checked;
-      this.render();
-    });
-    actions.createEl("button", { text: "Create new project", cls: "mod-cta" })
-      .addEventListener("click", () => this.plugin.openProjectCreator());
+    if (this.projectLayout === "gantt") {
+      const toggle = actions.createEl("label", { cls: "tm-completed-toggle" });
+      const checkbox = toggle.createEl("input", { type: "checkbox" });
+      checkbox.checked = this.showArchivedProjects;
+      toggle.createSpan({ text: "Show archived projects" });
+      checkbox.addEventListener("change", () => {
+        this.showArchivedProjects = checkbox.checked;
+        this.render();
+      });
+    }
+    const create = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Create new project", title: "Create new project" } });
+    setIcon(create, "plus");
+    create.addEventListener("click", () => this.plugin.openProjectCreator());
     const projects = this.plugin.index.projects();
     const active = projects.filter((project) => !project.archived);
     const archived = projects.filter((project) => project.archived);
-    if (!active.length && (!this.showArchivedProjects || !archived.length)) {
+    if (!projects.length || (this.projectLayout === "gantt" && !active.length && !this.showArchivedProjects)) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
       setIcon(icon, "target");
@@ -560,7 +564,7 @@ export class TaskMainView extends ItemView {
       return;
     }
     this.renderProjectGroup(container, "Active", active);
-    if (this.showArchivedProjects) this.renderProjectGroup(container, "Archived", archived);
+    this.renderProjectGroup(container, "Archived", archived);
   }
 
   private renderProjectGroup(container: HTMLElement, title: string, projects: Project[]): void {

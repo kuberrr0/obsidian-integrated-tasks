@@ -5967,8 +5967,8 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       this.renderProjectList(container);
       return;
     }
-    this.renderHeader(container);
-    this.renderFilters(container);
+    const viewOptions = this.renderHeader(container);
+    this.renderFilters(container, viewOptions);
     this.taskResults = container.createDiv({ cls: "tm-task-results" });
     this.renderTaskResults();
   }
@@ -6197,18 +6197,20 @@ var TaskMainView = class extends import_obsidian14.ItemView {
         this.render();
       });
     }
-    const add = actions.createEl("button", { cls: "mod-cta tm-add-task" });
+    const toggle = actions.createEl("button", { cls: "tm-filter-toggle clickable-icon", attr: { "aria-label": "View options: filter, sort, and group" } });
+    const add = actions.createEl("button", { cls: project ? "clickable-icon" : "mod-cta tm-add-task", attr: { "aria-label": "Add task", title: "Add task" } });
     const icon = add.createSpan();
     (0, import_obsidian14.setIcon)(icon, "plus");
-    add.createSpan({ text: "Add task" });
+    if (!project) add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
+    return toggle;
   }
   focusSearch() {
     const input = this.containerEl.querySelector('.tm-filters input[type="search"]');
     input == null ? void 0 : input.focus();
     input == null ? void 0 : input.select();
   }
-  renderFilters(container) {
+  renderFilters(container, toggle) {
     const filters = container.createDiv({ cls: "tm-filters" });
     const search = filters.createEl("input", { type: "search", attr: { placeholder: "Search tasks\u2026", "aria-label": "Search tasks" } });
     search.value = this.search;
@@ -6216,7 +6218,6 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       this.search = search.value;
       this.renderTaskResults();
     });
-    const toggle = filters.createEl("button", { cls: "tm-filter-toggle clickable-icon", attr: { "aria-label": "View options: filter, sort, and group" } });
     const menu = filters.createDiv({ cls: "tm-property-menu" });
     const sync = () => {
       (0, import_obsidian14.setIcon)(toggle, "sliders-vertical");
@@ -6343,19 +6344,23 @@ var TaskMainView = class extends import_obsidian14.ItemView {
         this.render();
       });
     }
-    const toggle = actions.createEl("label", { cls: "tm-completed-toggle" });
-    const checkbox = toggle.createEl("input", { type: "checkbox" });
-    checkbox.checked = this.showArchivedProjects;
-    toggle.createSpan({ text: "Show archived projects" });
-    checkbox.addEventListener("change", () => {
-      this.showArchivedProjects = checkbox.checked;
-      this.render();
-    });
-    actions.createEl("button", { text: "Create new project", cls: "mod-cta" }).addEventListener("click", () => this.plugin.openProjectCreator());
+    if (this.projectLayout === "gantt") {
+      const toggle = actions.createEl("label", { cls: "tm-completed-toggle" });
+      const checkbox = toggle.createEl("input", { type: "checkbox" });
+      checkbox.checked = this.showArchivedProjects;
+      toggle.createSpan({ text: "Show archived projects" });
+      checkbox.addEventListener("change", () => {
+        this.showArchivedProjects = checkbox.checked;
+        this.render();
+      });
+    }
+    const create = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Create new project", title: "Create new project" } });
+    (0, import_obsidian14.setIcon)(create, "plus");
+    create.addEventListener("click", () => this.plugin.openProjectCreator());
     const projects = this.plugin.index.projects();
     const active = projects.filter((project) => !project.archived);
     const archived = projects.filter((project) => project.archived);
-    if (!active.length && (!this.showArchivedProjects || !archived.length)) {
+    if (!projects.length || this.projectLayout === "gantt" && !active.length && !this.showArchivedProjects) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
       (0, import_obsidian14.setIcon)(icon, "target");
@@ -6391,7 +6396,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       return;
     }
     this.renderProjectGroup(container, "Active", active);
-    if (this.showArchivedProjects) this.renderProjectGroup(container, "Archived", archived);
+    this.renderProjectGroup(container, "Archived", archived);
   }
   renderProjectGroup(container, title, projects) {
     if (!projects.length) return;
