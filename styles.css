@@ -928,8 +928,39 @@ button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var
 .tm-task-list:empty { min-height: 28px; }
 button.tm-list-drag-handle { touch-action: none; }
 
-.tm-layout-controls { display: flex; gap: 2px; }
-.tm-layout-controls button[aria-pressed="true"] { background: var(--background-modifier-hover); color: var(--text-accent); }
+.tm-layout-controls {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+  height: var(--input-height, 30px);
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--background-modifier-hover);
+}
+.tm-layout-controls button.clickable-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.tm-layout-controls button.clickable-icon svg { width: 16px; height: 16px; }
+.tm-layout-controls button.clickable-icon:hover { color: var(--text-normal); }
+.tm-layout-controls button.clickable-icon[aria-pressed="true"] {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.tm-layout-controls button.clickable-icon:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 1px; }
 .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view.is-kanban-view { max-width: none; width: 100%; }
 .tm-kanban { display: flex; align-items: stretch; gap: 16px; overflow-x: auto; padding: 4px 2px 16px; min-height: 320px; }
 .tm-kanban-column { flex: 1 0 280px; min-width: 280px; max-width: 360px; background: transparent; border: 0; border-radius: 10px; padding: 12px; }
