@@ -33,13 +33,17 @@ it("keeps sorting, grouping, and filters behind one toggle and applies each cont
   const actions = root.children[0].children[1];
   expect(actions.children.at(-2)).toBe(toggle);
   expect(actions.children.at(-1)!.attrs["aria-label"]).toBe("Add task");
+  expect(actions.children.at(-1)!.all().some(el => el.text === "Add task")).toBe(false);
   const panel = toolbar.children.find(el => el.tag === "div")!;
   expect(toolbar.children.filter(el => el.tag === "button")).toHaveLength(0);
+  expect(toolbar.children.some(el => el.tag === "input")).toBe(false);
+  expect(toolbar.hidden).toBe(true);
   expect(toggle.text).toBe("");
   expect(toggle.attrs["aria-label"]).toBe("View options: filter, sort, and group");
   expect(panel.hidden).toBe(true);
   toggle.dispatchEvent(new Event("click"));
   expect(panel.hidden).toBe(false);
+  expect(toolbar.hidden).toBe(false);
   const control = (label: string) => panel.all().find(el => el.attrs["aria-label"] === label)!;
   const change = (label: string, value: string, event = "change") => {
     const el = control(label); el.value = value; el.dispatchEvent(new Event(event));
@@ -73,4 +77,16 @@ it.each([true, false])("lists archived projects without an opt-in checkbox (acti
   expect(create.text).toBe("");
   create.dispatchEvent(new Event("click"));
   expect(openProjectCreator).toHaveBeenCalledOnce();
+});
+
+it("starts a sectioned project at its first heading without an empty leading task list", () => {
+  const view = new TaskMainView({} as WorkspaceLeaf, { settings: {}, index: { headingsForPath: () => [{ name: "Ready", line: 0 }] } } as unknown as TaskManagerPlugin);
+  const internal = view as unknown as { renderProjectSections(root: HTMLElement, path: string, tasks: unknown[]): void; renderTaskList(root: HTMLElement, tasks: unknown[], target: unknown): void };
+  const renderList = vi.spyOn(internal, "renderTaskList").mockImplementation(() => {});
+  const root = new Element();
+  internal.renderProjectSections(root as never, "Project.md", [{ sectionLine: 0 }]);
+  expect(root.children[0].tag).toBe("section");
+  expect(root.children[0].children[0].text).toBe("Ready");
+  expect(renderList).toHaveBeenCalledOnce();
+  expect(renderList.mock.calls[0][0]).toBe(root.children[0]);
 });

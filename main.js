@@ -6040,8 +6040,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       projectPath: this.taskSourcePath,
       tag: this.state.mode === "tags" && !this.pagePath ? this.state.tag : void 0,
       tagPath: this.state.mode === "tags" ? this.pagePath : void 0,
-      filters: this.propertyFilters,
-      search: this.search || void 0
+      filters: this.propertyFilters
     };
     const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
     this.selection.retain(tasks);
@@ -6092,7 +6091,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       return;
     }
     if (!tasks.length) {
-      if (this.taskSourcePath && this.grouping === "default" && !this.search && !this.propertyFilters.length) {
+      if (this.taskSourcePath && this.grouping === "default" && !this.propertyFilters.length) {
         this.renderProjectSections(container, this.taskSourcePath, tasks);
       } else this.renderEmpty(container);
       return;
@@ -6153,8 +6152,10 @@ var TaskMainView = class extends import_obsidian14.ItemView {
   }
   renderProjectSections(container, path, tasks) {
     var _a;
-    this.renderTaskList(container, tasks.filter((task) => task.sectionLine === void 0), { destination: path });
-    for (const heading of this.plugin.index.headingsForPath(path)) {
+    const headings = this.plugin.index.headingsForPath(path);
+    const unsectioned = tasks.filter((task) => task.sectionLine === void 0);
+    if (unsectioned.length || !headings.length) this.renderTaskList(container, unsectioned, { destination: path });
+    for (const heading of headings) {
       const group = tasks.filter((task) => task.sectionLine === heading.line);
       const section = container.createEl("section", { cls: "tm-section" });
       const title = section.createEl("h2", { text: heading.name });
@@ -6164,7 +6165,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       (_a = this.listDrag) == null ? void 0 : _a.group(section, target);
       this.renderTaskList(section, group, target);
     }
-    if (!tasks.length && !this.plugin.index.headingsForPath(path).length) this.renderEmpty(container);
+    if (!tasks.length && !headings.length) this.renderEmpty(container);
   }
   renderHeader(container) {
     const header = container.createDiv({ cls: "tm-view-header" });
@@ -6198,26 +6199,14 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       });
     }
     const toggle = actions.createEl("button", { cls: "tm-filter-toggle clickable-icon", attr: { "aria-label": "View options: filter, sort, and group" } });
-    const add = actions.createEl("button", { cls: project ? "clickable-icon" : "mod-cta tm-add-task", attr: { "aria-label": "Add task", title: "Add task" } });
+    const add = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Add task", title: "Add task" } });
     const icon = add.createSpan();
     (0, import_obsidian14.setIcon)(icon, "plus");
-    if (!project) add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
     return toggle;
   }
-  focusSearch() {
-    const input = this.containerEl.querySelector('.tm-filters input[type="search"]');
-    input == null ? void 0 : input.focus();
-    input == null ? void 0 : input.select();
-  }
   renderFilters(container, toggle) {
     const filters = container.createDiv({ cls: "tm-filters" });
-    const search = filters.createEl("input", { type: "search", attr: { placeholder: "Search tasks\u2026", "aria-label": "Search tasks" } });
-    search.value = this.search;
-    search.addEventListener("input", () => {
-      this.search = search.value;
-      this.renderTaskResults();
-    });
     const menu = filters.createDiv({ cls: "tm-property-menu" });
     const sync = () => {
       (0, import_obsidian14.setIcon)(toggle, "sliders-vertical");
@@ -6225,6 +6214,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       toggle.setAttribute("aria-label", label);
       toggle.setAttribute("title", label);
       toggle.setAttribute("aria-expanded", String(this.filtersExpanded));
+      filters.hidden = !this.filtersExpanded;
       menu.hidden = !this.filtersExpanded;
     };
     toggle.addEventListener("click", () => {
@@ -6685,7 +6675,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     const icon = empty.createDiv({ cls: "tm-empty-icon" });
     (0, import_obsidian14.setIcon)(icon, "circle-check-big");
     empty.createEl("h3", { text: "Nothing here" });
-    empty.createEl("p", { text: this.search || this.propertyFilters.length ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
+    empty.createEl("p", { text: this.propertyFilters.length ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
   }
 };
 
@@ -8821,7 +8811,6 @@ var TaskManagerPlugin = class extends import_obsidian25.Plugin {
     }
     this.addCommand({ id: "edit-task", name: "Edit task", editorCheckCallback: (checking, editor, view) => this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: (checking) => this.editSelectedTaskProperties(checking) });
-    this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: (checking) => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
     this.addCommand({ id: "toggle-task-mode", name: "Toggle task mode", callback: () => {
@@ -9108,13 +9097,6 @@ var TaskManagerPlugin = class extends import_obsidian25.Plugin {
     if (!checking) {
       void view.setState({ ...view.getState(), calendarScope: scope }).then(() => this.app.workspace.requestSaveLayout()).catch((error) => new import_obsidian25.Notice(String(error)));
     }
-    return true;
-  }
-  focusProjectSearch(checking) {
-    if (!this.settings.taskMode) return false;
-    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
-    if (!(view == null ? void 0 : view.pagePath) || !this.index.isProject(view.pagePath) && !this.index.tagForPath(view.pagePath)) return false;
-    if (!checking) view.focusSearch();
     return true;
   }
   async setTaskMode(enabled) {

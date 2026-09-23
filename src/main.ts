@@ -138,7 +138,6 @@ export default class TaskManagerPlugin extends Plugin {
     this.addCommand({ id: "edit-task", name: "Edit task", editorCheckCallback: (checking, editor, view) =>
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
-    this.addCommand({ id: "search-task-in-list", name: "Search task in list", checkCallback: checking => this.focusProjectSearch(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
 
@@ -415,14 +414,6 @@ export default class TaskManagerPlugin extends Plugin {
         .then(() => this.app.workspace.requestSaveLayout())
         .catch(error => new Notice(String(error)));
     }
-    return true;
-  }
-
-  private focusProjectSearch(checking: boolean): boolean {
-    if (!this.settings.taskMode) return false;
-    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
-    if (!view?.pagePath || (!this.index.isProject(view.pagePath) && !this.index.tagForPath(view.pagePath))) return false;
-    if (!checking) view.focusSearch();
     return true;
   }
 

@@ -252,7 +252,6 @@ export class TaskMainView extends ItemView {
       tag: this.state.mode === "tags" && !this.pagePath ? this.state.tag : undefined,
       tagPath: this.state.mode === "tags" ? this.pagePath : undefined,
       filters: this.propertyFilters,
-      search: this.search || undefined
     };
     const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
     this.selection.retain(tasks);
@@ -293,7 +292,7 @@ export class TaskMainView extends ItemView {
       return;
     }
     if (!tasks.length) {
-      if (this.taskSourcePath && this.grouping === "default" && !this.search && !this.propertyFilters.length) {
+      if (this.taskSourcePath && this.grouping === "default" && !this.propertyFilters.length) {
         this.renderProjectSections(container, this.taskSourcePath, tasks);
       } else this.renderEmpty(container);
       return;
@@ -350,8 +349,10 @@ export class TaskMainView extends ItemView {
   }
 
   private renderProjectSections(container: HTMLElement, path: string, tasks: Task[]): void {
-    this.renderTaskList(container, tasks.filter((task) => task.sectionLine === undefined), { destination: path });
-    for (const heading of this.plugin.index.headingsForPath(path)) {
+    const headings = this.plugin.index.headingsForPath(path);
+    const unsectioned = tasks.filter(task => task.sectionLine === undefined);
+    if (unsectioned.length || !headings.length) this.renderTaskList(container, unsectioned, { destination: path });
+    for (const heading of headings) {
       const group = tasks.filter((task) => task.sectionLine === heading.line);
       const section = container.createEl("section", { cls: "tm-section" });
       const title = section.createEl("h2", { text: heading.name });
@@ -361,7 +362,7 @@ export class TaskMainView extends ItemView {
       this.listDrag?.group(section, target);
       this.renderTaskList(section, group, target);
     }
-    if (!tasks.length && !this.plugin.index.headingsForPath(path).length) this.renderEmpty(container);
+    if (!tasks.length && !headings.length) this.renderEmpty(container);
   }
 
   private renderHeader(container: HTMLElement): HTMLButtonElement {
@@ -394,28 +395,15 @@ export class TaskMainView extends ItemView {
       button.addEventListener("click", () => { this.layout = layout; this.render(); });
     }
     const toggle = actions.createEl("button", { cls: "tm-filter-toggle clickable-icon", attr: { "aria-label": "View options: filter, sort, and group" } });
-    const add = actions.createEl("button", { cls: project ? "clickable-icon" : "mod-cta tm-add-task", attr: { "aria-label": "Add task", title: "Add task" } });
+    const add = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Add task", title: "Add task" } });
     const icon = add.createSpan();
     setIcon(icon, "plus");
-    if (!project) add.createSpan({ text: "Add task" });
     add.addEventListener("click", () => this.plugin.openEditor(this.state));
     return toggle;
   }
 
-  focusSearch(): void {
-    const input = this.containerEl.querySelector<HTMLInputElement>('.tm-filters input[type="search"]');
-    input?.focus();
-    input?.select();
-  }
-
   private renderFilters(container: HTMLElement, toggle: HTMLButtonElement): void {
     const filters = container.createDiv({ cls: "tm-filters" });
-    const search = filters.createEl("input", { type: "search", attr: { placeholder: "Search tasks…", "aria-label": "Search tasks" } });
-    search.value = this.search;
-    search.addEventListener("input", () => {
-      this.search = search.value;
-      this.renderTaskResults();
-    });
     const menu = filters.createDiv({ cls: "tm-property-menu" });
     const sync = (): void => {
       setIcon(toggle, "sliders-vertical");
@@ -423,6 +411,7 @@ export class TaskMainView extends ItemView {
       toggle.setAttribute("aria-label", label);
       toggle.setAttribute("title", label);
       toggle.setAttribute("aria-expanded", String(this.filtersExpanded));
+      filters.hidden = !this.filtersExpanded;
       menu.hidden = !this.filtersExpanded;
     };
     toggle.addEventListener("click", () => { this.filtersExpanded = !this.filtersExpanded; sync(); });
@@ -838,6 +827,6 @@ export class TaskMainView extends ItemView {
     const icon = empty.createDiv({ cls: "tm-empty-icon" });
     setIcon(icon, "circle-check-big");
     empty.createEl("h3", { text: "Nothing here" });
-    empty.createEl("p", { text: this.search || this.propertyFilters.length ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
+    empty.createEl("p", { text: this.propertyFilters.length ? "No tasks match the current filters." : this.showCompleted ? "No tasks match this view." : "You're caught up. Completed tasks are hidden." });
   }
 }

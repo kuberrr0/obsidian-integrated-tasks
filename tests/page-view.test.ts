@@ -70,40 +70,6 @@ it("defaults wrapping on while preserving a saved choice to turn it off", async 
   }
 });
 
-it("offers search only in an active project while task mode is enabled", () => {
-  const plugin = new TaskManagerPlugin({} as App, {} as never);
-  const focusSearch = vi.fn();
-  let active: { pagePath?: string; focusSearch: () => void } | undefined = { pagePath: "Project.md", focusSearch };
-  plugin.app = { workspace: { getActiveViewOfType: () => active } } as unknown as App;
-  plugin.index = { isProject: (path: string) => path === "Project.md", tagForPath: () => undefined } as never;
-  const check = (plugin as unknown as { focusProjectSearch(checking: boolean): boolean }).focusProjectSearch.bind(plugin);
-  plugin.settings.taskMode = false;
-  expect(check(false)).toBe(false);
-  plugin.settings.taskMode = true;
-  expect(check(true)).toBe(true);
-  expect(focusSearch).not.toHaveBeenCalled();
-  expect(check(false)).toBe(true);
-  expect(focusSearch).toHaveBeenCalledOnce();
-  active.pagePath = "Notes.md";
-  expect(check(false)).toBe(false);
-  active.pagePath = undefined;
-  expect(check(false)).toBe(false);
-  active = undefined;
-  expect(check(false)).toBe(false);
-  expect(focusSearch).toHaveBeenCalledOnce();
-});
-
-it("focuses and selects the task search field without changing its value", () => {
-  const view = new TaskMainView({} as WorkspaceLeaf, {} as TaskManagerPlugin);
-  const input = { value: "existing query", focus: vi.fn(), select: vi.fn() };
-  view.containerEl = { querySelector: () => input } as unknown as HTMLElement;
-  view.focusSearch();
-  expect(input.focus).toHaveBeenCalledOnce();
-  expect(input.select).toHaveBeenCalledOnce();
-  expect(input.value).toBe("existing query");
-});
-
-
 function selectionView() {
   const tasks = scanTasks("Work.md", "- [ ] A\n- [ ] B\n- [ ] C");
   const bulkDrop = vi.fn().mockResolvedValue([]);
