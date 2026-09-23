@@ -155,7 +155,7 @@
   align-items: center;
   gap: var(--size-4-2);
   margin: 0 0 var(--size-4-2);
-  color: var(--text-accent);
+  color: var(--text-normal);
   font-size: var(--font-ui-medium);
   font-weight: var(--font-semibold);
 }
@@ -967,7 +967,7 @@ button.tm-list-drag-handle { touch-action: none; }
 .tm-kanban { display: flex; align-items: stretch; gap: 16px; overflow-x: auto; padding: 4px 2px 16px; min-height: 320px; }
 .tm-kanban-column { flex: 1 0 280px; min-width: 280px; max-width: 360px; background: transparent; border: 0; border-radius: 10px; padding: 12px; }
 .tm-kanban-column-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.tm-kanban-column-header h2 { font-size: var(--font-ui-medium); color: var(--text-accent); margin: 0; overflow-wrap: anywhere; flex: 1; }
+.tm-kanban-column-header h2 { font-size: var(--font-ui-medium); color: var(--text-normal); margin: 0; overflow-wrap: anywhere; flex: 1; }
 .tm-kanban .tm-task-list { display: flex; flex-direction: column; gap: 8px; min-height: 48px; }
 .tm-kanban .tm-task-row { grid-template-columns: 24px minmax(0, 1fr) 24px; align-items: start; padding: 10px; min-height: 72px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; margin-left: min(calc(var(--tm-depth) * 10px), 30px); }
 .tm-kanban .tm-task-content { display: flex; flex-direction: column; align-items: stretch; min-width: 0; gap: 8px; text-align: left; }
@@ -1190,7 +1190,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-dashboard-planning { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
 .tm-dashboard-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .tm-dashboard-heading { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.tm-dashboard-heading h2 { margin: 0; font-size: var(--font-ui-large); color: var(--text-accent); }
+.tm-dashboard-heading h2 { margin: 0; font-size: var(--font-ui-large); color: var(--text-normal); }
 .tm-dashboard-card { flex: 1; min-width: 0; min-height: 0; padding: 16px; border: 1px solid var(--interactive-accent); border-radius: 12px; overflow: auto; }
 .tm-dashboard-card .tm-empty { padding: 24px 8px; }
 .tm-dashboard-projects .tm-section > h2 { display: none; }
