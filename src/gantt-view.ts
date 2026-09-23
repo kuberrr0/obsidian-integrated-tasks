@@ -6,7 +6,7 @@ import { ganttSegments, daysBetween, ganttDateAt, ganttSelection, ganttRange, re
 import type { Project } from "./types";
 import type { ProjectDraft } from "./project-creator";
 import { renderProjectProgress } from "./project-progress";
-import { renderProjectHeaderDetails } from "./project-header-details";
+import { renderProjectDeadline } from "./project-header-details";
 
 interface GanttOptions {
   projects: Project[];
@@ -103,7 +103,16 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       new Notice(cause instanceof Error ? cause.message : "Could not update project dates.");
     } finally { busy = false; root.removeAttribute("aria-busy"); }
   };
-  for (const { project, depth } of projectHierarchy(options.projects)) {
+  const grouped = [false, true].flatMap(archived => projectHierarchy(options.projects.filter(project => project.archived === archived))
+    .map(entry => ({ ...entry, group: archived ? "Archived" : "Active" })));
+  let previousGroup = "";
+  for (const { project, depth, group } of grouped) {
+    if (group !== previousGroup) {
+      const heading = scroll.createDiv({ cls: "tm-gantt-row tm-gantt-group" });
+      heading.createDiv({ cls: "tm-gantt-label", text: group, attr: { role: "heading", "aria-level": "2" } });
+      heading.createDiv({ cls: "tm-gantt-track", attr: { "aria-hidden": "true" } });
+      previousGroup = group;
+    }
     const row = scroll.createDiv({ cls: `tm-gantt-row${project.archived ? " is-archived" : ""}` });
     const label = row.createDiv({ cls: "tm-gantt-label tm-gantt-project" });
     label.style.paddingLeft = `${12 + depth * 16}px`;
@@ -115,7 +124,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
     const metadata = content.createDiv({ cls: "tm-project-header-metadata" });
     const paintDetails = (): void => {
       metadata.empty();
-      renderProjectHeaderDetails(metadata, project, field => options.edit ? options.edit(project, field) : options.open(project), options.dateFormat);
+      renderProjectDeadline(metadata, project, field => options.edit ? options.edit(project, field) : options.open(project), options.dateFormat);
       metadata.hidden = !metadata.childElementCount;
     };
     detailPainters.set(project, paintDetails);

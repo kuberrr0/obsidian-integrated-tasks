@@ -72,9 +72,9 @@ it("repositions project bars after scrolling and retains date editing", async ()
   expect(container.all().some(el => el.cls === "tm-project-progress-circle")).toBe(true);
   const metadata = container.all().find(el => el.cls === "tm-project-header-metadata")!;
   expect(metadata.hidden).toBe(false);
-  const endDate = metadata.all().find(el => el.attrs["aria-label"]?.startsWith("Edit project end date:"))!;
-  endDate.dispatchEvent(new Event("click"));
-  expect(edit).toHaveBeenCalledWith(project, "endDate");
+  const deadline = metadata.all().find(el => el.attrs["aria-label"]?.startsWith("Edit project deadline:"))!;
+  deadline.dispatchEvent(new Event("click"));
+  expect(edit).toHaveBeenCalledWith(project, "deadline");
   const scroll = container.all().find(el => el.cls === "tm-gantt-scroll")!;
   const bar = container.all().find(el => el.cls === "tm-gantt-bar")!;
   scroll.scrollLeft = 0;
@@ -93,6 +93,22 @@ it("repositions project bars after scrolling and retains date editing", async ()
   handle.dispatchEvent(new Event("pointercancel"));
   handle.dispatchEvent(Object.assign(new Event("keydown"), { key: "ArrowRight" }));
   await vi.waitFor(() => expect(update).toHaveBeenCalledWith(project, { endDate: "2026-09-26" }));
-  expect(metadata.all().some(el => el.attrs.title === "End: 2026-09-26")).toBe(true);
+  expect(metadata.all().some(el => el.cls === "tm-project-date-range")).toBe(false);
+  expect(project.endDate).toBe("2026-09-26");
   expect(project.deadline).toBe("2026-10-01");
+});
+
+it("groups active and archived projects and shows only deadlines in their labels", () => {
+  const root = new Element();
+  const base = { openTasks: 1, completedTasks: 0, scheduledDate: "2026-09-18", endDate: "2026-09-25", deadline: "2026-10-01", parent: "Parent.md" };
+  renderGantt(root as never, { projects: [
+    { ...base, name: "Old", path: "Old.md", archived: true },
+    { ...base, name: "New", path: "New.md", archived: false }
+  ], anchor: "2026-09-18", zoom: "month", dateFormat: "YYYY-MM-DD", navigate: vi.fn(), open: vi.fn(), update: vi.fn() });
+  expect(root.all().filter(el => el.attrs.role === "heading").map(el => el.text)).toEqual(["Active", "Archived"]);
+  expect(root.all().filter(el => el.cls === "tm-task-title").map(el => el.text)).toEqual(["New", "Old"]);
+  for (const metadata of root.all().filter(el => el.cls === "tm-project-header-metadata")) {
+    expect(metadata.children).toHaveLength(1);
+    expect(metadata.children[0].cls).toContain("tm-task-due");
+  }
 });

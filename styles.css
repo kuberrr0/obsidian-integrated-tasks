@@ -536,7 +536,7 @@ button.tm-source,
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: 2px;
 }
 
 .tm-main-view .tm-project-row .tm-project-header-metadata { margin-top: 0; }
@@ -1016,8 +1016,9 @@ button.tm-list-drag-handle { touch-action: none; }
 .tm-gantt-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--background-modifier-border); border-radius: 8px; --tm-gantt-label: 330px; }
 .tm-gantt-row { display: grid; grid-template-columns: var(--tm-gantt-label) var(--tm-gantt-width); width: max-content; min-height: 36px; }
 .tm-gantt-label { position: sticky; left: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-start; padding: 4px 12px; background: var(--background-primary); border: 0; border-right: 1px solid var(--background-modifier-border); border-radius: 0; box-shadow: none; text-align: left; height: auto; white-space: normal; overflow-wrap: anywhere; }
-.tm-gantt-project { align-items: flex-start; gap: 8px; padding-block: 9px; }
-.tm-gantt-project .tm-project-icon { flex-shrink: 0; padding-top: 3px; }
+.tm-gantt-project { align-items: center; gap: 8px; padding-block: 9px; }
+.tm-gantt-project .tm-project-icon { flex-shrink: 0; padding-top: 0; }
+.tm-gantt-project .tm-project-icon > .tm-project-progress { align-self: center; min-height: 0; }
 .tm-gantt-project-content { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .tm-main-view .tm-gantt-project button.tm-task-title { height: auto; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
 .tm-main-view .tm-gantt-project .tm-project-header-metadata { display: flex; margin: 0; gap: 4px 8px; }
@@ -1193,7 +1194,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-dashboard-card { flex: 1; min-width: 0; min-height: 0; padding: 16px; border: 1px solid var(--interactive-accent); border-radius: 12px; overflow: auto; }
 .tm-dashboard-card .tm-empty { padding: 24px 8px; }
 .tm-dashboard-projects .tm-section > h2 { display: none; }
-.tm-dashboard-projects .tm-project-row .tm-task-content { display: flex; flex-wrap: wrap; gap: 6px; }
+.tm-dashboard-projects .tm-project-row .tm-task-content { display: flex; flex-wrap: wrap; gap: 2px; }
 .tm-dashboard-projects .tm-task-primary { flex-basis: 100%; }
 .tm-dashboard-projects .tm-project-metadata { justify-content: flex-start; }
 .tm-dashboard-card .tm-calendar-toolbar { flex-wrap: wrap; flex-shrink: 0; gap: 4px; margin-bottom: 8px; }
@@ -1249,7 +1250,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
   flex-direction: column;
   flex-wrap: nowrap;
   align-items: stretch;
-  gap: 4px;
+  gap: 2px;
   padding: 0;
   min-width: 0;
 }
@@ -1271,6 +1272,9 @@ button.tm-gantt-handle.is-finish:focus-visible,
   font-size: var(--font-ui-medium);
   line-height: 1.4;
   max-width: 100%;
+  height: auto;
+  min-height: 0;
+  padding-block: 0;
 }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-metadata {
   display: flex;
@@ -1397,7 +1401,7 @@ li.task-list-item { --tm-note-priority: initial; }
 /* Compact single-line Gantt labels and independent date controls. */
 .tm-gantt-row { border-bottom: 0; }
 .tm-gantt-project-content { flex-direction: row; align-items: center; gap: 10px; }
-.tm-main-view .tm-gantt-project button.tm-task-title { flex: 1 1 45%; width: auto; }
+.tm-main-view .tm-gantt-project button.tm-task-title { flex: 1 1 auto; width: auto; min-height: 0; padding-block: 0; }
 .tm-main-view .tm-gantt-project .tm-project-header-metadata { flex: 0 1 auto; min-width: 0; }
 .tm-gantt-date { font-size: var(--font-ui-medium); }
 button.tm-gantt-bar { background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary)); color: var(--text-normal); border: 1px solid color-mix(in srgb, var(--interactive-accent) 40%, transparent); border-radius: 10px; padding-inline: 14px; font-size: var(--font-ui-small); }
@@ -1475,8 +1479,7 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-calendar .tm-calendar-toolbar > button:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 .tm-calendar .tm-calendar-plan-toggle[aria-expanded="true"] { background: var(--background-modifier-hover); color: var(--text-normal); }
 @media (max-width: 700px) {
-  .tm-main-view .tm-project-row button.tm-task-title { min-height: 44px; padding-block: 10px; }
-  .tm-main-view .tm-project-row > .tm-project-icon { height: 44px; justify-self: center; }
+  .tm-main-view .tm-project-row > .tm-project-icon { justify-self: center; }
   .tm-main-view .tm-project-row > .tm-project-icon > .tm-project-progress { align-self: center; }
   .tm-main-view .tm-project-row .tm-task-primary { align-items: center; }
 }

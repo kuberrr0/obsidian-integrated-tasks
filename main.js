@@ -4438,46 +4438,49 @@ function projectDateLabel(date, now2 = /* @__PURE__ */ new Date()) {
   return formatDate(date, date.slice(0, 4) === String(now2.getFullYear()) ? "MMM D" : "MMM D, YYYY");
 }
 function renderProjectHeaderDetails(parent, project, edit, dateFormat, now2 = /* @__PURE__ */ new Date(), deadlineParent = parent) {
-  const editable2 = (element, label, field2) => {
-    element.setAttribute("role", "button");
-    element.setAttribute("tabindex", "0");
-    element.setAttribute("aria-label", `Edit ${label}`);
-    element.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      edit(field2);
-    });
-    element.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      event.stopPropagation();
-      edit(field2);
-    });
-  };
   if (project.scheduledDate || project.endDate) {
     const range = parent.createSpan({ cls: "tm-project-date-range" });
     if (project.scheduledDate) {
       const text = [projectDateLabel(project.scheduledDate, now2), project.scheduledTime && taskTimeLabel(project.scheduledTime)].filter(Boolean).join(", ");
       const start = range.createSpan({ text, attr: { title: `Start: ${formatDate(project.scheduledDate, dateFormat)}` } });
-      editable2(start, `project start date: ${text}`, "date");
+      editable2(start, `project start date: ${text}`, "date", edit);
     }
     if (project.scheduledDate && project.endDate) range.createSpan({ text: " - ", attr: { "aria-hidden": "true" } });
     if (project.endDate) {
       const text = projectDateLabel(project.endDate, now2);
       const end = range.createSpan({ text, attr: { title: `End: ${formatDate(project.endDate, dateFormat)}` } });
-      editable2(end, `project end date: ${text}`, "endDate");
+      editable2(end, `project end date: ${text}`, "endDate", edit);
     }
   }
-  if (project.deadline) {
-    const due = deadlineParent.createSpan({ cls: `tm-task-due${deadlineIsOverdue(project.deadline, project.deadlineTime, now2) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
-    (0, import_obsidian8.setIcon)(due.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
-    due.createSpan({ text: [taskDeadlineLabel(project.deadline, now2), project.deadlineTime && taskTimeLabel(project.deadlineTime)].filter(Boolean).join(", ") });
-    editable2(due, `project deadline: ${formatDate(project.deadline, dateFormat)}`, "deadline");
-  }
+  renderProjectDeadline(deadlineParent, project, edit, dateFormat, now2);
   if (project.parent) {
     const name = project.parent.replace(/\.md$/i, "");
     const source = parent.createSpan({ cls: "tm-task-source", text: name.split("/").pop(), attr: { title: name } });
-    editable2(source, `parent project: ${name}`, "parent");
+    editable2(source, `parent project: ${name}`, "parent", edit);
+  }
+}
+function editable2(element, label, field2, edit) {
+  element.setAttribute("role", "button");
+  element.setAttribute("tabindex", "0");
+  element.setAttribute("aria-label", `Edit ${label}`);
+  element.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    edit(field2);
+  });
+  element.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    edit(field2);
+  });
+}
+function renderProjectDeadline(parent, project, edit, dateFormat, now2 = /* @__PURE__ */ new Date()) {
+  if (project.deadline) {
+    const due = parent.createSpan({ cls: `tm-task-due${deadlineIsOverdue(project.deadline, project.deadlineTime, now2) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
+    (0, import_obsidian8.setIcon)(due.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
+    due.createSpan({ text: [taskDeadlineLabel(project.deadline, now2), project.deadlineTime && taskTimeLabel(project.deadlineTime)].filter(Boolean).join(", ") });
+    editable2(due, `project deadline: ${formatDate(project.deadline, dateFormat)}`, "deadline", edit);
   }
 }
 
@@ -4828,7 +4831,15 @@ function renderGantt(container, options) {
       root.removeAttribute("aria-busy");
     }
   };
-  for (const { project, depth } of projectHierarchy(options.projects)) {
+  const grouped = [false, true].flatMap((archived) => projectHierarchy(options.projects.filter((project) => project.archived === archived)).map((entry) => ({ ...entry, group: archived ? "Archived" : "Active" })));
+  let previousGroup = "";
+  for (const { project, depth, group } of grouped) {
+    if (group !== previousGroup) {
+      const heading = scroll.createDiv({ cls: "tm-gantt-row tm-gantt-group" });
+      heading.createDiv({ cls: "tm-gantt-label", text: group, attr: { role: "heading", "aria-level": "2" } });
+      heading.createDiv({ cls: "tm-gantt-track", attr: { "aria-hidden": "true" } });
+      previousGroup = group;
+    }
     const row = scroll.createDiv({ cls: `tm-gantt-row${project.archived ? " is-archived" : ""}` });
     const label = row.createDiv({ cls: "tm-gantt-label tm-gantt-project" });
     label.style.paddingLeft = `${12 + depth * 16}px`;
@@ -4840,7 +4851,7 @@ function renderGantt(container, options) {
     const metadata = content.createDiv({ cls: "tm-project-header-metadata" });
     const paintDetails = () => {
       metadata.empty();
-      renderProjectHeaderDetails(metadata, project, (field2) => options.edit ? options.edit(project, field2) : options.open(project), options.dateFormat);
+      renderProjectDeadline(metadata, project, (field2) => options.edit ? options.edit(project, field2) : options.open(project), options.dateFormat);
       metadata.hidden = !metadata.childElementCount;
     };
     detailPainters.set(project, paintDetails);
@@ -5832,7 +5843,6 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     this.calendarScope = "month";
     this.calendarAnchor = todayIso();
     this.showCompleted = false;
-    this.showArchivedProjects = false;
     this.search = "";
     this.propertyFilters = [];
     this.sort = "date";
@@ -6334,33 +6344,23 @@ var TaskMainView = class extends import_obsidian14.ItemView {
         this.render();
       });
     }
-    if (this.projectLayout === "gantt") {
-      const toggle = actions.createEl("label", { cls: "tm-completed-toggle" });
-      const checkbox = toggle.createEl("input", { type: "checkbox" });
-      checkbox.checked = this.showArchivedProjects;
-      toggle.createSpan({ text: "Show archived projects" });
-      checkbox.addEventListener("change", () => {
-        this.showArchivedProjects = checkbox.checked;
-        this.render();
-      });
-    }
     const create = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Create new project", title: "Create new project" } });
     (0, import_obsidian14.setIcon)(create, "plus");
     create.addEventListener("click", () => this.plugin.openProjectCreator());
     const projects = this.plugin.index.projects();
     const active = projects.filter((project) => !project.archived);
     const archived = projects.filter((project) => project.archived);
-    if (!projects.length || this.projectLayout === "gantt" && !active.length && !this.showArchivedProjects) {
+    if (!projects.length) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
       (0, import_obsidian14.setIcon)(icon, "target");
-      empty.createEl("h3", { text: archived.length ? "No active projects" : "No projects yet" });
-      empty.createEl("p", { text: archived.length ? "Enable Show archived projects to see your archived projects." : "Add #project to a note or include project in its frontmatter tags." });
+      empty.createEl("h3", { text: "No projects yet" });
+      empty.createEl("p", { text: "Add #project to a note or include project in its frontmatter tags." });
       return;
     }
     if (this.projectLayout === "gantt") {
       renderGantt(container, {
-        projects: this.showArchivedProjects ? projects : active,
+        projects,
         anchor: this.ganttAnchor,
         zoom: this.ganttZoom,
         dateFormat: this.plugin.dateFormat(),

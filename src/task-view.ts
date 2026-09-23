@@ -49,7 +49,6 @@ export class TaskMainView extends ItemView {
   private calendarScope: CalendarScope = "month";
   private calendarAnchor = todayIso();
   private showCompleted = false;
-  private showArchivedProjects = false;
   private search = "";
   private smartListVersion?: string;
   private propertyFilters: TaskFilter[] = [];
@@ -509,35 +508,23 @@ export class TaskMainView extends ItemView {
       setIcon(button, icon);
       button.addEventListener("click", () => { this.projectLayout = layout; this.render(); });
     }
-    if (this.projectLayout === "gantt") {
-      const toggle = actions.createEl("label", { cls: "tm-completed-toggle" });
-      const checkbox = toggle.createEl("input", { type: "checkbox" });
-      checkbox.checked = this.showArchivedProjects;
-      toggle.createSpan({ text: "Show archived projects" });
-      checkbox.addEventListener("change", () => {
-        this.showArchivedProjects = checkbox.checked;
-        this.render();
-      });
-    }
     const create = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Create new project", title: "Create new project" } });
     setIcon(create, "plus");
     create.addEventListener("click", () => this.plugin.openProjectCreator());
     const projects = this.plugin.index.projects();
     const active = projects.filter((project) => !project.archived);
     const archived = projects.filter((project) => project.archived);
-    if (!projects.length || (this.projectLayout === "gantt" && !active.length && !this.showArchivedProjects)) {
+    if (!projects.length) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
       setIcon(icon, "target");
-      empty.createEl("h3", { text: archived.length ? "No active projects" : "No projects yet" });
-      empty.createEl("p", { text: archived.length
-        ? "Enable Show archived projects to see your archived projects."
-        : "Add #project to a note or include project in its frontmatter tags." });
+      empty.createEl("h3", { text: "No projects yet" });
+      empty.createEl("p", { text: "Add #project to a note or include project in its frontmatter tags." });
       return;
     }
     if (this.projectLayout === "gantt") {
       renderGantt(container, {
-        projects: this.showArchivedProjects ? projects : active,
+        projects,
         anchor: this.ganttAnchor, zoom: this.ganttZoom, dateFormat: this.plugin.dateFormat(),
         navigate: (anchor, zoom) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.render(); },
         viewportChanged: anchor => { this.ganttAnchor = anchor; },
