@@ -1130,7 +1130,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  color: var(--text-muted);
+  color: var(--text-faint);
   vertical-align: middle;
 }
 .tm-description-indicator svg { width: 1em; height: 1em; }
