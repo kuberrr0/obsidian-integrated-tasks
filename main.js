@@ -6406,9 +6406,6 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
       renderProjectHeaderDetails(metadata, project, (property) => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat(), void 0, primary);
       if (!metadata.childElementCount) metadata.remove();
-      const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
-      (0, import_obsidian14.setIcon)(open, "chevron-right");
-      open.addEventListener("click", () => void this.plugin.openProject(project.path).catch((error) => new import_obsidian14.Notice(String(error))));
     }
   }
   renderGroupAddButton(parent, title, target) {
@@ -6654,15 +6651,6 @@ var TaskMainView = class extends import_obsidian14.ItemView {
       }
     });
     if (!metadata.childElementCount) metadata.remove();
-    const menuButton = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": "Task actions" } });
-    (0, import_obsidian14.setIcon)(menuButton, "more-horizontal");
-    menuButton.addEventListener("click", (event) => this.openMenu(event, task));
-  }
-  openMenu(event, task) {
-    const menu = new import_obsidian14.Menu();
-    menu.addItem((item) => item.setTitle("Edit task").setIcon("pencil").onClick(() => this.plugin.openEditor({ ...this.state, task })));
-    menu.addItem((item) => item.setTitle("Open source note").setIcon("file-text").onClick(() => void this.openSource(task)));
-    menu.showAtMouseEvent(event);
   }
   async openSource(task) {
     const file = this.app.vault.getAbstractFileByPath(task.path);

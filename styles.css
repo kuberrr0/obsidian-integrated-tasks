@@ -184,7 +184,7 @@
   --tm-depth: 0;
   position: relative;
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 30px;
+  grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
   min-height: 44px;
   padding: var(--size-4-1) 0 var(--size-4-1) calc(var(--tm-depth) * 24px);
@@ -305,17 +305,6 @@ button.tm-source,
 
 .tm-meta.is-p3 {
   color: var(--color-blue);
-}
-
-.tm-row-menu {
-  visibility: hidden;
-  opacity: 0;
-}
-
-.tm-task-row:hover .tm-row-menu,
-.tm-row-menu:focus-visible {
-  visibility: visible;
-  opacity: 1;
 }
 
 .tm-task-row.is-completed .tm-task-title {
@@ -504,7 +493,7 @@ button.tm-source,
   }
 
   .tm-task-row {
-    grid-template-columns: 22px minmax(0, 1fr) 28px;
+    grid-template-columns: 22px minmax(0, 1fr);
   }
 
   .tm-task-content {
@@ -519,10 +508,6 @@ button.tm-source,
     display: none;
   }
 
-  .tm-row-menu {
-    visibility: visible;
-    opacity: 1;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -530,7 +515,6 @@ button.tm-source,
     transition: none;
   }
 }
-
 
 .tm-project-row .tm-task-content {
   display: flex;
@@ -540,8 +524,7 @@ button.tm-source,
 }
 
 .tm-main-view .tm-project-row .tm-project-header-metadata { margin-top: 0; }
-.tm-project-row .tm-project-icon,
-.tm-project-row .tm-row-menu { align-self: start; }
+.tm-project-row .tm-project-icon { align-self: start; }
 
 .tm-project-metadata .tm-meta {
   flex-shrink: 0;
@@ -565,7 +548,6 @@ button.tm-source,
   .tm-project-row .tm-task-content {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-
 
   .tm-project-row .tm-project-metadata {
     grid-column: 1 / -1;
@@ -605,7 +587,6 @@ button.tm-source,
 .tm-note-token.is-p2 { color: var(--color-orange); }
 .tm-note-token.is-p3 { color: var(--color-blue); }
 
-
 /* Live Preview exposes the original date syntax when the caret enters a pill. */
 /* Reuse Obsidian's SVGs as masks so glyphs inherit each pill's color. */
 .tm-note-token::before {
@@ -622,7 +603,6 @@ button.tm-source,
 }
 .tm-note-token-editor .tm-note-token-brace,
 .tm-note-token-editor .tm-note-token-tag-prefix { display: none; }
-
 
 /* Keep a real controls box for browser and accessibility compatibility. */
 .tm-filters { grid-template-columns: minmax(160px, 1fr) minmax(0, 4fr); }
@@ -656,7 +636,7 @@ button.tm-filter-toggle { display: none; }
   .tm-filter-controls { display: none; }
   .tm-filter-controls.is-expanded { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tm-task-row {
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-columns: 44px minmax(0, 1fr);
     align-items: start;
     min-height: 60px;
     padding: 6px 0 10px min(calc(var(--tm-depth) * 12px), 36px);
@@ -670,7 +650,6 @@ button.tm-filter-toggle { display: none; }
   .tm-task-metadata .tm-meta { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
   .tm-meta > span { min-width: 0; }
   button.tm-source { display: inline-flex; min-height: 44px; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
-  .tm-row-menu { width: 44px; height: 44px; visibility: visible; opacity: 1; }
   .tm-project-row > .tm-project-icon { margin: 13px; }
   .tm-project-row .tm-task-content { grid-template-columns: minmax(0, 1fr) auto; }
   .tm-project-progress { align-self: start; min-height: 44px; }
@@ -686,11 +665,6 @@ button.tm-filter-toggle { display: none; }
   .tm-editor-actions { position: sticky; bottom: 0; background: var(--background-primary); padding-block: 12px; }
   .tm-editor-actions button { min-height: 44px; flex: 1; justify-content: center; }
 }
-
-@media (hover: none) and (pointer: coarse) {
-  .tm-row-menu { visibility: visible; opacity: 1; }
-}
-
 
 /* Reserve the mobile navigation strip even when Obsidian overlays its header. */
 body.is-mobile .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view {
@@ -969,15 +943,14 @@ button.tm-list-drag-handle { touch-action: none; }
 .tm-kanban-column-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .tm-kanban-column-header h2 { font-size: var(--font-ui-medium); color: var(--text-normal); margin: 0; overflow-wrap: anywhere; flex: 1; }
 .tm-kanban .tm-task-list { display: flex; flex-direction: column; gap: 8px; min-height: 48px; }
-.tm-kanban .tm-task-row { grid-template-columns: 24px minmax(0, 1fr) 24px; align-items: start; padding: 10px; min-height: 72px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; margin-left: min(calc(var(--tm-depth) * 10px), 30px); }
+.tm-kanban .tm-task-row { grid-template-columns: 24px minmax(0, 1fr); align-items: start; padding: 10px; min-height: 72px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; margin-left: min(calc(var(--tm-depth) * 10px), 30px); }
 .tm-kanban .tm-task-content { display: flex; flex-direction: column; align-items: stretch; min-width: 0; gap: 8px; text-align: left; }
 .tm-kanban .tm-task-primary { align-items: flex-start; justify-content: flex-start; }
 .tm-kanban button.tm-task-title { height: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; justify-content: flex-start; }
 .tm-kanban .tm-task-metadata { display: flex; flex-wrap: wrap; justify-content: flex-start; max-width: 100%; }
-.tm-kanban .tm-row-menu { opacity: 1; visibility: visible; width: 24px; }
 .tm-kanban-column[data-drop-position="group"] { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
 .tm-kanban-empty { color: var(--text-muted); font-size: var(--font-ui-small); text-align: center; padding: 16px; pointer-events: none; }
-@media (max-width: 700px) { .tm-kanban .tm-checkbox-target { width: 24px; } .tm-kanban .tm-task-row { grid-template-columns: 24px minmax(0, 1fr) 24px; } }
+@media (max-width: 700px) { .tm-kanban .tm-checkbox-target { width: 24px; } .tm-kanban .tm-task-row { grid-template-columns: 24px minmax(0, 1fr); } }
 
 .tm-main-view .tm-list-drag-handle { display: none; }
 
@@ -1236,7 +1209,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
 
 /* Reference task rows: a title line and a quiet, left-aligned detail line. */
 .tm-main-view .tm-task-row.tm-task-item {
-  grid-template-columns: 22px minmax(0, 1fr) 24px;
+  grid-template-columns: 22px minmax(0, 1fr);
   align-items: start;
   padding-top: 9px;
   padding-bottom: 9px;
@@ -1334,7 +1307,6 @@ button.tm-gantt-handle.is-finish:focus-visible,
   border-color: var(--tm-priority-color);
 }
 .tm-main-view input.tm-task-checkbox:is(.is-p1, .is-p2, .is-p3):checked { background: var(--tm-priority-color); }
-.tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-row-menu { margin-top: 0; }
 @media (max-width: 700px) {
   .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { width: 22px; height: 44px; min-height: 44px; padding-top: 0; }
   .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary,

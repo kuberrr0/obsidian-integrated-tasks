@@ -20,7 +20,7 @@ import { draftForGroup, taskGroupTarget, type ListDropGroup, type ListPlacement 
 import { renderCalendar } from "./calendar-view";
 import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { TASK_PROPERTIES } from "./task-properties";
-import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
@@ -561,9 +561,6 @@ export class TaskMainView extends ItemView {
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
       renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat(), undefined, primary);
       if (!metadata.childElementCount) metadata.remove();
-      const open = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": `Open ${project.name}` } });
-      setIcon(open, "chevron-right");
-      open.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
     }
   }
 
@@ -790,16 +787,6 @@ export class TaskMainView extends ItemView {
       edit: property => this.editTask(task, property), openSource: () => { void this.openSource(task); }
     });
     if (!metadata.childElementCount) metadata.remove();
-    const menuButton = row.createEl("button", { cls: "clickable-icon tm-row-menu", attr: { "aria-label": "Task actions" } });
-    setIcon(menuButton, "more-horizontal");
-    menuButton.addEventListener("click", (event) => this.openMenu(event, task));
-  }
-
-  private openMenu(event: MouseEvent, task: Task): void {
-    const menu = new Menu();
-    menu.addItem((item) => item.setTitle("Edit task").setIcon("pencil").onClick(() => this.plugin.openEditor({ ...this.state, task })));
-    menu.addItem((item) => item.setTitle("Open source note").setIcon("file-text").onClick(() => void this.openSource(task)));
-    menu.showAtMouseEvent(event);
   }
 
   private async openSource(task: Task): Promise<void> {
