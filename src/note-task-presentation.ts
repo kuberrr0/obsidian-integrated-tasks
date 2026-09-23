@@ -33,12 +33,11 @@ export function noteTaskPresentation(line: string, dateFormat?: string, now = ne
 export function renderNoteTaskDetails(root: HTMLElement, presentation: NoteTaskPresentation, link: (token: TaskToken, label: string) => HTMLElement | undefined): void {
     const document = root.ownerDocument;
     root.classList.add("tm-note-task-details");
-    const secondary = document.createDocumentFragment().createSpan();
-    secondary.className = "tm-note-task-secondary";
     for (const kind of ["deadline", "scheduledDate", "tags"] as const) {
         for (const token of presentation.tokens.filter(token => token.kind === kind)) {
             const item = document.createDocumentFragment().createSpan();
             item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}`;
+            item.setAttribute("data-tm-property-offset", String(token.from - presentation.from));
             item.setAttribute("title", token.description);
             item.setAttribute("aria-label", token.description);
             if (kind !== "scheduledDate") item.setAttribute("style", notePropertyIconStyle(kind));
@@ -47,8 +46,7 @@ export function renderNoteTaskDetails(root: HTMLElement, presentation: NoteTaskP
             if (anchor) item.appendChild(anchor);
             else item.appendChild(document.createTextNode(label));
             if (token.time) item.appendChild(document.createTextNode(`, ${token.time}`));
-            (kind === "deadline" ? root : secondary).appendChild(item);
+            root.appendChild(item);
         }
     }
-    if (secondary.childNodes.length) root.appendChild(secondary);
 }

@@ -6977,12 +6977,11 @@ function renderNoteTaskDetails(root, presentation, link) {
   var _a;
   const document2 = root.ownerDocument;
   root.classList.add("tm-note-task-details");
-  const secondary = document2.createDocumentFragment().createSpan();
-  secondary.className = "tm-note-task-secondary";
   for (const kind of ["deadline", "scheduledDate", "tags"]) {
     for (const token of presentation.tokens.filter((token2) => token2.kind === kind)) {
       const item = document2.createDocumentFragment().createSpan();
       item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}`;
+      item.setAttribute("data-tm-property-offset", String(token.from - presentation.from));
       item.setAttribute("title", token.description);
       item.setAttribute("aria-label", token.description);
       if (kind !== "scheduledDate") item.setAttribute("style", notePropertyIconStyle(kind));
@@ -6991,10 +6990,9 @@ function renderNoteTaskDetails(root, presentation, link) {
       if (anchor) item.appendChild(anchor);
       else item.appendChild(document2.createTextNode(label));
       if (token.time) item.appendChild(document2.createTextNode(`, ${token.time}`));
-      (kind === "deadline" ? root : secondary).appendChild(item);
+      root.appendChild(item);
     }
   }
-  if (secondary.childNodes.length) root.appendChild(secondary);
 }
 
 // src/note-token-editor.ts
@@ -7040,16 +7038,16 @@ var NoteTaskDetailsWidget = class extends import_view2.WidgetType {
   eq(other) {
     return this.from === other.from && JSON.stringify(this.presentation) === JSON.stringify(other.presentation);
   }
-  get lineBreaks() {
-    return this.presentation.tokens.some((token) => token.kind === "scheduledDate" || token.kind === "tags") ? 1 : 0;
-  }
   toDOM(view) {
     const root = view.dom.ownerDocument.createDocumentFragment().createSpan();
     renderNoteTaskDetails(root, this.presentation, (token, label) => new DateLabelWidget(label, token.linkText).toDOM(view));
     root.addEventListener("click", (event) => {
+      var _a;
       if (event.target.closest("a")) return;
       event.preventDefault();
-      view.dispatch({ selection: { anchor: this.from }, scrollIntoView: true });
+      const property = event.target.closest("[data-tm-property-offset]");
+      const offset = Number((_a = property == null ? void 0 : property.getAttribute("data-tm-property-offset")) != null ? _a : 0);
+      view.dispatch({ selection: { anchor: this.from + offset }, scrollIntoView: true });
       view.focus();
     });
     return root;

@@ -1323,10 +1323,9 @@ button.tm-gantt-handle.is-finish:focus-visible,
 
 .tm-task-due.is-overdue { color: var(--text-error); }
 
-/* Native Markdown tasks keep their title/checkbox and share the task-view hierarchy. */
+/* Native Markdown task properties flow inline after the title. */
 .tm-note-task-details { font-family: var(--font-interface); font-size: 0.85em; color: var(--text-muted); }
-.tm-note-task-secondary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 3px; }
-.cm-line .tm-note-task-secondary { margin-inline-start: var(--list-indent, 2em); }
+.tm-note-task-details > span + span { margin-inline-start: 8px; }
 .tm-note-task-details a.internal-link { color: inherit; text-decoration: none; }
 .tm-note-task-details a.internal-link:hover { color: var(--text-accent-hover); }
 .tm-note-task-scheduledDate.is-overdue, .tm-note-task-deadline.is-overdue { color: var(--text-error); }

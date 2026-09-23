@@ -37,14 +37,15 @@ export class DateLabelWidget extends WidgetType {
 export class NoteTaskDetailsWidget extends WidgetType {
   constructor(private readonly presentation: NoteTaskPresentation, private readonly from: number) { super(); }
   eq(other: NoteTaskDetailsWidget): boolean { return this.from === other.from && JSON.stringify(this.presentation) === JSON.stringify(other.presentation); }
-  get lineBreaks(): number { return this.presentation.tokens.some(token => token.kind === "scheduledDate" || token.kind === "tags") ? 1 : 0; }
   toDOM(view: EditorView): HTMLElement {
     const root = view.dom.ownerDocument.createDocumentFragment().createSpan();
     renderNoteTaskDetails(root, this.presentation, (token, label) => new DateLabelWidget(label, token.linkText).toDOM(view));
     root.addEventListener("click", event => {
       if ((event.target as HTMLElement).closest("a")) return;
       event.preventDefault();
-      view.dispatch({ selection: { anchor: this.from }, scrollIntoView: true });
+      const property = (event.target as HTMLElement).closest<HTMLElement>("[data-tm-property-offset]");
+      const offset = Number(property?.getAttribute("data-tm-property-offset") ?? 0);
+      view.dispatch({ selection: { anchor: this.from + offset }, scrollIntoView: true });
       view.focus();
     });
     return root;

@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { noteTaskPresentation } from "../src/note-task-presentation";
 import { noteTaskDecorations, NoteTaskDetailsWidget } from "../src/note-token-editor";
 
@@ -35,4 +35,35 @@ it("never replaces task destinations or non-checklist prose", () => {
     expect(noteTaskPresentation("Text 2026-09-20", "YYYY-MM-DD", now)).toBeUndefined();
     expect(noteTaskPresentation("- [ ] Task 2026-09-20 ~[[Elsewhere]] p1", "YYYY-MM-DD", now)).toBeUndefined();
     expect(noteTaskPresentation("- [ ] Task without properties", "YYYY-MM-DD", now)).toBeUndefined();
+});
+
+it("places the caret at the clicked property on a later document line", () => {
+    const source = "- [ ] Task 2026-09-20 21:00 {2026-09-23 17:00} #[[Work]] #[[Home]]";
+    const presentation = noteTaskPresentation(source, "YYYY-MM-DD", now)!;
+    const events = new Map<string, (event: unknown) => void>();
+    const items: Array<{ attrs: Map<string, string> }> = [];
+    const root = { classList: { add: vi.fn() }, appendChild: vi.fn(), addEventListener: (name: string, handler: (event: unknown) => void) => events.set(name, handler) };
+    const document = {
+        createTextNode: (text: string) => text,
+        createDocumentFragment: () => ({ createSpan: () => {
+            const item = { attrs: new Map<string, string>(), setAttribute(key: string, value: string) { this.attrs.set(key, value); }, appendChild: vi.fn() };
+            items.push(item);
+            return item;
+        } })
+    };
+    const view = { dom: { ownerDocument: { createDocumentFragment: () => ({ createSpan: () => Object.assign(root, { ownerDocument: document }) }) } }, dispatch: vi.fn(), focus: vi.fn() };
+    // Use plain tags for this caret test; link navigation is tested separately.
+    presentation.tokens = presentation.tokens.map(token => ({ ...token, linkText: undefined }));
+    new NoteTaskDetailsWidget(presentation, 200 + presentation.from).toDOM(view as never);
+    expect(items).toHaveLength(4);
+    const displayedTokens = ["deadline", "scheduledDate", "tags"].flatMap(kind => presentation.tokens.filter(token => token.kind === kind));
+    for (const [index, item] of items.entries()) {
+        const event = { target: { closest: (selector: string) => selector === "a" ? null : { getAttribute: (key: string) => item.attrs.get(key) } }, preventDefault: vi.fn() };
+        events.get("click")!(event);
+        expect(view.dispatch).toHaveBeenLastCalledWith({ selection: { anchor: 200 + displayedTokens[index].from }, scrollIntoView: true });
+        expect(event.preventDefault).toHaveBeenCalledOnce();
+    }
+    expect(view.focus).toHaveBeenCalledTimes(4);
+    events.get("click")!({ target: { closest: () => ({}) } });
+    expect(view.dispatch).toHaveBeenCalledTimes(4);
 });
