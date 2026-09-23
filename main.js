@@ -4401,9 +4401,15 @@ function renderTaskDetails(primary, metadata, task, options) {
   );
   if (date || time) {
     const schedule = metadata.createSpan({ cls: "tm-task-schedule", attr: { title: [task.scheduledDate && formatDate(task.scheduledDate, options.dateFormat), task.scheduledTime].filter(Boolean).join(", ") } });
-    if (date) schedule.createSpan({ cls: !task.completed && task.scheduledDate < todayIso(now2) ? "is-overdue" : "", text: date });
-    if (time) schedule.createSpan({ text: `${date ? ", " : ""}${time}` });
-    editable(schedule, `Edit scheduled date and time: ${date}${date && time ? ", " : ""}${time}`, () => options.edit("scheduledDate"));
+    if (date) {
+      const dateLabel = schedule.createSpan({ cls: !task.completed && task.scheduledDate < todayIso(now2) ? "is-overdue" : "", text: date });
+      editable(dateLabel, `Edit scheduled date: ${date}`, () => options.edit("scheduledDate"));
+    }
+    if (time) {
+      const timeLabel = schedule.createSpan({ text: `${date ? ", " : ""}${time}` });
+      const hasTime = task.scheduledTime && show("scheduledTime") && grouping !== "scheduledTime";
+      editable(timeLabel, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
+    }
   }
   const due = task.deadline && showDate("deadline") ? taskDeadlineLabel(task.deadline, now2) : "";
   const dueTime = task.deadlineTime && show("deadlineTime") && grouping !== "deadlineTime" ? taskTimeLabel(task.deadlineTime) : "";
@@ -6520,7 +6526,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     const interactive = (target) => {
       var _a2;
       const element = target;
-      const control = (_a2 = element == null ? void 0 : element.closest) == null ? void 0 : _a2.call(element, "button, input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
+      const control = (_a2 = element == null ? void 0 : element.closest) == null ? void 0 : _a2.call(element, "button, [role=button], input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
       return Boolean(control && control !== row);
     };
     const selectForContextMenu = (event) => {

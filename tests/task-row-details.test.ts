@@ -85,3 +85,14 @@ it("shows duration after the date without a start time, or alone without a date"
         expect(metadata.children[0].children.map(child => child.text).join("")).toBe(date ? "Tomorrow, 30m" : "30m");
     }
 });
+
+it("routes date and duration clicks to their respective fields", () => {
+    const primary = new Element(), metadata = new Element(), edit = vi.fn();
+    const task = scanTasks("Note.md", "- [ ] Task 2026-09-20 30m")[0];
+    renderTaskDetails(primary as never, metadata as never, task, { now, grouping: "none", show: () => true, dateFormat: "YYYY-MM-DD", tags: [], edit, openSource: vi.fn() });
+    const [date, duration] = metadata.children[0].children;
+    date.handlers.get("click")!({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    expect(edit).toHaveBeenLastCalledWith("scheduledDate");
+    duration.handlers.get("click")!({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    expect(edit).toHaveBeenLastCalledWith("durationMinutes");
+});

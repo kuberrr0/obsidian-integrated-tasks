@@ -87,9 +87,15 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
     );
     if (date || time) {
         const schedule = metadata.createSpan({ cls: "tm-task-schedule", attr: { title: [task.scheduledDate && formatDate(task.scheduledDate, options.dateFormat), task.scheduledTime].filter(Boolean).join(", ") } });
-        if (date) schedule.createSpan({ cls: !task.completed && task.scheduledDate! < todayIso(now) ? "is-overdue" : "", text: date });
-        if (time) schedule.createSpan({ text: `${date ? ", " : ""}${time}` });
-        editable(schedule, `Edit scheduled date and time: ${date}${date && time ? ", " : ""}${time}`, () => options.edit("scheduledDate"));
+        if (date) {
+            const dateLabel = schedule.createSpan({ cls: !task.completed && task.scheduledDate! < todayIso(now) ? "is-overdue" : "", text: date });
+            editable(dateLabel, `Edit scheduled date: ${date}`, () => options.edit("scheduledDate"));
+        }
+        if (time) {
+            const timeLabel = schedule.createSpan({ text: `${date ? ", " : ""}${time}` });
+            const hasTime = task.scheduledTime && show("scheduledTime") && grouping !== "scheduledTime";
+            editable(timeLabel, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
+        }
     }
     const due = task.deadline && showDate("deadline") ? taskDeadlineLabel(task.deadline, now) : "";
     const dueTime = task.deadlineTime && show("deadlineTime") && grouping !== "deadlineTime" ? taskTimeLabel(task.deadlineTime) : "";

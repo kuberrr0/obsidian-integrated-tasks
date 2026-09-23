@@ -701,7 +701,7 @@ export class TaskMainView extends ItemView {
     row.setAttribute("data-task-id", task.id);
     const interactive = (target: EventTarget | null): boolean => {
       const element = target as HTMLElement | null;
-      const control = element?.closest?.("button, input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
+      const control = element?.closest?.("button, [role=button], input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
       return Boolean(control && control !== row);
     };
     const selectForContextMenu = (event: MouseEvent): void => {

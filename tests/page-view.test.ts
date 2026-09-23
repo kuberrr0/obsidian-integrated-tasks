@@ -499,3 +499,18 @@ it("Mod-clicking a selected title deselects only that task without opening an ed
   rows[2].click({ metaKey: true });
   expect(view.getSelectedTasks()).toEqual([]);
 });
+
+it.each([false, true])("lets property controls handle clicks before opening an editor (selected: %s)", selected => {
+  const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  if (selected) rows[0].contextmenu();
+  const property = { role: "button" };
+  const target = { closest: (selectors: string) => selectors.split(", ").includes("[role=button]") ? property : undefined };
+  const event = rows[0].click({ target });
+  expect(event.stopPropagation).not.toHaveBeenCalled();
+  expect(openEditor).not.toHaveBeenCalled();
+  expect(openBulkEditor).not.toHaveBeenCalled();
+  // The property handler receives the event and requests its own field.
+  internals.editTask(tasks[0], "deadline");
+  if (selected) expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view, "deadline");
+  else expect(openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: tasks[0], focusProperty: "deadline" }));
+});
