@@ -1484,3 +1484,9 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
   background: transparent;
 }
 .tm-note-task-details > .tm-note-task-scheduledDate + .tm-note-task-durationMinutes { margin-inline-start: 0; }
+
+/* A single options panel contains task filtering, sorting, and grouping. */
+.tm-view-option-controls { display: flex; flex-wrap: wrap; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--background-modifier-border); }
+.tm-view-option { display: flex; flex: 1 1 160px; min-width: 0; flex-direction: column; gap: 6px; color: var(--text-muted); font-size: var(--font-ui-small); }
+.tm-view-option select { width: 100%; min-width: 0; }
+.tm-view-option-heading { margin: 12px 0 8px; font-size: var(--font-ui-small); }

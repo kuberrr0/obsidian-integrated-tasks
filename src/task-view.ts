@@ -414,10 +414,13 @@ export class TaskMainView extends ItemView {
       this.search = search.value;
       this.renderTaskResults();
     });
-    const toggle = filters.createEl("button", { cls: "tm-filter-toggle" });
+    const toggle = filters.createEl("button", { cls: "tm-filter-toggle clickable-icon", attr: { "aria-label": "View options: filter, sort, and group" } });
     const menu = filters.createDiv({ cls: "tm-property-menu" });
     const sync = (): void => {
-      toggle.setText(`Filter${this.propertyFilters.length ? ` (${this.propertyFilters.length})` : ""}`);
+      setIcon(toggle, "sliders-vertical");
+      const label = `View options: filter, sort, and group${this.propertyFilters.length ? ` (${this.propertyFilters.length} active filters)` : ""}`;
+      toggle.setAttribute("aria-label", label);
+      toggle.setAttribute("title", label);
       toggle.setAttribute("aria-expanded", String(this.filtersExpanded));
       menu.hidden = !this.filtersExpanded;
     };
@@ -426,6 +429,25 @@ export class TaskMainView extends ItemView {
       if (event.key === "Escape") { this.filtersExpanded = false; sync(); toggle.focus(); }
     });
     sync();
+    const ordering = menu.createDiv({ cls: "tm-view-option-controls" });
+    const selectOption = (label: string, value: string, choices: { key: string; label: string }[], change: (value: string) => void): void => {
+      const field = ordering.createEl("label", { cls: "tm-view-option" });
+      field.createSpan({ text: label });
+      const select = field.createEl("select", { attr: { "aria-label": label } });
+      for (const choice of choices) select.createEl("option", { value: choice.key, text: choice.label });
+      select.value = value;
+      select.addEventListener("change", () => { change(select.value); this.renderTaskResults(); });
+    };
+    selectOption("Sort by", this.sort, [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES
+      .filter(property => property.key !== "scheduledTime" && property.key !== "deadlineTime")
+      .map(property => ({ ...property, label: property.key === "scheduledDate" ? "Scheduled date and time" : property.key === "deadline" ? "Deadline date and time" : property.label }))], value => { this.sort = value as TaskSort; });
+    selectOption("Sort direction", this.descending ? "descending" : "ascending", [
+      { key: "ascending", label: "Ascending" }, { key: "descending", label: "Descending" }
+    ], value => { this.descending = value === "descending"; });
+    selectOption("Group by", this.grouping, [
+      { key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES
+    ], value => { this.grouping = value as TaskGrouping; });
+    menu.createEl("h3", { text: "Filters", cls: "tm-view-option-heading" });
     menu.createDiv({ text: "Match all properties. Within a property, AND is evaluated before OR.", cls: "tm-filter-hint" });
     const clear = menu.createEl("button", { text: "Clear all filters" });
     clear.addEventListener("click", () => { this.propertyFilters = []; this.render(); });
@@ -442,48 +464,6 @@ export class TaskMainView extends ItemView {
         this.renderTaskResults();
       });
     }
-    const ordering = filters.createDiv({ cls: "tm-order-controls" });
-    const iconButton = (icon: string, label: string): HTMLButtonElement => {
-      const button = ordering.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-      setIcon(button, icon);
-      return button;
-    };
-    const sort = iconButton("list-filter", `Sort: ${this.sort}`);
-    sort.addEventListener("click", event => {
-      const options = new Menu();
-      for (const property of [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES
-        .filter(property => property.key !== "scheduledTime" && property.key !== "deadlineTime")
-        .map(property => ({ ...property, label: property.key === "scheduledDate" ? "Scheduled date and time" : property.key === "deadline" ? "Deadline date and time" : property.label }))]) {
-        options.addItem(item => item.setTitle(property.label).setChecked(this.sort === property.key).onClick(() => {
-          this.sort = property.key as TaskSort;
-          sort.setAttribute("aria-label", `Sort: ${property.label}`);
-          sort.setAttribute("title", `Sort: ${property.label}`);
-          this.renderTaskResults();
-        }));
-      }
-      options.showAtMouseEvent(event);
-    });
-    const direction = iconButton(this.descending ? "arrow-down" : "arrow-up", this.descending ? "Descending" : "Ascending");
-    direction.addEventListener("click", () => {
-      this.descending = !this.descending;
-      setIcon(direction, this.descending ? "arrow-down" : "arrow-up");
-      direction.setAttribute("aria-label", this.descending ? "Descending" : "Ascending");
-      direction.setAttribute("title", this.descending ? "Descending" : "Ascending");
-      this.renderTaskResults();
-    });
-    const grouping = iconButton("group", `Group: ${this.grouping}`);
-    grouping.addEventListener("click", event => {
-      const options = new Menu();
-      for (const property of [{ key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES]) {
-        options.addItem(item => item.setTitle(property.label).setChecked(this.grouping === property.key).onClick(() => {
-          this.grouping = property.key as TaskGrouping;
-          grouping.setAttribute("aria-label", `Group: ${property.label}`);
-          grouping.setAttribute("title", `Group: ${property.label}`);
-          this.renderTaskResults();
-        }));
-      }
-      options.showAtMouseEvent(event);
-    });
   }
 
   private renderSmartLists(container: HTMLElement): void {
