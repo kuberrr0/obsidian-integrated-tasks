@@ -1567,6 +1567,13 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-editor-inline .cm-content { padding: 8px 0; min-height: 40px; overflow-wrap: anywhere; }
 .tm-editor-inline .cm-line { padding: 0; }
 .tm-editor-inline .cm-content:focus { outline: none; }
+.tm-editor-inline .cm-content {
+  caret-color: var(--caret-color, var(--text-normal));
+}
+.tm-editor-inline .cm-cursor,
+.tm-editor-inline .cm-dropCursor {
+  border-left-color: var(--caret-color, var(--text-normal));
+}
 .tm-editor-token { cursor: text; }
 
 .tm-editor-inline .tm-editor-project {
