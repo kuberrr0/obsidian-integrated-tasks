@@ -27,9 +27,14 @@ it("syncs sidebar selection through the supported active-view API", async () => 
   active = { getViewType: () => "task-manager-main", getState: () => ({ mode: "projects", pagePath: "Work.md" }) };
   changed();
   expect(setActive).toHaveBeenLastCalledWith("projects", undefined, "Work.md");
+  active = { getViewType: () => "task-manager-main", getState: () => ({ mode: "smartLists", smartListId: "work-list" }) };
+  changed();
+  expect(setActive).toHaveBeenLastCalledWith("smartLists", undefined, undefined, "work-list");
+  expect((view as unknown as { expanded: Set<string> }).expanded.has("all")).toBe(true);
+  expect((view as unknown as { expanded: Set<string> }).expanded.has("smartLists")).toBe(false);
   active = null; changed();
   active = { getViewType: () => "markdown", getState: () => ({}) }; changed();
-  expect(setActive).toHaveBeenCalledTimes(2);
+  expect(setActive).toHaveBeenCalledTimes(3);
   await view.onClose();
   expect(unsubscribe).toHaveBeenCalledOnce();
 });

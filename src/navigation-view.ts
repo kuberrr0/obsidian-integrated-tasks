@@ -8,8 +8,7 @@ const NAV_ITEMS: Array<{ mode: TaskViewMode; label: string }> = [
   { mode: "dashboard", label: "Dashboard" },
   { mode: "inbox", label: "Inbox" }, { mode: "today", label: "Today" },
   { mode: "upcoming", label: "Upcoming" }, { mode: "all", label: "All Tasks" },
-  { mode: "projects", label: "Projects" }, { mode: "tags", label: "Tags" },
-  { mode: "smartLists", label: "Smart Lists" }
+  { mode: "projects", label: "Projects" }, { mode: "tags", label: "Tags" }
 ];
 
 export class TaskNavigationView extends ItemView {
@@ -30,7 +29,7 @@ export class TaskNavigationView extends ItemView {
       if (view?.getViewType() !== "task-manager-main") return;
       const state = view.getState();
       const mode = NAV_ITEMS.find(item => item.mode === state.mode)?.mode;
-      if (mode === "smartLists") { this.setActive(mode, undefined, undefined, typeof state.smartListId === "string" ? state.smartListId : undefined); return; }
+      if (state.mode === "smartLists") { this.setActive("smartLists", undefined, undefined, typeof state.smartListId === "string" ? state.smartListId : undefined); return; }
       if (mode) this.setActive(mode, typeof state.tag === "string" ? state.tag : undefined,
         mode === "tags" ? undefined : typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : undefined);
     };
@@ -42,7 +41,7 @@ export class TaskNavigationView extends ItemView {
   setActive(mode: TaskViewMode, tag?: string, project?: string, smartListId?: string): void {
     this.activeSmartList = smartListId;
     this.activeMode = mode; this.activeTag = tag; this.activeProject = project;
-    if (tag || project || smartListId) this.expanded.add(mode);
+    if (tag || project || smartListId) this.expanded.add(mode === "smartLists" ? "all" : mode);
     this.render();
   }
   refresh(): void { this.render(); }
@@ -78,7 +77,7 @@ export class TaskNavigationView extends ItemView {
       return row;
     };
     for (const entry of NAV_ITEMS) {
-      const branch = entry.mode === "projects" || entry.mode === "tags" || entry.mode === "smartLists";
+      const branch = entry.mode === "projects" || entry.mode === "tags" || entry.mode === "all";
       const group = nav.createDiv({ cls: branch ? "tree-item nav-folder" : "tree-item nav-file" });
       const row = item(group, entry.label, entry.mode === this.activeMode && !this.activeTag && !this.activeProject && !this.activeSmartList,
         () => this.plugin.openTaskView({ mode: entry.mode }));
@@ -99,7 +98,7 @@ export class TaskNavigationView extends ItemView {
         const projects = this.plugin.index.projects().filter(project => !project.archived);
         for (const project of projects) item(children, project.name, this.activeProject === project.path, () => this.plugin.openProject(project.path));
         if (!projects.length) children.createDiv({ cls: "tm-nav-empty", text: "No projects yet" });
-      } else if (entry.mode === "smartLists") {
+      } else if (entry.mode === "all") {
         const lists = this.plugin.settings.smartLists;
         for (const list of lists) item(children, list.name, this.activeSmartList === list.id, () => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }));
         if (!lists.length) children.createDiv({ cls: "tm-nav-empty", text: "No smart lists yet" });

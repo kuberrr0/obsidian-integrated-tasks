@@ -7994,8 +7994,7 @@ var NAV_ITEMS = [
   { mode: "upcoming", label: "Upcoming" },
   { mode: "all", label: "All Tasks" },
   { mode: "projects", label: "Projects" },
-  { mode: "tags", label: "Tags" },
-  { mode: "smartLists", label: "Smart Lists" }
+  { mode: "tags", label: "Tags" }
 ];
 var TaskNavigationView = class extends import_obsidian22.ItemView {
   constructor(leaf, plugin) {
@@ -8021,8 +8020,8 @@ var TaskNavigationView = class extends import_obsidian22.ItemView {
       if ((view == null ? void 0 : view.getViewType()) !== "task-manager-main") return;
       const state = view.getState();
       const mode = (_a = NAV_ITEMS.find((item) => item.mode === state.mode)) == null ? void 0 : _a.mode;
-      if (mode === "smartLists") {
-        this.setActive(mode, void 0, void 0, typeof state.smartListId === "string" ? state.smartListId : void 0);
+      if (state.mode === "smartLists") {
+        this.setActive("smartLists", void 0, void 0, typeof state.smartListId === "string" ? state.smartListId : void 0);
         return;
       }
       if (mode) this.setActive(
@@ -8044,7 +8043,7 @@ var TaskNavigationView = class extends import_obsidian22.ItemView {
     this.activeMode = mode;
     this.activeTag = tag;
     this.activeProject = project;
-    if (tag || project || smartListId) this.expanded.add(mode);
+    if (tag || project || smartListId) this.expanded.add(mode === "smartLists" ? "all" : mode);
     this.render();
   }
   refresh() {
@@ -8087,7 +8086,7 @@ var TaskNavigationView = class extends import_obsidian22.ItemView {
       return row;
     };
     for (const entry of NAV_ITEMS) {
-      const branch = entry.mode === "projects" || entry.mode === "tags" || entry.mode === "smartLists";
+      const branch = entry.mode === "projects" || entry.mode === "tags" || entry.mode === "all";
       const group = nav.createDiv({ cls: branch ? "tree-item nav-folder" : "tree-item nav-file" });
       const row = item(
         group,
@@ -8114,7 +8113,7 @@ var TaskNavigationView = class extends import_obsidian22.ItemView {
         const projects = this.plugin.index.projects().filter((project) => !project.archived);
         for (const project of projects) item(children, project.name, this.activeProject === project.path, () => this.plugin.openProject(project.path));
         if (!projects.length) children.createDiv({ cls: "tm-nav-empty", text: "No projects yet" });
-      } else if (entry.mode === "smartLists") {
+      } else if (entry.mode === "all") {
         const lists = this.plugin.settings.smartLists;
         for (const list of lists) item(children, list.name, this.activeSmartList === list.id, () => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }));
         if (!lists.length) children.createDiv({ cls: "tm-nav-empty", text: "No smart lists yet" });
