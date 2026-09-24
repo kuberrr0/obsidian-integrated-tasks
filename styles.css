@@ -1507,13 +1507,13 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 
 .tm-editor-task-line {
   display: flex;
-  align-items: flex-start;
+  align-items: first baseline;
   gap: 10px;
 }
 
 .tm-editor-task-line .tm-editor-checkbox {
   flex: 0 0 auto;
-  margin: 12px 0 0;
+  margin: 0;
 }
 
 .tm-editor-task-line .tm-editor-raw {
@@ -1581,7 +1581,9 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-editor-modal .modal-content { padding-top: 10px; }
 .tm-editor-task-line { gap: 12px; }
 .tm-editor-inline .cm-content { line-height: 1.65; padding-block: 4px; }
-.tm-editor-task-line .tm-editor-checkbox { margin-top: 10px; }
+/* Follow the first text baseline rather than a fixed offset from the modal top.
+   The small optical correction centers the box against the title's letterforms. */
+.tm-editor-task-line .tm-editor-checkbox { margin: 0; transform: translateY(0.12em); }
 .tm-editor-inline .tm-editor-secondary {
   color: var(--text-muted);
   font-family: var(--font-interface);
