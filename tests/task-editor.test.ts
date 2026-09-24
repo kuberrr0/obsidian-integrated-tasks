@@ -1,7 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { App } from "obsidian";
 vi.mock("obsidian", async (importOriginal) => ({
-  ...await importOriginal<typeof import("./obsidian-mock")>(), Modal: class {}, Notice: class {}, setIcon: vi.fn()
+  ...await importOriginal<typeof import("./obsidian-mock")>(), Modal: class {}, Notice: class {}, setIcon: vi.fn(), Component: class { load() {} unload() {} }, MarkdownRenderer: { render: vi.fn(async () => {}) }
+}));
+vi.mock("../src/task-line-editor", () => ({
+  TaskLineEditor: class extends EventTarget {
+    value: string;
+    defaultValue: string;
+    selectionStart = 0;
+    selectionEnd = 0;
+    setSelectionRange = vi.fn();
+    focus = vi.fn();
+    destroy = vi.fn();
+    constructor(_parent: unknown, value: string, _format: string, change: () => void) {
+      super(); this.value = this.defaultValue = value;
+      this.addEventListener("input", change);
+    }
+  }
 }));
 import { TaskEditorModal, type TaskEditorProperty } from "../src/task-editor";
 import { tomorrowIso } from "../src/date";
@@ -11,7 +26,8 @@ function editor() {
   return new TaskEditorModal({} as App, { mode: "inbox", projects: [], settings: { ...DEFAULT_SETTINGS, inboxPath: "Tasks/Inbox.md" }, dateFormat: "DD/MM/YYYY", onSave: async () => {} }) as unknown as {
     serializeDraft(draft: TaskDraft): string;
     readRaw(): TaskDraft;
-    rawInput: { value: string };
+    rawInput: { value: string; setSelectionRange: ReturnType<typeof vi.fn> };
+    completedInput: { checked: boolean };
     destinationInput: { value: string };
   };
 }
@@ -25,7 +41,8 @@ describe("implicit Inbox destination", () => {
   });
   it("routes raw input without a token to configured Inbox even after selecting a project", () => {
     const modal = editor();
-    modal.rawInput = { value: "- [ ] Write report" };
+    modal.rawInput = { value: "- [ ] Write report", setSelectionRange: vi.fn() };
+    modal.completedInput = { checked: false };
     modal.destinationInput = { value: "Project.md" };
     expect(modal.readRaw().destination).toBe("Tasks/Inbox.md");
     modal.rawInput.value = "- [ ] Write report ~[[Project]]";
@@ -47,12 +64,24 @@ describe("calendar editor presets", () => {
 
 // Exercise the modal's event handlers without an Obsidian host.
 class EditorElement extends EventTarget {
+  hidden = false;
+  style = { height: "" };
+  scrollHeight = 40;
+  childNodes: EditorElement[] = [];
+  querySelectorAll(): EditorElement[] { return []; }
+  matches(): boolean { return false; }
+  replaceChildren(...children: EditorElement[]): void { this.children = children; }
   value = "";
+  rows = 0;
+  checked = false;
+  selectionStart = 0;
+  selectionEnd = 0;
+  defaultValue = "";
   text = "";
   disabled = false;
   children: EditorElement[] = [];
   options: EditorElement[] = [];
-  ownerDocument = { defaultView: null };
+  ownerDocument = { defaultView: null, activeElement: null, createElement: () => new EditorElement() };
   onkeydown?: (event: KeyboardEvent) => void;
   createEl(tag: string, options: { value?: string; text?: string } = {}): EditorElement {
     const child = tag === "button" ? new EditorButton() : new EditorElement();
@@ -70,6 +99,7 @@ class EditorElement extends EventTarget {
   empty(): void { this.children = []; }
   setText(text: string): void { this.text = text; }
   focus(): void {}
+  setSelectionRange = vi.fn();
   click(): void { this.dispatchEvent(new Event("click")); }
 }
 class EditorButton extends EditorElement {}
@@ -85,7 +115,7 @@ function openModal(edit = false, focusProperty?: TaskEditorProperty) {
   });
   const fields = modal as unknown as {
     modalEl: EditorElement; contentEl: EditorElement; close: () => void;
-    tagsInput: EditorElement; rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement; descriptionInput: EditorElement; destinationInput: EditorElement;
+    completedInput: EditorElement; tagsInput: EditorElement; rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement; descriptionInput: EditorElement; destinationInput: EditorElement;
   };
   fields.modalEl = new EditorElement();
   fields.contentEl = new EditorElement();
@@ -100,18 +130,12 @@ function openModal(edit = false, focusProperty?: TaskEditorProperty) {
 }
 
 describe("multiline modal interactions", () => {
-  it("shows only the main task's properties and preserves other lines after a structured edit", async () => {
+  it("preserves pasted task trees in the single text box", async () => {
     const { fields, onSave, key } = openModal();
     fields.rawInput.value = "- [x] Main p1\n  - [ ] Child tomorrow p2\n  - Description\n- [ ] Sibling";
-    fields.rawInput.dispatchEvent(new Event("input"));
-    expect(fields.titleInput.value).toBe("Main");
-    expect(fields.priorityInput.value).toBe("1");
-    fields.titleInput.value = "Renamed";
-    fields.titleInput.dispatchEvent(new Event("input"));
-    expect(fields.rawInput.value).toBe("- [x] Renamed p1\n  - [ ] Child tomorrow p2\n  - Description\n- [ ] Sibling");
     key({ metaKey: true });
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-    expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Renamed", completed: true, priority: 1, additionalLines: [expect.stringMatching(/^  - \[ \] Child \d{4}-\d{2}-\d{2} p2$/), "  - Description", "- [ ] Sibling"] });
+    expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Main", completed: true, priority: 1, additionalLines: [expect.stringMatching(/^  - \[ \] Child \d{4}-\d{2}-\d{2} p2$/), "  - Description", "- [ ] Sibling"] });
   });
   it.each([false, true])("requires Cmd/Ctrl+Enter in the modal (editing: %s)", async edit => {
     const { fields, onSave, key } = openModal(edit);
@@ -132,89 +156,85 @@ it("parses natural scheduled dates and deadlines in the edit modal raw text", as
   const { fields, onSave, key } = openModal(true);
   fields.rawInput.value = "- [ ] Call tomorrow at 9pm {tomorrow at noon}";
   fields.rawInput.dispatchEvent(new Event("input"));
-  expect(fields.titleInput.value).toBe("Call");
   key({ metaKey: true });
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Call", scheduledDate: tomorrowIso(), scheduledTime: "21:00", deadline: tomorrowIso(), deadlineTime: "12:00" });
 });
 
 
-it.each([false, true])("hides destination extensions in new/edit modal labels (editing: %s)", edit => {
+it.each([false, true])("uses one compact text field (editing: %s)", edit => {
   const { fields } = openModal(edit);
-  expect(fields.destinationInput.options.find(option => option.value === "Inbox.md")?.text).toBe("Inbox");
-  fields.rawInput.value = "- [ ] Task ~[[Projects/Work#Plan]]";
-  fields.rawInput.dispatchEvent(new Event("input"));
-  expect(fields.destinationInput.options.find(option => option.value === "Projects/Work.md#Plan")?.text).toBe("Projects/Work#Plan");
-  expect(fields.destinationInput.value).toBe("Projects/Work.md#Plan");
+  expect(fields.rawInput).toBeDefined();
+  expect(fields.titleInput).toBeUndefined();
+  expect(fields.tagsInput).toBeUndefined();
+  expect(fields.descriptionInput).toBeUndefined();
+  expect(fields.destinationInput).toBeUndefined();
 });
 
-
-it.each([false, true])("always shows an editable description last and saves it (editing: %s)", async edit => {
-  const { fields, key, onSave } = openModal(edit);
-  expect(fields.descriptionInput.value).toBe("");
-  expect(fields.contentEl.children[fields.contentEl.children.length - 2].children).toContain(fields.descriptionInput);
-  fields.rawInput.value = "- [ ] Main\n";
-  fields.rawInput.dispatchEvent(new Event("input"));
-  fields.descriptionInput.value = "First detail\nSecond detail";
-  fields.descriptionInput.dispatchEvent(new Event("input"));
-  if (!edit) expect(fields.rawInput.value).toContain("    - First detail\n    - Second detail");
+it("saves all metadata from the task line", async () => {
+  const { fields, key, onSave } = openModal(true);
+  fields.rawInput.value = "- [x] Renamed [[2027-03-28]] 09:15 1h {[[2027-03-29]]} p1 #[[work]] #[[client notes]] ~[[Projects/Work#Plan]]";
   key({ metaKey: true });
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-  expect(onSave.mock.calls[0][0].description).toBe("First detail\nSecond detail");
+  expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Renamed", completed: true, scheduledDate: "2027-03-28", scheduledTime: "09:15", durationMinutes: 60, deadline: "2027-03-29", priority: 1, tags: ["work", "client notes"], destination: "Projects/Work.md#Plan" });
+  expect(onSave.mock.calls[0][0].description).toBeUndefined();
+  expect(onSave.mock.calls[0][0].additionalLines).toBeUndefined();
 });
 
-it("keeps the new task description field in sync with raw bullets and preserves child descriptions", async () => {
-  const { fields, key, onSave } = openModal();
-  fields.rawInput.value = "- [ ] Parent\n  - Original\n  - [ ] Child\n    - Child description";
-  fields.rawInput.dispatchEvent(new Event("input"));
-  expect(fields.descriptionInput.value).toBe("- Original");
-  fields.descriptionInput.value = "Replacement";
-  fields.descriptionInput.dispatchEvent(new Event("input"));
-  expect(fields.rawInput.value).toBe("- [ ] Parent\n    - Replacement\n  - [ ] Child\n    - Child description");
+it("rejects extra task lines when editing", async () => {
+  const { fields, key, onSave } = openModal(true);
+  fields.rawInput.value = "- [ ] Main\n- [ ] Another";
   key({ metaKey: true });
-  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-  expect(onSave.mock.calls[0][0].description).toBe("Replacement");
+  expect(onSave).not.toHaveBeenCalled();
 });
 
-
-it("syncs multiple tags between raw and structured inputs and saves clearing them", async () => {
-  const { fields, onSave, key } = openModal(true);
-  fields.rawInput.value = "- [ ] Existing #[[work]] #[[client notes]]";
-  fields.rawInput.dispatchEvent(new Event("input"));
-  expect(fields.tagsInput.value).toBe("#[[work]] #[[client notes]]");
-  fields.titleInput.value = "Renamed";
-  fields.titleInput.dispatchEvent(new Event("input"));
-  expect(fields.rawInput.value).toBe("- [ ] Renamed #[[work]] #[[client notes]]");
-  fields.tagsInput.value = "";
-  fields.tagsInput.dispatchEvent(new Event("input"));
-  expect(fields.rawInput.value).toBe("- [ ] Renamed");
+it("rejects an empty checklist", () => {
+  const { fields, key, onSave } = openModal(true);
+  fields.rawInput.value = "- [ ] ";
   key({ metaKey: true });
-  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-  expect(onSave.mock.calls[0][0].tags).toEqual([]);
+  expect(onSave).not.toHaveBeenCalled();
 });
 
-it("saves tags added in the structured field", async () => {
-  const { fields, onSave, key } = openModal(true);
-  fields.tagsInput.value = "#[[work]] #[[client notes]]";
-  fields.tagsInput.dispatchEvent(new Event("input"));
-  key({ metaKey: true });
-  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-  expect(onSave.mock.calls[0][0].tags).toEqual(["work", "client notes"]);
-});
-
-it.each([
-  ["scheduledDate", "scheduledInput"], ["deadline", "deadlineInput"],
-  ["durationMinutes", "durationInput"], ["priority", "priorityInput"], ["tags", "tagsInput"]
-] as const)("focuses the %s property field instead of raw task text", (property, field) => {
-  const { fields } = openModal(true, property);
-  const input = (fields as unknown as Record<string, EditorElement>)[field];
-  const focus = vi.spyOn(input, "focus");
-  const rawFocus = vi.spyOn(fields.rawInput, "focus");
-  const select = vi.fn();
-  if (property !== "priority") Object.assign(input, { select });
+it("selects inline metadata for property shortcuts", () => {
+  const { fields } = openModal(true, "priority");
+  fields.rawInput.value = "Existing p2";
+  const focus = vi.spyOn(fields.rawInput, "focus");
   const callback = vi.mocked(window.setTimeout).mock.calls.at(-1)![0] as () => void;
   callback();
   expect(focus).toHaveBeenCalledOnce();
-  expect(rawFocus).not.toHaveBeenCalled();
-  if (property !== "priority") expect(select).toHaveBeenCalledOnce();
+  expect(fields.rawInput.setSelectionRange).toHaveBeenCalledWith(9, 11);
+});
+
+it("saves an unchanged task without changing its metadata", async () => {
+  const { key, onSave } = openModal(true);
+  key({ metaKey: true });
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Existing", completed: false, destination: "Inbox.md" });
+});
+
+it.each([false, true])("renders completion separately and saves checkbox changes (editing: %s)", async edit => {
+  const { fields, key, onSave } = openModal(edit);
+  expect(fields.rawInput.value).toBe(edit ? "Existing" : "");
+  expect(fields.completedInput.checked).toBe(false);
+  if (!edit) fields.rawInput.value = "New task p2";
+  fields.completedInput.checked = true;
+  key({ metaKey: true });
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  expect(onSave.mock.calls[0][0]).toMatchObject({ completed: true, title: edit ? "Existing" : "New task" });
+});
+
+it("renders a pasted checklist prefix as the checkbox", async () => {
+  const { fields, key, onSave } = openModal(true);
+  fields.rawInput.value = "- [x] Pasted p1";
+  fields.rawInput.dispatchEvent(new Event("input"));
+
+  key({ metaKey: true });
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Pasted", priority: 1, completed: true });
+});
+
+it.each([false, true])("omits modal headings and shortcut hints (editing: %s)", edit => {
+  const { fields } = openModal(edit);
+  const text = (element: EditorElement): string => [element.text, ...element.children.map(text)].join(" ");
+  expect(text(fields.contentEl)).not.toMatch(/New task|Edit task|Cmd\/Ctrl/);
 });

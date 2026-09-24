@@ -437,6 +437,8 @@ button.tm-source,
   margin: 0;
   font-family: inherit;
   font-size: var(--font-ui-small);
+  min-height: 40px;
+  line-height: 1.5;
   resize: vertical;
 }
 
@@ -661,7 +663,7 @@ button.tm-filter-toggle { display: none; }
   .tm-editor-modal .modal-content { min-height: 0; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
   .tm-editor-field { gap: 6px; margin-bottom: 16px; }
   .tm-editor-field input, .tm-editor-field select, .tm-editor-raw { min-width: 0; min-height: 44px; font-size: 16px; }
-  .tm-editor-raw { min-height: 96px; line-height: 1.5; }
+  .tm-editor-raw { min-height: 44px; line-height: 1.5; }
   .tm-editor-actions { position: sticky; bottom: 0; background: var(--background-primary); padding-block: 12px; }
   .tm-editor-actions button { min-height: 44px; flex: 1; justify-content: center; }
 }
@@ -1502,3 +1504,74 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-view-option-heading { margin: 12px 0 8px; font-size: var(--font-ui-small); }
 
 :is(.tm-task-due, .tm-note-task-deadline, .tm-note-token-deadline).is-distant { color: var(--text-muted); }
+
+.tm-editor-task-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.tm-editor-task-line .tm-editor-checkbox {
+  flex: 0 0 auto;
+  margin: 12px 0 0;
+}
+
+.tm-editor-task-line .tm-editor-raw {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  resize: none;
+}
+
+.tm-editor-modal .tm-editor-task-line textarea.tm-editor-raw,
+.tm-editor-modal .tm-editor-task-line textarea.tm-editor-raw:hover,
+.tm-editor-modal .tm-editor-task-line textarea.tm-editor-raw:focus {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+.tm-editor-modal .tm-editor-raw {
+  overflow: hidden;
+  font-family: var(--font-text);
+  font-size: var(--font-text-size);
+}
+
+.tm-editor-preview {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  overflow-wrap: anywhere;
+  cursor: text;
+  font-family: var(--font-text);
+  font-size: var(--font-text-size);
+}
+
+.tm-editor-preview > ul,
+.tm-editor-preview > ul > li,
+.tm-editor-preview p {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tm-editor-task-line > [hidden] { display: none; }
+.tm-editor-modal .tm-editor-error:empty { display: none; }
+
+/* One continuous editor keeps pointer positions and token source offsets aligned. */
+.tm-editor-inline { flex: 1; min-width: 0; }
+.tm-editor-inline .cm-editor { background: transparent; font-family: var(--font-text); font-size: var(--font-text-size); }
+.tm-editor-inline .cm-editor.cm-focused { outline: none; }
+.tm-editor-inline .cm-scroller { overflow: visible; font-family: inherit; }
+.tm-editor-inline .cm-content { padding: 8px 0; min-height: 40px; overflow-wrap: anywhere; }
+.tm-editor-inline .cm-line { padding: 0; }
+.tm-editor-inline .cm-content:focus { outline: none; }
+.tm-editor-token { cursor: text; }
+
+.tm-editor-inline .tm-editor-project {
+  color: var(--text-muted);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  text-decoration: none;
+}

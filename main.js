@@ -3632,10 +3632,10 @@ function trackModalViewport(modal, content) {
       if (!modal.ownerDocument.body.classList.contains("is-mobile") && !win.matchMedia("(max-width: 700px)").matches) return;
       const focused = modal.ownerDocument.activeElement;
       if (!focused || !content.contains(focused)) return;
-      const field2 = focused.getBoundingClientRect();
+      const field = focused.getBoundingClientRect();
       const area = content.getBoundingClientRect();
-      if (field2.bottom > area.bottom - 12) content.scrollTop += field2.bottom - area.bottom + 12;
-      else if (field2.top < area.top + 12) content.scrollTop -= area.top + 12 - field2.top;
+      if (field.bottom > area.bottom - 12) content.scrollTop += field.bottom - area.bottom + 12;
+      else if (field.top < area.top + 12) content.scrollTop -= area.top + 12 - field.top;
     });
   };
   viewport == null ? void 0 : viewport.addEventListener("resize", update);
@@ -3667,7 +3667,7 @@ var ProjectCreatorModal = class extends import_obsidian4.Modal {
     const content = this.contentEl;
     content.empty();
     content.createEl("h2", { text: this.options.initial ? "Edit project" : "Create project" });
-    const field2 = (label, kind = "input", placeholder) => {
+    const field = (label, kind = "input", placeholder) => {
       const row = content.createDiv({ cls: "tm-editor-field" });
       const caption = row.createEl("label", { text: label });
       const input = kind === "select" ? row.createEl("select") : row.createEl("input", { type: "text", attr: { placeholder: placeholder != null ? placeholder : "" } });
@@ -3675,16 +3675,16 @@ var ProjectCreatorModal = class extends import_obsidian4.Modal {
       caption.addEventListener("click", () => input.focus());
       return input;
     };
-    const name = field2("Project name", "input", "New project");
-    const date = field2("Start date", "input", "Tomorrow or a formatted date");
-    const endDate = field2("End date", "input", "Next Friday or a formatted date");
-    const deadline = field2("Deadline", "input", "Next Friday or a formatted date");
-    const priority = field2("Priority", "select");
+    const name = field("Project name", "input", "New project");
+    const date = field("Start date", "input", "Tomorrow or a formatted date");
+    const endDate = field("End date", "input", "Next Friday or a formatted date");
+    const deadline = field("Deadline", "input", "Next Friday or a formatted date");
+    const priority = field("Priority", "select");
     for (const [value, text] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) priority.createEl("option", { value, text });
-    const parent = field2("Parent project", "select");
+    const parent = field("Parent project", "select");
     parent.createEl("option", { value: "", text: "No parent" });
     for (const project of this.options.projects) parent.createEl("option", { value: project.path, text: project.path.replace(/\.md$/i, "") });
-    const tags = field2("Tags", "input", "project, work");
+    const tags = field("Tags", "input", "project, work");
     tags.value = "project";
     const archiveRow = content.createEl("label", { cls: "tm-toggle" });
     const archived = archiveRow.createEl("input", { type: "checkbox", attr: { "aria-label": "Archived" } });
@@ -4062,7 +4062,7 @@ var SmartListEditorModal = class extends import_obsidian5.Modal {
     content.empty();
     const draft = smartListDraft(this.list);
     content.createEl("h2", { text: this.list ? "Edit smart list" : "Create new smart list" });
-    const field2 = (label, select = false) => {
+    const field = (label, select = false) => {
       const row = content.createDiv({ cls: "tm-editor-field" });
       const caption = row.createEl("label", { text: label });
       const input = select ? row.createEl("select") : row.createEl("input", { type: "text" });
@@ -4070,16 +4070,16 @@ var SmartListEditorModal = class extends import_obsidian5.Modal {
       caption.addEventListener("click", () => input.focus());
       return input;
     };
-    const name = field2("List name");
+    const name = field("List name");
     name.value = draft.name;
-    const sort = field2("Sort by", true);
+    const sort = field("Sort by", true);
     for (const item of [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES]) sort.createEl("option", { value: item.key, text: item.label });
     sort.value = draft.sort;
-    const direction = field2("Sort direction", true);
+    const direction = field("Sort direction", true);
     direction.createEl("option", { value: "ascending", text: "Ascending" });
     direction.createEl("option", { value: "descending", text: "Descending" });
     direction.value = draft.descending ? "descending" : "ascending";
-    const grouping = field2("Group by", true);
+    const grouping = field("Group by", true);
     for (const item of [{ key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES]) grouping.createEl("option", { value: item.key, text: item.label });
     grouping.value = draft.grouping;
     content.createEl("h3", { text: "Filters" });
@@ -4155,12 +4155,12 @@ function bulkPropertyValues(task, dateFormat) {
 function bulkPropertyPatch(values, dateFormat, reference = /* @__PURE__ */ new Date()) {
   var _a, _b, _c;
   const patch = {};
-  for (const field2 of ["scheduled", "deadline"]) {
-    if (!(field2 in values)) continue;
-    const value = values[field2].trim();
+  for (const field of ["scheduled", "deadline"]) {
+    if (!(field in values)) continue;
+    const value = values[field].trim();
     const parsed = value ? parseDateTimeExpression(value, reference, dateFormat) : void 0;
-    if (value && !parsed) throw new Error(`Could not understand the ${field2 === "scheduled" ? "scheduled date and time" : "deadline date and time"}.`);
-    if (field2 === "scheduled") {
+    if (value && !parsed) throw new Error(`Could not understand the ${field === "scheduled" ? "scheduled date and time" : "deadline date and time"}.`);
+    if (field === "scheduled") {
       patch.scheduledDate = parsed == null ? void 0 : parsed.date;
       patch.scheduledTime = parsed == null ? void 0 : parsed.time;
     } else {
@@ -4279,9 +4279,9 @@ var BulkTaskEditorModal = class extends import_obsidian6.Modal {
     };
     this.stopViewportTracking = trackModalViewport(this.modalEl, content);
     if (this.options.focusProperty) {
-      const field2 = { scheduledDate: "scheduled", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[this.options.focusProperty];
+      const field = { scheduledDate: "scheduled", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[this.options.focusProperty];
       this.focusTimer = window.setTimeout(() => {
-        const input = this.inputs.get(field2);
+        const input = this.inputs.get(field);
         input == null ? void 0 : input.focus();
         if (input && "select" in input) input.select();
       }, 0);
@@ -4396,7 +4396,7 @@ function renderTaskDetails(primary, metadata, task, options) {
   const now2 = (_a = options.now) != null ? _a : /* @__PURE__ */ new Date();
   const { grouping, show } = options;
   const actionDate2 = task.scheduledDate && task.deadline ? task.scheduledDate < task.deadline ? task.scheduledDate : task.deadline : (_b = task.scheduledDate) != null ? _b : task.deadline;
-  const showDate = (field2) => show(field2) && grouping !== field2 && !(grouping === "date" && task[field2] === actionDate2);
+  const showDate = (field) => show(field) && grouping !== field && !(grouping === "date" && task[field] === actionDate2);
   const date = task.scheduledDate && showDate("scheduledDate") ? taskScheduleLabel(task.scheduledDate, now2) : "";
   const time = taskTimeDurationLabel(
     show("scheduledTime") && grouping !== "scheduledTime" ? task.scheduledTime : void 0,
@@ -4462,20 +4462,20 @@ function renderProjectHeaderDetails(parent, project, edit, dateFormat, now2 = /*
     editable2(source, `parent project: ${name}`, "parent", edit);
   }
 }
-function editable2(element, label, field2, edit) {
+function editable2(element, label, field, edit) {
   element.setAttribute("role", "button");
   element.setAttribute("tabindex", "0");
   element.setAttribute("aria-label", `Edit ${label}`);
   element.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    edit(field2);
+    edit(field);
   });
   element.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     event.stopPropagation();
-    edit(field2);
+    edit(field);
   });
 }
 function renderProjectDeadline(parent, project, edit, dateFormat, now2 = /* @__PURE__ */ new Date()) {
@@ -4613,17 +4613,17 @@ function parseProjectParent(frontmatter) {
   const path = ((_b = link == null ? void 0 : link[1]) != null ? _b : text).split(/[|#]/, 1)[0].trim();
   return path && !/[\r\n[\]]/.test(path) ? path : void 0;
 }
-function updateProjectDate(frontmatter, field2, value, expected, dateFormat) {
+function updateProjectDate(frontmatter, field, value, expected, dateFormat) {
   var _a, _b, _c;
   if (!parseDateExpression(value)) throw new Error("Invalid project date.");
   const current = parseProjectProperties(frontmatter, dateFormat);
   for (const key2 of ["scheduledDate", "endDate", "deadline"]) {
     if (current[key2] !== expected[key2]) throw new Error("Project dates changed while dragging. Refresh and try again.");
   }
-  const aliases = field2 === "scheduledDate" ? ["date", "startdate", "scheduleddate"] : field2 === "endDate" ? ["enddate"] : ["deadline"];
+  const aliases = field === "scheduledDate" ? ["date", "startdate", "scheduleddate"] : field === "endDate" ? ["enddate"] : ["deadline"];
   const keys = Object.keys(frontmatter);
   const matches = aliases.map((alias) => keys.find((key2) => key2.toLowerCase().replace(/[\s_-]/g, "") === alias)).filter((key2) => Boolean(key2));
-  const key = (_b = (_a = matches.find((key2) => frontmatter[key2] !== null && frontmatter[key2] !== void 0)) != null ? _a : matches[0]) != null ? _b : field2 === "scheduledDate" ? "date" : field2 === "endDate" ? "end date" : "deadline";
+  const key = (_b = (_a = matches.find((key2) => frontmatter[key2] !== null && frontmatter[key2] !== void 0)) != null ? _a : matches[0]) != null ? _b : field === "scheduledDate" ? "date" : field === "endDate" ? "end date" : "deadline";
   const original = frontmatter[key];
   const raw = Array.isArray(original) ? original[0] : original;
   const link = typeof raw === "string" ? /^\[\[[^\]|]+(\|[^\]]*)?\]\]$/.exec(raw.trim()) : void 0;
@@ -4633,10 +4633,10 @@ function updateProjectDate(frontmatter, field2, value, expected, dateFormat) {
 function updateProjectDates(frontmatter, changes, expected, dateFormat) {
   const next = { ...frontmatter };
   let snapshot = expected;
-  for (const field2 of ["scheduledDate", "endDate", "deadline"]) {
-    const value = changes[field2];
+  for (const field of ["scheduledDate", "endDate", "deadline"]) {
+    const value = changes[field];
     if (value === void 0) continue;
-    updateProjectDate(next, field2, value, snapshot, dateFormat);
+    updateProjectDate(next, field, value, snapshot, dateFormat);
     snapshot = parseProjectProperties(next, dateFormat);
   }
   Object.assign(frontmatter, next);
@@ -4708,15 +4708,15 @@ function ganttRange(project) {
 function resizeProjectDate(project, handle, delta) {
   const range = ganttRange(project);
   if (!range) throw new Error("Set a start date and a valid end date first.");
-  const field2 = handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : range.finishField;
-  const original = project[field2];
+  const field = handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : range.finishField;
+  const original = project[field];
   if (!original) throw new Error("This project has no end date to move.");
   let value = addDays(original, Math.round(delta));
-  if (field2 === "scheduledDate") {
+  if (field === "scheduledDate") {
     const limit = project.endDate && project.endDate < range.end ? project.endDate : range.end;
     if (value > limit) value = limit;
   } else if (value < range.start) value = range.start;
-  return { field: field2, value };
+  return { field, value };
 }
 function ganttDateAt(anchor, offset, dayWidth, days) {
   return addDays(anchor, Math.max(0, Math.min(days - 1, Math.floor(offset / dayWidth))));
@@ -4854,7 +4854,7 @@ function renderGantt(container, options) {
     const metadata = content.createDiv({ cls: "tm-project-header-metadata" });
     const paintDetails = () => {
       metadata.empty();
-      renderProjectDeadline(metadata, project, (field2) => options.edit ? options.edit(project, field2) : options.open(project), options.dateFormat);
+      renderProjectDeadline(metadata, project, (field) => options.edit ? options.edit(project, field) : options.open(project), options.dateFormat);
       metadata.hidden = !metadata.childElementCount;
     };
     detailPainters.set(project, paintDetails);
@@ -4981,9 +4981,9 @@ function renderGantt(container, options) {
         paint(project);
       };
       const save = async (change) => {
-        const { field: field2, value } = resizeProjectDate(project, handle, change);
-        if (value === project[field2] || busy) return;
-        await persist(project, { [field2]: value });
+        const { field, value } = resizeProjectDate(project, handle, change);
+        if (value === project[field] || busy) return;
+        await persist(project, { [field]: value });
         reset();
       };
       button.addEventListener("pointerdown", (event) => {
@@ -5000,8 +5000,8 @@ function renderGantt(container, options) {
       button.addEventListener("pointermove", (event) => {
         if (pointer !== event.pointerId) return;
         delta = Math.round((event.clientX - origin + scroll.scrollLeft - originScroll) / width2);
-        const { field: field2, value } = resizeProjectDate(project, handle, delta);
-        paint({ ...project, [field2]: value });
+        const { field, value } = resizeProjectDate(project, handle, delta);
+        paint({ ...project, [field]: value });
         row.addClass("is-resizing");
       });
       button.addEventListener("pointerup", (event) => {
@@ -6244,9 +6244,9 @@ var TaskMainView = class extends import_obsidian14.ItemView {
     sync();
     const ordering = menu.createDiv({ cls: "tm-view-option-controls" });
     const selectOption = (label, value, choices, change) => {
-      const field2 = ordering.createEl("label", { cls: "tm-view-option" });
-      field2.createSpan({ text: label });
-      const select = field2.createEl("select", { attr: { "aria-label": label } });
+      const field = ordering.createEl("label", { cls: "tm-view-option" });
+      field.createSpan({ text: label });
+      const select = field.createEl("select", { attr: { "aria-label": label } });
       for (const choice of choices) select.createEl("option", { value: choice.key, text: choice.label });
       select.value = value;
       select.addEventListener("change", () => {
@@ -6378,7 +6378,7 @@ var TaskMainView = class extends import_obsidian14.ItemView {
         open: (project) => {
           void this.plugin.openProject(project.path).catch((error) => new import_obsidian14.Notice(String(error)));
         },
-        edit: (project, field2) => this.plugin.openProjectEditor(project.path, field2),
+        edit: (project, field) => this.plugin.openProjectEditor(project.path, field),
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
           if (!(file instanceof import_obsidian14.TFile)) throw new Error("Project note no longer exists.");
@@ -7408,38 +7408,123 @@ function renderRecurringLogTokens(root, dateFormat) {
 // src/main.ts
 var import_obsidian25 = require("obsidian");
 
-// src/task-indentation.ts
-var TASK_INDENT = 4;
-
-// src/task-description.ts
-function descriptionLines(text, indent) {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  while (lines.length && !lines[0].trim()) lines.shift();
-  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-  const expanded = lines.map((line) => line.replace(/^\s*/, (spaces) => spaces.replace(/\t/g, "    ")));
-  const margin = Math.min(...expanded.filter((line) => line.trim()).map((line) => /^ */.exec(line)[0].length));
-  return expanded.map((source) => {
-    const line = source.slice(Number.isFinite(margin) ? margin : 0);
-    if (!line.trim()) return "";
-    const bullet = /^\s*[-+*]\s+/.test(line);
-    const checkbox = /^\s*[-+*]\s+\[[ xX]\](?:\s|$)/.test(line);
-    const value = (bullet || /^\s+\S/.test(line)) && !checkbox ? line : `- ${line}`;
-    return " ".repeat(indent + TASK_INDENT) + value;
-  });
-}
-function replaceDescription(slots, line, ownedLines, text, indent) {
-  for (const owned of ownedLines) slots[owned] = [];
-  slots[line].push(...descriptionLines(text, indent));
-}
-function newTaskLines(draft, dateFormat, linkDates = true) {
+// src/task-line-editor.ts
+var import_commands = require("@codemirror/commands");
+var import_state3 = require("@codemirror/state");
+var import_view4 = require("@codemirror/view");
+function inlineTaskTokens(text, dateFormat) {
   var _a, _b;
-  const lines = [serializeTask({ ...draft, indent: 0 }, dateFormat, linkDates), ...(_a = draft.additionalLines) != null ? _a : []];
-  if (draft.description === void 0) return lines;
-  const task = scanTasks("", lines.join("\n"), /* @__PURE__ */ new Date(), dateFormat)[0];
-  const slots = lines.map((line) => [line]);
-  replaceDescription(slots, 0, (_b = task == null ? void 0 : task.descriptionLines) != null ? _b : [], draft.description, 0);
-  return slots.flat();
+  const result = [];
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    const prefix = offset === 0 ? "- [ ] " : "";
+    const source = prefix + line;
+    const tokens = (_b = (_a = noteTaskPresentation(source, dateFormat)) == null ? void 0 : _a.tokens) != null ? _b : taskTokens(source, dateFormat);
+    const local = tokens.map((token) => ({ from: token.from - prefix.length, to: token.to - prefix.length, token }));
+    for (const item of local) result.push({ ...item, from: offset + item.from, to: offset + item.to });
+    for (const match of line.matchAll(/(?:~)?\[\[([^\]\n]+)\]\]/g)) {
+      const from = match.index;
+      const to = from + match[0].length;
+      if (local.some((token) => from < token.to && to > token.from)) continue;
+      const target = match[1];
+      const project = match[0].startsWith("~") ? target : void 0;
+      const label = project ? target.split("|")[0].split("#")[0].replace(/\.md$/i, "").split("/").pop() : target.includes("|") ? target.slice(target.indexOf("|") + 1) : target.replace(/#/g, " \u203A ");
+      result.push({ from: offset + from, to: offset + to, label, ...project ? { project } : {} });
+    }
+    offset += line.length + 1;
+  }
+  return result.sort((a, b) => a.from - b.from);
 }
+function inactiveTaskTokens(tokens, selections) {
+  return tokens.filter((token) => !selections.some((selection) => selection.from <= token.to && selection.to >= token.from));
+}
+var InlineTokenWidget = class extends import_view4.WidgetType {
+  constructor(item) {
+    super();
+    this.item = item;
+  }
+  eq(other) {
+    return JSON.stringify(this.item) === JSON.stringify(other.item);
+  }
+  toDOM(view) {
+    var _a, _b;
+    const root = view.dom.ownerDocument.createElement("span");
+    const token = this.item.token;
+    if (token && token.kind !== "priority") {
+      renderNoteTaskDetails(root, { from: token.from, to: token.to, tokens: [{ ...token, label: token.label || "" }] }, (_token, label) => {
+        const link = view.dom.ownerDocument.createElement("span");
+        link.className = "internal-link";
+        link.textContent = label;
+        return link;
+      });
+    } else {
+      root.className = token ? "tm-note-task-details" : this.item.project ? "tm-task-source tm-editor-project" : "internal-link";
+      if (this.item.project) root.title = this.item.project;
+      root.textContent = (_b = (_a = token == null ? void 0 : token.label) != null ? _a : this.item.label) != null ? _b : "";
+    }
+    root.classList.add("tm-editor-token");
+    root.addEventListener("mousedown", (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      view.dispatch({ selection: { anchor: this.item.from, head: this.item.to }, scrollIntoView: true });
+      view.focus();
+    });
+    return root;
+  }
+  ignoreEvent() {
+    return false;
+  }
+};
+var TaskLineEditor = class {
+  constructor(parent, value, dateFormat, onChange) {
+    this.defaultValue = value;
+    const decorate = (view) => {
+      const ranges = inactiveTaskTokens(inlineTaskTokens(view.state.doc.toString(), dateFormat), view.hasFocus ? view.state.selection.ranges : []).map((item) => import_view4.Decoration.replace({ widget: new InlineTokenWidget(item) }).range(item.from, item.to));
+      return import_view4.Decoration.set(ranges, true);
+    };
+    this.view = new import_view4.EditorView({
+      parent,
+      state: import_state3.EditorState.create({ doc: value, extensions: [
+        import_view4.EditorView.lineWrapping,
+        (0, import_commands.history)(),
+        import_view4.keymap.of([...import_commands.defaultKeymap.filter((binding) => binding.key !== "Mod-Enter"), ...import_commands.historyKeymap]),
+        import_view4.EditorView.contentAttributes.of({ "aria-label": "Task text", "aria-multiline": "true", role: "textbox" }),
+        import_view4.ViewPlugin.fromClass(class {
+          constructor(view) {
+            this.decorations = decorate(view);
+          }
+          update(update) {
+            if (update.docChanged || update.selectionSet || update.focusChanged) this.decorations = decorate(update.view);
+          }
+        }, { decorations: (plugin) => plugin.decorations }),
+        import_view4.EditorView.updateListener.of((update) => {
+          if (update.docChanged) onChange();
+        })
+      ] })
+    });
+  }
+  get value() {
+    return this.view.state.doc.toString();
+  }
+  set value(value) {
+    this.view.dispatch({ changes: { from: 0, to: this.view.state.doc.length, insert: value } });
+  }
+  get selectionStart() {
+    return this.view.state.selection.main.from;
+  }
+  get selectionEnd() {
+    return this.view.state.selection.main.to;
+  }
+  setSelectionRange(from, to) {
+    this.view.dispatch({ selection: { anchor: from, head: to } });
+  }
+  focus() {
+    this.view.focus();
+  }
+  destroy() {
+    this.view.destroy();
+  }
+};
 
 // src/task-input.ts
 var width = (line) => {
@@ -7514,164 +7599,35 @@ function initialDraft(options) {
     ...options.preset
   };
 }
-function field(parent, label, input) {
-  const row = parent.createDiv({ cls: "tm-editor-field" });
-  const caption = row.createEl("label", { text: label });
-  input.setAttribute("aria-label", label);
-  caption.addEventListener("click", () => input.focus());
-  row.appendChild(input);
-}
 var TaskEditorModal = class extends import_obsidian20.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
-    this.rawDirty = false;
-    this.descriptionDirty = false;
-    this.lastRawDescription = "";
+    this.taskIndent = "";
     this.draft = initialDraft(options);
   }
   onOpen() {
-    var _a, _b, _c, _d;
     this.modalEl.addClass("tm-editor-modal");
     const { contentEl } = this;
     contentEl.empty();
-    const header = contentEl.createDiv({ cls: "tm-editor-header" });
-    header.createEl("h2", { text: this.options.task ? "Edit task" : "New task" });
+    this.modalEl.setAttribute("aria-label", this.options.task ? "Edit task" : "New task");
     const rawField = contentEl.createDiv({ cls: "tm-editor-raw-field" });
-    this.rawInput = rawField.createEl("textarea", { cls: "tm-editor-raw" });
-    this.rawInput.setAttribute("aria-label", "Task text");
-    this.rawInput.placeholder = "Task today at 9pm 30m {tomorrow at noon} p1 ~[[Project#Heading]]";
-    this.rawInput.rows = this.options.task ? 2 : 5;
-    rawField.createDiv({ cls: "tm-editor-raw-help", text: this.options.task ? "Cmd/Ctrl+Enter to save." : "One task per line. Indent subtasks; use indented bullets for descriptions. Cmd/Ctrl+Enter to save." });
-    this.rawInput.value = this.serializeDraft(this.draft);
-    this.titleInput = contentEl.createEl("input", { type: "text", cls: "tm-editor-title" });
-    this.titleInput.placeholder = "What needs to be done?";
-    this.titleInput.value = this.draft.title;
-    field(contentEl, "Title", this.titleInput);
-    this.scheduledInput = contentEl.createEl("input", { type: "text" });
-    this.scheduledInput.placeholder = `Tomorrow, next Friday, or ${formatDate(todayIso(), this.options.dateFormat)}`;
-    this.scheduledInput.value = this.draft.scheduledDate ? formatDateTime(this.draft.scheduledDate, this.draft.scheduledTime, this.options.dateFormat) : "";
-    field(contentEl, "Scheduled date and time", this.scheduledInput);
-    this.durationInput = contentEl.createEl("input", { type: "text" });
-    this.durationInput.placeholder = "For example 1h30m";
-    this.durationInput.value = this.draft.durationMinutes ? formatDuration(this.draft.durationMinutes) : "";
-    field(contentEl, "Duration", this.durationInput);
-    this.deadlineInput = contentEl.createEl("input", { type: "text" });
-    this.deadlineInput.placeholder = "Tomorrow at noon";
-    this.deadlineInput.value = this.draft.deadline ? formatDateTime(this.draft.deadline, this.draft.deadlineTime, this.options.dateFormat) : "";
-    field(contentEl, "Deadline", this.deadlineInput);
-    this.priorityInput = contentEl.createEl("select");
-    for (const [value, label] of [["", "No priority"], ["1", "P1 \u2014 High"], ["2", "P2 \u2014 Medium"], ["3", "P3 \u2014 Low"]]) {
-      this.priorityInput.createEl("option", { value, text: label });
-    }
-    this.priorityInput.value = this.draft.priority ? String(this.draft.priority) : "";
-    field(contentEl, "Priority", this.priorityInput);
-    this.tagsInput = contentEl.createEl("input", { type: "text" });
-    this.tagsInput.placeholder = "#[[work]] #[[client notes]]";
-    this.tagsInput.value = formatTags(this.draft.tags);
-    field(contentEl, "Tags", this.tagsInput);
-    this.destinationInput = contentEl.createEl("select");
-    const destinations = /* @__PURE__ */ new Set([this.options.settings.inboxPath, this.draft.destination]);
-    for (const project of this.options.projects) {
-      destinations.add(project.path);
-      for (const heading of (_a = project.headings) != null ? _a : []) destinations.add(destinationString(project.path, heading.name));
-    }
-    for (const path of [...destinations].sort()) this.destinationInput.createEl("option", { value: path, text: destinationLabel(path) });
-    this.destinationInput.value = this.draft.destination;
-    field(contentEl, "Destination", this.destinationInput);
-    const description = contentEl.createDiv({ cls: "tm-description-field" });
-    const descriptionLabel = description.createEl("label", { text: "Description" });
-    this.descriptionInput = description.createEl("textarea", { cls: "tm-description-input", attr: { "aria-label": "Description", placeholder: "Add a description\u2026" } });
-    this.descriptionInput.rows = 4;
-    this.descriptionInput.value = (_d = (_c = (_b = this.options.task) == null ? void 0 : _b.description) != null ? _c : this.draft.description) != null ? _d : "";
-    descriptionLabel.addEventListener("click", () => this.descriptionInput.focus());
-    this.descriptionInput.addEventListener("input", () => {
-      var _a2, _b2;
-      this.descriptionDirty = true;
-      if (this.options.task) return;
-      try {
-        const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates);
-        const lines = newTaskLines({ ...draft, description: this.descriptionInput.value }, this.options.dateFormat, this.options.settings.linkDates);
-        this.rawInput.value = [this.serializeDraft(draft), ...lines.slice(1)].join("\n");
-        this.lastRawDescription = (_b2 = (_a2 = scanTasks("", lines.join("\n"), /* @__PURE__ */ new Date(), this.options.dateFormat)[0]) == null ? void 0 : _a2.description) != null ? _b2 : "";
-        this.rawDirty = true;
-      } catch (e) {
-      }
-    });
+    const taskLine = rawField.createDiv({ cls: "tm-editor-task-line tm-note-task-line" });
+    this.completedInput = taskLine.createEl("input", { type: "checkbox", cls: "tm-editor-checkbox", attr: { "aria-label": "Completed" } });
+    this.completedInput.checked = this.draft.completed;
+    this.taskIndent = " ".repeat(this.draft.indent);
+    const initial = this.options.task ? this.options.task.raw + this.serializeDraft(this.draft).slice(serializeTask(this.draft, this.options.dateFormat, this.options.settings.linkDates).length) : this.serializeDraft(this.draft);
+    const source = initial.replace(/^([ \t]*)[-+*]\s+\[([ xX])\][ \t]*/, "");
+    const editorHost = taskLine.createDiv({ cls: "tm-editor-inline" });
     const error = contentEl.createDiv({ cls: "tm-editor-error" });
-    const syncFromStructured = () => {
-      this.rawDirty = false;
+    const updatePriority = () => {
+      var _a;
+      const parsed = parseTaskInput(this.rawInput.value, /* @__PURE__ */ new Date(), this.options.dateFormat);
+      taskLine.setAttribute("data-tm-priority", String((_a = parsed == null ? void 0 : parsed.priority) != null ? _a : ""));
       error.empty();
-      const next = this.readStructured(false);
-      if (next) {
-        this.draft = next;
-        const remaining = this.rawInput.value.split(/\r?\n/).slice(1);
-        this.rawInput.value = [this.serializeDraft(next), ...remaining].join("\n");
-      }
     };
-    const structuredInputs = [
-      this.titleInput,
-      this.scheduledInput,
-      this.durationInput,
-      this.deadlineInput,
-      this.priorityInput,
-      this.tagsInput,
-      this.destinationInput
-    ];
-    for (const input of structuredInputs) {
-      input.addEventListener("input", syncFromStructured);
-    }
-    for (const [input, label] of [
-      [this.scheduledInput, "scheduled date"],
-      [this.deadlineInput, "deadline"]
-    ]) {
-      input.addEventListener("blur", () => {
-        if (!input.value.trim()) return;
-        const resolved = parseDateTimeExpression(input.value, /* @__PURE__ */ new Date(), this.options.dateFormat);
-        if (!resolved) {
-          error.setText(`Could not understand the ${label}.`);
-          return;
-        }
-        input.value = formatDateTime(resolved.date, resolved.time, this.options.dateFormat);
-        syncFromStructured();
-      });
-    }
-    this.rawInput.addEventListener("input", () => {
-      var _a2, _b2, _c2, _d2;
-      this.rawDirty = true;
-      const parsed = parseTaskInput(this.rawInput.value.split(/\r?\n/)[0], /* @__PURE__ */ new Date(), this.options.dateFormat, true);
-      if (!parsed) {
-        error.setText("Enter a valid main task on the first line.");
-        return;
-      }
-      error.empty();
-      if (!this.options.task) {
-        try {
-          const draft = parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates);
-          const description2 = (_b2 = (_a2 = scanTasks("", newTaskLines(draft, this.options.dateFormat, this.options.settings.linkDates).join("\n"), /* @__PURE__ */ new Date(), this.options.dateFormat)[0]) == null ? void 0 : _a2.description) != null ? _b2 : "";
-          if (!this.descriptionDirty || description2 !== this.lastRawDescription) {
-            this.descriptionInput.value = description2;
-            this.descriptionDirty = false;
-          }
-          this.lastRawDescription = description2;
-        } catch (e) {
-        }
-      }
-      this.draft = { ...parsed, destination: (_c2 = parsed.destination) != null ? _c2 : this.options.settings.inboxPath };
-      this.titleInput.value = parsed.title;
-      this.scheduledInput.value = parsed.scheduledDate ? formatDateTime(parsed.scheduledDate, parsed.scheduledTime, this.options.dateFormat) : "";
-      this.deadlineInput.value = parsed.deadline ? formatDateTime(parsed.deadline, parsed.deadlineTime, this.options.dateFormat) : "";
-      this.durationInput.value = parsed.durationMinutes ? formatDuration(parsed.durationMinutes) : "";
-      this.priorityInput.value = parsed.priority ? String(parsed.priority) : "";
-      this.tagsInput.value = formatTags(parsed.tags);
-      const destination = (_d2 = parsed.destination) != null ? _d2 : this.options.settings.inboxPath;
-      if (destination) {
-        if (!Array.from(this.destinationInput.options).some((option) => option.value === destination)) {
-          this.destinationInput.createEl("option", { value: destination, text: destinationLabel(destination) });
-        }
-        this.destinationInput.value = destination;
-      }
-    });
+    this.rawInput = new TaskLineEditor(editorHost, source, this.options.dateFormat, updatePriority);
+    updatePriority();
     const actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
     this.actions = actions;
     const deleteButton = this.options.task && this.options.onDelete ? actions.createEl("button", { text: "Delete task", cls: "tm-delete-task", attr: { title: this.options.task.childIds.length ? "Delete this task and its subtasks" : "Delete this task" } }) : void 0;
@@ -7683,7 +7639,7 @@ var TaskEditorModal = class extends import_obsidian20.Modal {
     const saveTask = async () => {
       if (save.disabled) return;
       try {
-        const next = this.rawDirty ? this.readRaw() : this.readStructured(true);
+        const next = this.readRaw();
         if (!next) return;
         save.disabled = true;
         if (deleteButton) deleteButton.disabled = true;
@@ -7727,19 +7683,21 @@ var TaskEditorModal = class extends import_obsidian20.Modal {
     };
     this.stopViewportTracking = trackModalViewport(this.modalEl, contentEl);
     this.focusTimer = window.setTimeout(() => {
+      this.rawInput.focus();
       if (this.options.focusProperty) {
-        const input = { scheduledDate: this.scheduledInput, deadline: this.deadlineInput, durationMinutes: this.durationInput, priority: this.priorityInput, tags: this.tagsInput }[this.options.focusProperty];
-        input.focus();
-        if ("select" in input) input.select();
+        const ranges = [];
+        parseTaskLine(`- [ ] ${this.rawInput.value}`, /* @__PURE__ */ new Date(), this.options.dateFormat, false, ranges);
+        const token = ranges.find((range) => range.kind === this.options.focusProperty);
+        const start = token ? token.from - 6 : this.rawInput.value.length;
+        this.rawInput.setSelectionRange(start, token ? token.to - 6 : start);
         return;
       }
-      this.rawInput.focus();
-      const titleStart = this.rawInput.value.indexOf("] ") + 2;
-      this.rawInput.setSelectionRange(titleStart, titleStart + this.draft.title.length);
+      this.rawInput.setSelectionRange(0, 0);
     }, 0);
   }
   onClose() {
     var _a, _b;
+    this.rawInput.destroy();
     window.clearTimeout(this.focusTimer);
     (_a = this.stopViewportTracking) == null ? void 0 : _a.call(this);
     (_b = this.actions) == null ? void 0 : _b.remove();
@@ -7749,70 +7707,31 @@ var TaskEditorModal = class extends import_obsidian20.Modal {
   serializeDraft(draft) {
     return draft.destination === this.options.settings.inboxPath ? serializeTask(draft, this.options.dateFormat, this.options.settings.linkDates) : serializeTaskInput(draft, this.options.dateFormat, this.options.settings.linkDates);
   }
+  /** Accept pasted Markdown while keeping its checkbox out of the text field. */
+  normalizeChecklist() {
+    const prefix = /^([ \t]*)[-+*]\s+\[([ xX])\][ \t]*/.exec(this.rawInput.value);
+    if (!prefix) return;
+    this.taskIndent = prefix[1];
+    this.completedInput.checked = prefix[2].toLowerCase() === "x";
+    const start = this.rawInput.selectionStart;
+    const end = this.rawInput.selectionEnd;
+    this.rawInput.value = this.rawInput.value.slice(prefix[0].length);
+    this.rawInput.setSelectionRange(Math.max(0, start - prefix[0].length), Math.max(0, end - prefix[0].length));
+  }
   readRaw() {
     var _a;
-    if (!this.options.task) return { ...parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates), ...this.descriptionPatch() };
-    const parsed = parseTaskInput(this.rawInput.value.trimEnd(), /* @__PURE__ */ new Date(), this.options.dateFormat, true);
-    if (!parsed || !parsed.title) {
-      new import_obsidian20.Notice("Raw text must be one valid checklist line with a title.");
-      return void 0;
-    }
-    return { ...parsed, destination: (_a = parsed.destination) != null ? _a : this.options.settings.inboxPath, ...this.descriptionPatch() };
-  }
-  readStructured(notify) {
-    var _a;
-    if (notify && this.options.task && /\n[^\n]*\S/.test(this.rawInput.value)) {
+    this.normalizeChecklist();
+    const markdown = `${this.taskIndent}- [${this.completedInput.checked ? "x" : " "}] ${this.rawInput.value}`;
+    if (!this.options.task) return parseTaskTreeInput(markdown, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates);
+    if (/\n[^\n]*\S/.test(this.rawInput.value)) {
       throw new Error("Edit one task at a time; use New task to add multiple tasks.");
     }
-    const title = this.titleInput.value.trim();
-    if (!title) {
-      if (notify) new import_obsidian20.Notice("Enter a task title.");
-      return void 0;
-    }
-    const scheduledDate = this.readDate(this.scheduledInput.value, "scheduled date", notify);
-    if (this.scheduledInput.value.trim() && !scheduledDate) return void 0;
-    const deadline = this.readDate(this.deadlineInput.value, "deadline", notify);
-    if (this.deadlineInput.value.trim() && !deadline) return void 0;
-    let durationMinutes;
-    if (this.durationInput.value.trim()) {
-      durationMinutes = (_a = parseTaskLine(`- [ ] Task ${this.durationInput.value.trim()}`, /* @__PURE__ */ new Date(), this.options.dateFormat)) == null ? void 0 : _a.durationMinutes;
-      if (!durationMinutes) {
-        if (notify) new import_obsidian20.Notice("Use a duration such as 45m, 2h, or 1h30m.");
-        return void 0;
-      }
-    }
-    let tags;
-    try {
-      tags = parseTags(this.tagsInput.value);
-    } catch (cause) {
-      if (notify) new import_obsidian20.Notice(cause instanceof Error ? cause.message : "Invalid tags.");
-      return void 0;
-    }
-    const additionalLines = notify && !this.options.task ? parseTaskTreeInput(this.rawInput.value, this.options.settings.inboxPath, /* @__PURE__ */ new Date(), this.options.dateFormat, this.options.settings.linkDates).additionalLines : void 0;
-    return {
-      ...additionalLines ? { additionalLines } : {},
-      ...this.descriptionPatch(),
-      title,
-      scheduledDate: scheduledDate == null ? void 0 : scheduledDate.date,
-      scheduledTime: scheduledDate == null ? void 0 : scheduledDate.time,
-      deadline: deadline == null ? void 0 : deadline.date,
-      deadlineTime: deadline == null ? void 0 : deadline.time,
-      durationMinutes,
-      tags,
-      priority: this.priorityInput.value ? Number(this.priorityInput.value) : void 0,
-      completed: this.draft.completed,
-      destination: this.destinationInput.value,
-      indent: this.draft.indent
-    };
-  }
-  descriptionPatch() {
-    return this.descriptionDirty ? { description: this.descriptionInput.value } : {};
-  }
-  readDate(value, label, notify) {
-    if (!value.trim()) return void 0;
-    const parsed = parseDateTimeExpression(value, /* @__PURE__ */ new Date(), this.options.dateFormat);
-    if (!parsed && notify) new import_obsidian20.Notice(`Could not understand the ${label}.`);
-    return parsed;
+    const value = markdown.trimEnd();
+    if (/^\s*[-+*]\s+\[[ xX]\]\s*$/.test(value)) throw new Error("Enter a task title.");
+    if (this.rawInput.value === this.rawInput.defaultValue) return { ...this.draft, completed: this.completedInput.checked };
+    const parsed = parseTaskInput(value, /* @__PURE__ */ new Date(), this.options.dateFormat, true);
+    if (!(parsed == null ? void 0 : parsed.title)) throw new Error("Enter a task title.");
+    return { ...parsed, destination: (_a = parsed.destination) != null ? _a : this.options.settings.inboxPath };
   }
 };
 
@@ -8126,6 +8045,9 @@ var TaskNavigationView = class extends import_obsidian22.ItemView {
   }
 };
 
+// src/task-indentation.ts
+var TASK_INDENT = 4;
+
 // src/task-date-update.ts
 function updateTaskDateTokens(content, sourceFormats, targetFormat, linkDates) {
   const lines = content.split(/(\r?\n)/);
@@ -8148,6 +8070,36 @@ function updateTaskDateTokens(content, sourceFormats, targetFormat, linkDates) {
     lines[line * 2] = updated;
   }
   return lines.join("");
+}
+
+// src/task-description.ts
+function descriptionLines(text, indent) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const expanded = lines.map((line) => line.replace(/^\s*/, (spaces) => spaces.replace(/\t/g, "    ")));
+  const margin = Math.min(...expanded.filter((line) => line.trim()).map((line) => /^ */.exec(line)[0].length));
+  return expanded.map((source) => {
+    const line = source.slice(Number.isFinite(margin) ? margin : 0);
+    if (!line.trim()) return "";
+    const bullet = /^\s*[-+*]\s+/.test(line);
+    const checkbox = /^\s*[-+*]\s+\[[ xX]\](?:\s|$)/.test(line);
+    const value = (bullet || /^\s+\S/.test(line)) && !checkbox ? line : `- ${line}`;
+    return " ".repeat(indent + TASK_INDENT) + value;
+  });
+}
+function replaceDescription(slots, line, ownedLines, text, indent) {
+  for (const owned of ownedLines) slots[owned] = [];
+  slots[line].push(...descriptionLines(text, indent));
+}
+function newTaskLines(draft, dateFormat, linkDates = true) {
+  var _a, _b;
+  const lines = [serializeTask({ ...draft, indent: 0 }, dateFormat, linkDates), ...(_a = draft.additionalLines) != null ? _a : []];
+  if (draft.description === void 0) return lines;
+  const task = scanTasks("", lines.join("\n"), /* @__PURE__ */ new Date(), dateFormat)[0];
+  const slots = lines.map((line) => [line]);
+  replaceDescription(slots, 0, (_b = task == null ? void 0 : task.descriptionLines) != null ? _b : [], draft.description, 0);
+  return slots.flat();
 }
 
 // src/task-block.ts
