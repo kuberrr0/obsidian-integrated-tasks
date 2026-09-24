@@ -4349,6 +4349,9 @@ function taskDeadlineLabel(date, now2 = /* @__PURE__ */ new Date()) {
   const value = count >= 365 ? `${Math.floor(count / 365)}y` : count >= 30 ? `${Math.floor(count / 30)}m` : `${count}d`;
   return `${value}${days < 0 ? " ago" : ""}`;
 }
+function deadlineIsDistant(date, now2 = /* @__PURE__ */ new Date()) {
+  return Boolean(date && taskDayDistance(date, now2) > 7);
+}
 function deadlineIsOverdue(date, time, now2 = /* @__PURE__ */ new Date()) {
   if (!date) return false;
   const days = taskDayDistance(date, now2);
@@ -4414,7 +4417,7 @@ function renderTaskDetails(primary, metadata, task, options) {
   const due = task.deadline && showDate("deadline") ? taskDeadlineLabel(task.deadline, now2) : "";
   const dueTime = task.deadlineTime && show("deadlineTime") && grouping !== "deadlineTime" ? taskTimeLabel(task.deadlineTime) : "";
   if (due || dueTime) {
-    const badge = primary.createSpan({ cls: `tm-task-due${!task.completed && deadlineIsOverdue(task.deadline, task.deadlineTime, now2) ? " is-overdue" : ""}`, attr: { title: [task.deadline && formatDate(task.deadline, options.dateFormat), task.deadlineTime].filter(Boolean).join(", ") } });
+    const badge = primary.createSpan({ cls: `tm-task-due${deadlineIsDistant(task.deadline, now2) ? " is-distant" : ""}${!task.completed && deadlineIsOverdue(task.deadline, task.deadlineTime, now2) ? " is-overdue" : ""}`, attr: { title: [task.deadline && formatDate(task.deadline, options.dateFormat), task.deadlineTime].filter(Boolean).join(", ") } });
     const icon = badge.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
     (0, import_obsidian7.setIcon)(icon, "flag");
     badge.createSpan({ text: [due, dueTime].filter(Boolean).join(", ") });
@@ -4477,7 +4480,7 @@ function editable2(element, label, field2, edit) {
 }
 function renderProjectDeadline(parent, project, edit, dateFormat, now2 = /* @__PURE__ */ new Date()) {
   if (project.deadline) {
-    const due = parent.createSpan({ cls: `tm-task-due${deadlineIsOverdue(project.deadline, project.deadlineTime, now2) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
+    const due = parent.createSpan({ cls: `tm-task-due${deadlineIsDistant(project.deadline, now2) ? " is-distant" : ""}${deadlineIsOverdue(project.deadline, project.deadlineTime, now2) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
     (0, import_obsidian8.setIcon)(due.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
     due.createSpan({ text: [taskDeadlineLabel(project.deadline, now2), project.deadlineTime && taskTimeLabel(project.deadlineTime)].filter(Boolean).join(", ") });
     editable2(due, `project deadline: ${formatDate(project.deadline, dateFormat)}`, "deadline", edit);
@@ -6884,6 +6887,7 @@ function taskTokens(line, dateFormat) {
         ...range,
         label: `${range.kind === "deadline" ? "Due " : ""}${value}`,
         description: `${range.kind === "deadline" ? "Deadline" : "Scheduled"}: ${value}`,
+        distant: range.kind === "deadline" && deadlineIsDistant(parsed.deadline),
         dateLabel,
         time,
         linkText: link == null ? void 0 : link[1],
@@ -6902,7 +6906,7 @@ function taskTokens(line, dateFormat) {
   });
 }
 function tokenClass(token) {
-  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}`;
+  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}${token.distant ? " is-distant" : ""}`;
 }
 function recurringLogTokens(line, dateFormat) {
   const entry = parseRecurringLog(line, [dateFormat != null ? dateFormat : "YYYY-MM-DD"]);
@@ -6964,6 +6968,7 @@ function noteTaskPresentation(line, dateFormat, now2 = /* @__PURE__ */ new Date(
     const dateLabel = token.kind === "deadline" ? taskDeadlineLabel(date, now2) : taskScheduleLabel(date, now2);
     return {
       ...token,
+      distant: token.kind === "deadline" && deadlineIsDistant(date, now2),
       dateLabel,
       time,
       label: [dateLabel, time].filter(Boolean).join(", "),
@@ -6978,7 +6983,7 @@ function renderNoteTaskDetails(root, presentation, link) {
   for (const kind of ["deadline", "scheduledDate", "durationMinutes", "tags"]) {
     for (const token of presentation.tokens.filter((token2) => token2.kind === kind && token2.label)) {
       const item = document2.createDocumentFragment().createSpan();
-      item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}`;
+      item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}${token.distant ? " is-distant" : ""}`;
       item.setAttribute("data-tm-property-offset", String(token.from - presentation.from));
       item.setAttribute("title", token.description);
       item.setAttribute("aria-label", token.description);

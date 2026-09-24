@@ -1,3 +1,4 @@
+import { deadlineIsDistant } from "./task-row-details";
 import { parseRecurringLog } from "./recurring-log";
 import { formatDate, todayIso } from "./date";
 import { formatDuration, parseTaskLine, type ParsedTokenRange } from "./parser";
@@ -11,6 +12,7 @@ export interface TaskToken extends Omit<ParsedTokenRange, "kind"> {
   dateLabel?: string;
   time?: string;
   overdue?: boolean;
+  distant?: boolean;
   display?: { from: number; to: number; label: string; linkText?: string };
 }
 
@@ -37,6 +39,7 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
       };
       return { ...range, label: `${range.kind === "deadline" ? "Due " : ""}${value}`,
         description: `${range.kind === "deadline" ? "Deadline" : "Scheduled"}: ${value}`,
+        distant: range.kind === "deadline" && deadlineIsDistant(parsed.deadline),
         dateLabel, time, linkText: link?.[1], display,
         overdue: !parsed.completed && (range.kind === "scheduledDate" ? parsed.scheduledDate! : parsed.deadline!) < todayIso() };
     }
@@ -49,7 +52,7 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
 }
 
 export function tokenClass(token: TaskToken): string {
-  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}`;
+  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}${token.distant ? " is-distant" : ""}`;
 }
 
 /** Standalone recurrence history entries, outside checklist metadata. */

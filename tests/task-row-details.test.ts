@@ -96,3 +96,13 @@ it("routes date and duration clicks to their respective fields", () => {
     duration.handlers.get("click")!({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
     expect(edit).toHaveBeenLastCalledWith("durationMinutes");
 });
+
+it.each([
+    ["2026-09-26", "tm-task-due"],
+    ["2026-09-27", "tm-task-due is-distant"]
+])("mutes task deadlines only beyond seven calendar days: %s", (deadline, cls) => {
+    const primary = new Element(), metadata = new Element();
+    const task = scanTasks("Note.md", `- [ ] Task {${deadline}}`)[0];
+    renderTaskDetails(primary as never, metadata as never, task, { now, grouping: "none", show: () => true, dateFormat: "YYYY-MM-DD", tags: [], edit: vi.fn(), openSource: vi.fn() });
+    expect(primary.children[0].cls).toBe(cls);
+});

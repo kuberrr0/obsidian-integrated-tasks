@@ -1,6 +1,6 @@
 import { setIcon } from "obsidian";
 import { formatDate } from "./date";
-import { deadlineIsOverdue, taskDeadlineLabel, taskTimeLabel } from "./task-row-details";
+import { deadlineIsDistant, deadlineIsOverdue, taskDeadlineLabel, taskTimeLabel } from "./task-row-details";
 import type { ProjectDraft } from "./project-creator";
 import type { Project } from "./types";
 
@@ -44,7 +44,7 @@ function editable(element: HTMLElement, label: string, field: keyof ProjectDraft
 
 export function renderProjectDeadline(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date()): void {
     if (project.deadline) {
-        const due = parent.createSpan({ cls: `tm-task-due${deadlineIsOverdue(project.deadline, project.deadlineTime, now) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
+        const due = parent.createSpan({ cls: `tm-task-due${deadlineIsDistant(project.deadline, now) ? " is-distant" : ""}${deadlineIsOverdue(project.deadline, project.deadlineTime, now) ? " is-overdue" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
         setIcon(due.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
         due.createSpan({ text: [taskDeadlineLabel(project.deadline, now), project.deadlineTime && taskTimeLabel(project.deadlineTime)].filter(Boolean).join(", ") });
         editable(due, `project deadline: ${formatDate(project.deadline, dateFormat)}`, "deadline", edit);

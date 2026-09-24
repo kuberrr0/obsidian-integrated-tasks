@@ -26,6 +26,10 @@ export function taskDeadlineLabel(date: string, now = new Date()): string {
     return `${value}${days < 0 ? " ago" : ""}`;
 }
 
+export function deadlineIsDistant(date: string | undefined, now = new Date()): boolean {
+    return Boolean(date && taskDayDistance(date, now) > 7);
+}
+
 export function deadlineIsOverdue(date: string | undefined, time: string | undefined, now = new Date()): boolean {
     if (!date) return false;
     const days = taskDayDistance(date, now);
@@ -100,7 +104,7 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
     const due = task.deadline && showDate("deadline") ? taskDeadlineLabel(task.deadline, now) : "";
     const dueTime = task.deadlineTime && show("deadlineTime") && grouping !== "deadlineTime" ? taskTimeLabel(task.deadlineTime) : "";
     if (due || dueTime) {
-        const badge = primary.createSpan({ cls: `tm-task-due${!task.completed && deadlineIsOverdue(task.deadline, task.deadlineTime, now) ? " is-overdue" : ""}`, attr: { title: [task.deadline && formatDate(task.deadline, options.dateFormat), task.deadlineTime].filter(Boolean).join(", ") } });
+        const badge = primary.createSpan({ cls: `tm-task-due${deadlineIsDistant(task.deadline, now) ? " is-distant" : ""}${!task.completed && deadlineIsOverdue(task.deadline, task.deadlineTime, now) ? " is-overdue" : ""}`, attr: { title: [task.deadline && formatDate(task.deadline, options.dateFormat), task.deadlineTime].filter(Boolean).join(", ") } });
         const icon = badge.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
         setIcon(icon, "flag");
         badge.createSpan({ text: [due, dueTime].filter(Boolean).join(", ") });

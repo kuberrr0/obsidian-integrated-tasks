@@ -1500,3 +1500,5 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-view-option { display: flex; flex: 1 1 160px; min-width: 0; flex-direction: column; gap: 6px; color: var(--text-muted); font-size: var(--font-ui-small); }
 .tm-view-option select { width: 100%; min-width: 0; }
 .tm-view-option-heading { margin: 12px 0 8px; font-size: var(--font-ui-small); }
+
+:is(.tm-task-due, .tm-note-task-deadline, .tm-note-token-deadline).is-distant { color: var(--text-muted); }

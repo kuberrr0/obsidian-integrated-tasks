@@ -58,3 +58,13 @@ it("places list deadlines beside the title while retaining metadata and edit act
     deadline.handlers.get("click")!({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
     expect(edit).toHaveBeenCalledWith("deadline");
 });
+
+it.each([
+    ["2026-09-26", "tm-task-due"],
+    ["2026-09-27", "tm-task-due is-distant"],
+    ["2027-01-01", "tm-task-due is-distant"]
+])("mutes project deadlines only beyond seven calendar days: %s", (deadline, cls) => {
+    const root = new Element();
+    renderProjectHeaderDetails(root as never, { ...project, deadline }, vi.fn(), "YYYY-MM-DD", now);
+    expect(root.children[0].cls).toBe(cls);
+});

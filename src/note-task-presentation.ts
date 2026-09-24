@@ -1,6 +1,6 @@
 import { parseTaskLine } from "./parser";
 import { taskTokens, type TaskToken } from "./task-tokens";
-import { deadlineIsOverdue, taskDeadlineLabel, taskScheduleLabel, taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
+import { deadlineIsDistant, deadlineIsOverdue, taskDeadlineLabel, taskScheduleLabel, taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
 import { notePropertyIconStyle } from "./task-property-icons";
 
 export interface NoteTaskPresentation {
@@ -25,7 +25,7 @@ export function noteTaskPresentation(line: string, dateFormat?: string, now = ne
         const rawTime = token.kind === "deadline" ? task.deadlineTime : task.scheduledTime;
         const time = token.kind === "scheduledDate" ? taskTimeDurationLabel(rawTime, rawTime ? task.durationMinutes : undefined) : rawTime ? taskTimeLabel(rawTime) : undefined;
         const dateLabel = token.kind === "deadline" ? taskDeadlineLabel(date, now) : taskScheduleLabel(date, now);
-        return { ...token, dateLabel, time, label: [dateLabel, time].filter(Boolean).join(", "),
+        return { ...token, distant: token.kind === "deadline" && deadlineIsDistant(date, now), dateLabel, time, label: [dateLabel, time].filter(Boolean).join(", "),
             overdue: !task.completed && (token.kind === "deadline" ? deadlineIsOverdue(date, rawTime, now) : date < `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`) };
     }) };
 }
@@ -37,7 +37,7 @@ export function renderNoteTaskDetails(root: HTMLElement, presentation: NoteTaskP
     for (const kind of ["deadline", "scheduledDate", "durationMinutes", "tags"] as const) {
         for (const token of presentation.tokens.filter(token => token.kind === kind && token.label)) {
             const item = document.createDocumentFragment().createSpan();
-            item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}`;
+            item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}${token.distant ? " is-distant" : ""}`;
             item.setAttribute("data-tm-property-offset", String(token.from - presentation.from));
             item.setAttribute("title", token.description);
             item.setAttribute("aria-label", token.description);
