@@ -1575,3 +1575,48 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
   font-size: var(--font-ui-smaller);
   text-decoration: none;
 }
+
+/* Match the title/deadline row and quiet metadata row used in task mode. */
+.tm-editor-modal { width: min(640px, calc(100vw - 32px)); }
+.tm-editor-modal .modal-content { padding-top: 10px; }
+.tm-editor-task-line { gap: 12px; }
+.tm-editor-inline .cm-content { line-height: 1.65; padding-block: 4px; }
+.tm-editor-task-line .tm-editor-checkbox { margin-top: 10px; }
+.tm-editor-inline .tm-editor-secondary {
+  color: var(--text-muted);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-medium);
+}
+.tm-editor-inline .tm-editor-secondary .tm-note-task-details,
+.tm-editor-inline .tm-editor-secondary .tm-editor-project { font-size: var(--font-ui-medium); }
+.tm-editor-inline .tm-note-task-deadline { margin-inline-start: 4px; vertical-align: 1px; }
+.tm-editor-inline .tm-editor-project { margin-inline: 4px; }
+.tm-editor-modal .tm-editor-raw-field { margin-bottom: 12px; }
+.tm-editor-modal > .tm-editor-actions { margin-top: 12px; }
+
+.tm-editor-inline .tm-note-task-details,
+.tm-editor-inline .tm-editor-project { font-size: var(--font-ui-medium); }
+.tm-editor-inline .tm-editor-schedule-date.is-overdue { color: var(--text-error); }
+
+.tm-editor-inline .tm-editor-priority { font-weight: var(--font-semibold); }
+.tm-editor-inline .tm-editor-priority.is-p1 { color: var(--text-error); }
+.tm-editor-inline .tm-editor-priority.is-p2 { color: var(--color-orange); }
+.tm-editor-inline .tm-editor-priority.is-p3 { color: var(--color-blue); }
+
+.tm-editor-modal .tm-editor-actions button.tm-editor-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+.tm-editor-icon-action svg { width: 18px; height: 18px; }
+@media (max-width: 700px) {
+  .tm-editor-modal .tm-editor-actions button.tm-editor-icon-action {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+  }
+}

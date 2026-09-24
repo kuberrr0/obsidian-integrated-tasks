@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { EditorState, type Range } from "@codemirror/state";
-import { Decoration, EditorView, keymap, ViewPlugin, WidgetType, type DecorationSet } from "@codemirror/view";
+import { Decoration, EditorView, keymap, placeholder, ViewPlugin, WidgetType, type DecorationSet } from "@codemirror/view";
 import { noteTaskPresentation, renderNoteTaskDetails } from "./note-task-presentation";
 import { taskTokens, type TaskToken } from "./task-tokens";
 
@@ -13,7 +13,8 @@ export function inlineTaskTokens(text: string, dateFormat: string): InlineTaskTo
   for (const line of text.split("\n")) {
     const prefix = offset === 0 ? "- [ ] " : "";
     const source = prefix + line;
-    const tokens = noteTaskPresentation(source, dateFormat)?.tokens ?? taskTokens(source, dateFormat);
+    const presentationSource = source.replace(/~\[\[[^\]\n]+\]\]/g, match => " ".repeat(match.length));
+    const tokens = noteTaskPresentation(presentationSource, dateFormat)?.tokens ?? taskTokens(source, dateFormat);
     const local = tokens.map(token => ({ from: token.from - prefix.length, to: token.to - prefix.length, token }));
     for (const item of local) result.push({ ...item, from: offset + item.from, to: offset + item.to });
     for (const match of line.matchAll(/(?:~)?\[\[([^\]\n]+)\]\]/g)) {
@@ -30,6 +31,34 @@ export function inlineTaskTokens(text: string, dateFormat: string): InlineTaskTo
     offset += line.length + 1;
   }
   return result.sort((a, b) => a.from - b.from);
+}
+
+/** Arrange existing suffix tokens for the task-mode layout without rewriting their values. */
+export function taskModeEditorText(text: string, dateFormat: string): string {
+  if (text.includes("\n")) return text;
+  const tokens = inlineTaskTokens(text, dateFormat).filter(item => item.token || item.project);
+  if (!tokens.length) return text;
+  let end = tokens[0].from;
+  for (const token of tokens) {
+    if (text.slice(end, token.from).trim()) return text;
+    end = token.to;
+  }
+  if (text.slice(end).trim()) return text;
+  const order = (item: InlineTaskToken): number => item.token?.kind === "deadline" ? 0
+    : item.token?.kind === "priority" ? 1 : item.token?.kind === "scheduledDate" ? 2
+    : item.token?.kind === "durationMinutes" ? 3 : item.project ? 4 : 5;
+  return [text.slice(0, tokens[0].from).trimEnd(), ...[...tokens].sort((a, b) => order(a) - order(b)).map(item => text.slice(item.from, item.to))].filter(Boolean).join(" ");
+}
+
+export function taskMetadataStart(tokens: InlineTaskToken[]): number | undefined {
+  return tokens.find(item => item.project || (item.token && item.token.kind !== "deadline" && item.token.kind !== "priority"))?.from;
+}
+
+class MetadataLineBreak extends WidgetType {
+  eq(): boolean { return true; }
+  get lineBreaks(): number { return 1; }
+  toDOM(view: EditorView): HTMLElement { return view.dom.ownerDocument.createElement("br"); }
+  ignoreEvent(): boolean { return false; }
 }
 
 export function inactiveTaskTokens(tokens: InlineTaskToken[], selections: readonly { from: number; to: number }[]): InlineTaskToken[] {
@@ -50,10 +79,25 @@ class InlineTokenWidget extends WidgetType {
         link.textContent = label;
         return link;
       });
+      if (token.kind === "scheduledDate") {
+        const schedule = root.querySelector(".tm-note-task-scheduledDate");
+        if (schedule) {
+          schedule.classList.remove("is-overdue");
+          const date = view.dom.ownerDocument.createElement("span");
+          date.className = token.overdue ? "tm-editor-schedule-date is-overdue" : "tm-editor-schedule-date";
+          date.textContent = token.dateLabel ?? token.label;
+          schedule.replaceChildren(date);
+          if (token.time) schedule.appendChild(view.dom.ownerDocument.createTextNode(`, ${token.time}`));
+        }
+      }
     } else {
       root.className = token ? "tm-note-task-details" : this.item.project ? "tm-task-source tm-editor-project" : "internal-link";
       if (this.item.project) root.title = this.item.project;
       root.textContent = token?.label ?? this.item.label ?? "";
+      if (token?.kind === "priority") {
+        root.classList.add("tm-editor-priority", `is-p${token.priority}`);
+        root.title = token.description;
+      }
     }
     root.classList.add("tm-editor-token");
     root.addEventListener("mousedown", event => {
@@ -70,20 +114,37 @@ class InlineTokenWidget extends WidgetType {
 
 export class TaskLineEditor {
   readonly view: EditorView;
+  private destroyed = false;
   defaultValue: string;
-  constructor(parent: HTMLElement, value: string, dateFormat: string, onChange: () => void) {
+  constructor(parent: HTMLElement, value: string, dateFormat: string, onChange: () => void, prompt = "") {
+    value = taskModeEditorText(value, dateFormat);
     this.defaultValue = value;
     const decorate = (view: EditorView): DecorationSet => {
-      const ranges: Range<Decoration>[] = inactiveTaskTokens(inlineTaskTokens(view.state.doc.toString(), dateFormat), view.hasFocus ? view.state.selection.ranges : [])
+      const tokens = inlineTaskTokens(view.state.doc.toString(), dateFormat);
+      const ranges: Range<Decoration>[] = inactiveTaskTokens(tokens, view.hasFocus ? view.state.selection.ranges : [])
         .map(item => Decoration.replace({ widget: new InlineTokenWidget(item) }).range(item.from, item.to));
+      const secondary = taskMetadataStart(tokens);
+      if (secondary !== undefined) {
+        ranges.push(Decoration.widget({ widget: new MetadataLineBreak(), side: -1 }).range(secondary));
+        ranges.push(Decoration.mark({ class: "tm-editor-secondary" }).range(secondary, view.state.doc.length));
+      }
       return Decoration.set(ranges, true);
     };
     this.view = new EditorView({
       parent,
       state: EditorState.create({ doc: value, extensions: [
         EditorView.lineWrapping,
+        placeholder(prompt),
+        EditorView.domEventHandlers({ blur: () => {
+          // Reorder only after editing, so typing never moves the caret.
+          queueMicrotask(() => {
+            if (this.destroyed || this.view.hasFocus) return;
+            const ordered = taskModeEditorText(this.value, dateFormat);
+            if (ordered !== this.value) this.value = ordered;
+          });
+        } }),
         history(),
-        keymap.of([...defaultKeymap.filter(binding => binding.key !== "Mod-Enter"), ...historyKeymap]),
+        keymap.of([{ key: "Shift-Enter", run: view => { view.dispatch(view.state.replaceSelection("\n")); return true; } }, ...defaultKeymap.filter(binding => binding.key !== "Mod-Enter"), ...historyKeymap]),
         EditorView.contentAttributes.of({ "aria-label": "Task text", "aria-multiline": "true", role: "textbox" }),
         ViewPlugin.fromClass(class {
           decorations: DecorationSet;
@@ -102,5 +163,5 @@ export class TaskLineEditor {
   get selectionEnd(): number { return this.view.state.selection.main.to; }
   setSelectionRange(from: number, to: number): void { this.view.dispatch({ selection: { anchor: from, head: to } }); }
   focus(): void { this.view.focus(); }
-  destroy(): void { this.view.destroy(); }
+  destroy(): void { this.destroyed = true; this.view.destroy(); }
 }

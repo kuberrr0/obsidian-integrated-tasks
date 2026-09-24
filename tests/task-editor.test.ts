@@ -114,7 +114,7 @@ function openModal(edit = false, focusProperty?: TaskEditorProperty) {
     task: edit ? { id: "Inbox.md:0", path: "Inbox.md", line: 0, endLine: 0, raw: "- [ ] Existing", title: "Existing", indent: 0, completed: false, childIds: [] } : undefined
   });
   const fields = modal as unknown as {
-    modalEl: EditorElement; contentEl: EditorElement; close: () => void;
+    modalEl: EditorElement; contentEl: EditorElement; close: () => void; handleKeydown: (event: KeyboardEvent) => void;
     completedInput: EditorElement; tagsInput: EditorElement; rawInput: EditorElement; titleInput: EditorElement; priorityInput: EditorElement; descriptionInput: EditorElement; destinationInput: EditorElement;
   };
   fields.modalEl = new EditorElement();
@@ -123,7 +123,7 @@ function openModal(edit = false, focusProperty?: TaskEditorProperty) {
   modal.onOpen();
   const key = (extra: Record<string, unknown> = {}) => {
     const event = { key: "Enter", target: fields.rawInput, preventDefault: vi.fn(), stopPropagation: vi.fn(), ...extra };
-    fields.contentEl.onkeydown!(event as unknown as KeyboardEvent);
+    fields.handleKeydown(event as unknown as KeyboardEvent);
     return event;
   };
   return { fields, onSave, key };
@@ -137,16 +137,15 @@ describe("multiline modal interactions", () => {
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
     expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Main", completed: true, priority: 1, additionalLines: [expect.stringMatching(/^  - \[ \] Child \d{4}-\d{2}-\d{2} p2$/), "  - Description", "- [ ] Sibling"] });
   });
-  it.each([false, true])("requires Cmd/Ctrl+Enter in the modal (editing: %s)", async edit => {
+  it.each([false, true])("saves with Enter while preserving Shift+Enter and composition (editing: %s)", async edit => {
     const { fields, onSave, key } = openModal(edit);
     fields.rawInput.value = "- [ ] Task";
     fields.rawInput.dispatchEvent(new Event("input"));
-    expect(key().preventDefault).not.toHaveBeenCalled();
     expect(key({ shiftKey: true }).preventDefault).not.toHaveBeenCalled();
     key({ metaKey: true, isComposing: true });
     key({ ctrlKey: true, repeat: true });
     expect(onSave).not.toHaveBeenCalled();
-    expect(key({ ctrlKey: true }).preventDefault).toHaveBeenCalledOnce();
+    expect(key().preventDefault).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inlineTaskTokens, inactiveTaskTokens } from "../src/task-line-editor";
+import { inlineTaskTokens, inactiveTaskTokens, taskModeEditorText, taskMetadataStart } from "../src/task-line-editor";
 
 const text = "Discuss [[Project|plan]] [[2026-09-25]] 10:00 30m {[[2026-09-26]]} p1 #[[work]] ~[[Projects/Work#Ready]]";
 const tokens = inlineTaskTokens(text, "YYYY-MM-DD");
@@ -38,4 +38,16 @@ it("renders a project name without its folder, extension, or section", () => {
   const project = inlineTaskTokens(source, "YYYY-MM-DD")[0];
   expect(project).toMatchObject({ label: "Autumn Open House", project: "Projects/Autumn Open House.md#Ready" });
   expect(source.slice(project.from, project.to)).toBe("~[[Projects/Autumn Open House.md#Ready]]");
+});
+
+it("arranges deadline and priority beside title with schedule, project, tags below", () => {
+  const source = "Implement the new landing page [[2026-09-23]] 10:00 2h {[[2026-09-29]]} p1 #[[website]] ~[[Projects/Website Refresh]]";
+  const ordered = taskModeEditorText(source, "YYYY-MM-DD");
+  expect(ordered).toBe("Implement the new landing page {[[2026-09-29]]} p1 [[2026-09-23]] 10:00 2h ~[[Projects/Website Refresh]] #[[website]]");
+  expect(ordered.slice(taskMetadataStart(inlineTaskTokens(ordered, "YYYY-MM-DD")))).toBe("[[2026-09-23]] 10:00 2h ~[[Projects/Website Refresh]] #[[website]]");
+  expect(taskModeEditorText(ordered, "YYYY-MM-DD")).toBe(ordered);
+});
+
+it("does not reorder prose links or pasted task trees", () => {
+  for (const text of ["Discuss [[Project]] tomorrow", "Parent p1\n  - [ ] Child p2"]) expect(taskModeEditorText(text, "YYYY-MM-DD")).toBe(text);
 });

@@ -54,6 +54,7 @@ export class TaskEditorModal extends Modal {
   private stopViewportTracking?: () => void;
   private actions?: HTMLElement;
   private focusTimer?: number;
+  private handleKeydown?: (event: KeyboardEvent) => void;
   private completedInput!: HTMLInputElement;
   private taskIndent = "";
   private rawInput!: TaskLineEditor;
@@ -91,13 +92,11 @@ export class TaskEditorModal extends Modal {
     const actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
     this.actions = actions;
     const deleteButton = this.options.task && this.options.onDelete
-      ? actions.createEl("button", { text: "Delete task", cls: "tm-delete-task", attr: { title: this.options.task.childIds.length ? "Delete this task and its subtasks" : "Delete this task" } })
+      ? actions.createEl("button", { cls: "tm-delete-task tm-editor-icon-action", attr: { "aria-label": "Delete task", title: this.options.task.childIds.length ? "Delete this task and its subtasks" : "Delete this task" } })
       : undefined;
-    const cancel = actions.createEl("button", { text: "Cancel" });
-    cancel.addEventListener("click", () => this.close());
-    const save = actions.createEl("button", { text: "Save task", cls: "mod-cta" });
-    const saveIcon = save.createSpan({ cls: "tm-button-icon" });
-    setIcon(saveIcon, "check");
+    if (deleteButton) setIcon(deleteButton, "trash-2");
+    const save = actions.createEl("button", { cls: "mod-cta tm-editor-icon-action", attr: { "aria-label": "Save task", title: "Save task" } });
+    setIcon(save, "check");
     const saveTask = async (): Promise<void> => {
       if (save.disabled) return;
       try {
@@ -133,14 +132,17 @@ export class TaskEditorModal extends Modal {
     };
     deleteButton?.addEventListener("click", () => { void deleteTask(); });
 
-    contentEl.onkeydown = (event: KeyboardEvent): void => {
-      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
-      // Keep native keyboard activation for explicit actions such as Cancel.
+    this.handleKeydown = (event: KeyboardEvent): void => {
+      if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing || event.keyCode === 229) return;
+      // Keep native keyboard activation for explicit action buttons.
       if (event.target instanceof HTMLButtonElement) return;
       event.preventDefault();
       event.stopPropagation();
       if (!event.repeat && !save.disabled) save.click();
     };
+
+    // Capture Enter before CodeMirror can insert a newline.
+    contentEl.addEventListener("keydown", this.handleKeydown, true);
 
     this.stopViewportTracking = trackModalViewport(this.modalEl, contentEl);
     this.focusTimer = window.setTimeout(() => {
@@ -162,7 +164,7 @@ export class TaskEditorModal extends Modal {
     window.clearTimeout(this.focusTimer);
     this.stopViewportTracking?.();
     this.actions?.remove();
-    this.contentEl.onkeydown = null;
+    if (this.handleKeydown) this.contentEl.removeEventListener("keydown", this.handleKeydown, true);
     this.contentEl.empty();
   }
 

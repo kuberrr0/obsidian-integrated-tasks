@@ -1,9 +1,10 @@
+import { TaskLineEditor, inlineTaskTokens } from "./task-line-editor";
 import type { TaskEditorProperty } from "./task-editor";
 import { formatTags, parseTags } from "./task-tags";
-import { Modal, Notice, type App } from "obsidian";
+import { Modal, Notice, setIcon, type App } from "obsidian";
 import { formatDateTime, parseDateTimeExpression } from "./date";
-import { durationToMinutes, formatDuration } from "./parser";
-import { destinationLabel, destinationString } from "./structure";
+import { durationToMinutes, formatDuration, parseTaskInput, serializeTask, serializeTaskInput } from "./parser";
+import { destinationString } from "./structure";
 import { trackModalViewport } from "./mobile-layout";
 import type { BulkTaskPatch } from "./bulk-tasks";
 import type { Project, Task } from "./types";
@@ -61,76 +62,81 @@ export function bulkPropertyPatch(values: Partial<Record<Field, string>>, dateFo
   return patch;
 }
 
+const labels: Record<Field, string> = { scheduled: "Scheduled date", deadline: "Deadline", duration: "Duration", priority: "Priority", tags: "Tags", destination: "Project", description: "Description" };
+const propertyKeys = ["scheduledDate", "scheduledTime", "deadline", "deadlineTime", "durationMinutes", "priority", "tags", "destination"] as const;
+
+export function commonBulkValues(tasks: Task[], dateFormat: string): Partial<Record<Field, string>> {
+  const snapshots = tasks.map(task => bulkPropertyValues(task, dateFormat));
+  const values: Partial<Record<Field, string>> = {};
+  if (!snapshots.length) return values;
+  for (const key of Object.keys(labels) as Field[]) {
+    if (snapshots.every(value => value[key] === snapshots[0][key])) values[key] = snapshots[0][key];
+  }
+  return values;
+}
+
+export function bulkInlineText(values: Partial<Record<Field, string>>, dateFormat: string): string {
+  const properties = bulkPropertyPatch(values, dateFormat);
+  const draft = { ...properties, title: "", completed: false, indent: 0, destination: properties.destination ?? "" };
+  return (draft.destination ? serializeTaskInput(draft, dateFormat) : serializeTask(draft, dateFormat)).replace(/^- \[ \]\s*/, "");
+}
+
+/** Compare parsed properties, so rendering/reordering never applies mixed values. */
+export function bulkInlinePatch(text: string, initial: string, dateFormat: string, inboxPath: string): BulkTaskPatch {
+  const parse = (value: string) => {
+    if (/[\r\n]/.test(value)) throw new Error("Enter task properties on one line.");
+    const parsed = parseTaskInput(`Properties ${value}`, new Date(), dateFormat);
+    if (!parsed || parsed.title !== "Properties") throw new Error("Use task property syntax for dates, duration, priority, tags, and project.");
+    return parsed;
+  };
+  const before = parse(initial);
+  const after = parse(text);
+  const patch: BulkTaskPatch = {};
+  for (const key of propertyKeys) {
+    const previous = key === "tags" ? before.tags ?? [] : before[key];
+    const next = key === "tags" ? after.tags ?? [] : after[key];
+    if (JSON.stringify(previous) !== JSON.stringify(next)) Object.assign(patch, { [key]: key === "destination" ? next ?? inboxPath : next });
+  }
+  if ("scheduledDate" in patch || "scheduledTime" in patch) { patch.scheduledDate = after.scheduledDate; patch.scheduledTime = after.scheduledTime; }
+  if ("deadline" in patch || "deadlineTime" in patch) { patch.deadline = after.deadline; patch.deadlineTime = after.deadlineTime; }
+  return patch;
+}
+
 export class BulkTaskEditorModal extends Modal {
-  private inputs = new Map<Field, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
-  private initial = new Map<Field, string | undefined>();
-  private changed = new Set<Field>();
+  private editor!: TaskLineEditor;
+  private initialText = "";
   private actions?: HTMLElement;
   private focusTimer?: number;
   private stopViewportTracking?: () => void;
+  private handleKeydown?: (event: KeyboardEvent) => void;
   constructor(app: App, private readonly options: BulkEditorOptions) { super(app); }
 
   onOpen(): void {
-    this.modalEl.addClass("tm-editor-modal");
+    this.modalEl.addClass("tm-editor-modal", "tm-bulk-editor-modal");
+    this.modalEl.setAttribute("aria-label", "Edit task properties");
     const content = this.contentEl;
     content.empty();
-    content.createEl("h2", { text: "Edit task properties" });
-    content.createEl("p", { cls: "tm-bulk-help", text: `${this.options.tasks.length} selected. Only changed fields are applied. Delete task also deletes their subtasks.` });
-    const snapshots = this.options.tasks.map(task => bulkPropertyValues(task, this.options.dateFormat));
-    for (const [key, label] of [["scheduled", "Date and time"], ["duration", "Duration"], ["deadline", "Deadline date and time"], ["priority", "Priority"], ["tags", "Tags"], ["destination", "Destination"], ["description", "Description"]] as const) {
-      const common = snapshots.every(value => value[key] === snapshots[0][key]) ? snapshots[0][key] : undefined;
-      this.initial.set(key, common);
-      const row = content.createDiv({ cls: "tm-editor-field tm-bulk-field" });
-      const caption = row.createEl("label", { text: label });
-      const input = key === "description" ? row.createEl("textarea", { cls: "tm-description-input", attr: { rows: "4" } }) : key === "priority" || key === "destination" ? row.createEl("select") : row.createEl("input", { type: "text" });
-      input.setAttribute("aria-label", label);
-      caption.addEventListener("click", () => input.focus());
-      if (input.tagName === "SELECT") {
-        const select = input as HTMLSelectElement;
-        if (common === undefined) select.createEl("option", { value: "__mixed__", text: "Mixed — unchanged" });
-        if (key === "priority") {
-          for (const [value, text] of [["", "No priority"], ["1", "P1 — High"], ["2", "P2 — Medium"], ["3", "P3 — Low"]]) select.createEl("option", { value, text });
-        } else {
-          const destinations = new Set([this.options.inboxPath, ...snapshots.map(value => value.destination)]);
-          for (const project of this.options.projects) {
-            destinations.add(project.path);
-            for (const heading of project.headings ?? []) destinations.add(destinationString(project.path, heading.name));
-          }
-          for (const destination of [...destinations].sort()) select.createEl("option", { value: destination, text: destinationLabel(destination) });
-        }
-        input.value = common ?? "__mixed__";
-      } else {
-        (input as HTMLInputElement).placeholder = common === undefined ? "Mixed — unchanged" : key === "tags" ? "#[[work]] #[[client notes]]" : key === "duration" ? "45m or 1h30m" : key === "description" ? "Add a description…" : "Tomorrow at 9am";
-        input.value = common ?? "";
-      }
-      this.inputs.set(key, input);
-      const update = (): void => {
-        if (input.value === "__mixed__" || input.value === this.initial.get(key)) this.changed.delete(key);
-        else this.changed.add(key);
-      };
-      input.addEventListener("input", update);
-      input.addEventListener("change", update);
-      if (key !== "destination") {
-        const clear = row.createEl("button", { text: "Clear", attr: { "aria-label": `Clear ${label.toLowerCase()}` } });
-        clear.addEventListener("click", () => { input.value = ""; this.changed.add(key); });
-      }
-    }
+    const common = commonBulkValues(this.options.tasks, this.options.dateFormat);
+    this.initialText = bulkInlineText(common, this.options.dateFormat);
+    const host = content.createDiv({ cls: "tm-editor-inline tm-editor-raw-field" });
     const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
+    this.editor = new TaskLineEditor(host, this.initialText, this.options.dateFormat, () => error.empty(), "Add a date, duration, p1–p3, #[[tag]], or ~[[Project]]");
+
     this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
-    const remove = this.actions.createEl("button", { text: "Delete task", cls: "tm-delete-task" });
-    const cancel = this.actions.createEl("button", { text: "Cancel" });
-    const save = this.actions.createEl("button", { text: "Save task", cls: "mod-cta", attr: { title: "Cmd/Ctrl+Enter" } });
+    const remove = this.actions.createEl("button", { cls: "tm-delete-task tm-editor-icon-action", attr: { "aria-label": "Delete task", title: "Delete selected tasks and their subtasks" } });
+    const save = this.actions.createEl("button", { cls: "mod-cta tm-editor-icon-action", attr: { "aria-label": "Save task", title: "Save task properties" } });
+    setIcon(remove, "trash-2");
+    setIcon(save, "check");
     const run = async (deleting: boolean): Promise<void> => {
       if (save.disabled) return;
       try {
-        const values = Object.fromEntries([...this.changed].map(key => [key, this.inputs.get(key)!.value]));
-        const patch = deleting ? {} : bulkPropertyPatch(values, this.options.dateFormat);
-        save.disabled = remove.disabled = cancel.disabled = true;
+        const patch = deleting ? {} : bulkInlinePatch(this.editor.value, this.initialText, this.options.dateFormat, this.options.inboxPath);
+        save.disabled = remove.disabled = true;
         if (deleting) await this.options.onDelete();
         else await this.options.onSave(patch);
         this.close();
       } catch (cause) {
-        save.disabled = remove.disabled = cancel.disabled = false;
+        save.disabled = remove.disabled = false;
         const message = cause instanceof Error ? cause.message : "Could not update selected tasks.";
         error.setText(message);
         new Notice(message);
@@ -138,28 +144,28 @@ export class BulkTaskEditorModal extends Modal {
     };
     remove.addEventListener("click", () => { void run(true); });
     save.addEventListener("click", () => { void run(false); });
-    cancel.addEventListener("click", () => this.close());
-    content.onkeydown = event => {
-      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
+    this.handleKeydown = event => {
+      if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing || event.keyCode === 229) return;
+      if ((event.target as HTMLElement)?.tagName === "BUTTON") return;
       event.preventDefault(); event.stopPropagation();
       if (!event.repeat) void run(false);
     };
+    content.addEventListener("keydown", this.handleKeydown, true);
     this.stopViewportTracking = trackModalViewport(this.modalEl, content);
-    if (this.options.focusProperty) {
-      const field: Field = { scheduledDate: "scheduled", deadline: "deadline", durationMinutes: "duration", priority: "priority", tags: "tags" }[this.options.focusProperty] as Field;
-      this.focusTimer = window.setTimeout(() => {
-        const input = this.inputs.get(field);
-        input?.focus();
-        if (input && "select" in input) input.select();
-      }, 0);
-    }
+    this.focusTimer = window.setTimeout(() => {
+      this.editor.focus();
+      const token = this.options.focusProperty ? inlineTaskTokens(this.editor.value, this.options.dateFormat).find(item => item.token?.kind === this.options.focusProperty) : undefined;
+      const start = token?.from ?? this.editor.value.length;
+      this.editor.setSelectionRange(start, token?.to ?? start);
+    }, 0);
   }
 
   onClose(): void {
     if (this.focusTimer !== undefined) window.clearTimeout(this.focusTimer);
+    this.editor.destroy();
     this.stopViewportTracking?.();
     this.actions?.remove();
-    this.contentEl.onkeydown = null;
+    if (this.handleKeydown) this.contentEl.removeEventListener("keydown", this.handleKeydown, true);
     this.contentEl.empty();
   }
 }
