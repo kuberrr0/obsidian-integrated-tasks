@@ -65,11 +65,13 @@ it("includes times in date pills while retaining date-only link targets", () => 
 
 
 it("formats Markdown date labels with Daily Notes settings while retaining link targets and times", () => {
-  const text = "- [ ] Call [[2026-09-09]] 9pm {[[Sep 10, 2026]] noon}";
+  const text = "- [ ] Call [[2026-09-09]] 9pm {[[2026-09-10]] noon}";
   const tokens = taskTokens(text, "DD/MM/YYYY");
   expect(tokens.map(token => token.label)).toEqual(["09/09/2026 21:00", "Due 10/09/2026 12:00"]);
-  expect(tokens.map(token => token.linkText)).toEqual(["2026-09-09", "Sep 10, 2026"]);
-  expect(tokens.map(token => text.slice(token.display!.from, token.display!.to))).toEqual(["[[2026-09-09]]", "[[Sep 10, 2026]]"]);
+  expect(tokens.map(token => token.linkText)).toEqual(["2026-09-09", "2026-09-10"]);
+  expect(tokens.map(token => text.slice(token.display!.from, token.display!.to))).toEqual(["[[2026-09-09]]", "[[2026-09-10]]"]);
+  // Link text in another format is a note link, not a date.
+  expect(taskTokens("- [ ] Call {[[Sep 10, 2026]] noon}", "DD/MM/YYYY")).toEqual([]);
   expect(taskTokens("- [ ] Call {2026-09-09 noon}", "DD/MM/YYYY")[0]).toMatchObject({ label: "Due 09/09/2026 12:00", display: { label: "09/09/2026 12:00" } });
 });
 

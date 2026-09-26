@@ -112,7 +112,8 @@ describe("bulk dragging", () => {
     const text = "- [ ] A\r\n\t- Detail\r\n\r\n\t- [ ] Child\r\n- [ ] B\r\n- [ ] C\r\n";
     const tasks = scanTasks("Work.md", text);
     const result = planBulkTasks(new Map([["Work.md", text]]), [tasks[0], tasks[3]].map(task => ({ task, draft: draftForGroup(task) })), { anchor: tasks[2], placement: "after" });
-    expect(result.get("Work.md")).toBe("- [ ] B\r\n- [ ] A\r\n    - Detail\r\n\r\n    - [ ] Child\r\n- [ ] C\r\n");
+    // Indent depth is unchanged, so the original tab indentation is kept.
+    expect(result.get("Work.md")).toBe("- [ ] B\r\n- [ ] A\r\n\t- Detail\r\n\r\n\t- [ ] Child\r\n- [ ] C\r\n");
   });
 });
 

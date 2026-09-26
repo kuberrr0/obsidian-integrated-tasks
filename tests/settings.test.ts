@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import type { App } from "obsidian";
 import type TaskManagerPlugin from "../src/main";
 
@@ -14,7 +14,7 @@ const { rows } = vi.hoisted(() => ({ rows: [] as Array<{
 
 vi.mock("obsidian", () => ({
   Notice: class {},
-  PluginSettingTab: class { containerEl = { empty: () => { rows.length = 0; }, addClass: vi.fn(), createDiv: () => ({}) }; },
+  PluginSettingTab: class { containerEl = { empty: () => { rows.length = 0; }, addClass: vi.fn(), createDiv: () => ({}) }; hide() {} },
   Setting: class {
     row = { name: "", desc: "" } as typeof rows[number];
     settingEl = { addClass: vi.fn() };
@@ -72,6 +72,8 @@ describe("settings compatibility", () => {
   });
 
   it.each(["declarative", "legacy"])("preserves normalization and persistence in the %s page", async (mode) => {
+    vi.useFakeTimers();
+    onTestFinished(() => { vi.useRealTimers(); });
     const { tab, plugin } = setup();
     if (mode === "legacy") {
       tab.display();
@@ -89,12 +91,22 @@ describe("settings compatibility", () => {
     const position = rows.find(({ name }) => name === "New task position")!;
     expect(inbox.value).toBe("Tasks.md");
     expect(position.value).toBe("top");
+    await inbox.change!("  Projects/Qu");
     await inbox.change!("  Projects/Queue  ");
     expect(plugin.settings.inboxPath).toBe("Projects/Queue.md");
+    expect(plugin.saveSettings).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(500);
     expect(plugin.saveSettings).toHaveBeenCalledOnce();
     expect(plugin.refreshViews).toHaveBeenCalledOnce();
     await inbox.change!("   ");
     expect(plugin.settings.inboxPath).toBe("Inbox.md");
+    // Closing the settings page applies an edit that is still waiting.
+    tab.hide();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
+    expect(plugin.refreshViews).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
     await position.change!("bottom");
     expect(plugin.settings.newTaskPosition).toBe("bottom");
     await position.change!("invalid");
@@ -127,13 +139,20 @@ describe("settings compatibility", () => {
   });
 });
 
- it("changes the format and runs the date updater with a disabled button until completion", async () => {
+ it("changes the format once typing pauses and runs the date updater with a disabled button until completion", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => { vi.useRealTimers(); });
     const { tab, plugin } = setup();
     tab.display();
     const format = rows.find(row => row.name === "Date format")!;
     expect(format.value).toBe("");
-    await format.change!("DD/MM/YYYY");
-    expect(plugin.setDateFormat).toHaveBeenCalledWith("DD/MM/YYYY");
+    for (const typed of ["D", "DD", "DD/", "DD/MM", "DD/MM/YYYY"]) {
+      await format.change!(typed);
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(plugin.setDateFormat).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(plugin.setDateFormat).toHaveBeenCalledExactlyOnceWith("DD/MM/YYYY");
     const update = rows.find(row => row.name === "Update dates")!;
     const pending = update.click!();
     expect(update.disabled).toBe(true);

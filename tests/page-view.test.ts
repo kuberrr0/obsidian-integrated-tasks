@@ -75,7 +75,7 @@ function selectionView() {
   const bulkDrop = vi.fn().mockResolvedValue([]);
   const openEditor = vi.fn();
   const openBulkEditor = vi.fn();
-  const plugin = { settings: { hiddenListTaskProperties: [] as string[], hiddenKanbanTaskProperties: [] as string[] }, openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
+  const plugin = { settings: {}, openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
   const view = new TaskMainView({} as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   const internals = view as unknown as {

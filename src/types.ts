@@ -111,14 +111,10 @@ export interface TaskManagerSettings {
   showGroupTaskCounts: boolean;
   showSubtaskCounts: boolean;
   taskHoverHighlight: "none" | "title" | "background" | "all";
-  taskListRowHeightMultiplier: number;
-  hiddenListTaskProperties: TaskProperty[];
-  hiddenKanbanTaskProperties: TaskProperty[];
   wrapTaskTitles: boolean;
   wrapCalendarTaskTitles: boolean;
   wrapKanbanTaskTitles: boolean;
   inboxPath: string;
-  tasksHeading: string;
   newTaskPosition: "top" | "bottom";
 }
 
@@ -131,14 +127,10 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   showGroupTaskCounts: false,
   showSubtaskCounts: false,
   taskHoverHighlight: "none",
-  taskListRowHeightMultiplier: 1.0,
-  hiddenListTaskProperties: [],
-  hiddenKanbanTaskProperties: [],
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: false,
   wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
-  tasksHeading: "Tasks",
   newTaskPosition: "top"
 };
 

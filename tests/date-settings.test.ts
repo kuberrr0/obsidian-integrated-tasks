@@ -16,6 +16,8 @@ it("defaults to Daily Notes, overrides it, and retains the source format until u
   } as unknown as App;
   plugin.saveSettings = vi.fn().mockResolvedValue(undefined);
   plugin.store = { updateDates: vi.fn().mockResolvedValue([]) } as never;
+  const rescanAll = vi.fn().mockResolvedValue(undefined);
+  plugin.index = { rescanAll } as never;
   expect(plugin.settings.dateFormat).toBe("");
   expect(plugin.dateFormat()).toBe("DD.MM.YYYY");
   await plugin.setDateFormat(" MM/DD/YYYY ");
@@ -25,6 +27,8 @@ it("defaults to Daily Notes, overrides it, and retains the source format until u
   await plugin.updateTaskDates();
   expect(plugin.store.updateDates).toHaveBeenCalledWith(["DD.MM.YYYY", "YYYY/MM/DD", "DD.MM.YYYY"]);
   expect(plugin.settings.previousDateFormat).toBeUndefined();
+  // Format changes re-read every note; updating dates only picks up rewritten notes.
+  expect(rescanAll.mock.calls).toEqual([[undefined], [undefined], [{ force: false }]]);
   await plugin.setDateFormat("   ");
   expect(plugin.dateFormat()).toBe("DD.MM.YYYY");
   plugin.app = {} as App;

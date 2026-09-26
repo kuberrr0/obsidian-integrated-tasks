@@ -1,13 +1,14 @@
 import { TASK_INDENT } from "./task-indentation";
 import { replaceDescription } from "./task-description";
 import { insertIntoDestination, lineEnding } from "./markdown";
-import { liveTaskBlock, rewriteBlock } from "./task-block";
-import { serializeTask } from "./parser";
-import { splitDestination } from "./structure";
+import { liveTaskBlock, noteSnapshot, rewriteBlock, type NoteSnapshot } from "./task-block";
+import { rewriteTaskLine } from "./parser";
+import { destinationString, splitDestination } from "./structure";
+import { normalizePath } from "obsidian";
 import type { ListPlacement } from "./list-drag";
 import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
-export type BulkTaskPatch = Partial<Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority" | "tags" | "destination" | "description">>;
+export type BulkTaskPatch = Partial<Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "durationMinutes" | "priority" | "tags" | "destination" | "description" | "completed">>;
 export interface BulkTaskChange { task: Task; draft?: TaskDraft }
 export interface BulkTaskOptions {
   delete?: boolean;
@@ -19,6 +20,13 @@ export interface BulkTaskOptions {
   sectionHeadingLevel?: number;
 }
 
+/** An unchanged destination string never moves a task, even if its heading contains `|` or `[[links]]`. */
+export function isMove(task: Task, draft: TaskDraft): boolean {
+  if (draft.destination === destinationString(task.path, task.section)) return false;
+  const destination = splitDestination(draft.destination);
+  return normalizePath(destination.path) !== task.path || destination.heading !== task.section;
+}
+
 /** Plan every write before touching the vault, using original offsets throughout. */
 export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskChange[], options: BulkTaskOptions = {}): Map<string, string> {
   const get = (path: string): string => {
@@ -26,9 +34,16 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
     if (content === undefined) throw new Error(`Cannot find note: ${path}`);
     return content;
   };
+  // Planning uses original offsets throughout, so each note is parsed once.
+  const snapshots = new Map<string, NoteSnapshot>();
+  const snapshot = (path: string): NoteSnapshot => {
+    let note = snapshots.get(path);
+    if (!note) snapshots.set(path, note = noteSnapshot(path, get(path), options.dateFormat, options.sectionHeadingLevel));
+    return note;
+  };
   const seen = new Set<string>();
   const entries = changes.map(change => {
-    const block = liveTaskBlock(get(change.task.path), change.task, options.dateFormat);
+    const block = liveTaskBlock(snapshot(change.task.path), change.task, options.dateFormat, options.sectionHeadingLevel);
     const key = `${change.task.path}:${block.start}`;
     if (seen.has(key)) throw new Error("Selection changed. Select the tasks again.");
     seen.add(key);
@@ -38,19 +53,20 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
     parent !== child && parent.task.path === child.task.path && parent.block.start <= child.block.start && parent.block.end > child.block.start;
   const moving = entries.filter(entry => {
     if (options.delete || options.anchor) return true;
-    if (!entry.draft) return false;
-    const destination = splitDestination(entry.draft.destination);
-    return destination.path !== entry.task.path || destination.heading !== entry.task.section;
+    return Boolean(entry.draft) && isMove(entry.task, entry.draft!);
   });
   const roots = moving.filter(entry => !moving.some(parent => contains(parent, entry)));
-  const anchor = options.anchor ? liveTaskBlock(get(options.anchor.path), options.anchor, options.dateFormat) : undefined;
+  const anchor = options.anchor ? liveTaskBlock(snapshot(options.anchor.path), options.anchor, options.dateFormat, options.sectionHeadingLevel) : undefined;
   if (anchor && roots.some(entry => entry.task.path === options.anchor!.path && anchor.start >= entry.block.start && anchor.start < entry.block.end)) {
     throw new Error("Tasks cannot be moved into themselves or their subtasks.");
   }
-  const lines = new Map([...contents].map(([path, content]) => [path, content.split(/\r?\n/).map(line => [line])]));
+  const lines = new Map([...contents].map(([path, content]) => [path, (snapshots.get(path)?.lines ?? content.split(/\r?\n/)).map(line => [line])]));
   // Apply properties to every explicitly selected task, including selected children.
   if (!options.delete) for (const entry of entries) {
-    if (entry.draft) lines.get(entry.task.path)![entry.block.start][0] = serializeTask({ ...entry.draft, indent: entry.block.indent }, options.dateFormat, options.linkDates);
+    if (entry.draft) {
+      const slot = lines.get(entry.task.path)![entry.block.start];
+      slot[0] = rewriteTaskLine(slot[0], { ...entry.draft, indent: entry.block.indent }, options.dateFormat, options.linkDates);
+    }
     if (entry.draft?.description !== undefined && entry.draft.description !== (entry.task.description ?? "")) {
       if ((entry.block.description ?? "") !== (entry.task.description ?? "")) throw new Error("Task description changed. Refresh and try again.");
       replaceDescription(lines.get(entry.task.path)!, entry.block.start, entry.block.descriptionLines ?? [], entry.draft.description, entry.block.indent);

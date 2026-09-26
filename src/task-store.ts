@@ -1,17 +1,17 @@
 import { updateRecurringLogDates } from "./recurring-log";
-import { recurringFile, repeatRules, nextRepeatDate, advanceRecurringTask, appendRecurringLog, type RecurringOutcome } from "./recurring-task";
-import { TASK_INDENT } from "./task-indentation";
+import { recurringFile, repeatRules, nextRepeatDate, repeatAnchor, storedRepeatAnchor, advanceRecurringTask, appendRecurringLog, REPEAT_ANCHOR, type RecurringOutcome } from "./recurring-task";
 import { updateTaskDateTokens } from "./task-date-update";
 import { newTaskLines } from "./task-description";
-import { planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
+import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
-import { liveTaskBlock, rewriteBlock, placeTaskBlock } from "./task-block";
+import { liveTaskBlock } from "./task-block";
 import type { ListPlacement } from "./list-drag";
 import { splitDestination } from "./structure";
 import { normalizePath, type App, TFile, TFolder } from "obsidian";
 import {
+  findLiveLine,
   insertIntoDestination,
-  removeTaskBlockFromContent,
+  removeLinesFromContent,
   toggleTaskInContent,
   updateTaskInContent
 } from "./markdown";
@@ -52,28 +52,52 @@ export class TaskStore {
       return;
     }
     const file = this.requireFile(task.path);
-    await this.app.vault.process(file, (content) => toggleTaskInContent(content, task, completed));
+    await this.app.vault.process(file, (content) => toggleTaskInContent(content, task, completed, this.getSectionHeadingLevel()));
   }
 
   async resolveRecurring(task: Task, outcome: RecurringOutcome): Promise<string[]> {
     const recurring = recurringFile(this.app, task);
     if (!recurring) throw new Error("Task does not link to a recurring-task note.");
-    if (task.completed || !task.scheduledDate) throw new Error("Select an open recurring task with a scheduled date.");
     const source = this.requireFile(task.path);
     const files = new Map([[recurring.path, recurring], [source.path, source]]);
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
-    const next = nextRepeatDate(repeatRules(before.get(recurring.path)!), task.scheduledDate);
     const after = new Map(before);
-    after.set(source.path, advanceRecurringTask(before.get(source.path)!, task, next, this.getDateFormat()));
-    after.set(recurring.path, appendRecurringLog(after.get(recurring.path)!, outcome, task.scheduledDate, this.getDateFormat(), this.getLinkDates()));
-    return this.commitChanges(files, before, after);
+    const anchor = this.advanceRecurring(after, task, recurring, outcome).anchor;
+    const paths = await this.commitChanges(files, before, after);
+    await this.saveRepeatAnchors(new Map([[recurring, anchor]]), before);
+    return paths;
+  }
+
+  /** Advance one recurring task to its next instance and log the outcome, within planned contents. */
+  private advanceRecurring(contents: Map<string, string>, task: Task, recurring: TFile, outcome: RecurringOutcome): { task: Task; anchor?: string } {
+    if (task.completed || !task.scheduledDate) throw new Error("Select an open recurring task with a scheduled date.");
+    const definition = contents.get(recurring.path)!;
+    const rules = repeatRules(definition);
+    const anchor = repeatAnchor(rules, task.scheduledDate, storedRepeatAnchor(definition));
+    const next = nextRepeatDate(rules, task.scheduledDate, anchor);
+    const source = contents.get(task.path)!;
+    const line = findLiveLine(source.split(/\r?\n/), task, this.getSectionHeadingLevel());
+    const advanced = advanceRecurringTask(source, task, next, this.getDateFormat(), this.getSectionHeadingLevel());
+    contents.set(task.path, advanced);
+    contents.set(recurring.path, appendRecurringLog(contents.get(recurring.path)!, outcome, task.scheduledDate, this.getDateFormat(), this.getLinkDates()));
+    return { task: { ...task, line, raw: advanced.split(/\r?\n/)[line], scheduledDate: next }, anchor };
+  }
+
+  /** Persist month/year anchors after the task writes commit; a lost anchor only resets to the next scheduled date. */
+  private async saveRepeatAnchors(anchors: Map<TFile, string | undefined>, before: Map<string, string>): Promise<void> {
+    for (const [file, anchor] of anchors) {
+      if (!anchor || anchor === storedRepeatAnchor(before.get(file.path) ?? "") || !this.app.fileManager?.processFrontMatter) continue;
+      try {
+        await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => { frontmatter[REPEAT_ANCHOR] = anchor; });
+      } catch (error) { console.error("Could not save the repeat anchor", error); }
+    }
   }
 
   async delete(task: Task): Promise<void> {
     const file = this.requireFile(task.path);
     await this.app.vault.process(file, content => {
-      const block = liveTaskBlock(content, task, this.getDateFormat());
-      return removeTaskBlockFromContent(content, task, block.lines.length);
+      const block = liveTaskBlock(content, task, this.getDateFormat(), this.getSectionHeadingLevel());
+      return removeLinesFromContent(content, block.start, block.lines.length);
     });
   }
 
@@ -86,91 +110,13 @@ export class TaskStore {
   }
 
   async update(task: Task, draft: TaskDraft): Promise<void> {
-    if (draft.description !== undefined && draft.description !== (task.description ?? "")) {
+    // Description edits, moves and recurring completions share the planned, all-or-nothing bulk path.
+    if ((draft.description !== undefined && draft.description !== (task.description ?? "")) || isMove(task, draft) || this.completesRecurring(task, draft)) {
       await this.bulkChange([task], () => draft);
       return;
     }
-    const destination = splitDestination(draft.destination);
-    if (normalizePath(destination.path) !== task.path || destination.heading !== task.section) {
-      await this.move(task, draft);
-      return;
-    }
-
     const file = this.requireFile(task.path);
-    await this.app.vault.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates()));
-  }
-
-  async relocate(task: Task, anchor: Task, placement: ListPlacement, draft: TaskDraft): Promise<void> {
-    const source = this.requireFile(task.path);
-    const target = this.requireFile(anchor.path);
-    if (source.path === target.path) {
-      await this.app.vault.process(source, content => {
-        const block = liveTaskBlock(content, task, this.getDateFormat());
-        const destination = liveTaskBlock(content, anchor, this.getDateFormat());
-        const indent = destination.indent + (placement === "child" ? TASK_INDENT : 0);
-        return placeTaskBlock(content, task, anchor, placement, rewriteBlock(block, draft, indent, this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
-      });
-      return;
-    }
-    const content = await this.app.vault.read(source);
-    const block = liveTaskBlock(content, task, this.getDateFormat());
-    let before = "";
-    let after = "";
-    await this.app.vault.process(target, current => {
-      before = current;
-      const destination = liveTaskBlock(current, anchor, this.getDateFormat());
-      after = placeTaskBlock(current, undefined, anchor, placement, rewriteBlock(block, draft, destination.indent + (placement === "child" ? TASK_INDENT : 0), this.getDateFormat(), this.getLinkDates()), this.getDateFormat());
-      return after;
-    });
-    try {
-      await this.app.vault.process(source, current => {
-        const latest = liveTaskBlock(current, task, this.getDateFormat());
-        if (latest.lines.join("\n") !== block.lines.join("\n")) throw new Error("Task changed while moving. Try again.");
-        return removeTaskBlockFromContent(current, task, latest.lines.length);
-      });
-    } catch (cause) {
-      await this.app.vault.process(target, current => {
-        if (current !== after) throw new Error("Source task was kept, but the destination changed during the move. Check the destination for a duplicate.");
-        return before;
-      });
-      throw cause;
-    }
-  }
-
-  private async move(task: Task, draft: TaskDraft): Promise<void> {
-    const source = this.requireFile(task.path);
-    const { path, heading } = splitDestination(draft.destination);
-    const target = heading ? this.requireFile(path) : await this.ensureFile(path);
-    if (source.path === target.path) {
-      await this.app.vault.process(source, content => {
-        const block = liveTaskBlock(content, task, this.getDateFormat());
-        return insertIntoDestination(removeTaskBlockFromContent(content, task, block.lines.length),
-          rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel());
-      });
-      return;
-    }
-    const content = await this.app.vault.read(source);
-    const block = liveTaskBlock(content, task, this.getDateFormat());
-    let before = "";
-    let after = "";
-    await this.app.vault.process(target, current => {
-      before = current;
-      after = insertIntoDestination(current, rewriteBlock(block, draft, 0, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel());
-      return after;
-    });
-    try {
-      await this.app.vault.process(source, current => {
-        const latest = liveTaskBlock(current, task, this.getDateFormat());
-        if (latest.lines.join("\n") !== block.lines.join("\n")) throw new Error("Task changed while moving. Try again.");
-        return removeTaskBlockFromContent(current, task, latest.lines.length);
-      });
-    } catch (cause) {
-      await this.app.vault.process(target, current => {
-        if (current !== after) throw new Error("Source task was kept, but the destination changed during the move. Check the destination for a duplicate.");
-        return before;
-      });
-      throw cause;
-    }
+    await this.app.vault.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates(), this.getSectionHeadingLevel()));
   }
 
   async bulkUpdate(tasks: Task[], patch: BulkTaskPatch): Promise<string[]> {
@@ -186,18 +132,49 @@ export class TaskStore {
     return this.bulkChange(tasks, task => draftForGroup(task, group), { anchor, placement });
   }
 
+  private completesRecurring(task: Task, draft?: TaskDraft): TFile | undefined {
+    return !task.completed && draft?.completed ? recurringFile(this.app, task) : undefined;
+  }
+
+  /**
+   * Plan and commit every change together. A recurring task whose draft completes it is
+   * advanced and logged (as resolveRecurring does) instead of being checked; its other
+   * property changes still apply, and an explicitly changed scheduled date wins over the next instance.
+   */
   async bulkChange(tasks: Task[], draft: (task: Task) => TaskDraft | undefined, options: BulkTaskOptions = {}): Promise<string[]> {
     const changes = tasks.map(task => ({ task, draft: draft(task) }));
     const files = new Map<string, TFile>();
     for (const task of tasks) files.set(task.path, this.requireFile(task.path));
     if (options.anchor) files.set(options.anchor.path, this.requireFile(options.anchor.path));
-    for (const change of changes) if (change.draft && !options.anchor) {
+    for (const change of changes) if (change.draft && !options.anchor && isMove(change.task, change.draft)) {
       const { path, heading } = splitDestination(change.draft.destination);
       if (!files.has(path)) files.set(path, heading ? this.requireFile(path) : await this.ensureFile(path));
     }
+    const recurring = options.delete ? [] : changes.flatMap(change => {
+      const file = this.completesRecurring(change.task, change.draft);
+      return file ? [{ change, file }] : [];
+    });
+    for (const { file } of recurring) files.set(file.path, file);
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
-    const after = planBulkTasks(before, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates(), sectionHeadingLevel: this.getSectionHeadingLevel() });
-    return this.commitChanges(files, before, after);
+    const contents = new Map(before);
+    const anchors = new Map<TFile, string | undefined>();
+    for (const { change, file } of recurring) {
+      const original = change.task;
+      const advanced = this.advanceRecurring(contents, original, file, "COMPLETED");
+      anchors.set(file, advanced.anchor);
+      change.task = advanced.task;
+      change.draft = { ...change.draft!, completed: false,
+        scheduledDate: change.draft!.scheduledDate === original.scheduledDate ? advanced.task.scheduledDate : change.draft!.scheduledDate };
+    }
+    const planned = planBulkTasks(contents, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates(), sectionHeadingLevel: this.getSectionHeadingLevel() });
+    const after = new Map<string, string>();
+    for (const [path, content] of before) {
+      const final = planned.get(path) ?? contents.get(path)!;
+      if (final !== content) after.set(path, final);
+    }
+    const paths = await this.commitChanges(files, before, after);
+    await this.saveRepeatAnchors(anchors, before);
+    return paths;
   }
 
   private async commitChanges(files: Map<string, TFile>, before: Map<string, string>, after: Map<string, string>): Promise<string[]> {

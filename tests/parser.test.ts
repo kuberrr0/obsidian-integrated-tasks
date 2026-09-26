@@ -19,7 +19,7 @@ describe("task parser", () => {
   });
 
   it("parses recognized suffix tokens in any order", () => {
-    const task = parseTaskLine("  - [x] Send brief p2 [[tomorrow]] 45m", reference);
+    const task = parseTaskLine("  - [x] Send brief p2 [[2026-09-05]] 45m", reference);
     expect(task).toMatchObject({
       title: "Send brief",
       indent: 2,
@@ -42,14 +42,14 @@ describe("task parser", () => {
   });
 
   it("resolves natural language inside deadline syntax", () => {
-    expect(parseTaskLine("- [ ] Submit proposal {[[tomorrow]]}", reference)).toMatchObject({
+    expect(parseTaskLine("- [ ] Submit proposal {tomorrow}", reference)).toMatchObject({
       title: "Submit proposal",
       deadline: "2026-09-05"
     });
   });
 
   it("parses scheduled date and deadline independently when both are present", () => {
-    expect(parseTaskInput("do this [[today]] {[[tomorrow]]}", reference)).toMatchObject({
+    expect(parseTaskInput("do this [[2026-09-04]] {tomorrow}", reference)).toMatchObject({
       title: "do this",
       scheduledDate: "2026-09-04",
       deadline: "2026-09-05"
@@ -57,7 +57,7 @@ describe("task parser", () => {
   });
 
   it("uses a trailing wiki-link marker as the editor destination", () => {
-    expect(parseTaskInput("do this [[today]] ~[[Projects/Launch]]", reference)).toMatchObject({
+    expect(parseTaskInput("do this [[2026-09-04]] ~[[Projects/Launch]]", reference)).toMatchObject({
       title: "do this",
       scheduledDate: "2026-09-04",
       destination: "Projects/Launch.md"
@@ -185,7 +185,9 @@ describe("task scanner", () => {
 
 describe("project sections", () => {
   it("round trips heading destinations with aliases and extensions", () => {
-    for (const input of ["Project#Plan", "Project.md#Plan|Alias"]) {
+    // An alias belongs to the note part; after '#', '|' is part of the heading name.
+    expect(parseTaskInput("Do it ~[[Project.md#Plan|Alias]]")!.destination).toBe("Project.md#Plan|Alias");
+    for (const input of ["Project#Plan", "Project.md|Alias#Plan"]) {
       const parsed = parseTaskInput(`Do it ~[[${input}]]`)!;
       expect(parsed.destination).toBe("Project.md#Plan");
       expect(serializeTaskInput({ ...parsed, destination: parsed.destination! })).toBe("- [ ] Do it ~[[Project#Plan]]");
@@ -224,7 +226,7 @@ describe("plain-language task input dates", () => {
   });
 
   it("combines plain dates with duration, priority, deadline, and heading destination", () => {
-    expect(parseTaskInput("Review 30m p1 tomorrow {[[next Friday]]} ~[[Project#Plan]]", reference)).toMatchObject({
+    expect(parseTaskInput("Review 30m p1 tomorrow {next Friday} ~[[Project#Plan]]", reference)).toMatchObject({
       title: "Review", scheduledDate: "2026-09-05", durationMinutes: 30,
       deadline: "2026-09-11", priority: 1, destination: "Project.md#Plan"
     });

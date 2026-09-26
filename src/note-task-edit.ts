@@ -135,7 +135,28 @@ export function noteTaskEditEditor(getDateFormat: () => string, open: OpenTask, 
   });
 }
 
+/** Reading-view sections can span the whole note; reuse one scan per section text and context. */
+interface SectionScan { path: string; text: string; format: string; level: number; day: string; tasks: Map<number, Task> }
+const sectionScans: SectionScan[] = [];
+
+function sectionTasks(path: string, text: string, format: string, level: number): Map<number, Task> {
+  const day = todayIso();
+  const index = sectionScans.findIndex(scan => scan.path === path && scan.format === format && scan.level === level && scan.day === day && scan.text === text);
+  if (index >= 0) {
+    const [scan] = sectionScans.splice(index, 1);
+    sectionScans.unshift(scan);
+    return scan.tasks;
+  }
+  const tasks = new Map(scanTasks(path, text, new Date(), format, level).map(task => [task.line, task]));
+  sectionScans.unshift({ path, text, format, level, day, tasks });
+  // A few recent sections cover the open notes without retaining old note text.
+  sectionScans.length = Math.min(sectionScans.length, 16);
+  return tasks;
+}
+
 export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostProcessorContext, getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1, complete?: (task: Task) => boolean): void {
+  // Most rendered sections have no checklist; they need no listeners (three of them on the document).
+  if (!root.matches?.("li.task-list-item") && !root.querySelector?.("li.task-list-item")) return;
   const child = new MarkdownRenderChild(root);
   context.addChild(child);
   child.register(bindNoteTaskEdit(root, checkbox => {
@@ -147,6 +168,6 @@ export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostPro
     const relativeLine = item.getAttribute("data-line");
     if (relativeLine === null || !/^\d+$/.test(relativeLine)) return;
     const line = section.lineStart + Number(relativeLine);
-    return scanTasks(context.sourcePath, section.text, new Date(), getDateFormat(), getSectionHeadingLevel()).find(task => task.line === line);
+    return sectionTasks(context.sourcePath, section.text, getDateFormat(), getSectionHeadingLevel()).get(line);
   }, open, complete));
 }

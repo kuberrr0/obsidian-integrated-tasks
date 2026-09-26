@@ -1,5 +1,5 @@
 import type { ProjectDateField } from "./gantt";
-import { formatDate, parseDateExpression } from "./date";
+import { formatDate, parseStrictDateExpression } from "./date";
 import type { Priority, ProjectProperties } from "./types";
 
 /** Normalize note properties to the same display values used by tasks. */
@@ -13,7 +13,8 @@ export function parseProjectProperties(frontmatter: Record<string, unknown> | un
     const text = scalar(value);
     if (!text) return undefined;
     const link = /^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/.exec(text);
-    return parseDateExpression(link?.[1] ?? text, new Date(), dateFormat);
+    // Frontmatter dates must be formatted or ISO; `date: May` is prose, not a date.
+    return parseStrictDateExpression(link?.[1] ?? text, dateFormat);
   };
   const rawPriority = scalar(values.get("priority"))?.toLowerCase();
   const priorities: Record<string, Priority> = { "1": 1, p1: 1, high: 1, "2": 2, p2: 2, medium: 2, "3": 3, p3: 3, low: 3 };
@@ -57,7 +58,7 @@ export function parseProjectParent(frontmatter?: Record<string, unknown>): strin
 
 /** Preserve property names and date-link formatting when saving a Gantt handle. */
 export function updateProjectDate(frontmatter: Record<string, unknown>, field: ProjectDateField, value: string, expected: ProjectProperties, dateFormat?: string): void {
-  if (!parseDateExpression(value)) throw new Error("Invalid project date.");
+  if (!parseStrictDateExpression(value)) throw new Error("Invalid project date.");
   const current = parseProjectProperties(frontmatter, dateFormat);
   for (const key of ["scheduledDate", "endDate", "deadline"] as const) {
     if (current[key] !== expected[key]) throw new Error("Project dates changed while dragging. Refresh and try again.");

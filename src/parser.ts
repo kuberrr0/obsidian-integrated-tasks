@@ -1,4 +1,4 @@
-import { formatTags } from "./task-tags";
+import { formatTags, normalizeTags } from "./task-tags";
 import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
 import { findInputDate, findInputDeadline, formatDate, formatLocalDate, parseDateTimeExpression } from "./date";
 import type { ParsedTaskMetadata, Priority, Task, TaskDraft } from "./types";
@@ -9,7 +9,9 @@ const PRIORITY = /(?:^|\s)p([123])\s*$/i;
 const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
 const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
-const DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
+// A heading may hold balanced [[links]]; the path part holds no brackets or '#'.
+const DESTINATION = /(?:^|\s)~\[\[([^[\]#\r\n]+(?:#(?:[^[\]\r\n]|\[\[[^[\]\r\n]*\]\])*)?)\]\]\s*$/;
+const BLOCK_ID = /\s\^[A-Za-z0-9-]+\s*$/;
 
 interface PlainDateShape { wordCounts: Set<number>; needsDigit: boolean }
 const plainDateShapes = new Map<string, PlainDateShape>();
@@ -62,6 +64,9 @@ export interface ParsedTokenRange {
   to: number;
 }
 
+/** Internal ranges, including the destination and block ID that public callers never style. */
+interface LineRange { kind: ParsedTokenRange["kind"] | "destination" | "blockId"; from: number; to: number }
+
 export interface ParsedTaskLine extends ParsedTaskMetadata {
   indent: number;
   completed: boolean;
@@ -101,16 +106,34 @@ export function parseTaskLine(
   tokenRanges?: ParsedTokenRange[],
   fallbackDateFormats: string[] = []
 ): ParsedTaskLine | undefined {
+  return parseLine(line, reference, dateFormat, naturalDates, tokenRanges as LineRange[] | undefined, fallbackDateFormats, false);
+}
+
+function parseLine(
+  line: string,
+  reference: Date,
+  dateFormat: string | undefined,
+  naturalDates: boolean,
+  tokenRanges: LineRange[] | undefined,
+  fallbackDateFormats: string[],
+  internalRanges: boolean
+): ParsedTaskLine | undefined {
   const dateFormats = [dateFormat ?? "YYYY-MM-DD", ...fallbackDateFormats];
   const checkbox = CHECKBOX.exec(line);
   if (!checkbox) return undefined;
 
+  const offset = line.length - checkbox[3].length;
   let remainder = checkbox[3].trimEnd();
+  // A trailing Obsidian block ID stays outside the title; metadata before it still parses.
+  const blockId = BLOCK_ID.exec(remainder);
+  if (blockId) {
+    if (internalRanges) tokenRanges?.push({ kind: "blockId", from: offset + blockId.index + 1, to: offset + remainder.length });
+    remainder = remainder.slice(0, blockId.index).trimEnd();
+  }
   const metadata: Omit<ParsedTaskLine, "title" | "indent" | "completed"> = {};
   const consumed = new Set<string>();
-  const recordToken = (kind: ParsedTokenRange["kind"], match: RegExpExecArray): void => {
-    const offset = line.length - checkbox[3].length;
-    tokenRanges?.push({ kind, from: offset + match.index + match[0].search(/\S/), to: offset + remainder.trimEnd().length });
+  const recordToken = (kind: LineRange["kind"], match: RegExpExecArray): void => {
+    if (kind !== "destination" || internalRanges) tokenRanges?.push({ kind, from: offset + match.index + match[0].search(/\S/), to: offset + remainder.trimEnd().length });
   };
 
   for (;;) {
@@ -126,6 +149,7 @@ export function parseTaskLine(
       const destination = normalizeDestination(match[1]);
       if (destination) {
         metadata.destination = destination;
+        recordToken("destination", match);
         remainder = remainder.slice(0, match.index).trimEnd();
         consumed.add("destination");
         changed = true;
@@ -226,6 +250,72 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
   return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
 }
 
+const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "priority", "tags", "destination"];
+
+/**
+ * Edit an existing task line in place: keep indentation, checkbox spacing, title spelling,
+ * unchanged tokens, `~[[destination]]` and a trailing `^blockid`; replace or remove changed
+ * tokens where they stand and add new ones in serializeTask's canonical order.
+ */
+export function rewriteTaskLine(raw: string, draft: TaskDraft, dateFormat?: string, linkDates = true, reference = new Date()): string {
+  const checkbox = CHECKBOX.exec(raw);
+  const ranges: LineRange[] = [];
+  const parsed = checkbox && parseLine(raw, reference, dateFormat, false, ranges, [], true);
+  if (!checkbox || !parsed) return serializeTask(draft, dateFormat, linkDates);
+  const offset = raw.length - checkbox[3].length;
+  const leading = checkbox[1];
+  const indent = indentWidth(leading) === draft.indent ? leading : " ".repeat(Math.max(0, draft.indent));
+  let marker = raw.slice(leading.length, offset);
+  if (parsed.completed !== draft.completed) marker = marker.replace(/\[[ xX]\]/, `[${draft.completed ? "x" : " "}]`);
+
+  ranges.sort((a, b) => a.from - b.from);
+  const blockId = ranges.find(range => range.kind === "blockId");
+  const tokens = ranges.filter(range => range !== blockId);
+  const contentEnd = offset + checkbox[3].trimEnd().length;
+  const titleText = raw.slice(offset, tokens[0]?.from ?? blockId?.from ?? contentEnd).trimEnd();
+  const title = draft.title.trim() === parsed.title ? titleText : draft.title.trim();
+
+  const dateText = (date: string): string => linkDates ? `[[${formatDate(date, dateFormat)}]]` : formatDate(date, dateFormat);
+  const scheduledTime = draft.scheduledDate ? draft.scheduledTime ?? "" : "";
+  const deadlineTime = draft.deadline ? draft.deadlineTime ?? "" : "";
+  const draftTags = normalizeTags(draft.tags);
+  const parsedTags = parsed.tags ?? [];
+  const wanted: Partial<Record<LineRange["kind"], string | undefined>> = {
+    scheduledDate: parsed.scheduledDate === draft.scheduledDate && (parsed.scheduledTime ?? "") === scheduledTime ? undefined
+      : draft.scheduledDate ? `${dateText(draft.scheduledDate)}${scheduledTime ? ` ${scheduledTime}` : ""}` : "",
+    durationMinutes: (parsed.durationMinutes ?? 0) === (draft.durationMinutes ?? 0) ? undefined : draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
+    deadline: parsed.deadline === draft.deadline && (parsed.deadlineTime ?? "") === deadlineTime ? undefined
+      : draft.deadline ? `{${dateText(draft.deadline)}${deadlineTime ? ` ${deadlineTime}` : ""}}` : "",
+    priority: (parsed.priority ?? 0) === (draft.priority ?? 0) ? undefined : draft.priority ? `p${draft.priority}` : "",
+    tags: draftTags.length === parsedTags.length && draftTags.every(tag => parsedTags.includes(tag)) ? undefined : formatTags(draftTags)
+  };
+
+  // Each part carries the whitespace that preceded it; undefined `wanted` keeps the source text.
+  const parts: Array<{ kind: LineRange["kind"]; gap: string; text: string }> = [];
+  const present = new Set<LineRange["kind"]>();
+  let previous = offset + titleText.length;
+  for (const token of tokens) {
+    const gap = raw.slice(previous, token.from);
+    previous = token.to;
+    const replacement = wanted[token.kind];
+    const first = !present.has(token.kind);
+    present.add(token.kind);
+    if (replacement === undefined) parts.push({ kind: token.kind, gap, text: raw.slice(token.from, token.to) });
+    else if (first && replacement) parts.push({ kind: token.kind, gap, text: replacement });
+  }
+  for (const kind of CANONICAL_ORDER) {
+    const text = wanted[kind];
+    if (present.has(kind) || !text) continue;
+    const rank = CANONICAL_ORDER.indexOf(kind);
+    let index = 0;
+    parts.forEach((part, position) => { if (CANONICAL_ORDER.indexOf(part.kind) < rank) index = position + 1; });
+    parts.splice(index, 0, { kind, gap: " ", text });
+  }
+  if (blockId) parts.push({ kind: "blockId", gap: raw.slice(previous, blockId.from), text: raw.slice(blockId.from, blockId.to) });
+  const body = parts.reduce((text, part) => text + (text ? part.gap || " " : "") + part.text, title);
+  return indent + marker + body + raw.slice(blockId?.to ?? contentEnd);
+}
+
 export function serializeTaskInput(draft: TaskDraft, dateFormat?: string, linkDates = true): string {
   const { path, heading } = splitDestination(draft.destination);
   const destination = destinationString(path.replace(/\.md$/i, ""), heading);
@@ -313,15 +403,11 @@ export function scanTasks(path: string, content: string, reference = new Date(),
     task.description = lines.map(line => line.slice(margin)).join("\n");
   }
 
-  for (let index = 0; index < tasks.length; index += 1) {
+  // A subtree ends at its last descendant; children always follow their parent.
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  for (let index = tasks.length - 1; index >= 0; index -= 1) {
     const task = tasks[index];
-    let endLine = task.line;
-    for (let candidateIndex = index + 1; candidateIndex < tasks.length; candidateIndex += 1) {
-      const candidate = tasks[candidateIndex];
-      if (candidate.sectionLine !== task.sectionLine || candidate.indent <= task.indent) break;
-      endLine = candidate.line;
-    }
-    task.endLine = endLine;
+    for (const child of task.childIds) task.endLine = Math.max(task.endLine, byId.get(child)!.endLine);
   }
 
   return tasks;

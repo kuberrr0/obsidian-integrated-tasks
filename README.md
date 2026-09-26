@@ -62,6 +62,18 @@ Click a checkbox to complete a task, or click its title to edit it. Drag tasks t
 
 Use the **+** beside a group or heading to add a task there. Click a task's source label to return to the note it came from.
 
+Everything you can do by dragging also works from the keyboard. Long lists show their first tasks straight away and load the rest as you scroll.
+
+| Key | Action |
+| --- | --- |
+| ↑ / ↓, Home / End | Move between tasks |
+| Tab | Reach the focused task's checkbox, title, and details |
+| Enter or Space | Open the task |
+| Shift + ↑ / ↓ | Select a range |
+| Alt + ↑ / ↓ | Move the task up or down among its siblings |
+| Alt + → / ← | Make it a subtask of the task above, or move it out of its parent |
+| M | Move to another section, column, or note, or reschedule it |
+
 ### Calendar: make time for your work
 
 See your schedule across four days, a week, or a month. Day and year views are also available from the command palette.
@@ -104,7 +116,7 @@ You can continue writing and checking off tasks directly in your notes. In Live 
 
 **Cmd/Ctrl-click a checkbox** to open the task editor. On mobile, **press and hold the checkbox**.
 
-With Task mode off, you can type a natural date into a checklist, such as “Call the venue tomorrow.” Press Enter or move to another line to turn the recognized date into a saved schedule.
+With Task mode off, you can end a checklist item with a natural date, such as “Call the venue tomorrow.” When you press Enter or move off a line you edited, the recognized date becomes a saved schedule. Lines you only move through, completed tasks, and words in the middle of a title are left as you wrote them. Links to notes, such as `[[Friday]]`, stay links; only links in your date format count as dates.
 
 Tags connect related work across your vault. Open a tag from the sidebar to see its tasks; a task created in that view inherits the tag. When a tag has a linked note, Task mode can show that note as a tag task view too.
 
@@ -117,6 +129,7 @@ Select tasks to change their dates, priorities, tags, or other details together.
 | Select a task | Right-click |
 | Select a range | Shift + right-click |
 | Add to your selection | Cmd/Ctrl + right-click |
+| Select a range from the keyboard | Shift + ↑ / ↓ |
 | Clear your selection | Click outside the selected tasks, or press Escape while a selected task is focused |
 
 Click a selected task title or run **Edit task properties** to make a shared change. Only the fields you edit are applied; **Mixed — unchanged** preserves each task's existing value.
@@ -135,11 +148,11 @@ Check off the recurring task to record its completion and advance it to the next
 
 You can also use **Skip recurring task** or **Fail recurring task** from the command palette. In a regular note, place your cursor on the task first; in Task mode, select one recurring task.
 
-Repeat rules include every day, every week, every other week, every month, every year, and named weekdays. Overdue routines advance one occurrence at a time.
+Repeat rules include every day, every week, every other week, every month, every year, and named weekdays. Overdue routines advance one occurrence at a time. Monthly and yearly routines remember the day they started on, so a routine on the 31st returns to the 31st after a shorter month.
 
 ## Make it fit your workflow
 
-In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Adjust title wrapping, row height, hover highlighting, task counts, and the details shown in lists and boards.
+In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Adjust title wrapping, hover highlighting, and task counts.
 
 Choose your preferred date format and whether dates link to notes. These choices apply to new edits; use **Update dates** to apply them to existing tasks and recurring-task history.
 

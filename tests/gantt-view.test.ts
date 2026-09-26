@@ -91,10 +91,15 @@ it("repositions project bars after scrolling and retains date editing", async ()
   handle.dispatchEvent(Object.assign(new Event("pointermove"), { pointerId: 1, clientX: 132, clientY: 100 }));
   expect(container.all().some(el => el.cls === "tm-gantt-preview")).toBe(false);
   handle.dispatchEvent(new Event("pointercancel"));
+  // Arrow keys preview without saving; leaving the handle saves the combined change once.
   handle.dispatchEvent(Object.assign(new Event("keydown"), { key: "ArrowRight" }));
-  await vi.waitFor(() => expect(update).toHaveBeenCalledWith(project, { endDate: "2026-09-26" }));
+  handle.dispatchEvent(Object.assign(new Event("keydown"), { key: "ArrowRight" }));
+  expect(update).not.toHaveBeenCalled();
+  expect(bar.text).toBe("2026-09-18 – 2026-09-27");
+  handle.dispatchEvent(new Event("blur"));
+  await vi.waitFor(() => expect(update).toHaveBeenCalledExactlyOnceWith(project, { endDate: "2026-09-27" }));
   expect(metadata.all().some(el => el.cls === "tm-project-date-range")).toBe(false);
-  expect(project.endDate).toBe("2026-09-26");
+  expect(project.endDate).toBe("2026-09-27");
   expect(project.deadline).toBe("2026-10-01");
 });
 

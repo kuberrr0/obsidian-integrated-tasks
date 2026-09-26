@@ -1,4 +1,5 @@
-import { parseTaskInput, serializeTask } from "./parser";
+import { findInputDate, findInputDeadline } from "./date";
+import { parseTaskInput, serializeTask, type ParsedTaskLine } from "./parser";
 import type { TaskDraft } from "./types";
 
 const width = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((total, char) => total + (char === "\t" ? 4 : 1), 0);
@@ -38,4 +39,34 @@ export function parseTaskTreeInput(input: string, destination: string, reference
   }
   if (additionalLines.length) main.additionalLines = additionalLines;
   return main;
+}
+
+/**
+ * Re-parse an edited task line strictly; natural-language dates are read only from text the user
+ * newly typed (the span between the unchanged prefix and suffix), so existing prose such as
+ * "Buy sun cream" or "Done last Friday" is never reinterpreted.
+ */
+export function parseEditedTaskInput(text: string, original: string, reference = new Date(), dateFormat?: string, checkbox = "- [ ] "): ParsedTaskLine | undefined {
+  const strict = parseTaskInput(checkbox + text, reference, dateFormat, false);
+  let from = 0;
+  const shortest = Math.min(text.length, original.length);
+  while (from < shortest && text[from] === original[from]) from++;
+  let to = text.length;
+  for (let originalTo = original.length; to > from && originalTo > from && text[to - 1] === original[originalTo - 1]; originalTo--) to--;
+  if (!strict || !text.slice(from, to).trim()) return strict;
+  const within = { from, to };
+  const deadline = strict.deadline ? undefined : findInputDeadline(text, reference, dateFormat, within);
+  const scheduled = strict.scheduledDate ? undefined : findInputDate(text, reference, within);
+  if (!deadline && !scheduled) return strict;
+  let cleaned = text;
+  for (const match of [deadline, scheduled].filter(match => match !== undefined).sort((a, b) => b.index - a.index)) {
+    const before = cleaned.slice(0, match.index).trimEnd();
+    const after = cleaned.slice(match.index + match.text.length).trimStart();
+    cleaned = before && after ? `${before} ${after}` : before + after;
+  }
+  const parsed = parseTaskInput(checkbox + cleaned, reference, dateFormat, false);
+  if (!parsed) return parsed;
+  if (deadline && !parsed.deadline) Object.assign(parsed, { deadline: deadline.date }, deadline.time ? { deadlineTime: deadline.time } : {});
+  if (scheduled && !parsed.scheduledDate) Object.assign(parsed, { scheduledDate: scheduled.date }, scheduled.time ? { scheduledTime: scheduled.time } : {});
+  return parsed;
 }

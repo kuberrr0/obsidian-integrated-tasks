@@ -17,7 +17,8 @@ it("saves to the existing note, preserves its folder on rename, and refuses name
   const renameFile = vi.fn(async (_file, path: string) => { file.path = path; });
   plugin.app = {
     vault: { getAbstractFileByPath: (path: string) => path === file.path ? file : path === "Projects/Taken.md" ? new TFile() : null },
-    metadataCache: { getFileCache: () => ({ frontmatter: metadata }) }, fileManager: { processFrontMatter, renameFile }
+    metadataCache: { getFileCache: () => ({ frontmatter: metadata }) }, fileManager: { processFrontMatter, renameFile },
+    workspace: { getLeavesOfType: () => [], getMostRecentLeaf: () => null }
   } as unknown as App;
   const refreshPath = vi.fn();
   plugin.index = { projects: () => [{ path: file.path, name: "Launch", openTasks: 1, completedTasks: 0, archived: false }], refreshPath } as unknown as TaskIndex;
@@ -35,7 +36,9 @@ it("saves to the existing note, preserves its folder on rename, and refuses name
   expect(renameFile).toHaveBeenCalledWith(file, "Projects/Renamed.md");
   expect(metadata.custom).toBe("keep");
   expect(metadata.priority).toBe(1);
-  expect(refreshPath).toHaveBeenCalledWith("Projects/Renamed.md");
-  expect(plugin.openProject).toHaveBeenCalledWith("Projects/Renamed.md");
+  expect(refreshPath).toHaveBeenCalledWith(file);
+  expect(file.path).toBe("Projects/Renamed.md");
+  // With no tab showing the project, it opens in a new one.
+  expect(plugin.openProject).toHaveBeenCalledWith("Projects/Renamed.md", undefined);
   open.mockRestore();
 });

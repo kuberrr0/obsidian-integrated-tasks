@@ -21,6 +21,16 @@ export class TaskModeController {
   }
   dispose(): void { this.disposed = true; this.pending = false; }
 
+  /** Keep remembered task-view layouts attached to a note after it is renamed. */
+  renamePath(oldPath: string, newPath: string): void {
+    for (const leaf of [...this.app.workspace.getLeavesOfType("markdown"), ...this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)]) {
+      const saved = this.savedViews.get(leaf);
+      if (saved?.pagePath !== oldPath) continue;
+      const markdownState = saved.markdownState && typeof saved.markdownState === "object" ? saved.markdownState as Record<string, unknown> : undefined;
+      this.savedViews.set(leaf, { ...saved, pagePath: newPath, ...(markdownState ? { markdownState: { ...markdownState, file: newPath } } : {}) });
+    }
+  }
+
   private async drain(): Promise<void> {
     while (this.pending && !this.disposed) {
       this.pending = false;

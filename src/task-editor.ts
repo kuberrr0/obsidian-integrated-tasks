@@ -1,5 +1,5 @@
 import { TaskLineEditor } from "./task-line-editor";
-import { parseTaskTreeInput } from "./task-input";
+import { parseEditedTaskInput, parseTaskTreeInput } from "./task-input";
 import type { TaskEditorPreset } from "./types";
 import { trackModalViewport } from "./mobile-layout";
 import { destinationString } from "./structure";
@@ -80,7 +80,7 @@ export class TaskEditorModal extends Modal {
       : this.serializeDraft(this.draft);
     const source = initial.replace(/^([ \t]*)[-+*]\s+\[([ xX])\][ \t]*/, "");
     const editorHost = taskLine.createDiv({ cls: "tm-editor-inline" });
-    const error = contentEl.createDiv({ cls: "tm-editor-error" });
+    const error = contentEl.createDiv({ cls: "tm-editor-error", attr: { role: "alert", "aria-live": "assertive" } });
     const updatePriority = (): void => {
       const parsed = parseTaskInput(this.rawInput.value, new Date(), this.options.dateFormat);
       taskLine.setAttribute("data-tm-priority", String(parsed?.priority ?? ""));
@@ -197,7 +197,8 @@ export class TaskEditorModal extends Modal {
     if (/^\s*[-+*]\s+\[[ xX]\]\s*$/.test(value)) throw new Error("Enter a task title.");
     // Saving an untouched note line must not reinterpret prose as natural dates.
     if (this.rawInput.value === this.rawInput.defaultValue) return { ...this.draft, completed: this.completedInput.checked };
-    const parsed = parseTaskInput(value, new Date(), this.options.dateFormat, true);
+    // Only newly typed text may be read as a natural-language date; the rest parses strictly.
+    const parsed = parseEditedTaskInput(this.rawInput.value, this.rawInput.defaultValue, new Date(), this.options.dateFormat, `${this.taskIndent}- [${this.completedInput.checked ? "x" : " "}] `);
     if (!parsed?.title) throw new Error("Enter a task title.");
     return { ...parsed, destination: parsed.destination ?? this.options.settings.inboxPath };
   }

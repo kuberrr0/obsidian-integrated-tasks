@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { scanTasks } from "../src/parser";
 import { draftForGroup, taskGroupTarget } from "../src/list-drag";
-import { liveTaskBlock, placeTaskBlock, rewriteBlock } from "../src/task-block";
+import { planBulkTasks } from "../src/bulk-tasks";
 import { actionDate } from "../src/date";
 import { TaskStore } from "../src/task-store";
 import { TFile, type App } from "obsidian";
@@ -24,33 +24,33 @@ describe("list task dragging", () => {
   it("reorders complete subtrees including indented notes", async () => {
     const files = { "Work.md": content };
     const tasks = scanTasks("Work.md", content);
-    await setup(files).relocate(tasks[0], tasks[2], "after", draftForGroup(tasks[0]));
+    await setup(files).bulkDrop([tasks[0]], undefined, tasks[2], "after");
     expect(files["Work.md"]).toBe("# Plan\n- [ ] Other\n  - [ ] Other child\n- [ ] Parent\n  - [ ] Child\n    Child notes\n");
   });
   it("indents with children, then outdents without absorbing following siblings", async () => {
     const files = { "Work.md": content };
     const store = setup(files);
     let tasks = scanTasks("Work.md", files["Work.md"]);
-    await store.relocate(tasks[0], tasks[2], "child", draftForGroup(tasks[0]));
+    await store.bulkDrop([tasks[0]], undefined, tasks[2], "child");
     tasks = scanTasks("Work.md", files["Work.md"]);
     const parent = tasks.find(task => task.title === "Parent")!;
     expect(parent.indent).toBe(4);
     expect(tasks.find(task => task.title === "Child")?.indent).toBe(6);
-    await store.relocate(parent, tasks[0], "after", draftForGroup(parent));
+    await store.bulkDrop([parent], undefined, tasks[0], "after");
     expect(scanTasks("Work.md", files["Work.md"]).find(task => task.title === "Parent")?.parentId).toBeUndefined();
     expect(files["Work.md"]).toContain("- [ ] Other\n  - [ ] Other child\n- [ ] Parent\n  - [ ] Child\n    Child notes");
   });
   it("rejects cycles without modifying the note", async () => {
     const files = { "Work.md": content };
     const tasks = scanTasks("Work.md", content);
-    await expect(setup(files).relocate(tasks[0], tasks[1], "child", draftForGroup(tasks[0]))).rejects.toThrow(/itself or its subtasks/);
+    await expect(setup(files).bulkDrop([tasks[0]], undefined, tasks[1], "child")).rejects.toThrow(/themselves or their subtasks/);
     expect(files["Work.md"]).toBe(content);
   });
   it("moves across notes and applies the target property", async () => {
     const files = { "Source.md": content, "Target.md": "# Next\n- [ ] Destination p1\n" };
     const source = scanTasks("Source.md", content)[0];
     const target = scanTasks("Target.md", files["Target.md"])[0];
-    await setup(files).relocate(source, target, "before", draftForGroup(source, taskGroupTarget("priority", target)));
+    await setup(files).bulkDrop([source], taskGroupTarget("priority", target), target, "before");
     expect(files["Source.md"]).toBe("# Plan\n- [ ] Other\n  - [ ] Other child\n");
     expect(files["Target.md"]).toBe("# Next\n- [ ] Parent p1\n  - [ ] Child\n    Child notes\n- [ ] Destination p1\n");
   });
@@ -59,21 +59,20 @@ describe("list task dragging", () => {
     const original = { ...files };
     const source = scanTasks("Source.md", content)[0];
     const target = scanTasks("Target.md", files["Target.md"])[0];
-    await expect(setup(files, true).relocate(source, target, "child", draftForGroup(source))).rejects.toThrow("Source write failed");
+    await expect(setup(files, true).bulkDrop([source], undefined, target, "child")).rejects.toThrow("Source write failed");
     expect(files).toEqual(original);
   });
   it("preserves CRLF and converts tab indentation consistently", () => {
     const text = "- [ ] A\r\n\t- [ ] Nested\r\n- [ ] B\r\n";
     const tasks = scanTasks("Work.md", text);
-    const block = liveTaskBlock(text, tasks[0]);
-    const changed = placeTaskBlock(text, tasks[0], tasks[2], "child", rewriteBlock(block, draftForGroup(tasks[0]), 2));
-    expect(changed).toBe("- [ ] B\r\n  - [ ] A\r\n      - [ ] Nested\r\n");
+    const changed = planBulkTasks(new Map([["Work.md", text]]), [{ task: tasks[0], draft: draftForGroup(tasks[0]) }], { anchor: tasks[2], placement: "child" });
+    expect(changed.get("Work.md")).toBe("- [ ] B\r\n    - [ ] A\r\n        - [ ] Nested\r\n");
   });
   it("recomputes moved block boundaries after new subtasks are added", async () => {
     const old = "- [ ] A\n- [ ] B\n";
     const tasks = scanTasks("Work.md", old);
     const files = { "Work.md": "- [ ] A\n  - [ ] New child\n- [ ] B\n" };
-    await setup(files).relocate(tasks[0], tasks[1], "after", draftForGroup(tasks[0]));
+    await setup(files).bulkDrop([tasks[0]], undefined, tasks[1], "after");
     expect(files["Work.md"]).toBe("- [ ] B\n- [ ] A\n  - [ ] New child\n");
   });
 });

@@ -59,7 +59,7 @@ export function taskTimeDurationLabel(time?: string, duration?: number): string 
 
 interface TaskDetailsOptions {
     grouping: TaskGrouping;
-    show: (property: TaskProperty) => boolean;
+    show?: (property: TaskProperty) => boolean;
     dateFormat: string;
     now?: Date;
     source?: string;
@@ -68,10 +68,11 @@ interface TaskDetailsOptions {
     openSource: () => void;
 }
 
-function editable(element: HTMLElement, label: string, action: () => void): void {
+function editable(element: HTMLElement, label: string, focusKey: string, action: () => void): void {
     element.setAttribute("role", "button");
     element.setAttribute("tabindex", "0");
     element.setAttribute("aria-label", label);
+    element.setAttribute("data-tm-focus-key", focusKey);
     element.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); action(); });
     element.addEventListener("keydown", event => {
         if (event.key !== "Enter" && event.key !== " ") return;
@@ -81,7 +82,8 @@ function editable(element: HTMLElement, label: string, action: () => void): void
 
 export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, task: Task, options: TaskDetailsOptions): void {
     const now = options.now ?? new Date();
-    const { grouping, show } = options;
+    const { grouping } = options;
+    const show = options.show ?? ((): boolean => true);
     const actionDate = task.scheduledDate && task.deadline ? (task.scheduledDate < task.deadline ? task.scheduledDate : task.deadline) : task.scheduledDate ?? task.deadline;
     const showDate = (field: "scheduledDate" | "deadline") => show(field) && grouping !== field && !(grouping === "date" && task[field] === actionDate);
     const date = task.scheduledDate && showDate("scheduledDate") ? taskScheduleLabel(task.scheduledDate, now) : "";
@@ -93,12 +95,12 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
         const schedule = metadata.createSpan({ cls: "tm-task-schedule", attr: { title: [task.scheduledDate && formatDate(task.scheduledDate, options.dateFormat), task.scheduledTime].filter(Boolean).join(", ") } });
         if (date) {
             const dateLabel = schedule.createSpan({ cls: !task.completed && task.scheduledDate! < todayIso(now) ? "is-overdue" : "", text: date });
-            editable(dateLabel, `Edit scheduled date: ${date}`, () => options.edit("scheduledDate"));
+            editable(dateLabel, `Edit scheduled date: ${date}`, "scheduledDate", () => options.edit("scheduledDate"));
         }
         if (time) {
             const timeLabel = schedule.createSpan({ text: `${date ? ", " : ""}${time}` });
             const hasTime = task.scheduledTime && show("scheduledTime") && grouping !== "scheduledTime";
-            editable(timeLabel, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
+            editable(timeLabel, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, "time", () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
         }
     }
     const due = task.deadline && showDate("deadline") ? taskDeadlineLabel(task.deadline, now) : "";
@@ -108,17 +110,17 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
         const icon = badge.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
         setIcon(icon, "flag");
         badge.createSpan({ text: [due, dueTime].filter(Boolean).join(", ") });
-        editable(badge, `Edit deadline: ${task.deadline ?? ""}${dueTime ? `, ${dueTime}` : ""}`, () => options.edit("deadline"));
+        editable(badge, `Edit deadline: ${task.deadline ?? ""}${dueTime ? `, ${dueTime}` : ""}`, "deadline", () => options.edit("deadline"));
     }
     if (options.source && show("source") && grouping !== "source") {
         const source = metadata.createSpan({ cls: "tm-task-source", text: options.source.replace(/\.md$/i, "").split("/").pop(), attr: { title: options.source } });
-        editable(source, `Open source note: ${options.source}`, options.openSource);
+        editable(source, `Open source note: ${options.source}`, "source", options.openSource);
     }
     if (show("tags") && grouping !== "tags") for (const tag of options.tags) {
         const label = metadata.createSpan({ cls: "tm-task-tag" });
         const icon = label.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
         setIcon(icon, "tag");
         label.createSpan({ text: tag });
-        editable(label, `Edit tags: ${tag}`, () => options.edit("tags"));
+        editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
     }
 }

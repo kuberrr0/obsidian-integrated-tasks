@@ -19,6 +19,9 @@ interface GanttOptions {
   edit?: (project: Project, field: keyof ProjectDraft) => void;
   update: (project: Project, changes: Partial<Record<ProjectDateField, string>>) => Promise<void>;
 }
+
+// Arrow keys preview date changes live and save once they pause, so focus is not lost per key.
+const KEY_SAVE_DELAY_MS = 500;
 export function renderGantt(container: HTMLElement, options: GanttOptions): void {
   const root = container.createDiv({ cls: "tm-gantt" });
   const { days: period, width } = GANTT_ZOOMS[options.zoom];
@@ -46,7 +49,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
     const button = scopes.createEl("button", { text: label, attr: { "aria-label": value === "five-year" ? "5 years" : value[0].toUpperCase() + value.slice(1), "aria-pressed": String(options.zoom === value) } });
     button.addEventListener("click", () => options.navigate(anchor, value));
   }
-  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0" } });
+  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0", "data-tm-scroll-key": "gantt" } });
   const buffer = Math.max(period, Math.ceil((scroll.clientWidth || 1200) / width));
   days = buffer * 5;
   start = addDays(anchor, -buffer * 2);
@@ -151,7 +154,15 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
     const range = ganttRange(project);
     if (!range && !project.scheduledDate && !project.endDate && !project.deadline) {
       track.addClass("is-unscheduled");
-      track.setAttribute("aria-label", `Drag to schedule ${project.name}`);
+      // Dragging needs a pointer; the keyboard opens the project editor at its start date instead.
+      track.setAttribute("role", "button");
+      track.setAttribute("tabindex", "0");
+      track.setAttribute("aria-label", `Set dates for ${project.name}`);
+      track.addEventListener("keydown", event => {
+        if (event.target !== track || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        if (options.edit) options.edit(project, "date"); else options.open(project);
+      });
       const hint = track.createSpan({ cls: "tm-gantt-undated", text: "Drag to set dates" });
       const selection = track.createDiv({ cls: "tm-gantt-selection" });
       selection.hidden = true;
@@ -233,12 +244,21 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       let origin = 0;
       let originScroll = 0;
       let delta = 0;
+      let keyDelta = 0;
+      let keyTimer: ReturnType<typeof setTimeout> | undefined;
       const reset = (): void => { pointer = undefined; interacting = false; delta = 0; row.removeClass("is-resizing"); paint(project); };
       const save = async (change: number): Promise<void> => {
         const { field, value } = resizeProjectDate(project, handle, change);
-        if (value === project[field] || busy) return;
+        if (value === project[field] || busy) { reset(); return; }
         await persist(project, { [field]: value });
         reset();
+      };
+      const saveKeys = (): void => {
+        clearTimeout(keyTimer);
+        keyTimer = undefined;
+        const change = keyDelta;
+        keyDelta = 0;
+        void save(change);
       };
       button.addEventListener("pointerdown", event => {
         if (event.button !== 0 || busy) return;
@@ -263,10 +283,27 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       button.addEventListener("pointercancel", reset);
       button.addEventListener("lostpointercapture", () => { if (pointer !== undefined) reset(); });
       button.addEventListener("keydown", event => {
+        if (event.key === "Escape" && keyTimer !== undefined) {
+          event.preventDefault();
+          clearTimeout(keyTimer); keyTimer = undefined; keyDelta = 0; reset();
+          return;
+        }
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
         event.preventDefault();
-        void save(event.key === "ArrowLeft" ? -1 : 1);
+        if (busy) return;
+        keyDelta += event.key === "ArrowLeft" ? -1 : 1;
+        const { field, value } = resizeProjectDate(project, handle, keyDelta);
+        paint({ ...project, [field]: value });
+        row.addClass("is-resizing");
+        clearTimeout(keyTimer);
+        keyTimer = setTimeout(saveKeys, KEY_SAVE_DELAY_MS);
       });
+      button.addEventListener("keyup", event => {
+        if (keyTimer === undefined || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+        clearTimeout(keyTimer);
+        keyTimer = setTimeout(saveKeys, KEY_SAVE_DELAY_MS);
+      });
+      button.addEventListener("blur", () => { if (keyTimer !== undefined) saveKeys(); });
     }
   }
   scroll.scrollLeft = buffer * 2 * width;

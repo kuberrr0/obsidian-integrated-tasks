@@ -6,9 +6,9 @@ export interface NoteHeading {
 }
 
 /** Markdown body lines, excluding YAML and fenced examples. */
-export function bodyLines(content: string): Array<{ text: string; line: number }> {
+export function bodyLines(content: string | readonly string[]): Array<{ text: string; line: number }> {
   const result: Array<{ text: string; line: number }> = [];
-  classifyLines(content.split(/\r?\n/), (text, line, body) => { if (body) result.push({ text, line }); });
+  classifyLines(typeof content === "string" ? content.split(/\r?\n/) : content, (text, line, body) => { if (body) result.push({ text, line }); });
   return result;
 }
 
@@ -31,7 +31,8 @@ function classifyLines(lines: Iterable<string>, visit: (text: string, line: numb
       visit(text, current, false);
       continue;
     }
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(text)?.[1];
+    // Fences may be indented to any depth inside list items.
+    const marker = /^[ \t]*(`{3,}|~{3,})/.exec(text)?.[1];
     if (fence) {
       if (marker?.[0] === fence[0] && marker.length >= fence.length && text.trim() === marker) fence = undefined;
       visit(text, current, false);
@@ -42,7 +43,7 @@ function classifyLines(lines: Iterable<string>, visit: (text: string, line: numb
   }
 }
 
-export function scanHeadings(content: string): NoteHeading[] {
+export function scanHeadings(content: string | readonly string[]): NoteHeading[] {
   const headings: NoteHeading[] = [];
   const lines = bodyLines(content);
   for (let i = 0; i < lines.length; i++) {
@@ -61,14 +62,16 @@ export function scanHeadings(content: string): NoteHeading[] {
 }
 
 /** The selected heading level defines task sections and destinations. */
-export function scanSections(content: string, level = 1): NoteHeading[] {
+export function scanSections(content: string | readonly string[], level = 1): NoteHeading[] {
   return scanHeadings(content).filter(heading => heading.level === level);
 }
 
+/** Headings may contain `|` and `[[links]]`; only a path part carries an alias. */
 export function splitDestination(value: string): { path: string; heading?: string } {
-  const target = value.trim().replace(/^~?\[\[|\]\]$/g, "").split("|", 1)[0];
+  let target = value.trim();
+  if (/^~?\[\[/.test(target) && target.endsWith("]]")) target = target.replace(/^~?\[\[/, "").slice(0, -2);
   const separator = target.indexOf("#");
-  const path = (separator < 0 ? target : target.slice(0, separator)).trim();
+  const path = (separator < 0 ? target : target.slice(0, separator)).split("|", 1)[0].trim();
   const heading = separator < 0 ? undefined : target.slice(separator + 1).trim() || undefined;
   if (!path || /[\r\n]/.test(target)) throw new Error("Enter a destination note.");
   return { path: /\.md$/i.test(path) ? path : `${path}.md`, heading };

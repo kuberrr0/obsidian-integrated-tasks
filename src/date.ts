@@ -25,11 +25,8 @@ export function tomorrowIso(now = new Date()): string {
   return formatLocalDate(result);
 }
 
-export function parseDateExpression(
-  value: string,
-  reference = new Date(),
-  dateFormat: string | string[] = DEFAULT_DATE_FORMAT
-): string | undefined {
+/** Only ISO or the configured date format(s); never natural language. Link text and frontmatter use this. */
+export function parseStrictDateExpression(value: string, dateFormat: string | string[] = DEFAULT_DATE_FORMAT): string | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
 
@@ -47,7 +44,19 @@ export function parseDateExpression(
   }
 
   const formatted = moment(trimmed, dateFormat, true);
-  if (formatted.isValid()) return formatted.format(DEFAULT_DATE_FORMAT);
+  return formatted.isValid() ? formatted.format(DEFAULT_DATE_FORMAT) : undefined;
+}
+
+export function parseDateExpression(
+  value: string,
+  reference = new Date(),
+  dateFormat: string | string[] = DEFAULT_DATE_FORMAT
+): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (ISO_DATE.test(trimmed)) return parseStrictDateExpression(trimmed, dateFormat);
+  const strict = parseStrictDateExpression(trimmed, dateFormat);
+  if (strict) return strict;
 
   const parsed = chrono.parse(trimmed, reference, { forwardDate: true }).find((result) =>
     result.index === 0 && result.text.length === trimmed.length
@@ -67,22 +76,41 @@ export function actionDate(task: { scheduledDate?: string; deadline?: string }):
   return task.scheduledDate ?? task.deadline;
 }
 
+/** Text range of an edited value; natural dates are only read from text inside it. */
+export interface InputRange { from: number; to: number }
+
+/** Blank everything outside `within`, after the full value's own masking kept links and code intact. */
+function onlyWithin(prose: string, within?: InputRange): string {
+  if (!within) return prose;
+  return " ".repeat(within.from) + prose.slice(within.from, within.to) + " ".repeat(Math.max(0, prose.length - within.to));
+}
+
+/** A match inside `within` must not be part of a longer word that continues outside it. */
+function boundedMatch(value: string, index: number, length: number, outside: RegExp): boolean {
+  const text = value.slice(index, index + length);
+  const start = index + text.search(/\S/);
+  const end = index + text.trimEnd().length;
+  return !outside.test(value[start - 1] ?? "") && !outside.test(value[end] ?? "");
+}
+
 /** Find a date in editor prose without interpreting links or inline code as dates. */
-export function findInputDate(value: string, reference = new Date()): { index: number; text: string; date: string; time?: string } | undefined {
-  const prose = value.replace(/\{[^}]*\}?|\[\[[\s\S]*?\]\]|`[^`]*`|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\b(?:\d+h(?:\d+m)?|\d+m)\b/g, (match) => " ".repeat(match.length));
+export function findInputDate(value: string, reference = new Date(), within?: InputRange): { index: number; text: string; date: string; time?: string } | undefined {
+  const prose = onlyWithin(value.replace(/\{[^}]*\}?|\[\[[\s\S]*?\]\]|`[^`]*`|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\b(?:\d+h(?:\d+m)?|\d+m)\b/g, (match) => " ".repeat(match.length)), within);
   const result = chrono.parse(prose, reference, { forwardDate: true }).find((match) =>
-    !match.end && (match.start.isCertain("day") || match.start.isCertain("weekday") || match.start.isCertain("hour"))
+    !match.end && (match.start.isCertain("day") || match.start.isCertain("weekday") || match.start.isCertain("hour")) &&
+    (!within || boundedMatch(value, match.index, match.text.length, /[\p{L}\p{N}]/u))
   );
   return result ? { index: result.index, text: result.text, date: formatLocalDate(result.start.date()), ...(resultTime(result) ? { time: resultTime(result) } : {}) } : undefined;
 }
 
 
 /** Curly braces route editor dates to Deadline, even in the middle of a title. */
-export function findInputDeadline(value: string, reference = new Date(), dateFormat?: string): { index: number; text: string; date: string; time?: string } | undefined {
-  const prose = value.replace(/`[^`]*`|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)/g, (match) => " ".repeat(match.length));
+export function findInputDeadline(value: string, reference = new Date(), dateFormat?: string, within?: InputRange): { index: number; text: string; date: string; time?: string } | undefined {
+  const prose = onlyWithin(value.replace(/`[^`]*`|\[\[[\s\S]*?\]\]|\[[^\]]*\]\([^)]*\)/g, (match) => " ".repeat(match.length)), within);
   const pattern = /(?:^|\s)\{([^{}[\]]+)\}(?=\s|$)/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(prose))) {
+    if (within && !boundedMatch(value, match.index, match[0].length, /\S/)) continue;
     const date = parseDateTimeExpression(match[1], reference, dateFormat);
     if (date) return { index: match.index, text: match[0], ...date };
   }
@@ -109,7 +137,8 @@ export function parseDateTimeExpression(value: string, reference = new Date(), d
   const text = value.trim();
   const link = /^\[\[([^\]]+)\]\](?:\s+(.+))?$/.exec(text);
   if (link) {
-    const date = parseDateExpression(link[1], reference, dateFormat);
+    // Note links are only dates when they name a date exactly: [[April]] or [[Friday]] stay note links.
+    const date = parseStrictDateExpression(link[1], dateFormat);
     const time = link[2] ? parseTimeExpression(link[2], reference) : undefined;
     return date && (!link[2] || time) ? { date, ...(time ? { time } : {}) } : undefined;
   }

@@ -8,7 +8,7 @@ const complete = (clause: Clause): boolean => Boolean(clause.operator && (
 ));
 
 export function renderPropertyFilter(container: HTMLElement, property: typeof TASK_PROPERTIES[number], initial: TaskFilter | undefined,
-  tasks: Task[], onChange: (filter: TaskFilter | undefined) => void): void {
+  tasks: Task[] | (() => Task[]), onChange: (filter: TaskFilter | undefined) => void): void {
   const clauses: Clause[] = [{ operator: initial?.operator ?? "", values: [...initial?.values ?? []], join: "and" },
     ...(initial?.conditions ?? []).map(condition => ({ ...condition, values: [...condition.values] }))];
   const apply = (): void => {
@@ -57,7 +57,7 @@ export function renderPropertyFilter(container: HTMLElement, property: typeof TA
         if (!clause.operator || ["has", "missing"].includes(clause.operator)) return;
         if (property.kind === "choice") {
           const choices = property.key === "priority" ? ["1", "2", "3"] : property.key === "status" ? ["Open", "Completed"]
-            : [...new Set(tasks.map(task => propertyValue(task, property.key)).filter(value => value !== undefined && value !== "").map(String))].sort();
+            : [...new Set((typeof tasks === "function" ? tasks() : tasks).map(task => propertyValue(task, property.key)).filter(value => value !== undefined && value !== "").map(String))].sort();
           for (const value of choices) {
             const label = inputs.createEl("label");
             const check = label.createEl("input", { type: "checkbox" });

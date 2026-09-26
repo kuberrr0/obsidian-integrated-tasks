@@ -23,7 +23,15 @@ export interface CalendarOptions {
   dragStart?: (task: Task) => void;
   resize: (task: Task, date: string, time: string, duration: number) => Promise<void>;
   move: (task: Task, date: string, time?: string) => Promise<void>;
+  /** A restored time-grid scroll position; without one, day and week views open near the current time. */
+  initialScrollTop?: number;
 }
+
+/** Unscheduled tasks render in pages so a large vault does not build every card at once. */
+export const UNSCHEDULED_PAGE = 200;
+const HOUR_HEIGHT = 48;
+const DEFAULT_SLOT = 36; // 09:00
+const KEY_SAVE_DELAY_MS = 500;
 
 /** Render inside the task view; all writes go through its existing task store. */
 export function renderCalendar(container: HTMLElement, options: CalendarOptions): void {
@@ -45,11 +53,17 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     }
   });
   const byDate = new Map<string, Task[]>();
+  const byMonth = new Map<string, Task[]>();
   for (const task of options.tasks) {
     const key = calendarDate(task) ?? "";
     const group = byDate.get(key) ?? [];
     group.push(task);
     byDate.set(key, group);
+    if (key && options.scope === "year") {
+      const month = byMonth.get(key.slice(0, 7)) ?? [];
+      month.push(task);
+      byMonth.set(key.slice(0, 7), month);
+    }
   }
   let dragged: Task | undefined;
   let grabOffsetMinutes = 0;
@@ -73,8 +87,9 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     button.addEventListener("click", () => options.navigate(options.anchor, scope));
   }
   const body = root.createDiv({ cls: "tm-calendar-body" });
-  const surface = body.createDiv({ cls: "tm-calendar-surface" });
-  const planner = options.planning ? body.createEl("aside", { cls: "tm-calendar-planner", attr: { "aria-label": "Plan tasks" } }) : undefined;
+  // Stable scroll keys let the task view restore scroll positions across re-renders.
+  const surface = body.createDiv({ cls: "tm-calendar-surface", attr: { "data-tm-scroll-key": "calendar-surface" } });
+  const planner = options.planning ? body.createEl("aside", { cls: "tm-calendar-planner", attr: { "aria-label": "Plan tasks", "data-tm-scroll-key": "calendar-planner" } }) : undefined;
   if (planner) {
     planner.hidden = !options.planningOpen;
     const plan = toolbar.createEl("button", { cls: "tm-calendar-plan-toggle", text: "Plan tasks", attr: { "aria-expanded": String(!planner.hidden) } });
@@ -109,8 +124,9 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   };
   const taskCard = (parent: HTMLElement, task: Task): HTMLElement => {
     const time = calendarTime(task);
+    // A plain container: the checkbox, title button and resize sliders are its interactive parts.
     const card = parent.createDiv({ cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
-      attr: { role: "button", tabindex: "0", title: `${task.title}${task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ""}`, "aria-label": `Edit ${task.title}` } });
+      attr: { title: `${task.title}${task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ""}` } });
     const checkbox = card.createEl("input", { cls: "tm-calendar-check", type: "checkbox", attr: { "aria-label": `Complete ${taskTitleLabel(task.title)}` } });
     checkbox.checked = task.completed;
     checkbox.disabled = !options.toggle;
@@ -124,12 +140,9 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         new Notice(cause instanceof Error ? cause.message : "Could not complete task.");
       }).finally(() => { checkbox.disabled = false; });
     });
-    card.addEventListener("keydown", event => {
-      if (!options.bind && event.target === card && (event.key === "Enter" || event.key === " ")) {
-        event.preventDefault(); event.stopPropagation(); options.edit(task);
-      }
-    });
-    const title = card.createSpan({ cls: "tm-calendar-task-title", text: taskTitleLabel(task.title) });
+    // Focus keys let the task view put focus back on the same control after re-rendering.
+    const title = card.createEl("button", { cls: "tm-calendar-task-title", text: taskTitleLabel(task.title), attr: { type: "button", "data-tm-focus-key": `calendar-title:${task.id}` } });
+    title.addEventListener("click", event => { event.stopPropagation(); options.edit(task); });
     const timeLabel = taskTimeDurationLabel(time, task.durationMinutes);
     if (timeLabel) card.createSpan({ cls: "tm-calendar-task-time", text: timeLabel });
     if (task.deadline && calendarDate(task) === task.deadline && (time ?? "") === (task.deadlineTime ?? "")) {
@@ -137,11 +150,8 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     }
     renderDescriptionIndicator(title, task.description);
     card.draggable = true;
-    card.addEventListener("click", event => {
-      if (!options.bind || (event.target as HTMLElement).closest(".tm-calendar-task-title")) {
-        event.stopPropagation(); options.edit(task);
-      }
-    });
+    // Without selection, a click anywhere on the card opens the editor, as the title does.
+    if (!options.bind) card.addEventListener("click", event => { event.stopPropagation(); options.edit(task); });
     options.bind?.(card, task);
     card.addEventListener("dragstart", event => {
       options.dragStart?.(task);
@@ -178,21 +188,50 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   const renderHours = (timeline: HTMLElement): void => {
     for (let hour = 0; hour < 24; hour++) {
       const label = timeline.createDiv({ cls: "tm-calendar-hour", text: taskTimeLabel(minuteTime(hour * 60)).replace(" ", "").toLowerCase() });
-      label.style.top = `${hour * 48}px`;
+      label.style.top = `${hour * HOUR_HEIGHT}px`;
     }
+  };
+  // Each lane is one tab stop; arrow keys move between its slots and to the same time on adjacent days.
+  const slotLanes: HTMLElement[][] = [];
+  const focusSlot = (laneIndex: number, slotIndex: number): void => {
+    const slots = slotLanes[laneIndex];
+    for (const slot of slots) if (slot.getAttribute("tabindex") === "0") slot.setAttribute("tabindex", "-1");
+    slots[slotIndex].setAttribute("tabindex", "0");
+    slots[slotIndex].focus();
   };
   const renderDayLane = (timeline: HTMLElement, day: string): void => {
     const tasks = byDate.get(day) ?? [];
     const lane = timeline.createDiv({ cls: "tm-calendar-lane", attr: { "aria-label": `Daily schedule for ${day}` } });
+    let entrySlot = DEFAULT_SLOT;
     if (day === todayIso()) {
       const now = new Date();
+      const minutes = now.getHours() * 60 + now.getMinutes();
       const marker = lane.createSpan({ cls: "tm-calendar-now", attr: { "aria-hidden": "true" } });
-      marker.style.top = `${(now.getHours() * 60 + now.getMinutes()) / 15 * 12}px`;
+      marker.style.top = `${minutes / 15 * 12}px`;
+      entrySlot = Math.floor(minutes / SLOT_MINUTES);
     }
+    const laneIndex = slotLanes.length;
+    const slots: HTMLElement[] = [];
+    slotLanes.push(slots);
     for (let slot = 0; slot < 96; slot++) {
-      const button = lane.createEl("button", { cls: `tm-calendar-slot${slot > 0 && slot % 4 === 0 ? " is-hour-start" : ""}`, attr: { "aria-label": `Create task on ${day} at ${minuteTime(slot * 15)}` } });
+      const button = lane.createEl("button", { cls: `tm-calendar-slot${slot > 0 && slot % 4 === 0 ? " is-hour-start" : ""}`, attr: {
+        "aria-label": `Create task on ${day} at ${minuteTime(slot * 15)}`, tabindex: slot === entrySlot ? "0" : "-1"
+      } });
       button.addEventListener("click", event => { if (event.detail === 0) options.create(selectionPreset(day, slot, slot)); });
+      slots.push(button);
     }
+    lane.addEventListener("keydown", event => {
+      const index = slots.indexOf(event.target as HTMLElement);
+      if (index < 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const vertical = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+      const horizontal = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+      // Past the first or last day, left and right fall through to the calendar's period keys.
+      if (!vertical && !(horizontal && slotLanes[laneIndex + horizontal])) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (vertical) focusSlot(laneIndex, Math.max(0, Math.min(slots.length - 1, index + vertical)));
+      else focusSlot(laneIndex + horizontal, index);
+    });
     const minutesAt = (clientY: number): number => {
       const bounds = lane.getBoundingClientRect();
       return (clientY - bounds.top) / bounds.height * 1440;
@@ -257,7 +296,7 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       };
       for (const edge of ["start", "end"] as const) {
         const handle = card.createSpan({ cls: `tm-calendar-resize-handle is-${edge}`, attr: {
-          role: "slider", tabindex: "0", "aria-label": `Resize ${edge === "start" ? "start time" : "end time"} of ${task.title}`,
+          role: "slider", tabindex: "0", "aria-label": `Resize ${edge === "start" ? "start time" : "end time"} of ${task.title}`, "data-tm-focus-key": `resize-${edge}:${task.id}`,
           "aria-valuemin": "0", "aria-valuemax": "1440", "aria-valuenow": String(edge === "start" ? begin : end),
           "aria-valuetext": minuteTime(edge === "start" ? begin : end), "aria-orientation": "vertical"
         } });
@@ -273,14 +312,17 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
           handle.setAttribute("aria-valuenow", String(boundary));
           handle.setAttribute("aria-valuetext", minuteTime(boundary));
         };
+        let keyTimer: ReturnType<typeof setTimeout> | undefined;
+        const reset = (): void => { range = { start: begin, duration: end - begin }; restore(); };
         const save = (): void => {
-          if (range.start === begin && range.duration === end - begin) { restore(); return; }
+          clearTimeout(keyTimer);
+          keyTimer = undefined;
+          if (range.start === begin && range.duration === end - begin) { reset(); return; }
           moving = true;
           card.setAttribute("aria-busy", "true");
           void options.resize(task, day, minuteTime(range.start), range.duration).catch(cause => {
-            restore();
             new Notice(cause instanceof Error ? cause.message : "Could not resize task.");
-          }).finally(() => { moving = false; card.removeAttribute("aria-busy"); restore(); });
+          }).finally(() => { moving = false; card.removeAttribute("aria-busy"); reset(); });
         };
         handle.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); });
         handle.addEventListener("pointerdown", event => {
@@ -311,29 +353,51 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         const cancel = (): void => { if (pointer !== undefined) { pointer = undefined; restore(); } };
         handle.addEventListener("pointercancel", cancel);
         handle.addEventListener("lostpointercapture", cancel);
+        // Arrow keys preview live; the change saves once the keys pause, or on blur, so
+        // each press does not re-render the calendar and drop focus.
         handle.addEventListener("keydown", event => {
+          if (event.key === "Escape" && keyTimer !== undefined) {
+            event.preventDefault(); event.stopPropagation();
+            clearTimeout(keyTimer); keyTimer = undefined; reset();
+            return;
+          }
           if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
           event.preventDefault();
           event.stopPropagation();
           if (moving) return;
-          update((edge === "start" ? begin : end) + (event.key === "ArrowUp" ? -15 : 15));
-          save();
+          clearTimeout(keyTimer);
+          keyTimer = setTimeout(save, KEY_SAVE_DELAY_MS);
+          card.addClass("is-resizing");
+          update((edge === "start" ? range.start : range.start + range.duration) + (event.key === "ArrowUp" ? -15 : 15));
         });
+        handle.addEventListener("keyup", event => {
+          if (keyTimer === undefined || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+          clearTimeout(keyTimer);
+          keyTimer = setTimeout(save, KEY_SAVE_DELAY_MS);
+        });
+        handle.addEventListener("blur", () => { if (keyTimer !== undefined) save(); });
       }
     }
+  };
+  const scrollTimeGrid = (scroll: HTMLElement, range: string[]): void => {
+    if (options.initialScrollTop !== undefined) { scroll.scrollTop = options.initialScrollTop; return; }
+    if (!range.includes(todayIso())) return;
+    const now = new Date();
+    scroll.scrollTop = Math.max(0, (now.getHours() + now.getMinutes() / 60 - 1) * HOUR_HEIGHT);
   };
   if (options.scope === "day" || options.scope === "week" || options.scope === "four-day") {
     if (options.scope === "day") {
       const allDay = surface.createDiv({ cls: "tm-calendar-allday" });
       allDay.createSpan({ text: "all-day" });
       for (const task of (byDate.get(options.anchor) ?? []).filter(task => !calendarTime(task))) taskCard(allDay, task);
-      const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll" });
+      const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll", attr: { "data-tm-scroll-key": "calendar-grid" } });
       const timeline = scroll.createDiv({ cls: "tm-calendar-timeline" });
       renderHours(timeline);
       renderDayLane(timeline, options.anchor);
+      scrollTimeGrid(scroll, [options.anchor]);
     } else {
       // One scroll surface keeps all seven timelines and the hour labels aligned.
-      const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll tm-calendar-week-scroll" });
+      const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll tm-calendar-week-scroll", attr: { "data-tm-scroll-key": "calendar-grid" } });
       const week = scroll.createDiv({ cls: `tm-calendar-week${options.scope === "four-day" ? " is-four-day" : ""}` });
       const header = week.createDiv({ cls: "tm-calendar-week-header" });
       header.createSpan({ cls: "tm-calendar-week-gutter", text: "all-day" });
@@ -351,28 +415,57 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         const column = columns.createDiv({ cls: "tm-calendar-week-day" });
         renderDayLane(column, day);
       }
+      scrollTimeGrid(scroll, days);
     }
   } else if (options.scope === "month") monthGrid(surface, options.anchor, false);
   else {
-    const year = surface.createDiv({ cls: "tm-calendar-year" });
+    const year = surface.createDiv({ cls: "tm-calendar-year", attr: { "data-tm-scroll-key": "calendar-year" } });
     for (let month = 0; month < 12; month++) {
       const section = year.createDiv();
       const anchor = `${date.getFullYear()}-${String(month + 1).padStart(2, "0")}-01`;
       section.createEl("h3", { text: localDate(anchor).toLocaleDateString(undefined, { month: "long" }) });
       monthGrid(section, anchor, true);
-      const monthTasks = options.tasks.filter(task => calendarDate(task)?.slice(0, 7) === anchor.slice(0, 7));
+      const monthTasks = byMonth.get(anchor.slice(0, 7)) ?? [];
       if (monthTasks.length) {
         const list = section.createEl("details", { cls: "tm-calendar-month-tasks" });
         list.createEl("summary", { text: `${monthTasks.length} tasks — expand to drag` });
-        for (const task of monthTasks) taskCard(list, task);
+        // Closed lists stay empty until first opened.
+        let built = false;
+        list.addEventListener("toggle", () => {
+          if (built || !list.open) return;
+          built = true;
+          for (const task of monthTasks) taskCard(list, task);
+        });
       }
     }
   }
   const unscheduled = byDate.get("") ?? [];
   if (unscheduled.length || planner) {
-    const tray = (planner ?? surface).createEl("section", { cls: "tm-calendar-unscheduled" });
+    const tray = (planner ?? surface).createEl("section", { cls: "tm-calendar-unscheduled", attr: { "data-tm-scroll-key": "calendar-tray" } });
     tray.createEl("h3", { text: "Unscheduled" });
     tray.createEl("p", { cls: "tm-calendar-plan-hint", text: unscheduled.length ? "Drag a task onto the calendar to schedule it." : "No unscheduled tasks." });
-    for (const task of unscheduled) taskCard(tray, task);
+    const list = tray.createDiv({ cls: "tm-calendar-unscheduled-list" });
+    let shown = 0;
+    const showMore = (): HTMLElement | undefined => {
+      const page = unscheduled.slice(shown, shown + UNSCHEDULED_PAGE);
+      shown += page.length;
+      return page.map(task => taskCard(list, task))[0];
+    };
+    showMore();
+    if (shown < unscheduled.length) {
+      const more = tray.createEl("button", { cls: "tm-show-more-tasks" });
+      const label = (): void => {
+        const remaining = unscheduled.length - shown;
+        more.setText(`Show ${Math.min(UNSCHEDULED_PAGE, remaining)} more (${remaining} hidden)`);
+      };
+      label();
+      more.addEventListener("click", () => {
+        const first = showMore();
+        if (shown < unscheduled.length) { label(); return; }
+        // The button goes away, so keep focus on the first newly shown task.
+        more.remove();
+        first?.querySelector<HTMLElement>(".tm-calendar-task-title")?.focus();
+      });
+    }
   }
 }

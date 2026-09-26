@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { TFile, type App } from "obsidian";
 import * as parser from "../src/parser";
+import * as dates from "../src/date";
+import * as query from "../src/query";
 import { noteRecurringCompletion } from "../src/note-recurring-completion";
 import { TaskIndex } from "../src/task-index";
 import { DEFAULT_SETTINGS } from "../src/types";
@@ -11,13 +13,18 @@ const proseNote = (count: number): string =>
   Array.from({ length: count }, (_, i) => `- [ ] Call the vendor about item number ${i} for the open house`).join("\n");
 
 describe("large notes", () => {
-  it("scans 10,000 prose-only tasks quickly", () => {
-    const start = performance.now();
+  // Counts date-parser calls rather than timing the scan, so slow CI machines cannot make it flaky.
+  it("scans 10,000 prose-only tasks without trying to parse their words as dates", () => {
+    const parse = vi.spyOn(dates, "parseDateTimeExpression");
     const tasks = parser.scanTasks("Big.md", proseNote(10_000), new Date(2026, 8, 26), "YYYY-MM-DD");
     expect(tasks).toHaveLength(10_000);
     expect(tasks[42].title).toBe("Call the vendor about item number 42 for the open house");
     expect(tasks[42].scheduledDate).toBeUndefined();
-    expect(performance.now() - start).toBeLessThan(1000);
+    expect(parse).not.toHaveBeenCalled();
+    // Control: the spy does see the parser's calls.
+    parser.parseTaskLine("- [ ] Pay rent 2026-10-30", new Date(2026, 8, 26));
+    expect(parse).toHaveBeenCalled();
+    parse.mockRestore();
   });
 
   it("still reads plain dates in multi-word formats, with a trailing time", () => {
@@ -29,13 +36,16 @@ describe("large notes", () => {
     expect(prose?.scheduledDate).toBeUndefined();
   });
 
-  it("does not rescan the note while typing, only when a checkbox is checked", () => {
+  it("does not rescan the note while typing, or when a non-recurring box is checked", () => {
     const scan = vi.spyOn(parser, "scanTasks");
-    const state = EditorState.create({ doc: proseNote(10_000), extensions: noteRecurringCompletion(() => "YYYY-MM-DD", () => false, vi.fn(), () => "Big.md") });
+    const create = (recurring: boolean) => EditorState.create({ doc: proseNote(10_000), extensions: noteRecurringCompletion(() => "YYYY-MM-DD", () => recurring, vi.fn(), () => "Big.md") });
+    const state = create(false);
     const line = state.doc.line(500);
     state.update({ changes: { from: line.to, insert: " more" } });
-    expect(scan).not.toHaveBeenCalled();
     state.update({ changes: { from: line.from + 3, to: line.from + 4, insert: "x" } });
+    expect(scan).not.toHaveBeenCalled();
+    // Only a recurring task needs the full note structure.
+    create(true).update({ changes: { from: line.from + 3, to: line.from + 4, insert: "x" } });
     expect(scan).toHaveBeenCalled();
     scan.mockRestore();
   });
@@ -49,9 +59,12 @@ describe("large notes", () => {
     } as unknown as App;
     const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
     await index.initialize();
-    const start = performance.now();
+    const sort = vi.spyOn(query, "sortTasks");
     for (let line = 0; line < 10_000; line++) expect(index.taskById(`Big.md:${line}`)?.line).toBe(line);
-    expect(performance.now() - start).toBeLessThan(500);
+    expect(sort.mock.calls.length).toBeLessThanOrEqual(1);
+    index.allTasks();
+    expect(sort.mock.calls.length).toBeGreaterThanOrEqual(1);
+    sort.mockRestore();
     content = "- [ ] Only task";
     await index.refreshPath("Big.md");
     expect(index.taskById("Big.md:42")).toBeUndefined();
@@ -101,6 +114,9 @@ describe("body line classification", () => {
 
 describe("plain date pre-filter and parse cache", () => {
   const reference = new Date(2026, 8, 26);
+  // Year-less formats resolve against the current year; pin it so these do not depend on today's date.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(reference); });
+  afterEach(() => { vi.useRealTimers(); });
   it.each([
     ["MMM D, YYYY", "Oct 30, 2026"], ["DD.MM.YYYY", "30.10.2026"], ["dddd, MMMM Do YYYY", "Friday, October 30th 2026"],
     ["D MMMM", "30 October"], ["YYYY-MM-DD", "2026-10-30"]

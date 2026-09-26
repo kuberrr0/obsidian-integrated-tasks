@@ -13,9 +13,9 @@ import { noteDateInput } from "./note-date-input";
 import { noteTokenEditor } from "./note-token-editor";
 import { noteTaskEditEditor, registerNoteTaskEdit } from "./note-task-edit";
 import { renderNoteTokens } from "./note-token-reading";
-import { MarkdownView, Notice, Plugin, TFile, type Editor, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, Notice, Plugin, TFile, TFolder, type Editor, type TAbstractFile, type WorkspaceLeaf } from "obsidian";
 import { TaskEditorModal, type TaskEditorOptions } from "./task-editor";
-import { TaskIndex } from "./task-index";
+import { TaskIndex, type RefreshOptions } from "./task-index";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
 import { TaskStore } from "./task-store";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
@@ -23,6 +23,8 @@ import { DEFAULT_SETTINGS, type SmartList, type Task, type TaskManagerSettings, 
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
+
+const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay"];
 
 interface OpenEditorState extends TaskViewState {
   focusProperty?: TaskEditorOptions["focusProperty"];
@@ -60,13 +62,13 @@ export default class TaskManagerPlugin extends Plugin {
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
 
     const commands: Array<[TaskViewMode, string, string]> = [
-      ["dashboard", "Open Task Dashboard", "open-task-dashboard"],
-      ["inbox", "Open Inbox", "open-inbox"],
-      ["today", "Open Today", "open-today"],
-      ["upcoming", "Open Upcoming", "open-upcoming"],
-      ["all", "Open All Tasks", "open-all-tasks"],
-      ["projects", "Open Projects", "open-projects"],
-      ["tags", "Open Tags", "open-tags"]
+      ["dashboard", "Open task dashboard", "open-task-dashboard"],
+      ["inbox", "Open inbox", "open-inbox"],
+      ["today", "Open today", "open-today"],
+      ["upcoming", "Open upcoming", "open-upcoming"],
+      ["all", "Open all tasks", "open-all-tasks"],
+      ["projects", "Open projects", "open-projects"],
+      ["tags", "Open tags", "open-tags"]
     ];
     for (const [mode, name, id] of commands) {
       this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new Notice(String(error))) });
@@ -161,7 +163,12 @@ export default class TaskManagerPlugin extends Plugin {
       }
     });
 
+    // Task views store note paths, so they follow renames and close with deleted notes like Markdown tabs.
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => { void this.retargetViews(file, oldPath); }));
+    this.registerEvent(this.app.vault.on("delete", file => this.closeDeletedViews(file)));
+
     this.app.workspace.onLayoutReady(() => {
+      if (this.unloaded) return;
       void this.activateNavigation(false).catch(error => new Notice(String(error)));
       // Index after the workspace loads, so a large vault does not delay startup. Views
       // restored meanwhile show what is indexed so far and refresh when it finishes.
@@ -197,27 +204,21 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const saved = await this.loadData() as (Partial<TaskManagerSettings> & { taskListRowHeight?: number }) | null;
+    const saved = await this.loadData() as Partial<TaskManagerSettings> | null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
-    if (saved?.taskListRowHeightMultiplier === undefined && typeof saved?.taskListRowHeight === "number" && Number.isFinite(saved.taskListRowHeight)) {
-      const editorFontSize = typeof document === "undefined" ? 16 : parseFloat(getComputedStyle(document.body).getPropertyValue("--font-text-size")) || 16;
-      this.settings.taskListRowHeightMultiplier = Math.max(1, saved.taskListRowHeight / editorFontSize);
-    }
+    // Settings from older versions that no longer exist; drop them so they are not saved back.
+    for (const key of LEGACY_SETTINGS) delete (this.settings as unknown as Record<string, unknown>)[key];
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
+    if (typeof this.settings.dateFormat !== "string") this.settings.dateFormat = DEFAULT_SETTINGS.dateFormat;
     if (!Number.isInteger(this.settings.sectionHeadingLevel) || this.settings.sectionHeadingLevel < 1 || this.settings.sectionHeadingLevel > 6) this.settings.sectionHeadingLevel = 1;
     this.settings.showGroupTaskCounts = this.settings.showGroupTaskCounts === true;
     this.settings.showSubtaskCounts = this.settings.showSubtaskCounts === true;
     if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
-    if (!Number.isFinite(this.settings.taskListRowHeightMultiplier) || this.settings.taskListRowHeightMultiplier < 1) this.settings.taskListRowHeightMultiplier = DEFAULT_SETTINGS.taskListRowHeightMultiplier;
-    for (const key of ["hiddenListTaskProperties", "hiddenKanbanTaskProperties"] as const) {
-      const hidden = this.settings[key];
-      this.settings[key] = Array.isArray(hidden) ? hidden.filter(property =>
-        ["source", "scheduledDate", "scheduledTime", "deadline", "deadlineTime", "duration", "priority", "tags"].includes(property)) : [];
-    }
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
+    if (typeof this.settings.inboxPath !== "string" || !this.settings.inboxPath.trim()) this.settings.inboxPath = DEFAULT_SETTINGS.inboxPath;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
   }
 
@@ -328,18 +329,34 @@ export default class TaskManagerPlugin extends Plugin {
         if (draft.parent === file.path || draft.parent === destination) throw new Error("A project cannot be its own parent.");
         await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) =>
           applyProjectDraft(frontmatter, draft, this.dateFormat(), this.settings.linkDates));
-        if (destination !== file.path) await this.app.fileManager.renameFile(file, destination);
-        await this.index.refreshPath(file.path);
-        await this.openProject(file.path);
+        if (destination !== file.path) {
+          const oldPath = file.path;
+          await this.app.fileManager.renameFile(file, destination);
+          // Usually already done by the rename event; repeating it is a no-op.
+          await this.retargetViews(file, oldPath);
+        }
+        await this.index.refreshPath(file);
+        await this.revealProject(file.path);
       }
     }).open();
   }
 
-  async openProject(path: string): Promise<void> {
+  /** Reveal a tab already showing the project, or open one. */
+  private async revealProject(path: string): Promise<void> {
+    const shows = (leaf: WorkspaceLeaf): boolean => {
+      const state = (leaf.getViewState().state ?? {}) as Record<string, unknown>;
+      return state.pagePath === path || state.projectPath === path || state.file === path;
+    };
+    const leaves = [...this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW), ...this.app.workspace.getLeavesOfType("markdown")].filter(shows);
+    const recent = this.app.workspace.getMostRecentLeaf();
+    await this.openProject(path, leaves.find(leaf => leaf === recent) ?? leaves[0]);
+  }
+
+  async openProject(path: string, existing?: WorkspaceLeaf): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
-    const leaf = this.app.workspace.getLeaf("tab");
-    await leaf.openFile(file);
+    const leaf = existing ?? this.app.workspace.getLeaf("tab");
+    if (!existing) await leaf.openFile(file);
     if (!this.settings.taskMode) await this.setTaskMode(true);
     else await this.taskModeController?.sync();
     await this.app.workspace.revealLeaf(leaf);
@@ -506,6 +523,44 @@ export default class TaskManagerPlugin extends Plugin {
     new TaskEditorModal(this.app, options).open();
   }
 
+  private viewRetargeting: Promise<void> = Promise.resolve();
+
+  /** Point task views (and remembered task-mode layouts) at a renamed note or folder. */
+  private retargetViews(file: TAbstractFile, oldPath: string): Promise<void> {
+    const renamed = (path: unknown): string | undefined => {
+      if (typeof path !== "string") return undefined;
+      if (file instanceof TFile) return file.extension === "md" && path === oldPath ? file.path : undefined;
+      // Obsidian also reports each file inside a renamed folder; this covers any view it misses.
+      return file instanceof TFolder && path.startsWith(`${oldPath}/`) ? file.path + path.slice(oldPath.length) : undefined;
+    };
+    this.viewRetargeting = this.viewRetargeting.then(async () => {
+      if (file instanceof TFile && file.extension === "md") this.taskModeController?.renamePath(oldPath, file.path);
+      for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
+        const viewState = leaf.getViewState();
+        const state = (viewState.state ?? {}) as Record<string, unknown>;
+        const next: Record<string, unknown> = { ...state };
+        let path: string | undefined;
+        for (const key of ["pagePath", "projectPath"] as const) {
+          const target = renamed(state[key]);
+          if (target) { next[key] = target; path = target; }
+        }
+        if (!path) continue;
+        if (state.markdownState && typeof state.markdownState === "object") next.markdownState = { ...state.markdownState as Record<string, unknown>, file: path };
+        await leaf.setViewState({ type: TASK_MAIN_VIEW, state: next, ...(viewState.pinned ? { pinned: true } : {}) });
+      }
+    }).catch(error => { console.error("Task manager could not update renamed task views", error); });
+    return this.viewRetargeting;
+  }
+
+  private closeDeletedViews(file: TAbstractFile): void {
+    const deleted = (path: unknown): boolean => typeof path === "string" &&
+      (file instanceof TFolder ? path.startsWith(`${file.path}/`) : path === file.path);
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
+      const state = (leaf.getViewState().state ?? {}) as Record<string, unknown>;
+      if (deleted(state.pagePath) || deleted(state.projectPath)) leaf.detach();
+    }
+  }
+
   refreshViews(): void {
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
       const view = leaf.view;
@@ -528,9 +583,9 @@ export default class TaskManagerPlugin extends Plugin {
     await this.refreshDateParsing();
   }
 
-  private async refreshDateParsing(): Promise<void> {
-    await Promise.all(this.app.vault.getMarkdownFiles().map(file => this.index.refreshPath(file.path)));
-    this.refreshViews();
+  /** Settings that change how notes are read rescan the vault in batches; views update on the one index event. */
+  private async refreshDateParsing(options?: RefreshOptions): Promise<void> {
+    await this.index.rescanAll(options);
   }
 
   async updateTaskDates(): Promise<void> {
@@ -540,7 +595,8 @@ export default class TaskManagerPlugin extends Plugin {
     ]);
     delete this.settings.previousDateFormat;
     await this.saveSettings();
-    await this.refreshDateParsing();
+    // The format itself is unchanged, so only notes whose content changed are parsed again.
+    await this.refreshDateParsing({ force: false });
     new Notice(`Updated task dates in ${paths.length} note${paths.length === 1 ? "" : "s"}.`);
   }
 

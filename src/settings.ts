@@ -1,9 +1,34 @@
 import { Notice, PluginSettingTab, Setting, type App, type SettingDefinitionRender } from "obsidian";
 import type TaskManagerPlugin from "./main";
 
+/** Text settings apply once typing pauses, so each keystroke does not save and re-index the vault. */
+export const TEXT_SETTING_DELAY_MS = 500;
+
 export class TaskManagerSettingTab extends PluginSettingTab {
+  private readonly pendingText = new Map<string, { timer: ReturnType<typeof setTimeout>; apply: () => Promise<void> }>();
+
   constructor(app: App, private readonly plugin: TaskManagerPlugin) {
     super(app, plugin);
+  }
+
+  private applySoon(key: string, apply: () => Promise<void>): void {
+    const pending = this.pendingText.get(key);
+    if (pending) clearTimeout(pending.timer);
+    const timer = setTimeout(() => {
+      this.pendingText.delete(key);
+      void apply().catch(error => new Notice(String(error)));
+    }, TEXT_SETTING_DELAY_MS);
+    this.pendingText.set(key, { timer, apply });
+  }
+
+  /** Apply edits still waiting when the settings page closes. */
+  hide(): void {
+    for (const pending of this.pendingText.values()) {
+      clearTimeout(pending.timer);
+      void pending.apply().catch(error => new Notice(String(error)));
+    }
+    this.pendingText.clear();
+    super.hide();
   }
 
   getSettingDefinitions() {
@@ -48,7 +73,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         render: (setting: Setting) => { setting.addText(text => text
           .setPlaceholder("Daily Notes format")
           .setValue(this.plugin.settings.dateFormat)
-          .onChange(value => this.plugin.setDateFormat(value))); }
+          .onChange(value => this.applySoon("dateFormat", () => this.plugin.setDateFormat(value)))); }
       },
       {
         section: "Dates",
@@ -145,11 +170,13 @@ export class TaskManagerSettingTab extends PluginSettingTab {
     setting.addText((text) => text
       .setPlaceholder("Inbox.md")
       .setValue(this.plugin.settings.inboxPath)
-      .onChange(async (value) => {
+      .onChange((value) => {
         const path = value.trim() || "Inbox.md";
         this.plugin.settings.inboxPath = path.endsWith(".md") ? path : `${path}.md`;
-        await this.plugin.saveSettings();
-        this.plugin.refreshViews();
+        this.applySoon("inboxPath", async () => {
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+        });
       }));
   }
 

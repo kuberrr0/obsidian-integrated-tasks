@@ -4,6 +4,7 @@ import { editorLivePreviewField, editorInfoField, Platform } from "obsidian";
 import { type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
 import { nonBodyLines } from "./structure";
+import { todayIso } from "./date";
 import { taskTokens, recurringLogTokens, tokenClass, type TaskToken } from "./task-tokens";
 
 export interface NoteTokenSpan { from: number; to: number; token: TaskToken }
@@ -95,16 +96,20 @@ export function noteTokenMarks(
   return { pills: Decoration.set(pills, true), syntax: Decoration.set(syntax, true) };
 }
 
-interface NoteLineTokens { presentation: NoteTaskPresentation | undefined; tokens: TaskToken[] }
+/** `minute` is set only for lines whose labels depend on the time of day (a deadline with a time). */
+interface NoteLineTokens { presentation: NoteTaskPresentation | undefined; tokens: TaskToken[]; minute?: number }
 
 export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills: DecorationSet; syntax: DecorationSet }> {
   return ViewPlugin.fromClass(class {
     pills: DecorationSet = Decoration.none;
     syntax: DecorationSet = Decoration.none;
-    // Only visible lines are parsed; results are reused while the line text and date format are unchanged.
+    // Only visible lines are parsed; results are reused while the line text, date format and day are unchanged.
+    // Labels ("Today", "3d ago") and overdue flags depend on the date, so the cache is dropped when the day
+    // changes; lines with a deadline time (overdue from that minute on) are also re-derived each new minute.
     private readonly lines = new Map<string, NoteLineTokens>();
     private nonBody: Set<number>;
     private format = getDateFormat();
+    private day = todayIso();
 
     constructor(view: EditorView) {
       this.nonBody = nonBodyLines(view.state.doc.iterLines());
@@ -114,16 +119,27 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
     update(update: ViewUpdate): void {
       const formatChanged = this.format !== getDateFormat();
       if (formatChanged) { this.format = getDateFormat(); this.lines.clear(); }
+      const dayChanged = this.checkDay();
       if (update.docChanged) this.nonBody = nonBodyLines(update.state.doc.iterLines());
-      if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged || formatChanged || update.transactions.length) this.decorate(update.view);
+      if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged || formatChanged || dayChanged || update.transactions.length) this.decorate(update.view);
     }
 
-    private lineTokens(text: string): NoteLineTokens {
+    /** Drop date-relative labels cached on an earlier day. */
+    private checkDay(): boolean {
+      const day = todayIso();
+      if (day === this.day) return false;
+      this.day = day;
+      this.lines.clear();
+      return true;
+    }
+
+    private lineTokens(text: string, minute: number): NoteLineTokens {
       let entry = this.lines.get(text);
-      if (!entry) {
+      if (!entry || (entry.minute !== undefined && entry.minute !== minute)) {
         if (this.lines.size > 5000) this.lines.clear();
         const presentation = noteTaskPresentation(text, this.format);
-        entry = { presentation, tokens: [...(presentation ? [] : taskTokens(text, this.format)), ...recurringLogTokens(text, this.format)] };
+        const timed = presentation?.tokens.some(token => token.kind === "deadline" && token.time);
+        entry = { presentation, tokens: [...(presentation ? [] : taskTokens(text, this.format)), ...recurringLogTokens(text, this.format)], ...(timed ? { minute } : {}) };
         this.lines.set(text, entry);
       }
       return entry;
@@ -134,6 +150,8 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
         this.pills = this.syntax = Decoration.none;
         return;
       }
+      this.checkDay();
+      const minute = Math.floor(Date.now() / 60_000);
       const tokens: NoteTokenSpan[] = [];
       const tasks: NoteTaskSpan[] = [];
       const doc = view.state.doc;
@@ -145,7 +163,7 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
           done = number;
           if (this.nonBody.has(number - 1)) continue;
           const line = doc.line(number);
-          const { presentation, tokens: lineTokens } = this.lineTokens(line.text);
+          const { presentation, tokens: lineTokens } = this.lineTokens(line.text, minute);
           if (presentation) tasks.push({ from: line.from + presentation.from, to: line.from + presentation.to, lineFrom: line.from, lineTo: line.to, presentation });
           for (const token of lineTokens) tokens.push({ from: line.from + token.from, to: line.from + token.to, token });
         }
