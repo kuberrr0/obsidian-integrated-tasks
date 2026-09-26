@@ -1629,3 +1629,10 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
     height: 44px;
   }
 }
+
+.tm-show-more-tasks {
+  display: block;
+  margin: 8px auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}

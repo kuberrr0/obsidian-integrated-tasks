@@ -104,7 +104,8 @@ export function parseTimeExpression(value: string, reference = new Date()): stri
   return result ? resultTime(result) : undefined;
 }
 
-export function parseDateTimeExpression(value: string, reference = new Date(), dateFormat: string | string[] = DEFAULT_DATE_FORMAT): { date: string; time?: string } | undefined {
+/** `strict` skips natural-language dates, for callers that only accept exact date formats. */
+export function parseDateTimeExpression(value: string, reference = new Date(), dateFormat: string | string[] = DEFAULT_DATE_FORMAT, strict = false): { date: string; time?: string } | undefined {
   const text = value.trim();
   const link = /^\[\[([^\]]+)\]\](?:\s+(.+))?$/.exec(text);
   if (link) {
@@ -122,6 +123,7 @@ export function parseDateTimeExpression(value: string, reference = new Date(), d
     const time = suffix ? parseTimeExpression(suffix, reference) : undefined;
     if (!suffix || time) return { date: strict.format(DEFAULT_DATE_FORMAT), ...(time ? { time } : {}) };
   }
+  if (strict) return undefined;
   const result = chrono.parse(text, reference, { forwardDate: true }).find((match) =>
     match.index === 0 && match.text.length === text.length && !match.end &&
     (match.start.isCertain("day") || match.start.isCertain("weekday"))

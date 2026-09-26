@@ -1,10 +1,26 @@
-import { EditorState, StateEffect, type Extension, type ChangeSpec } from "@codemirror/state";
+import { EditorState, StateEffect, type Extension, type ChangeSpec, type Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { editorInfoField } from "obsidian";
 import { scanTasks } from "./parser";
 import type { Task } from "./types";
 
 const recurringCompletion = StateEffect.define<Task[]>();
+
+/** Cheap line-level precheck: does any edited line turn an open checkbox into a checked one? */
+function checksOpenTask(transaction: Transaction): boolean {
+    const oldDoc = transaction.startState.doc;
+    let found = false;
+    transaction.changes.iterChangedRanges((fromA, toA) => {
+        const last = oldDoc.lineAt(toA).number;
+        for (let number = oldDoc.lineAt(fromA).number; !found && number <= last; number++) {
+            const oldLine = oldDoc.line(number);
+            if (!/^\s*-\s+\[ \]/.test(oldLine.text)) continue;
+            const newText = transaction.newDoc.lineAt(transaction.changes.mapPos(oldLine.from)).text;
+            found = newText.replace(/^(\s*-\s+\[)[xX](\])/, "$1 $2") === oldLine.text && newText !== oldLine.text;
+        }
+    });
+    return found;
+}
 
 /** Catch native checkbox commands (and typed checks) without persisting a checked instance. */
 export function noteRecurringCompletion(
@@ -17,16 +33,17 @@ export function noteRecurringCompletion(
         EditorState.transactionFilter.of(transaction => {
             if (!transaction.docChanged || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
             const path = getPath(transaction.startState);
-            if (!path) return transaction;
+            if (!path || !checksOpenTask(transaction)) return transaction;
             const previous = scanTasks(path, transaction.startState.doc.toString(), new Date(), getDateFormat());
-            const current = scanTasks(path, transaction.newDoc.toString(), new Date(), getDateFormat());
+            const current = new Map(scanTasks(path, transaction.newDoc.toString(), new Date(), getDateFormat())
+                .filter(candidate => candidate.completed).map(candidate => [candidate.line, candidate]));
             const tasks: Task[] = [];
             const changes: ChangeSpec[] = [];
             for (const task of previous) {
                 if (task.completed) continue;
                 const oldLine = transaction.startState.doc.line(task.line + 1);
                 const mapped = transaction.newDoc.lineAt(transaction.changes.mapPos(oldLine.from));
-                const checked = current.find(candidate => candidate.line === mapped.number - 1 && candidate.completed);
+                const checked = current.get(mapped.number - 1);
                 if (!checked) continue;
                 const raw = checked.raw.replace(/^(\s*-\s+\[)[xX](\])/, "$1 $2");
                 // Only checkbox transitions; pasted/replaced task content is not completion.

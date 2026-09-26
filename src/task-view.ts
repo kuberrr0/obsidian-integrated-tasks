@@ -28,6 +28,10 @@ import type { TaskProperty, TaskFilter, Project, Task, TaskQuery, TaskViewMode, 
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
+// Large lists render in pages; more rows load as the "Show more" button scrolls into view.
+const ROW_PAGE = 200;
+const MIN_SIDE_BY_SIDE_ROWS = 20;
+
 const TITLES: Record<TaskViewMode, string> = {
   dashboard: "Task Dashboard",
   inbox: "Inbox",
@@ -64,6 +68,11 @@ export class TaskMainView extends ItemView {
   private visibleTasks: Task[] = [];
   private selectionRows = new Map<string, HTMLElement[]>();
   private draggedTasks: Task[] = [];
+  /** Rows to render across all lists; grows as the user loads more, so re-renders keep their place. */
+  private rowLimit = ROW_PAGE;
+  private rowsLeft = 0;
+  private rowObservers: IntersectionObserver[] = [];
+  private renderQueued = false;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
     super(leaf);
@@ -112,6 +121,7 @@ export class TaskMainView extends ItemView {
       this.descending = false;
       this.grouping = "default";
       this.filtersExpanded = false;
+      this.rowLimit = ROW_PAGE;
     }
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode as TaskViewMode;
     this.state.smartListId = typeof state.smartListId === "string" ? state.smartListId : undefined;
@@ -126,12 +136,28 @@ export class TaskMainView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.registerDomEvent(this.containerEl.ownerDocument, "click", event => this.clearSelectionOutside(event), true);
-    this.unsubscribe = this.plugin.index.subscribe(() => this.render());
+    this.unsubscribe = this.plugin.index.subscribe(() => this.scheduleRender());
     this.render();
   }
 
   async onClose(): Promise<void> {
     this.unsubscribe?.();
+    this.disconnectRowObservers();
+  }
+
+  /** Coalesce bursts of index updates into one render per frame. */
+  private scheduleRender(): void {
+    if (this.renderQueued) return;
+    this.renderQueued = true;
+    this.containerEl.win.requestAnimationFrame(() => {
+      this.renderQueued = false;
+      this.render();
+    });
+  }
+
+  private disconnectRowObservers(): void {
+    for (const observer of this.rowObservers) observer.disconnect();
+    this.rowObservers = [];
   }
 
   render(): void {
@@ -147,6 +173,8 @@ export class TaskMainView extends ItemView {
       }
     }
     container.empty();
+    this.disconnectRowObservers();
+    this.rowsLeft = this.rowLimit;
     this.taskResults = undefined;
     this.visibleTasks = [];
     this.selectionRows.clear();
@@ -240,6 +268,8 @@ export class TaskMainView extends ItemView {
     const container = this.taskResults;
     if (!container) return;
     container.empty();
+    this.disconnectRowObservers();
+    this.rowsLeft = this.rowLimit;
     this.visibleTasks = [];
     this.selectionRows.clear();
     this.updateSelection();
@@ -440,12 +470,13 @@ export class TaskMainView extends ItemView {
     menu.createDiv({ text: "Match all properties. Within a property, AND is evaluated before OR.", cls: "tm-filter-hint" });
     const clear = menu.createEl("button", { text: "Clear all filters" });
     clear.addEventListener("click", () => { this.propertyFilters = []; this.render(); });
+    const allTasks = this.plugin.index.allTasks();
     for (const property of TASK_PROPERTIES) {
       const active = this.propertyFilters.find(filter => filter.property === property.key);
       const submenu = menu.createDiv({ cls: "tm-property-submenu" });
       const summary = submenu.createSpan({ cls: "tm-property-name", text: `${property.label}${active ? " •" : ""}` });
       const panel = submenu.createDiv({ cls: "tm-property-conditions" });
-      renderPropertyFilter(panel, property, active, this.plugin.index.allTasks(), filter => {
+      renderPropertyFilter(panel, property, active, allTasks, filter => {
         this.propertyFilters = this.propertyFilters.filter(item => item.property !== property.key);
         if (filter) this.propertyFilters.push(filter);
         summary.setText(`${property.label}${filter ? " •" : ""}`);
@@ -591,9 +622,47 @@ export class TaskMainView extends ItemView {
     const list = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
     if (target) this.listDrag?.group(list, target);
     const visibleIds = new Set(tasks.map((task) => task.id));
-    for (const task of orderTaskTree(tasks)) {
-      const relativeDepth = this.depthWithin(task, visibleIds);
-      this.renderTaskRow(list, task, relativeDepth, target);
+    const ordered = orderTaskTree(tasks);
+    let rendered = 0;
+    const renderRows = (count: number): void => {
+      for (const task of ordered.slice(rendered, rendered + count)) this.renderTaskRow(list, task, this.depthWithin(task, visibleIds), target);
+      rendered = Math.min(ordered.length, rendered + count);
+    };
+    // Board columns and dashboard cards sit side by side, so each shows a few rows even once the shared budget is spent.
+    const floor = this.layout === "kanban" || this.state.mode === "dashboard" ? MIN_SIDE_BY_SIDE_ROWS : 0;
+    const initial = Math.min(ordered.length, Math.max(this.rowsLeft, floor));
+    this.rowsLeft = Math.max(0, this.rowsLeft - initial);
+    renderRows(initial);
+    if (rendered < ordered.length) this.renderShowMore(container, () => ordered.length - rendered, count => {
+      renderRows(count);
+      this.rowLimit += count;
+      // Shift-click ranges follow visibleTasks, which must stay in on-screen order.
+      const row = (task: Task): HTMLElement | undefined => this.selectionRows.get(task.id)?.[0];
+      this.visibleTasks.sort((left, right) => {
+        const [a, b] = [row(left), row(right)];
+        if (!a || !b || a === b) return 0;
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+      this.updateSelection();
+    });
+  }
+
+  private renderShowMore(container: HTMLElement, remaining: () => number, load: (count: number) => void): void {
+    const more = container.createEl("button", { cls: "tm-show-more-tasks", attr: { type: "button" } });
+    const label = (): void => { more.setText(`Show ${Math.min(ROW_PAGE, remaining())} more (${remaining()} hidden)`); };
+    let observer: IntersectionObserver | undefined;
+    const next = (): void => {
+      load(ROW_PAGE);
+      if (remaining() > 0) { label(); return; }
+      observer?.disconnect();
+      more.remove();
+    };
+    label();
+    more.addEventListener("click", next);
+    if (typeof IntersectionObserver !== "undefined") {
+      observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) next(); }, { rootMargin: "600px" });
+      observer.observe(more);
+      this.rowObservers.push(observer);
     }
   }
 

@@ -36,6 +36,7 @@ export default class TaskManagerPlugin extends Plugin {
   store!: TaskStore;
   private taskModeController?: TaskModeController;
   private taskModeRibbon?: HTMLElement;
+  private unloaded = false;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -160,21 +161,37 @@ export default class TaskManagerPlugin extends Plugin {
       }
     });
 
-    await this.index.initialize();
-    this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, path => this.index.isProject(path), path => this.index.tagForPath(path));
-    const syncTaskMode = (): void => { void this.taskModeController?.sync().catch(error => new Notice(String(error))); };
-    this.registerEvent(this.app.workspace.on("file-open", syncTaskMode));
-    this.registerEvent(this.app.metadataCache.on("resolved", syncTaskMode));
-    this.registerEvent(this.app.workspace.on("active-leaf-change", syncTaskMode));
-    this.registerEvent(this.app.workspace.on("layout-change", syncTaskMode));
-    this.register(this.index.subscribe(syncTaskMode));
     this.app.workspace.onLayoutReady(() => {
-      syncTaskMode();
       void this.activateNavigation(false).catch(error => new Notice(String(error)));
+      // Index after the workspace loads, so a large vault does not delay startup. Views
+      // restored meanwhile show what is indexed so far and refresh when it finishes.
+      void this.index.initialize()
+        .then(() => { if (!this.unloaded) this.startTaskMode(); })
+        .catch(error => new Notice(String(error)));
     });
   }
 
+  /** Task mode decides tabs from project and tag membership, so it waits for the full index. */
+  private startTaskMode(): void {
+    this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, path => this.index.isProject(path), path => this.index.tagForPath(path));
+    const syncTaskMode = (): void => { void this.taskModeController?.sync().catch(error => new Notice(String(error))); };
+    // Metadata and index updates arrive in bursts; navigation events stay immediate to avoid a flash of Markdown.
+    let syncTimer: number | undefined;
+    const syncTaskModeSoon = (): void => {
+      window.clearTimeout(syncTimer);
+      syncTimer = window.setTimeout(syncTaskMode, 100);
+    };
+    this.register(() => window.clearTimeout(syncTimer));
+    this.registerEvent(this.app.workspace.on("file-open", syncTaskMode));
+    this.registerEvent(this.app.metadataCache.on("resolved", syncTaskModeSoon));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", syncTaskMode));
+    this.registerEvent(this.app.workspace.on("layout-change", syncTaskMode));
+    this.register(this.index.subscribe(syncTaskModeSoon));
+    syncTaskMode();
+  }
+
   onunload(): void {
+    this.unloaded = true;
     this.taskModeController?.dispose();
     this.index.destroy();
   }

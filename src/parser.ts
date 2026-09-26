@@ -1,6 +1,6 @@
 import { formatTags } from "./task-tags";
 import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
-import { findInputDate, findInputDeadline, formatDate, parseDateTimeExpression } from "./date";
+import { findInputDate, findInputDeadline, formatDate, formatLocalDate, parseDateTimeExpression } from "./date";
 import type { ParsedTaskMetadata, Priority, Task, TaskDraft } from "./types";
 
 const CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
@@ -11,18 +11,46 @@ const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
 const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 const DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
 
-/** Plain metadata must exactly match the configured date format (or ISO). */
+interface PlainDateShape { wordCounts: Set<number>; needsDigit: boolean }
+const plainDateShapes = new Map<string, PlainDateShape>();
+
+/** Word counts (and whether a digit is required) of every date these formats can produce, plus ISO. */
+function plainDateShape(dateFormat: string[]): PlainDateShape {
+  const key = dateFormat.join("\u0000");
+  let shape = plainDateShapes.get(key);
+  if (!shape) {
+    shape = { wordCounts: new Set([1]), needsDigit: true };
+    // One sample per month, on varying weekdays, covers every month and day name.
+    for (let month = 0; month < 12; month++) {
+      const sample = formatLocalDate(new Date(2026, month, 1 + (month * 5) % 28));
+      for (const format of dateFormat) {
+        const label = formatDate(sample, format).trim();
+        shape.wordCounts.add(label.split(/\s+/).length);
+        if (!/\d/.test(label)) shape.needsDigit = false;
+      }
+    }
+    plainDateShapes.set(key, shape);
+  }
+  return shape;
+}
+
+/** Plain metadata must exactly match the configured date format (or ISO), optionally followed by an HH:mm time. */
 function plainScheduled(text: string, reference: Date, dateFormat: string[]): RegExpExecArray | null {
-  const starts = /(?:^|\s)\S+/g;
-  let start: RegExpExecArray | null;
-  while ((start = starts.exec(text))) {
-    const value = text.slice(start.index).trim();
-    if (/[[\]{}]/.test(value)) continue;
-    const parsed = parseDateTimeExpression(value, reference, dateFormat);
+  const { wordCounts, needsDigit } = plainDateShape(dateFormat);
+  const words = [...text.matchAll(/(?:^|\s)\S+/g)];
+  const timed = /^\s*\d{2}:\d{2}$/.test(words[words.length - 1]?.[0] ?? "");
+  for (let word = 0; word < words.length; word++) {
+    // Skip suffixes whose shape cannot be a formatted date, before any date parsing.
+    const count = words.length - word;
+    if (!wordCounts.has(count) && !(timed && wordCounts.has(count - 1))) continue;
+    const index = words[word].index ?? 0;
+    const value = text.slice(index).trim();
+    if ((needsDigit && !/\d/.test(value)) || /[[\]{}]/.test(value)) continue;
+    const parsed = parseDateTimeExpression(value, reference, dateFormat, true);
     if (!parsed) continue;
     const time = parsed.time ? ` ${parsed.time}` : "";
     if (!dateFormat.some(format => value === `${formatDate(parsed.date, format)}${time}`) && value !== `${parsed.date}${time}`) continue;
-    const match: RegExpExecArray = Object.assign([text.slice(start.index), value] as [string, string], { index: start.index, input: text });
+    const match: RegExpExecArray = Object.assign([text.slice(index), value] as [string, string], { index, input: text });
     return match;
   }
   return null;
@@ -204,6 +232,24 @@ export function serializeTaskInput(draft: TaskDraft, dateFormat?: string, linkDa
   return `${serializeTask(draft, dateFormat, linkDates)} ~[[${destination}]]`;
 }
 
+// scanTasks reparses whole notes on every change; unchanged lines reuse their parse.
+// Keyed by the reference day, so relative dates resolve afresh each day.
+let parseCacheContext = "";
+const parseCache = new Map<string, ParsedTaskLine | null>();
+
+function cachedParseTaskLine(line: string, reference: Date, dateFormat?: string): ParsedTaskLine | undefined {
+  if (!CHECKBOX.test(line)) return undefined;
+  const context = `${dateFormat ?? ""}\u0000${formatLocalDate(reference)}`;
+  if (context !== parseCacheContext) { parseCache.clear(); parseCacheContext = context; }
+  let parsed = parseCache.get(line);
+  if (parsed === undefined) {
+    if (parseCache.size >= 250_000) parseCache.clear();
+    parsed = parseTaskLine(line, reference, dateFormat) ?? null;
+    parseCache.set(line, parsed);
+  }
+  return parsed ?? undefined;
+}
+
 export function scanTasks(path: string, content: string, reference = new Date(), dateFormat?: string, sectionHeadingLevel = 1): Task[] {
   const tasks: Task[] = [];
   const stack: Task[] = [];
@@ -215,7 +261,7 @@ export function scanTasks(path: string, content: string, reference = new Date(),
   for (const { text: line, line: lineNumber } of bodyLines(content)) {
     const heading = headings.get(lineNumber);
     if (heading) { section = heading; stack.length = 0; }
-    const parsed = parseTaskLine(line, reference, dateFormat);
+    const parsed = cachedParseTaskLine(line, reference, dateFormat);
     if (!parsed) {
       if (!line.trim()) continue;
       const indent = indentWidth(/^[ \t]*/.exec(line)?.[0] ?? "");
@@ -252,7 +298,9 @@ export function scanTasks(path: string, content: string, reference = new Date(),
       sectionLine: section?.line,
       childIds: [],
       parentId: parent?.id,
-      ...parsed
+      ...parsed,
+      // Cached parses are shared between identical lines; give each task its own array.
+      ...(parsed.tags ? { tags: [...parsed.tags] } : {})
     };
     parent?.childIds.push(task.id);
     tasks.push(task);

@@ -8,25 +8,38 @@ export interface NoteHeading {
 /** Markdown body lines, excluding YAML and fenced examples. */
 export function bodyLines(content: string): Array<{ text: string; line: number }> {
   const result: Array<{ text: string; line: number }> = [];
-  const lines = content.split(/\r?\n/);
-  let frontmatter = lines[0]?.trim() === "---";
+  classifyLines(content.split(/\r?\n/), (text, line, body) => { if (body) result.push({ text, line }); });
+  return result;
+}
+
+/** Zero-based numbers of YAML and fenced lines, which hold no tasks. */
+export function nonBodyLines(lines: Iterable<string>): Set<number> {
+  const result = new Set<number>();
+  classifyLines(lines, (_text, line, body) => { if (!body) result.add(line); });
+  return result;
+}
+
+function classifyLines(lines: Iterable<string>, visit: (text: string, line: number, body: boolean) => void): void {
+  let line = 0;
+  let frontmatter = false;
   let fence: string | undefined;
-  for (let line = 0; line < lines.length; line++) {
-    const text = lines[line];
-    if (line === 0 && frontmatter) continue;
+  for (const text of lines) {
+    const current = line++;
+    if (current === 0 && text.trim() === "---") { frontmatter = true; visit(text, current, false); continue; }
     if (frontmatter) {
       if (/^(---|\.\.\.)\s*$/.test(text)) frontmatter = false;
+      visit(text, current, false);
       continue;
     }
     const marker = /^ {0,3}(`{3,}|~{3,})/.exec(text)?.[1];
     if (fence) {
       if (marker?.[0] === fence[0] && marker.length >= fence.length && text.trim() === marker) fence = undefined;
+      visit(text, current, false);
       continue;
     }
-    if (marker) { fence = marker; continue; }
-    result.push({ text, line });
+    if (marker) { fence = marker; visit(text, current, false); continue; }
+    visit(text, current, true);
   }
-  return result;
 }
 
 export function scanHeadings(content: string): NoteHeading[] {

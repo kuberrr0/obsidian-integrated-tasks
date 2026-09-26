@@ -3,7 +3,7 @@ import { notePropertyIconStyle } from "./task-property-icons";
 import { editorLivePreviewField, editorInfoField, Platform } from "obsidian";
 import { type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
-import { bodyLines } from "./structure";
+import { nonBodyLines } from "./structure";
 import { taskTokens, recurringLogTokens, tokenClass, type TaskToken } from "./task-tokens";
 
 export interface NoteTokenSpan { from: number; to: number; token: TaskToken }
@@ -95,32 +95,38 @@ export function noteTokenMarks(
   return { pills: Decoration.set(pills, true), syntax: Decoration.set(syntax, true) };
 }
 
+interface NoteLineTokens { presentation: NoteTaskPresentation | undefined; tokens: TaskToken[] }
+
 export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills: DecorationSet; syntax: DecorationSet }> {
   return ViewPlugin.fromClass(class {
     pills: DecorationSet = Decoration.none;
     syntax: DecorationSet = Decoration.none;
-    private tokens: NoteTokenSpan[] = [];
-    private tasks: NoteTaskSpan[] = [];
-    private format = "";
+    // Only visible lines are parsed; results are reused while the line text and date format are unchanged.
+    private readonly lines = new Map<string, NoteLineTokens>();
+    private nonBody: Set<number>;
+    private format = getDateFormat();
 
-    constructor(view: EditorView) { this.rebuildTokens(view); this.decorate(view); }
+    constructor(view: EditorView) {
+      this.nonBody = nonBodyLines(view.state.doc.iterLines());
+      this.decorate(view);
+    }
 
     update(update: ViewUpdate): void {
       const formatChanged = this.format !== getDateFormat();
-      if (update.docChanged || formatChanged) this.rebuildTokens(update.view);
+      if (formatChanged) { this.format = getDateFormat(); this.lines.clear(); }
+      if (update.docChanged) this.nonBody = nonBodyLines(update.state.doc.iterLines());
       if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged || formatChanged || update.transactions.length) this.decorate(update.view);
     }
 
-    private rebuildTokens(view: EditorView): void {
-      this.format = getDateFormat();
-      this.tokens = [];
-      this.tasks = [];
-      for (const { text, line } of bodyLines(view.state.doc.toString())) {
-        const offset = view.state.doc.line(line + 1).from;
+    private lineTokens(text: string): NoteLineTokens {
+      let entry = this.lines.get(text);
+      if (!entry) {
+        if (this.lines.size > 5000) this.lines.clear();
         const presentation = noteTaskPresentation(text, this.format);
-        if (presentation) this.tasks.push({ from: offset + presentation.from, to: offset + presentation.to, lineFrom: offset, lineTo: offset + text.length, presentation });
-        for (const token of [...(presentation ? [] : taskTokens(text, this.format)), ...recurringLogTokens(text, this.format)]) this.tokens.push({ from: offset + token.from, to: offset + token.to, token });
+        entry = { presentation, tokens: [...(presentation ? [] : taskTokens(text, this.format)), ...recurringLogTokens(text, this.format)] };
+        this.lines.set(text, entry);
       }
+      return entry;
     }
 
     private decorate(view: EditorView): void {
@@ -128,9 +134,25 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
         this.pills = this.syntax = Decoration.none;
         return;
       }
-      const marks = noteTokenMarks(this.tokens, view.viewport, view.state.selection.ranges);
+      const tokens: NoteTokenSpan[] = [];
+      const tasks: NoteTaskSpan[] = [];
+      const doc = view.state.doc;
+      let done = 0;
+      for (const range of view.visibleRanges) {
+        // Ranges split by a fold may share a line; decorate it once.
+        const last = doc.lineAt(range.to).number;
+        for (let number = Math.max(doc.lineAt(range.from).number, done + 1); number <= last; number++) {
+          done = number;
+          if (this.nonBody.has(number - 1)) continue;
+          const line = doc.line(number);
+          const { presentation, tokens: lineTokens } = this.lineTokens(line.text);
+          if (presentation) tasks.push({ from: line.from + presentation.from, to: line.from + presentation.to, lineFrom: line.from, lineTo: line.to, presentation });
+          for (const token of lineTokens) tokens.push({ from: line.from + token.from, to: line.from + token.to, token });
+        }
+      }
+      const marks = noteTokenMarks(tokens, view.viewport, view.state.selection.ranges);
       this.pills = marks.pills;
-      this.syntax = marks.syntax.update({ add: noteTaskDecorations(this.tasks, view.state.selection.ranges), sort: true });
+      this.syntax = marks.syntax.update({ add: noteTaskDecorations(tasks, view.state.selection.ranges), sort: true });
     }
   }, {
     decorations: (plugin) => plugin.syntax,

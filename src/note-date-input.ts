@@ -1,7 +1,7 @@
 import { EditorState, type ChangeSpec } from "@codemirror/state";
 import { formatDate, parseDateExpression, parseDateTimeExpression } from "./date";
 import { parseTaskLine, type ParsedTokenRange } from "./parser";
-import { bodyLines } from "./structure";
+import { nonBodyLines } from "./structure";
 
 /** Resolve only the last date in each category; earlier mentions remain prose. */
 export function noteDateChanges(text: string, dateFormat: string, reference = new Date(), linkDates = true): { from: number; to: number; insert: string }[] {
@@ -81,11 +81,15 @@ export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boo
       if (selections.some(range => range.from <= to && range.to >= from)) candidates.delete(number);
     }
     if (!candidates.size) return transaction;
+    // Only the lines the caret left can change; check they are tasks before classifying the whole note.
+    const tasks = [...candidates].sort((a, b) => a - b).map(number => transaction.newDoc.line(number))
+      .filter(line => /^\s*-\s+\[[ xX]\]\s/.test(line.text));
+    if (!tasks.length) return transaction;
+    const nonBody = nonBodyLines(transaction.newDoc.iterLines());
     const changes: ChangeSpec[] = [];
     const reference = new Date();
-    for (const { text, line } of bodyLines(transaction.newDoc.toString())) {
-      if (!candidates.has(line + 1) || !/^\s*-\s+\[[ xX]\]\s/.test(text)) continue;
-      const { from } = transaction.newDoc.line(line + 1);
+    for (const { text, number, from } of tasks) {
+      if (nonBody.has(number - 1)) continue;
       const dateFormat = getDateFormat();
       const resolvedDates = noteDateChanges(text, dateFormat, reference, getLinkDates());
       let resolved = text;

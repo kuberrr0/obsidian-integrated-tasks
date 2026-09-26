@@ -64,30 +64,49 @@ function taskTagSummaries(tasks) {
 
 // src/structure.ts
 function bodyLines(content) {
-  var _a, _b;
   const result = [];
-  const lines = content.split(/\r?\n/);
-  let frontmatter = ((_a = lines[0]) == null ? void 0 : _a.trim()) === "---";
+  classifyLines(content.split(/\r?\n/), (text, line, body) => {
+    if (body) result.push({ text, line });
+  });
+  return result;
+}
+function nonBodyLines(lines) {
+  const result = /* @__PURE__ */ new Set();
+  classifyLines(lines, (_text, line, body) => {
+    if (!body) result.add(line);
+  });
+  return result;
+}
+function classifyLines(lines, visit) {
+  var _a;
+  let line = 0;
+  let frontmatter = false;
   let fence;
-  for (let line = 0; line < lines.length; line++) {
-    const text = lines[line];
-    if (line === 0 && frontmatter) continue;
-    if (frontmatter) {
-      if (/^(---|\.\.\.)\s*$/.test(text)) frontmatter = false;
+  for (const text of lines) {
+    const current = line++;
+    if (current === 0 && text.trim() === "---") {
+      frontmatter = true;
+      visit(text, current, false);
       continue;
     }
-    const marker = (_b = /^ {0,3}(`{3,}|~{3,})/.exec(text)) == null ? void 0 : _b[1];
+    if (frontmatter) {
+      if (/^(---|\.\.\.)\s*$/.test(text)) frontmatter = false;
+      visit(text, current, false);
+      continue;
+    }
+    const marker = (_a = /^ {0,3}(`{3,}|~{3,})/.exec(text)) == null ? void 0 : _a[1];
     if (fence) {
       if ((marker == null ? void 0 : marker[0]) === fence[0] && marker.length >= fence.length && text.trim() === marker) fence = void 0;
+      visit(text, current, false);
       continue;
     }
     if (marker) {
       fence = marker;
+      visit(text, current, false);
       continue;
     }
-    result.push({ text, line });
+    visit(text, current, true);
   }
-  return result;
 }
 function scanHeadings(content) {
   const headings = [];
@@ -3076,7 +3095,7 @@ function parseTimeExpression(value, reference = /* @__PURE__ */ new Date()) {
   );
   return result ? resultTime(result) : void 0;
 }
-function parseDateTimeExpression(value, reference = /* @__PURE__ */ new Date(), dateFormat = DEFAULT_DATE_FORMAT) {
+function parseDateTimeExpression(value, reference = /* @__PURE__ */ new Date(), dateFormat = DEFAULT_DATE_FORMAT, strict2 = false) {
   const text = value.trim();
   const link = /^\[\[([^\]]+)\]\](?:\s+(.+))?$/.exec(text);
   if (link) {
@@ -3087,12 +3106,13 @@ function parseDateTimeExpression(value, reference = /* @__PURE__ */ new Date(), 
   for (let index = text.length; index > 0; index--) {
     if (index !== text.length && text[index] !== " ") continue;
     const prefix = text.slice(0, index);
-    const strict2 = moment(prefix, [DEFAULT_DATE_FORMAT, ...[dateFormat].flat()], true);
-    if (!strict2.isValid()) continue;
+    const strict3 = moment(prefix, [DEFAULT_DATE_FORMAT, ...[dateFormat].flat()], true);
+    if (!strict3.isValid()) continue;
     const suffix = text.slice(index).trim();
     const time = suffix ? parseTimeExpression(suffix, reference) : void 0;
-    if (!suffix || time) return { date: strict2.format(DEFAULT_DATE_FORMAT), ...time ? { time } : {} };
+    if (!suffix || time) return { date: strict3.format(DEFAULT_DATE_FORMAT), ...time ? { time } : {} };
   }
+  if (strict2) return void 0;
   const result = parse(text, reference, { forwardDate: true }).find(
     (match) => match.index === 0 && match.text.length === text.length && !match.end && (match.start.isCertain("day") || match.start.isCertain("weekday"))
   );
@@ -3110,17 +3130,40 @@ var DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 var SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
 var DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 var DESTINATION = /(?:^|\s)~\[\[([^\]]+)\]\]\s*$/;
+var plainDateShapes = /* @__PURE__ */ new Map();
+function plainDateShape(dateFormat) {
+  const key = dateFormat.join("\0");
+  let shape = plainDateShapes.get(key);
+  if (!shape) {
+    shape = { wordCounts: /* @__PURE__ */ new Set([1]), needsDigit: true };
+    for (let month = 0; month < 12; month++) {
+      const sample = formatLocalDate(new Date(2026, month, 1 + month * 5 % 28));
+      for (const format of dateFormat) {
+        const label = formatDate(sample, format).trim();
+        shape.wordCounts.add(label.split(/\s+/).length);
+        if (!/\d/.test(label)) shape.needsDigit = false;
+      }
+    }
+    plainDateShapes.set(key, shape);
+  }
+  return shape;
+}
 function plainScheduled(text, reference, dateFormat) {
-  const starts = /(?:^|\s)\S+/g;
-  let start;
-  while (start = starts.exec(text)) {
-    const value = text.slice(start.index).trim();
-    if (/[[\]{}]/.test(value)) continue;
-    const parsed = parseDateTimeExpression(value, reference, dateFormat);
+  var _a, _b, _c;
+  const { wordCounts, needsDigit } = plainDateShape(dateFormat);
+  const words = [...text.matchAll(/(?:^|\s)\S+/g)];
+  const timed = /^\s*\d{2}:\d{2}$/.test((_b = (_a = words[words.length - 1]) == null ? void 0 : _a[0]) != null ? _b : "");
+  for (let word = 0; word < words.length; word++) {
+    const count = words.length - word;
+    if (!wordCounts.has(count) && !(timed && wordCounts.has(count - 1))) continue;
+    const index = (_c = words[word].index) != null ? _c : 0;
+    const value = text.slice(index).trim();
+    if (needsDigit && !/\d/.test(value) || /[[\]{}]/.test(value)) continue;
+    const parsed = parseDateTimeExpression(value, reference, dateFormat, true);
     if (!parsed) continue;
     const time = parsed.time ? ` ${parsed.time}` : "";
     if (!dateFormat.some((format) => value === `${formatDate(parsed.date, format)}${time}`) && value !== `${parsed.date}${time}`) continue;
-    const match = Object.assign([text.slice(start.index), value], { index: start.index, input: text });
+    const match = Object.assign([text.slice(index), value], { index, input: text });
     return match;
   }
   return null;
@@ -3266,6 +3309,24 @@ function serializeTaskInput(draft, dateFormat, linkDates = true) {
   const destination = destinationString(path.replace(/\.md$/i, ""), heading);
   return `${serializeTask(draft, dateFormat, linkDates)} ~[[${destination}]]`;
 }
+var parseCacheContext = "";
+var parseCache = /* @__PURE__ */ new Map();
+function cachedParseTaskLine(line, reference, dateFormat) {
+  var _a;
+  if (!CHECKBOX.test(line)) return void 0;
+  const context = `${dateFormat != null ? dateFormat : ""}\0${formatLocalDate(reference)}`;
+  if (context !== parseCacheContext) {
+    parseCache.clear();
+    parseCacheContext = context;
+  }
+  let parsed = parseCache.get(line);
+  if (parsed === void 0) {
+    if (parseCache.size >= 25e4) parseCache.clear();
+    parsed = (_a = parseTaskLine(line, reference, dateFormat)) != null ? _a : null;
+    parseCache.set(line, parsed);
+  }
+  return parsed != null ? parsed : void 0;
+}
 function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFormat, sectionHeadingLevel = 1) {
   var _a, _b;
   const tasks = [];
@@ -3280,7 +3341,7 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
       section = heading;
       stack.length = 0;
     }
-    const parsed = parseTaskLine(line, reference, dateFormat);
+    const parsed = cachedParseTaskLine(line, reference, dateFormat);
     if (!parsed) {
       if (!line.trim()) continue;
       const indent = indentWidth((_b = (_a = /^[ \t]*/.exec(line)) == null ? void 0 : _a[0]) != null ? _b : "");
@@ -3319,7 +3380,9 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
       sectionLine: section == null ? void 0 : section.line,
       childIds: [],
       parentId: parent == null ? void 0 : parent.id,
-      ...parsed
+      ...parsed,
+      // Cached parses are shared between identical lines; give each task its own array.
+      ...parsed.tags ? { tags: [...parsed.tags] } : {}
     };
     parent == null ? void 0 : parent.childIds.push(task.id);
     tasks.push(task);
@@ -3348,6 +3411,20 @@ function scanTasks(path, content, reference = /* @__PURE__ */ new Date(), dateFo
 
 // src/note-recurring-completion.ts
 var recurringCompletion = import_state.StateEffect.define();
+function checksOpenTask(transaction) {
+  const oldDoc = transaction.startState.doc;
+  let found = false;
+  transaction.changes.iterChangedRanges((fromA, toA) => {
+    const last = oldDoc.lineAt(toA).number;
+    for (let number = oldDoc.lineAt(fromA).number; !found && number <= last; number++) {
+      const oldLine = oldDoc.line(number);
+      if (!/^\s*-\s+\[ \]/.test(oldLine.text)) continue;
+      const newText = transaction.newDoc.lineAt(transaction.changes.mapPos(oldLine.from)).text;
+      found = newText.replace(/^(\s*-\s+\[)[xX](\])/, "$1 $2") === oldLine.text && newText !== oldLine.text;
+    }
+  });
+  return found;
+}
 function noteRecurringCompletion(getDateFormat, isRecurring, complete2, getPath = (state) => {
   var _a, _b;
   return (_b = (_a = state.field(import_obsidian2.editorInfoField, false)) == null ? void 0 : _a.file) == null ? void 0 : _b.path;
@@ -3356,16 +3433,16 @@ function noteRecurringCompletion(getDateFormat, isRecurring, complete2, getPath 
     import_state.EditorState.transactionFilter.of((transaction) => {
       if (!transaction.docChanged || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
       const path = getPath(transaction.startState);
-      if (!path) return transaction;
+      if (!path || !checksOpenTask(transaction)) return transaction;
       const previous = scanTasks(path, transaction.startState.doc.toString(), /* @__PURE__ */ new Date(), getDateFormat());
-      const current = scanTasks(path, transaction.newDoc.toString(), /* @__PURE__ */ new Date(), getDateFormat());
+      const current = new Map(scanTasks(path, transaction.newDoc.toString(), /* @__PURE__ */ new Date(), getDateFormat()).filter((candidate) => candidate.completed).map((candidate) => [candidate.line, candidate]));
       const tasks = [];
       const changes = [];
       for (const task of previous) {
         if (task.completed) continue;
         const oldLine = transaction.startState.doc.line(task.line + 1);
         const mapped = transaction.newDoc.lineAt(transaction.changes.mapPos(oldLine.from));
-        const checked = current.find((candidate) => candidate.line === mapped.number - 1 && candidate.completed);
+        const checked = current.get(mapped.number - 1);
         if (!checked) continue;
         const raw = checked.raw.replace(/^(\s*-\s+\[)[xX](\])/, "$1 $2");
         if (raw !== task.raw || !isRecurring(task)) continue;
@@ -6188,6 +6265,8 @@ function renderCalendar(container, options) {
 // src/task-view.ts
 var import_obsidian16 = require("obsidian");
 var TASK_MAIN_VIEW = "task-manager-main";
+var ROW_PAGE = 200;
+var MIN_SIDE_BY_SIDE_ROWS = 20;
 var TITLES = {
   dashboard: "Task Dashboard",
   inbox: "Inbox",
@@ -6222,6 +6301,11 @@ var TaskMainView = class extends import_obsidian16.ItemView {
     this.visibleTasks = [];
     this.selectionRows = /* @__PURE__ */ new Map();
     this.draggedTasks = [];
+    /** Rows to render across all lists; grows as the user loads more, so re-renders keep their place. */
+    this.rowLimit = ROW_PAGE;
+    this.rowsLeft = 0;
+    this.rowObservers = [];
+    this.renderQueued = false;
     this.navigation = false;
   }
   get pagePath() {
@@ -6274,6 +6358,7 @@ var TaskMainView = class extends import_obsidian16.ItemView {
       this.descending = false;
       this.grouping = "default";
       this.filtersExpanded = false;
+      this.rowLimit = ROW_PAGE;
     }
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode;
     this.state.smartListId = typeof state.smartListId === "string" ? state.smartListId : void 0;
@@ -6286,12 +6371,26 @@ var TaskMainView = class extends import_obsidian16.ItemView {
   }
   async onOpen() {
     this.registerDomEvent(this.containerEl.ownerDocument, "click", (event) => this.clearSelectionOutside(event), true);
-    this.unsubscribe = this.plugin.index.subscribe(() => this.render());
+    this.unsubscribe = this.plugin.index.subscribe(() => this.scheduleRender());
     this.render();
   }
   async onClose() {
     var _a;
     (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
+    this.disconnectRowObservers();
+  }
+  /** Coalesce bursts of index updates into one render per frame. */
+  scheduleRender() {
+    if (this.renderQueued) return;
+    this.renderQueued = true;
+    this.containerEl.win.requestAnimationFrame(() => {
+      this.renderQueued = false;
+      this.render();
+    });
+  }
+  disconnectRowObservers() {
+    for (const observer of this.rowObservers) observer.disconnect();
+    this.rowObservers = [];
   }
   render() {
     var _a, _b;
@@ -6309,6 +6408,8 @@ var TaskMainView = class extends import_obsidian16.ItemView {
       }
     }
     container.empty();
+    this.disconnectRowObservers();
+    this.rowsLeft = this.rowLimit;
     this.taskResults = void 0;
     this.visibleTasks = [];
     this.selectionRows.clear();
@@ -6408,6 +6509,8 @@ var TaskMainView = class extends import_obsidian16.ItemView {
     const container = this.taskResults;
     if (!container) return;
     container.empty();
+    this.disconnectRowObservers();
+    this.rowsLeft = this.rowLimit;
     this.visibleTasks = [];
     this.selectionRows.clear();
     this.updateSelection();
@@ -6643,12 +6746,13 @@ var TaskMainView = class extends import_obsidian16.ItemView {
       this.propertyFilters = [];
       this.render();
     });
+    const allTasks = this.plugin.index.allTasks();
     for (const property of TASK_PROPERTIES) {
       const active = this.propertyFilters.find((filter) => filter.property === property.key);
       const submenu = menu.createDiv({ cls: "tm-property-submenu" });
       const summary = submenu.createSpan({ cls: "tm-property-name", text: `${property.label}${active ? " \u2022" : ""}` });
       const panel = submenu.createDiv({ cls: "tm-property-conditions" });
-      renderPropertyFilter(panel, property, active, this.plugin.index.allTasks(), (filter) => {
+      renderPropertyFilter(panel, property, active, allTasks, (filter) => {
         this.propertyFilters = this.propertyFilters.filter((item) => item.property !== property.key);
         if (filter) this.propertyFilters.push(filter);
         summary.setText(`${property.label}${filter ? " \u2022" : ""}`);
@@ -6806,9 +6910,54 @@ var TaskMainView = class extends import_obsidian16.ItemView {
     const list = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
     if (target) (_a = this.listDrag) == null ? void 0 : _a.group(list, target);
     const visibleIds = new Set(tasks.map((task) => task.id));
-    for (const task of orderTaskTree(tasks)) {
-      const relativeDepth = this.depthWithin(task, visibleIds);
-      this.renderTaskRow(list, task, relativeDepth, target);
+    const ordered = orderTaskTree(tasks);
+    let rendered = 0;
+    const renderRows = (count) => {
+      for (const task of ordered.slice(rendered, rendered + count)) this.renderTaskRow(list, task, this.depthWithin(task, visibleIds), target);
+      rendered = Math.min(ordered.length, rendered + count);
+    };
+    const floor = this.layout === "kanban" || this.state.mode === "dashboard" ? MIN_SIDE_BY_SIDE_ROWS : 0;
+    const initial = Math.min(ordered.length, Math.max(this.rowsLeft, floor));
+    this.rowsLeft = Math.max(0, this.rowsLeft - initial);
+    renderRows(initial);
+    if (rendered < ordered.length) this.renderShowMore(container, () => ordered.length - rendered, (count) => {
+      renderRows(count);
+      this.rowLimit += count;
+      const row = (task) => {
+        var _a2;
+        return (_a2 = this.selectionRows.get(task.id)) == null ? void 0 : _a2[0];
+      };
+      this.visibleTasks.sort((left, right) => {
+        const [a, b] = [row(left), row(right)];
+        if (!a || !b || a === b) return 0;
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+      this.updateSelection();
+    });
+  }
+  renderShowMore(container, remaining, load) {
+    const more = container.createEl("button", { cls: "tm-show-more-tasks", attr: { type: "button" } });
+    const label = () => {
+      more.setText(`Show ${Math.min(ROW_PAGE, remaining())} more (${remaining()} hidden)`);
+    };
+    let observer;
+    const next = () => {
+      load(ROW_PAGE);
+      if (remaining() > 0) {
+        label();
+        return;
+      }
+      observer == null ? void 0 : observer.disconnect();
+      more.remove();
+    };
+    label();
+    more.addEventListener("click", next);
+    if (typeof IntersectionObserver !== "undefined") {
+      observer = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) next();
+      }, { rootMargin: "600px" });
+      observer.observe(more);
+      this.rowObservers.push(observer);
     }
   }
   async dropListTask(original, group, originalAnchor, placement) {
@@ -7169,11 +7318,13 @@ function noteDateInput(getDateFormat, isTaskMode, getLinkDates = () => true) {
       if (selections.some((range) => range.from <= to && range.to >= from)) candidates.delete(number);
     }
     if (!candidates.size) return transaction;
+    const tasks = [...candidates].sort((a, b) => a - b).map((number) => transaction.newDoc.line(number)).filter((line) => /^\s*-\s+\[[ xX]\]\s/.test(line.text));
+    if (!tasks.length) return transaction;
+    const nonBody = nonBodyLines(transaction.newDoc.iterLines());
     const changes = [];
     const reference = /* @__PURE__ */ new Date();
-    for (const { text, line } of bodyLines(transaction.newDoc.toString())) {
-      if (!candidates.has(line + 1) || !/^\s*-\s+\[[ xX]\]\s/.test(text)) continue;
-      const { from } = transaction.newDoc.line(line + 1);
+    for (const { text, number, from } of tasks) {
+      if (nonBody.has(number - 1)) continue;
       const dateFormat = getDateFormat();
       const resolvedDates = noteDateChanges(text, dateFormat, reference, getLinkDates());
       let resolved = text;
@@ -7283,36 +7434,54 @@ function noteTokenEditor(getDateFormat) {
     constructor(view) {
       this.pills = import_view3.Decoration.none;
       this.syntax = import_view3.Decoration.none;
-      this.tokens = [];
-      this.tasks = [];
-      this.format = "";
-      this.rebuildTokens(view);
+      // Only visible lines are parsed; results are reused while the line text and date format are unchanged.
+      this.lines = /* @__PURE__ */ new Map();
+      this.format = getDateFormat();
+      this.nonBody = nonBodyLines(view.state.doc.iterLines());
       this.decorate(view);
     }
     update(update) {
       const formatChanged = this.format !== getDateFormat();
-      if (update.docChanged || formatChanged) this.rebuildTokens(update.view);
+      if (formatChanged) {
+        this.format = getDateFormat();
+        this.lines.clear();
+      }
+      if (update.docChanged) this.nonBody = nonBodyLines(update.state.doc.iterLines());
       if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged || formatChanged || update.transactions.length) this.decorate(update.view);
     }
-    rebuildTokens(view) {
-      this.format = getDateFormat();
-      this.tokens = [];
-      this.tasks = [];
-      for (const { text, line } of bodyLines(view.state.doc.toString())) {
-        const offset = view.state.doc.line(line + 1).from;
+    lineTokens(text) {
+      let entry = this.lines.get(text);
+      if (!entry) {
+        if (this.lines.size > 5e3) this.lines.clear();
         const presentation = noteTaskPresentation(text, this.format);
-        if (presentation) this.tasks.push({ from: offset + presentation.from, to: offset + presentation.to, lineFrom: offset, lineTo: offset + text.length, presentation });
-        for (const token of [...presentation ? [] : taskTokens(text, this.format), ...recurringLogTokens(text, this.format)]) this.tokens.push({ from: offset + token.from, to: offset + token.to, token });
+        entry = { presentation, tokens: [...presentation ? [] : taskTokens(text, this.format), ...recurringLogTokens(text, this.format)] };
+        this.lines.set(text, entry);
       }
+      return entry;
     }
     decorate(view) {
       if (!view.state.field(import_obsidian18.editorLivePreviewField, false)) {
         this.pills = this.syntax = import_view3.Decoration.none;
         return;
       }
-      const marks = noteTokenMarks(this.tokens, view.viewport, view.state.selection.ranges);
+      const tokens = [];
+      const tasks = [];
+      const doc = view.state.doc;
+      let done = 0;
+      for (const range of view.visibleRanges) {
+        const last = doc.lineAt(range.to).number;
+        for (let number = Math.max(doc.lineAt(range.from).number, done + 1); number <= last; number++) {
+          done = number;
+          if (this.nonBody.has(number - 1)) continue;
+          const line = doc.line(number);
+          const { presentation, tokens: lineTokens } = this.lineTokens(line.text);
+          if (presentation) tasks.push({ from: line.from + presentation.from, to: line.from + presentation.to, lineFrom: line.from, lineTo: line.to, presentation });
+          for (const token of lineTokens) tokens.push({ from: line.from + token.from, to: line.from + token.to, token });
+        }
+      }
+      const marks = noteTokenMarks(tokens, view.viewport, view.state.selection.ranges);
       this.pills = marks.pills;
-      this.syntax = marks.syntax.update({ add: noteTaskDecorations(this.tasks, view.state.selection.ranges), sort: true });
+      this.syntax = marks.syntax.update({ add: noteTaskDecorations(tasks, view.state.selection.ranges), sort: true });
     }
   }, {
     decorations: (plugin) => plugin.syntax,
@@ -7430,11 +7599,18 @@ function noteTaskEditEditor(getDateFormat, open, getSectionHeadingLevel = () => 
     constructor(view) {
       this.view = view;
       this.resolve = (checkbox) => {
-        var _a, _b;
+        var _a, _b, _c;
         const path = (_b = (_a = this.view.state.field(import_obsidian19.editorInfoField, false)) == null ? void 0 : _a.file) == null ? void 0 : _b.path;
         if (!path) return;
-        const line = this.view.state.doc.lineAt(this.view.posAtDOM(checkbox)).number - 1;
-        return scanTasks(path, this.view.state.doc.toString(), /* @__PURE__ */ new Date(), getDateFormat(), getSectionHeadingLevel()).find((task) => task.line === line);
+        const doc = this.view.state.doc;
+        const line = doc.lineAt(this.view.posAtDOM(checkbox));
+        if (!/^\s*-\s+\[[^\]]\]/.test(line.text)) return;
+        const key = `${path}\0${getDateFormat()}\0${getSectionHeadingLevel()}\0${todayIso()}`;
+        if (((_c = this.scanned) == null ? void 0 : _c.doc) !== doc || this.scanned.key !== key) {
+          const tasks = scanTasks(path, doc.toString(), /* @__PURE__ */ new Date(), getDateFormat(), getSectionHeadingLevel());
+          this.scanned = { doc, key, tasks: new Map(tasks.map((task) => [task.line, task])) };
+        }
+        return this.scanned.tasks.get(line.number - 1);
       };
       this.dispose = bindNoteTaskEdit(view.dom, this.resolve, open, complete2);
     }
@@ -7807,6 +7983,8 @@ var TaskEditorModal = class extends import_obsidian20.Modal {
 
 // src/task-index.ts
 var import_obsidian21 = require("obsidian");
+var SCAN_BATCH = 50;
+var SCAN_SLICE_MS = 30;
 var TaskIndex = class {
   constructor(app, getSettings, getDateFormat) {
     this.app = app;
@@ -7819,21 +7997,28 @@ var TaskIndex = class {
     this.projectPaths = /* @__PURE__ */ new Set();
     this.listeners = /* @__PURE__ */ new Set();
     this.eventRefs = [];
+    this.destroyed = false;
+    // The latest scan of each path wins, even if an older read finishes later.
+    this.scanTokens = /* @__PURE__ */ new Map();
+    this.scanCount = 0;
+    // Link resolution can change with any vault or metadata event, so these reset on every emit.
+    this.tagLinks = /* @__PURE__ */ new Map();
   }
   async initialize() {
-    const files = this.app.vault.getMarkdownFiles();
-    await Promise.all(files.map((file) => this.scanFile(file)));
-    this.refreshProjects(files);
     this.eventRefs.push(
       this.app.vault.on("create", (file) => {
+        this.invalidateTags();
         if (file instanceof import_obsidian21.TFile && file.extension === "md") void this.refreshFile(file);
       }),
       this.app.vault.on("modify", (file) => {
         if (file instanceof import_obsidian21.TFile && file.extension === "md") void this.refreshFile(file);
       }),
       this.app.vault.on("delete", (file) => {
+        this.invalidateTags();
         if (file instanceof import_obsidian21.TFile && file.extension === "md") {
+          this.scanTokens.delete(file.path);
           this.tasksByPath.delete(file.path);
+          this.invalidateTasks();
           this.headingsByPath.delete(file.path);
           this.projectPaths.delete(file.path);
           this.projectProperties.delete(file.path);
@@ -7842,8 +8027,11 @@ var TaskIndex = class {
         }
       }),
       this.app.vault.on("rename", (file, oldPath) => {
+        this.invalidateTags();
         if (file instanceof import_obsidian21.TFile && file.extension === "md") {
+          this.scanTokens.delete(oldPath);
           this.tasksByPath.delete(oldPath);
+          this.invalidateTasks();
           this.headingsByPath.delete(oldPath);
           this.projectPaths.delete(oldPath);
           this.projectProperties.delete(oldPath);
@@ -7858,8 +8046,22 @@ var TaskIndex = class {
         }
       })
     );
+    const files = this.app.vault.getMarkdownFiles();
+    let yielded = performance.now();
+    for (let start = 0; start < files.length; start += SCAN_BATCH) {
+      if (this.destroyed) return;
+      await Promise.all(files.slice(start, start + SCAN_BATCH).map((file) => this.scanFile(file).catch((error) => console.error(`Task manager could not index ${file.path}`, error))));
+      if (performance.now() - yielded > SCAN_SLICE_MS) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        yielded = performance.now();
+      }
+    }
+    if (this.destroyed) return;
+    for (const file of files) this.updateProjectStatus(file);
+    this.emit();
   }
   destroy() {
+    this.destroyed = true;
     for (const eventRef of this.eventRefs) this.app.vault.offref(eventRef);
     this.eventRefs.length = 0;
     this.listeners.clear();
@@ -7868,47 +8070,78 @@ var TaskIndex = class {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+  /** Returns a copy, so callers may reorder it without affecting the index. */
   allTasks() {
-    return sortTasks([...this.tasksByPath.values()].flat());
+    return this.sortedAllTasks().slice();
+  }
+  sortedAllTasks() {
+    var _a;
+    (_a = this.sortedTasks) != null ? _a : this.sortedTasks = sortTasks([...this.tasksByPath.values()].flat());
+    return this.sortedTasks;
+  }
+  invalidateTasks() {
+    this.sortedTasks = void 0;
+    this.tasksById = void 0;
+    this.invalidateTags();
+  }
+  invalidateTags() {
+    this.tagLinks.clear();
+    this.tagsByPath = void 0;
+    this.filesByTag = void 0;
   }
   tasksForPath(path) {
     var _a;
     return (_a = this.tasksByPath.get(path)) != null ? _a : [];
   }
   taskById(id) {
-    return this.allTasks().find((task) => task.id === id);
+    var _a;
+    (_a = this.tasksById) != null ? _a : this.tasksById = new Map(this.sortedAllTasks().map((task) => [task.id, task]));
+    return this.tasksById.get(id);
   }
   query(query, now2 = /* @__PURE__ */ new Date()) {
-    return sortTasks(
-      this.allTasks().filter((task) => (!query.tagPath || this.taskHasTagPath(task, query.tagPath)) && taskMatchesQuery(task, query, this.getSettings().inboxPath, now2))
-    );
+    return this.sortedAllTasks().filter((task) => (!query.tagPath || this.taskHasTagPath(task, query.tagPath)) && taskMatchesQuery(task, query, this.getSettings().inboxPath, now2));
   }
   taskHasTagPath(task, path) {
     var _a;
     return ((_a = task.tags) != null ? _a : []).some((tag) => {
       var _a2;
-      return ((_a2 = this.app.metadataCache.getFirstLinkpathDest(tag, task.path)) == null ? void 0 : _a2.path) === path;
+      return ((_a2 = this.resolveTag(tag, task.path)) == null ? void 0 : _a2.path) === path;
     });
   }
+  /** The first tag, in task order, that links to this note. */
   tagForPath(path) {
     var _a;
-    for (const task of this.allTasks()) {
-      const tag = (_a = task.tags) == null ? void 0 : _a.find((tag2) => {
-        var _a2;
-        return ((_a2 = this.app.metadataCache.getFirstLinkpathDest(tag2, task.path)) == null ? void 0 : _a2.path) === path;
-      });
-      if (tag) return tag;
+    if (!this.tagsByPath) {
+      this.tagsByPath = /* @__PURE__ */ new Map();
+      for (const task of this.sortedAllTasks()) for (const tag of (_a = task.tags) != null ? _a : []) {
+        const file = this.resolveTag(tag, task.path);
+        if (file && !this.tagsByPath.has(file.path)) this.tagsByPath.set(file.path, tag);
+      }
     }
-    return void 0;
+    return this.tagsByPath.get(path);
   }
+  /** The note the first task using this tag links to. */
   tagFile(tag) {
     var _a;
-    for (const task of this.allTasks()) {
-      if (!((_a = task.tags) == null ? void 0 : _a.includes(tag))) continue;
-      const file = this.app.metadataCache.getFirstLinkpathDest(tag, task.path);
-      if ((file == null ? void 0 : file.extension) === "md") return file;
+    if (!this.filesByTag) {
+      this.filesByTag = /* @__PURE__ */ new Map();
+      for (const task of this.sortedAllTasks()) for (const name of (_a = task.tags) != null ? _a : []) {
+        if (this.filesByTag.has(name)) continue;
+        const file = this.resolveTag(name, task.path);
+        if ((file == null ? void 0 : file.extension) === "md") this.filesByTag.set(name, file);
+      }
     }
-    return void 0;
+    return this.filesByTag.get(tag);
+  }
+  /** Tags resolve like links, so the same tag may point elsewhere from another note. */
+  resolveTag(tag, sourcePath) {
+    const key = `${sourcePath}\0${tag}`;
+    let file = this.tagLinks.get(key);
+    if (file === void 0) {
+      file = this.app.metadataCache.getFirstLinkpathDest(tag, sourcePath);
+      this.tagLinks.set(key, file);
+    }
+    return file;
   }
   projects() {
     return [...this.projectPaths].map((path) => {
@@ -7945,15 +8178,13 @@ var TaskIndex = class {
     this.emit();
   }
   async scanFile(file) {
+    const token = ++this.scanCount;
+    this.scanTokens.set(file.path, token);
     const content = await this.app.vault.cachedRead(file);
+    if (this.scanTokens.get(file.path) !== token) return;
     this.headingsByPath.set(file.path, scanSections(content, this.getSettings().sectionHeadingLevel));
     this.tasksByPath.set(file.path, scanTasks(file.path, content, /* @__PURE__ */ new Date(), this.getDateFormat(), this.getSettings().sectionHeadingLevel));
-  }
-  refreshProjects(files) {
-    this.projectPaths.clear();
-    this.projectProperties.clear();
-    this.archivedPaths.clear();
-    for (const file of files) this.updateProjectStatus(file);
+    this.invalidateTasks();
   }
   updateProjectStatus(file) {
     const cache = this.app.metadataCache.getFileCache(file);
@@ -7969,6 +8200,7 @@ var TaskIndex = class {
     }
   }
   emit() {
+    this.invalidateTags();
     for (const listener of this.listeners) listener();
   }
 };
@@ -8717,6 +8949,7 @@ var TaskManagerPlugin = class extends import_obsidian25.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
+    this.unloaded = false;
     this.pendingRecurringNotes = /* @__PURE__ */ new Set();
     this.recurringNoteQueue = Promise.resolve();
   }
@@ -8847,24 +9080,36 @@ var TaskManagerPlugin = class extends import_obsidian25.Plugin {
         return true;
       }
     });
-    await this.index.initialize();
+    this.app.workspace.onLayoutReady(() => {
+      void this.activateNavigation(false).catch((error) => new import_obsidian25.Notice(String(error)));
+      void this.index.initialize().then(() => {
+        if (!this.unloaded) this.startTaskMode();
+      }).catch((error) => new import_obsidian25.Notice(String(error)));
+    });
+  }
+  /** Task mode decides tabs from project and tag membership, so it waits for the full index. */
+  startTaskMode() {
     this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, (path) => this.index.isProject(path), (path) => this.index.tagForPath(path));
     const syncTaskMode = () => {
       var _a;
       void ((_a = this.taskModeController) == null ? void 0 : _a.sync().catch((error) => new import_obsidian25.Notice(String(error))));
     };
+    let syncTimer;
+    const syncTaskModeSoon = () => {
+      window.clearTimeout(syncTimer);
+      syncTimer = window.setTimeout(syncTaskMode, 100);
+    };
+    this.register(() => window.clearTimeout(syncTimer));
     this.registerEvent(this.app.workspace.on("file-open", syncTaskMode));
-    this.registerEvent(this.app.metadataCache.on("resolved", syncTaskMode));
+    this.registerEvent(this.app.metadataCache.on("resolved", syncTaskModeSoon));
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncTaskMode));
     this.registerEvent(this.app.workspace.on("layout-change", syncTaskMode));
-    this.register(this.index.subscribe(syncTaskMode));
-    this.app.workspace.onLayoutReady(() => {
-      syncTaskMode();
-      void this.activateNavigation(false).catch((error) => new import_obsidian25.Notice(String(error)));
-    });
+    this.register(this.index.subscribe(syncTaskModeSoon));
+    syncTaskMode();
   }
   onunload() {
     var _a;
+    this.unloaded = true;
     (_a = this.taskModeController) == null ? void 0 : _a.dispose();
     this.index.destroy();
   }

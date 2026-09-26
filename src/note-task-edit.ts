@@ -1,5 +1,7 @@
 import { Platform, editorInfoField, MarkdownRenderChild, type MarkdownPostProcessorContext } from "obsidian";
 import { EditorView, ViewPlugin } from "@codemirror/view";
+import type { Text } from "@codemirror/state";
+import { todayIso } from "./date";
 import { scanTasks } from "./parser";
 import type { Task } from "./types";
 
@@ -108,11 +110,20 @@ export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElem
 
 export function noteTaskEditEditor(getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1, complete?: (task: Task) => boolean) {
   return ViewPlugin.fromClass(class {
+    // Every checkbox click resolves its task; reuse one scan per document version.
+    private scanned?: { doc: Text; key: string; tasks: Map<number, Task> };
     private resolve = (checkbox: HTMLElement): Task | undefined => {
       const path = this.view.state.field(editorInfoField, false)?.file?.path;
       if (!path) return;
-      const line = this.view.state.doc.lineAt(this.view.posAtDOM(checkbox)).number - 1;
-      return scanTasks(path, this.view.state.doc.toString(), new Date(), getDateFormat(), getSectionHeadingLevel()).find(task => task.line === line);
+      const doc = this.view.state.doc;
+      const line = doc.lineAt(this.view.posAtDOM(checkbox));
+      if (!/^\s*-\s+\[[^\]]\]/.test(line.text)) return;
+      const key = `${path}\u0000${getDateFormat()}\u0000${getSectionHeadingLevel()}\u0000${todayIso()}`;
+      if (this.scanned?.doc !== doc || this.scanned.key !== key) {
+        const tasks = scanTasks(path, doc.toString(), new Date(), getDateFormat(), getSectionHeadingLevel());
+        this.scanned = { doc, key, tasks: new Map(tasks.map(task => [task.line, task])) };
+      }
+      return this.scanned.tasks.get(line.number - 1);
     };
     private dispose: () => void;
 
