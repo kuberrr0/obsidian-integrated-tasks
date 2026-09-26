@@ -6,6 +6,10 @@ export interface ParsedTaskMetadata {
   scheduledTime?: string;
   deadline?: string;
   deadlineTime?: string;
+  /** Hidden from Inbox, Today and Upcoming before this ISO date. */
+  deferDate?: string;
+  /** Hidden from Inbox, Today and Upcoming until the defer is cleared. */
+  someday?: boolean;
   durationMinutes?: number;
   priority?: Priority;
   tags?: string[];
@@ -52,7 +56,7 @@ export interface TaskViewState {
   markdownState?: Record<string, unknown>;
 }
 
-export type TaskProperty = "tags" | "title" | "priority" | "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "duration" | "source" | "section" | "status";
+export type TaskProperty = "tags" | "title" | "priority" | "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "defer" | "duration" | "source" | "section" | "status";
 export type TaskSort = "date" | TaskProperty;
 export type TaskGrouping = "default" | "none" | "date" | TaskProperty;
 export type FilterOperator = "has" | "missing" | "is" | "isNot" | "contains" | "before" | "after" | "between";
@@ -116,6 +120,7 @@ export interface TaskManagerSettings {
   wrapKanbanTaskTitles: boolean;
   inboxPath: string;
   newTaskPosition: "top" | "bottom";
+  showUndoNotices: boolean;
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
@@ -131,7 +136,8 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   wrapCalendarTaskTitles: false,
   wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
-  newTaskPosition: "top"
+  newTaskPosition: "top",
+  showUndoNotices: true
 };
 
 export type TaskEditorPreset = Partial<Omit<TaskDraft, "indent">>;

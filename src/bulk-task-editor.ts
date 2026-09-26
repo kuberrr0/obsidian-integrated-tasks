@@ -2,14 +2,14 @@ import { TaskLineEditor, inlineTaskTokens } from "./task-line-editor";
 import type { TaskEditorProperty } from "./task-editor";
 import { formatTags, parseTags } from "./task-tags";
 import { Modal, Notice, setIcon, type App } from "obsidian";
-import { formatDateTime, parseDateTimeExpression } from "./date";
+import { formatDate, formatDateTime, parseDateTimeExpression } from "./date";
 import { durationToMinutes, formatDuration, parseTaskInput, serializeTask, serializeTaskInput } from "./parser";
 import { destinationString } from "./structure";
 import { trackModalViewport } from "./mobile-layout";
 import type { BulkTaskPatch } from "./bulk-tasks";
 import type { Project, Task } from "./types";
 
-type Field = "tags" | "scheduled" | "deadline" | "duration" | "priority" | "destination" | "description";
+type Field = "tags" | "scheduled" | "deadline" | "defer" | "duration" | "priority" | "destination" | "description";
 interface BulkEditorOptions {
   focusProperty?: TaskEditorProperty;
   tasks: Task[];
@@ -24,6 +24,7 @@ export function bulkPropertyValues(task: Task, dateFormat: string): Record<Field
   return {
     scheduled: task.scheduledDate ? formatDateTime(task.scheduledDate, task.scheduledTime, dateFormat) : "",
     deadline: task.deadline ? formatDateTime(task.deadline, task.deadlineTime, dateFormat) : "",
+    defer: task.someday ? "someday" : task.deferDate ? formatDate(task.deferDate, dateFormat) : "",
     duration: task.durationMinutes ? formatDuration(task.durationMinutes) : "",
     tags: formatTags(task.tags),
     priority: task.priority ? String(task.priority) : "",
@@ -42,6 +43,13 @@ export function bulkPropertyPatch(values: Partial<Record<Field, string>>, dateFo
     if (value && !parsed) throw new Error(`Could not understand the ${field === "scheduled" ? "scheduled date and time" : "deadline date and time"}.`);
     if (field === "scheduled") { patch.scheduledDate = parsed?.date; patch.scheduledTime = parsed?.time; }
     else { patch.deadline = parsed?.date; patch.deadlineTime = parsed?.time; }
+  }
+  if ("defer" in values) {
+    const value = values.defer!.trim();
+    const parsed = value && !/^someday$/i.test(value) ? parseDateTimeExpression(value, reference, dateFormat) : undefined;
+    if (value && !/^someday$/i.test(value) && (!parsed || parsed.time)) throw new Error("Enter a hidden-until date without a time, or someday.");
+    patch.deferDate = parsed?.date;
+    patch.someday = /^someday$/i.test(value) || undefined;
   }
   if ("duration" in values) {
     const value = values.duration!.trim();
@@ -62,8 +70,8 @@ export function bulkPropertyPatch(values: Partial<Record<Field, string>>, dateFo
   return patch;
 }
 
-const labels: Record<Field, string> = { scheduled: "Scheduled date", deadline: "Deadline", duration: "Duration", priority: "Priority", tags: "Tags", destination: "Project", description: "Description" };
-const propertyKeys = ["scheduledDate", "scheduledTime", "deadline", "deadlineTime", "durationMinutes", "priority", "tags", "destination"] as const;
+const labels: Record<Field, string> = { scheduled: "Scheduled date", deadline: "Deadline", defer: "Hidden until", duration: "Duration", priority: "Priority", tags: "Tags", destination: "Project", description: "Description" };
+const propertyKeys = ["scheduledDate", "scheduledTime", "deadline", "deadlineTime", "deferDate", "someday", "durationMinutes", "priority", "tags", "destination"] as const;
 
 export function commonBulkValues(tasks: Task[], dateFormat: string): Partial<Record<Field, string>> {
   const snapshots = tasks.map(task => bulkPropertyValues(task, dateFormat));
@@ -86,7 +94,7 @@ export function bulkInlinePatch(text: string, initial: string, dateFormat: strin
   const parse = (value: string) => {
     if (/[\r\n]/.test(value)) throw new Error("Enter task properties on one line.");
     const parsed = parseTaskInput(`Properties ${value}`, new Date(), dateFormat);
-    if (!parsed || parsed.title !== "Properties") throw new Error("Use task property syntax for dates, duration, priority, tags, and project.");
+    if (!parsed || parsed.title !== "Properties") throw new Error("Use task property syntax for dates, duration, hidden-until date, priority, tags, and project.");
     return parsed;
   };
   const before = parse(initial);
@@ -99,6 +107,7 @@ export function bulkInlinePatch(text: string, initial: string, dateFormat: strin
   }
   if ("scheduledDate" in patch || "scheduledTime" in patch) { patch.scheduledDate = after.scheduledDate; patch.scheduledTime = after.scheduledTime; }
   if ("deadline" in patch || "deadlineTime" in patch) { patch.deadline = after.deadline; patch.deadlineTime = after.deadlineTime; }
+  if ("deferDate" in patch || "someday" in patch) { patch.deferDate = after.deferDate; patch.someday = after.someday; }
   return patch;
 }
 
@@ -120,7 +129,7 @@ export class BulkTaskEditorModal extends Modal {
     this.initialText = bulkInlineText(common, this.options.dateFormat);
     const host = content.createDiv({ cls: "tm-editor-inline tm-editor-raw-field" });
     const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
-    this.editor = new TaskLineEditor(host, this.initialText, this.options.dateFormat, () => error.empty(), "Add a date, duration, p1–p3, #[[tag]], or ~[[Project]]");
+    this.editor = new TaskLineEditor(host, this.initialText, this.options.dateFormat, () => error.empty(), "Add a date, duration, >hidden-until date, p1–p3, #[[tag]], or ~[[Project]]");
 
     this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
     const remove = this.actions.createEl("button", { cls: "tm-delete-task tm-editor-icon-action", attr: { "aria-label": "Delete task", title: "Delete selected tasks and their subtasks" } });

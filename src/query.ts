@@ -2,6 +2,11 @@ import { matchesFilter, propertyValue, propertyLabel } from "./task-properties";
 import { actionDate, todayIso } from "./date";
 import type { Task, TaskQuery, TaskSort, TaskGrouping } from "./types";
 
+/** Defers hide tasks until their date arrives; nothing is written when it does. */
+export function isDeferred(task: Pick<Task, "deferDate" | "someday">, today = todayIso()): boolean {
+  return task.someday === true || (task.deferDate !== undefined && task.deferDate > today);
+}
+
 export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string, now = new Date()): boolean {
   if (query.tag !== undefined && !task.tags?.includes(query.tag)) return false;
   if (query.filters?.some(filter => !matchesFilter(task, filter))) return false;
@@ -16,6 +21,9 @@ export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string
   if (query.dateFilter === "dated" && !date) return false;
   if (query.dateFilter === "undated" && date) return false;
   if (query.dateFilter === "overdue" && (!date || date >= today)) return false;
+  // A defer filter asks for these tasks explicitly.
+  if ((query.mode === "inbox" || query.mode === "today" || query.mode === "upcoming") && isDeferred(task, today)
+    && !query.filters?.some(filter => filter.property === "defer")) return false;
   switch (query.mode) {
     case "inbox":
       return task.path === inboxPath;
@@ -79,7 +87,7 @@ export function groupTasks(tasks: Task[], grouping: Exclude<TaskGrouping, "defau
   const groups = new Map<string, Task[]>();
   for (const task of tasks) {
     const value = grouping === "date" ? actionDate(task) : propertyValue(task, grouping);
-    const key = value === undefined || value === "" ? `No ${grouping === "date" ? "date" : grouping === "scheduledDate" ? "scheduled date" : grouping === "scheduledTime" ? "scheduled time" : grouping === "deadlineTime" ? "deadline time" : grouping}`
+    const key = value === undefined || value === "" ? grouping === "defer" ? "Not hidden" : `No ${grouping === "date" ? "date" : grouping === "scheduledDate" ? "scheduled date" : grouping === "scheduledTime" ? "scheduled time" : grouping === "deadlineTime" ? "deadline time" : grouping}`
       : grouping === "date" ? String(value) : propertyLabel(grouping, value);
     const group = groups.get(key) ?? [];
     group.push(task);

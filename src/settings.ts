@@ -110,6 +110,15 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         render: (setting: Setting) => this.renderPositionSetting(setting)
       },
       {
+        section: "Task defaults",
+        name: "Show undo notices",
+        desc: "After you complete, move, edit, or delete tasks from the plugin's views, show a notice with an Undo button. The Undo last task change command and Cmd/Ctrl+Z in task views work either way.",
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showUndoNotices).onChange(async value => {
+          this.plugin.settings.showUndoNotices = value;
+          await this.plugin.saveSettings();
+        })); }
+      },
+      {
         section: "Appearance",
         name: "Task highlight on hover",
         desc: "Choose how tasks and projects in the Projects list respond when you hover over them.",

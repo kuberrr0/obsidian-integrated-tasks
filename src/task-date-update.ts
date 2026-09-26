@@ -13,6 +13,11 @@ export function updateTaskDateTokens(content: string, sourceFormats: string[], t
     if (!task) continue;
     let updated = text;
     for (const range of ranges.sort((a, b) => b.from - a.from)) {
+      if (range.kind === "defer" && task.deferDate) {
+        const label = formatDate(task.deferDate, targetFormat);
+        updated = updated.slice(0, range.from) + `>${linkDates ? `[[${label}]]` : label}` + updated.slice(range.to);
+        continue;
+      }
       if (range.kind !== "scheduledDate" && range.kind !== "deadline") continue;
       const date = task[range.kind];
       if (!date) continue;

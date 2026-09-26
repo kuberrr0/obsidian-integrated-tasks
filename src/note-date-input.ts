@@ -27,7 +27,7 @@ function acceptsExpression(expression: string, previousWord: string, dateFormat:
 
 /**
  * Resolve an unmarked date only at the end of the title prose (after which only metadata tokens
- * may follow), and the last `{…}` deadline. Existing date links win over earlier prose.
+ * may follow), the last `{…}` deadline and a trailing `>…` defer. Existing date links win over earlier prose.
  */
 export function noteDateChanges(text: string, dateFormat: string, reference = new Date(), linkDates = true): { from: number; to: number; insert: string }[] {
   type Change = { from: number; to: number; insert: string };
@@ -35,7 +35,18 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
   // Prose that must never be parsed, but still counts as prose (so a date before it is not trailing).
   const opaque = (value: string): string => "\u0001".repeat(value.length);
   const checkbox = /^\s*-\s+\[[ xX]\]\s/.exec(text)?.[0] ?? "";
-  const protectedText = blank(checkbox) + text.slice(checkbox.length)
+  const ranges: ParsedTokenRange[] = [];
+  parseTaskLine(text, reference, dateFormat, false, ranges);
+  const deferRange = ranges.find(range => range.kind === "defer");
+  let defer: Change | undefined;
+  if (deferRange) {
+    const expression = text.slice(deferRange.from + 1, deferRange.to);
+    const dateTime = /^someday$|^\[\[/i.test(expression) ? undefined : parseDateTimeExpression(expression, reference, dateFormat);
+    const label = dateTime && formatDate(dateTime.date, dateFormat);
+    if (label) defer = { from: deferRange.from + 1, to: deferRange.to, insert: linkDates ? `[[${label}]]` : label };
+  }
+  const source = deferRange ? text.slice(0, deferRange.from) + blank(text.slice(deferRange.from, deferRange.to)) + text.slice(deferRange.to) : text;
+  const protectedText = blank(checkbox) + source.slice(checkbox.length)
     .replace(/(`+)[\s\S]*?\1|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\S+@\S+\.\S+/g, opaque);
   const replacement = (expression: string): string | undefined => {
     const dateTime = parseDateTimeExpression(expression.trim(), reference, dateFormat);
@@ -69,6 +80,8 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
     const expression = prose.slice(from, end);
     if (expression !== text.slice(from, end)) continue;
     const previousWord = /(\S+)\s*$/.exec(prose.slice(0, from))?.[1] ?? "";
+    // Never split an unrecognized `>…` token into prose and a date.
+    if (previousWord.startsWith(">")) continue;
     if (!acceptsExpression(expression, previousWord, dateFormat)) continue;
     const insert = replacement(expression);
     if (insert === undefined) continue;
@@ -76,6 +89,7 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
     break;
   }
   if (deadline) changes.push(deadline);
+  if (defer) changes.push(defer);
   return changes.filter(change => text.slice(change.from, change.to) !== change.insert).sort((a, b) => a.from - b.from);
 }
 
@@ -84,7 +98,7 @@ function orderNoteProperties(text: string, dateFormat: string, reference: Date):
   const ranges: ParsedTokenRange[] = [];
   parseTaskLine(text, reference, dateFormat, false, ranges);
   ranges.sort((a, b) => a.from - b.from);
-  const order: ParsedTokenRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "priority", "tags"];
+  const order: ParsedTokenRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "defer", "priority", "tags"];
   const tokens = [...ranges].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
     .map(range => text.slice(range.from, range.to));
   for (let index = ranges.length - 1; index >= 0; index--) {

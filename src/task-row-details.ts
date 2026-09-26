@@ -1,6 +1,7 @@
 import { formatDuration } from "./parser";
 import { setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
+import { isDeferred } from "./query";
 import type { TaskEditorProperty } from "./task-editor";
 import type { Task, TaskGrouping, TaskProperty } from "./types";
 
@@ -111,6 +112,14 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
         setIcon(icon, "flag");
         badge.createSpan({ text: [due, dueTime].filter(Boolean).join(", ") });
         editable(badge, `Edit deadline: ${task.deadline ?? ""}${dueTime ? `, ${dueTime}` : ""}`, "deadline", () => options.edit("deadline"));
+    }
+    if ((task.someday || task.deferDate) && show("defer") && grouping !== "defer") {
+        const label = task.someday ? "Someday" : `Hidden until ${taskScheduleLabel(task.deferDate!, now)}`;
+        const defer = metadata.createSpan({ cls: `tm-task-defer${isDeferred(task, todayIso(now)) ? " is-active" : ""}`, attr: { title: task.someday ? "Hidden until someday" : `Hidden until ${formatDate(task.deferDate!, options.dateFormat)}` } });
+        const icon = defer.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
+        setIcon(icon, "eye-off");
+        defer.createSpan({ text: label });
+        editable(defer, `Edit hidden until: ${label}`, "defer", () => options.edit("defer"));
     }
     if (options.source && show("source") && grouping !== "source") {
         const source = metadata.createSpan({ cls: "tm-task-source", text: options.source.replace(/\.md$/i, "").split("/").pop(), attr: { title: options.source } });

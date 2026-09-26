@@ -151,6 +151,13 @@ export class TaskMainView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.registerDomEvent(this.containerEl.ownerDocument, "click", event => this.clearSelectionOutside(event), true);
+    // Obsidian's own undo only covers the editor; in task views Cmd/Ctrl+Z undoes the last task change.
+    this.registerDomEvent(this.containerEl, "keydown", event => {
+      if (!(Platform.isMacOS ? event.metaKey : event.ctrlKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "z") return;
+      if ((event.target as HTMLElement | null)?.closest?.("input:not([type=checkbox]), textarea, select, [contenteditable=true]")) return;
+      event.preventDefault();
+      void this.plugin.undoTaskChange();
+    });
     this.unsubscribe = this.plugin.index.subscribe(() => this.scheduleRender());
     this.render();
   }
@@ -397,7 +404,7 @@ export class TaskMainView extends ItemView {
         },
         move: async (task, date, time) => {
           const selected = this.draggedTasks.length ? this.draggedTasks : [task];
-          const paths = await this.plugin.store.bulkChange(selected, original => rescheduledDraft(original, date, time));
+          const paths = await this.plugin.store.bulkChange(selected, original => rescheduledDraft(original, date, time), {}, `Rescheduled ${selected.length === 1 ? `“${selected[0].title}”` : `${selected.length} tasks`}`);
           this.clearSelection();
           for (const path of paths) await this.plugin.index.refreshPath(path);
         }
@@ -420,7 +427,9 @@ export class TaskMainView extends ItemView {
     }
     if (this.grouping !== "default") {
       for (const [key, group] of groupTasks(tasks, this.grouping)) {
-        const title = this.grouping === "date" && key !== "No date" ? formatDate(key, this.plugin.dateFormat())
+        // Date groupings are keyed by ISO date; show them in the user's format.
+        const title = ["date", "scheduledDate", "deadline", "defer"].includes(this.grouping) && /^\d{4}-\d{2}-\d{2}$/.test(key)
+          ? `${this.grouping === "defer" ? "Hidden until " : ""}${formatDate(key, this.plugin.dateFormat())}`
           : this.grouping === "source" ? key.replace(/\.md$/i, "") : key;
         this.renderSection(container, title, group, undefined, taskGroupTarget(this.grouping, group[0]));
       }
@@ -452,7 +461,7 @@ export class TaskMainView extends ItemView {
     for (const column of columns) {
       const section = board.createEl("section", { cls: "tm-kanban-column", attr: { "data-tm-scroll-key": `kanban:${column.title}` } });
       const header = section.createDiv({ cls: "tm-kanban-column-header" });
-      const title = column.target?.property && ["date", "scheduledDate", "deadline"].includes(column.target.property) && typeof column.target.value === "string"
+      const title = column.target?.property && ["date", "scheduledDate", "deadline", "defer"].includes(column.target.property) && typeof column.target.value === "string"
         ? formatDate(column.target.value, this.plugin.dateFormat()) : column.target?.property === "source" ? column.title.replace(/\.md$/i, "") : column.title;
       header.createEl("h2", { text: title });
       if (this.plugin.settings.showGroupTaskCounts) header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
@@ -669,7 +678,7 @@ export class TaskMainView extends ItemView {
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
           if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
-          await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()));
+          await this.plugin.store.updateFrontmatter(file, (frontmatter: Record<string, unknown>) => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()), `Changed dates of “${project.name}”`);
           await this.plugin.index.refreshPath(project.path);
         }
       });
@@ -1011,6 +1020,12 @@ export class TaskMainView extends ItemView {
       menu.addItem(item => item.setTitle(`Schedule for ${label.toLowerCase()}`).setIcon("calendar").onClick(() => move({ property: "scheduledDate", value: date })));
     }
     menu.addItem(item => item.setTitle("Remove dates").setIcon("calendar-x").onClick(() => move({ property: "date", value: undefined })));
+    menu.addSeparator();
+    // Snoozing hides a task from Inbox, Today and Upcoming until the date (see isDeferred).
+    for (const [label, value] of [["Snooze until tomorrow", addDays(today, 1)], ["Snooze until next week", addDays(today, 7)], ["Snooze to someday", "Someday"]] as const) {
+      menu.addItem(item => item.setTitle(label).setIcon("alarm-clock-off").onClick(() => move({ property: "defer", value })));
+    }
+    if (task.deferDate || task.someday) menu.addItem(item => item.setTitle("Stop snoozing").setIcon("alarm-clock").onClick(() => move({ property: "defer", value: undefined })));
     const rect = row.getBoundingClientRect();
     menu.showAtPosition({ x: rect.left, y: rect.bottom });
   }

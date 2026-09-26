@@ -1,5 +1,5 @@
 import { findInputDate, findInputDeadline } from "./date";
-import { parseTaskInput, serializeTask, type ParsedTaskLine } from "./parser";
+import { parseTaskInput, parseTaskLine, serializeTask, type ParsedTaskLine, type ParsedTokenRange } from "./parser";
 import type { TaskDraft } from "./types";
 
 const width = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((total, char) => total + (char === "\t" ? 4 : 1), 0);
@@ -47,7 +47,8 @@ export function parseTaskTreeInput(input: string, destination: string, reference
  * "Buy sun cream" or "Done last Friday" is never reinterpreted.
  */
 export function parseEditedTaskInput(text: string, original: string, reference = new Date(), dateFormat?: string, checkbox = "- [ ] "): ParsedTaskLine | undefined {
-  const strict = parseTaskInput(checkbox + text, reference, dateFormat, false);
+  const ranges: ParsedTokenRange[] = [];
+  const strict = parseTaskLine(checkbox + text, reference, dateFormat, false, ranges);
   let from = 0;
   const shortest = Math.min(text.length, original.length);
   while (from < shortest && text[from] === original[from]) from++;
@@ -55,8 +56,11 @@ export function parseEditedTaskInput(text: string, original: string, reference =
   for (let originalTo = original.length; to > from && originalTo > from && text[to - 1] === original[originalTo - 1]; originalTo--) to--;
   if (!strict || !text.slice(from, to).trim()) return strict;
   const within = { from, to };
-  const deadline = strict.deadline ? undefined : findInputDeadline(text, reference, dateFormat, within);
-  const scheduled = strict.scheduledDate ? undefined : findInputDate(text, reference, within);
+  // A `>tomorrow` defer is already parsed; its words are not a schedule.
+  const defer = ranges.find(range => range.kind === "defer");
+  const prose = defer ? text.slice(0, defer.from - checkbox.length) + " ".repeat(defer.to - defer.from) + text.slice(defer.to - checkbox.length) : text;
+  const deadline = strict.deadline ? undefined : findInputDeadline(prose, reference, dateFormat, within);
+  const scheduled = strict.scheduledDate ? undefined : findInputDate(prose, reference, within);
   if (!deadline && !scheduled) return strict;
   let cleaned = text;
   for (const match of [deadline, scheduled].filter(match => match !== undefined).sort((a, b) => b.index - a.index)) {

@@ -20,6 +20,7 @@ vi.mock("../src/task-line-editor", () => ({
 }));
 import { TaskEditorModal, type TaskEditorProperty } from "../src/task-editor";
 import { tomorrowIso } from "../src/date";
+import { scanTasks } from "../src/parser";
 import { DEFAULT_SETTINGS, type TaskDraft } from "../src/types";
 
 function editor() {
@@ -105,13 +106,13 @@ class EditorElement extends EventTarget {
 class EditorButton extends EditorElement {}
 
 afterEach(() => vi.unstubAllGlobals());
-function openModal(edit = false, focusProperty?: TaskEditorProperty) {
+function openModal(edit = false, focusProperty?: TaskEditorProperty, raw?: string) {
   vi.stubGlobal("window", { setTimeout: vi.fn() });
   vi.stubGlobal("HTMLButtonElement", EditorButton);
   const onSave = vi.fn(async (_draft: TaskDraft) => {});
   const modal = new TaskEditorModal({} as App, {
     mode: "inbox", projects: [], settings: DEFAULT_SETTINGS, dateFormat: "YYYY-MM-DD", onSave, focusProperty,
-    task: edit ? { id: "Inbox.md:0", path: "Inbox.md", line: 0, endLine: 0, raw: "- [ ] Existing", title: "Existing", indent: 0, completed: false, childIds: [] } : undefined
+    task: edit && raw ? scanTasks("Inbox.md", raw)[0] : edit ? { id: "Inbox.md:0", path: "Inbox.md", line: 0, endLine: 0, raw: "- [ ] Existing", title: "Existing", indent: 0, completed: false, childIds: [] } : undefined
   });
   const fields = modal as unknown as {
     modalEl: EditorElement; contentEl: EditorElement; close: () => void; handleKeydown: (event: KeyboardEvent) => void;
@@ -202,6 +203,22 @@ it("selects inline metadata for property shortcuts", () => {
   callback();
   expect(focus).toHaveBeenCalledOnce();
   expect(fields.rawInput.setSelectionRange).toHaveBeenCalledWith(9, 11);
+});
+
+it("selects a defer for the hidden-until shortcut", () => {
+  const { fields } = openModal(true, "defer", "- [ ] Existing >2026-10-01 p2");
+  expect(fields.rawInput.value).toBe("Existing >2026-10-01 p2");
+  const callback = vi.mocked(window.setTimeout).mock.calls.at(-1)![0] as () => void;
+  callback();
+  expect(fields.rawInput.setSelectionRange).toHaveBeenCalledWith(9, 20);
+});
+
+it.each(["- [ ] Existing >2026-10-01", "- [ ] Existing >someday"])("keeps a defer when saving unchanged: %s", async raw => {
+  const { key, onSave } = openModal(true, undefined, raw);
+  key({ metaKey: true });
+  await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  const draft = onSave.mock.calls[0][0];
+  expect(raw.endsWith("someday") ? draft.someday : draft.deferDate).toBe(raw.endsWith("someday") ? true : "2026-10-01");
 });
 
 it("saves an unchanged task without changing its metadata", async () => {

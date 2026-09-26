@@ -4,6 +4,7 @@ import { getIcon } from "obsidian";
 export const TASK_PROPERTY_ICONS = {
   scheduledDate: "calendar-days",
   deadline: "flag",
+  defer: "eye-off",
   durationMinutes: "clock-3",
   priority: "signal",
   tags: "tag",

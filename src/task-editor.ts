@@ -8,7 +8,7 @@ import { todayIso, tomorrowIso } from "./date";
 import { parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
 import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from "./types";
 
-export type TaskEditorProperty = "scheduledDate" | "deadline" | "durationMinutes" | "priority" | "tags";
+export type TaskEditorProperty = "scheduledDate" | "deadline" | "defer" | "durationMinutes" | "priority" | "tags";
 
 export interface TaskEditorOptions {
   focusProperty?: TaskEditorProperty;
@@ -31,6 +31,8 @@ function initialDraft(options: TaskEditorOptions): TaskDraft {
       scheduledTime: options.task.scheduledTime,
       deadline: options.task.deadline,
       deadlineTime: options.task.deadlineTime,
+      deferDate: options.task.deferDate,
+      someday: options.task.someday,
       durationMinutes: options.task.durationMinutes,
       priority: options.task.priority,
       tags: options.task.tags,

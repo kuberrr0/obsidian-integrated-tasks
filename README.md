@@ -72,7 +72,8 @@ Everything you can do by dragging also works from the keyboard. Long lists show 
 | Shift + ↑ / ↓ | Select a range |
 | Alt + ↑ / ↓ | Move the task up or down among its siblings |
 | Alt + → / ← | Make it a subtask of the task above, or move it out of its parent |
-| M | Move to another section, column, or note, or reschedule it |
+| M | Move to another section, column, or note, reschedule it, or snooze it |
+| Cmd/Ctrl + Z | Undo the last task change |
 
 ### Calendar: make time for your work
 
@@ -135,6 +136,18 @@ Select tasks to change their dates, priorities, tags, or other details together.
 Click a selected task title or run **Edit task properties** to make a shared change. Only the fields you edit are applied; **Mixed — unchanged** preserves each task's existing value.
 
 You can also drag a selection to move tasks together, drop it onto the calendar to reschedule it, or delete selected tasks along with their subtasks.
+
+## Undo a change
+
+After you complete, move, edit, snooze, or delete tasks from a task view, a notice shows what changed with an **Undo** button. You can also press **Cmd/Ctrl+Z** in a task view or run **Undo last task change** from the command palette. The last 20 changes can be undone.
+
+Undo puts your notes back exactly as they were, so it only runs if those notes haven't changed since; otherwise it tells you which note changed. You can turn the notices off in the plugin settings and still undo with the command or shortcut.
+
+## Snooze tasks you can't act on yet
+
+End a task with `>` and a date to hide it from Inbox, Today, and Upcoming until that day, such as `- [ ] Renew passport >Oct 1, 2026`. Use `>someday` to set a task aside with no date. Snoozed tasks still appear in All Tasks, projects, and tags, labelled **Hidden until**, and come back on their own when the date arrives.
+
+In a task view, press **M** on a task and choose a **Snooze** option, or set **Hidden until** for several tasks at once in the bulk editor. In a note, you can type a natural date such as `>tomorrow`; it becomes a date when you move off the line.
 
 ## Build recurring routines
 

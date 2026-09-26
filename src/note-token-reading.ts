@@ -80,7 +80,7 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
         link.textContent = token.dateLabel ?? link.textContent;
         pill.appendChild(link);
         if (token.time) pill.appendChild(document.createTextNode(` ${token.time}`));
-      } else pill.textContent = token.kind === "deadline" ? token.label.replace(/^Due /, "") : token.label;
+      } else pill.textContent = token.kind === "deadline" ? token.label.replace(/^Due /, "") : token.kind === "defer" ? token.dateLabel ?? token.label : token.label;
       range.insertNode(pill);
     }
   }

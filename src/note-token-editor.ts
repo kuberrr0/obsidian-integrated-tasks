@@ -92,6 +92,7 @@ export function noteTokenMarks(
       syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + 1));
       syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(to - 1, to));
     }
+    if (token.kind === "defer") syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + 1));
   }
   return { pills: Decoration.set(pills, true), syntax: Decoration.set(syntax, true) };
 }

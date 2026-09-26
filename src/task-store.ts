@@ -17,7 +17,31 @@ import {
 } from "./markdown";
 import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
+/** One user action's effect on notes, kept so the action can be undone as a unit. */
+export interface TaskChange {
+  label: string;
+  /** `before` is undefined for a note the action created. */
+  files: Array<{ path: string; before?: string; after: string }>;
+}
+
+const UNDO_HISTORY = 20;
+
+function taskName(title: string): string {
+  const trimmed = title.trim();
+  return `“${trimmed.length > 40 ? `${trimmed.slice(0, 39)}…` : trimmed}”`;
+}
+
+function tasksName(tasks: Array<{ title: string }>): string {
+  return tasks.length === 1 ? taskName(tasks[0].title) : `${tasks.length} tasks`;
+}
+
 export class TaskStore {
+  /** Called after each recorded action, e.g. to offer an Undo notice. */
+  onChange?: (change: TaskChange) => void;
+  private history: TaskChange[] = [];
+  private queue: Promise<unknown> = Promise.resolve();
+  private journal?: Map<string, { file: TFile; before?: string }>;
+
   constructor(
     private readonly app: App,
     private readonly getDateFormat: () => string,
@@ -26,7 +50,11 @@ export class TaskStore {
     private readonly getSectionHeadingLevel: () => number = () => 1
   ) {}
 
-  async updateDates(sourceFormats: string[]): Promise<string[]> {
+  updateDates(sourceFormats: string[]): Promise<string[]> {
+    return this.run("Updated task dates", () => this.updateDatesNow(sourceFormats));
+  }
+
+  private async updateDatesNow(sourceFormats: string[]): Promise<string[]> {
     const format = this.getDateFormat();
     const linkDates = this.getLinkDates();
     const files = new Map(this.app.vault.getMarkdownFiles().map(file => [file.path, file]));
@@ -46,16 +74,23 @@ export class TaskStore {
     return this.commitChanges(files, before, after);
   }
 
-  async toggle(task: Task, completed: boolean): Promise<void> {
-    if (completed && recurringFile(this.app, task)) {
-      await this.resolveRecurring(task, "COMPLETED");
-      return;
-    }
-    const file = this.requireFile(task.path);
-    await this.app.vault.process(file, (content) => toggleTaskInContent(content, task, completed, this.getSectionHeadingLevel()));
+  toggle(task: Task, completed: boolean): Promise<void> {
+    return this.run(`${completed ? "Completed" : "Reopened"} ${taskName(task.title)}`, async () => {
+      if (completed && recurringFile(this.app, task)) {
+        await this.resolveRecurringNow(task, "COMPLETED");
+        return;
+      }
+      const file = this.requireFile(task.path);
+      await this.process(file, (content) => toggleTaskInContent(content, task, completed, this.getSectionHeadingLevel()));
+    });
   }
 
-  async resolveRecurring(task: Task, outcome: RecurringOutcome): Promise<string[]> {
+  resolveRecurring(task: Task, outcome: RecurringOutcome): Promise<string[]> {
+    const verb = outcome === "COMPLETED" ? "Completed" : outcome === "SKIPPED" ? "Skipped" : "Marked as failed";
+    return this.run(`${verb} ${taskName(task.title)}`, () => this.resolveRecurringNow(task, outcome));
+  }
+
+  private async resolveRecurringNow(task: Task, outcome: RecurringOutcome): Promise<string[]> {
     const recurring = recurringFile(this.app, task);
     if (!recurring) throw new Error("Task does not link to a recurring-task note.");
     const source = this.requireFile(task.path);
@@ -88,48 +123,133 @@ export class TaskStore {
     for (const [file, anchor] of anchors) {
       if (!anchor || anchor === storedRepeatAnchor(before.get(file.path) ?? "") || !this.app.fileManager?.processFrontMatter) continue;
       try {
+        await this.remember(file);
         await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => { frontmatter[REPEAT_ANCHOR] = anchor; });
       } catch (error) { console.error("Could not save the repeat anchor", error); }
     }
   }
 
-  async delete(task: Task): Promise<void> {
-    const file = this.requireFile(task.path);
-    await this.app.vault.process(file, content => {
-      const block = liveTaskBlock(content, task, this.getDateFormat(), this.getSectionHeadingLevel());
-      return removeLinesFromContent(content, block.start, block.lines.length);
+  delete(task: Task): Promise<void> {
+    return this.run(`Deleted ${taskName(task.title)}`, async () => {
+      const file = this.requireFile(task.path);
+      await this.process(file, content => {
+        const block = liveTaskBlock(content, task, this.getDateFormat(), this.getSectionHeadingLevel());
+        return removeLinesFromContent(content, block.start, block.lines.length);
+      });
     });
   }
 
-  async create(draft: TaskDraft): Promise<void> {
-    const { path, heading } = splitDestination(draft.destination);
-    const file = heading ? this.requireFile(path) : await this.ensureFile(path);
-    await this.app.vault.process(file, (content) =>
-      insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel())
-    );
+  create(draft: TaskDraft): Promise<void> {
+    return this.run(`Added ${taskName(draft.title)}`, async () => {
+      const { path, heading } = splitDestination(draft.destination);
+      const file = heading ? this.requireFile(path) : await this.ensureFile(path);
+      await this.process(file, (content) =>
+        insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel())
+      );
+    });
   }
 
-  async update(task: Task, draft: TaskDraft): Promise<void> {
-    // Description edits, moves and recurring completions share the planned, all-or-nothing bulk path.
-    if ((draft.description !== undefined && draft.description !== (task.description ?? "")) || isMove(task, draft) || this.completesRecurring(task, draft)) {
-      await this.bulkChange([task], () => draft);
-      return;
-    }
-    const file = this.requireFile(task.path);
-    await this.app.vault.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates(), this.getSectionHeadingLevel()));
+  update(task: Task, draft: TaskDraft): Promise<void> {
+    return this.run(`Edited ${taskName(task.title)}`, async () => {
+      // Description edits, moves and recurring completions share the planned, all-or-nothing bulk path.
+      if ((draft.description !== undefined && draft.description !== (task.description ?? "")) || isMove(task, draft) || this.completesRecurring(task, draft)) {
+        await this.bulkChangeNow([task], () => draft);
+        return;
+      }
+      const file = this.requireFile(task.path);
+      await this.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates(), this.getSectionHeadingLevel()));
+    });
   }
 
   async bulkUpdate(tasks: Task[], patch: BulkTaskPatch): Promise<string[]> {
     if (!Object.keys(patch).length) return [];
-    return this.bulkChange(tasks, task => ({ ...draftForGroup(task), ...patch }));
+    return this.bulkChange(tasks, task => ({ ...draftForGroup(task), ...patch }), {}, `Edited ${tasksName(tasks)}`);
   }
 
-  async bulkDelete(tasks: Task[]): Promise<string[]> {
-    return this.bulkChange(tasks, () => undefined, { delete: true });
+  bulkDelete(tasks: Task[]): Promise<string[]> {
+    return this.bulkChange(tasks, () => undefined, { delete: true }, `Deleted ${tasksName(tasks)}`);
   }
 
-  async bulkDrop(tasks: Task[], group?: ListDropGroup, anchor?: Task, placement?: ListPlacement): Promise<string[]> {
-    return this.bulkChange(tasks, task => draftForGroup(task, group), { anchor, placement });
+  bulkDrop(tasks: Task[], group?: ListDropGroup, anchor?: Task, placement?: ListPlacement): Promise<string[]> {
+    return this.bulkChange(tasks, task => draftForGroup(task, group), { anchor, placement }, dropLabel(tasks, group, anchor));
+  }
+
+  /** Change project frontmatter (for example Gantt dates) as an undoable action. */
+  updateFrontmatter(file: TFile, change: (frontmatter: Record<string, unknown>) => void, label: string): Promise<void> {
+    return this.run(label, async () => {
+      await this.remember(file);
+      await this.app.fileManager.processFrontMatter(file, change);
+    });
+  }
+
+  lastChange(): TaskChange | undefined {
+    return this.history[this.history.length - 1];
+  }
+
+  /**
+   * Put every note an action touched back as it was. Refuses, before writing anything,
+   * if any of those notes changed since, so an undo never discards later edits.
+   */
+  undo(change: TaskChange | undefined = this.lastChange()): Promise<string[]> {
+    const result = this.queue.then(async () => {
+      if (!change || !this.history.includes(change)) throw new Error("Nothing to undo.");
+      const targets = change.files.map(entry => ({ entry, file: this.app.vault.getAbstractFileByPath(entry.path) }));
+      for (const { entry, file } of targets) {
+        if (!(file instanceof TFile) || await this.app.vault.read(file) !== entry.after) {
+          throw new Error(`Can't undo: ${entry.path.replace(/\.md$/i, "")} has changed since.`);
+        }
+      }
+      for (const { entry, file } of [...targets].reverse()) {
+        if (entry.before === undefined) await this.app.fileManager.trashFile(file as TFile);
+        else await this.app.vault.process(file as TFile, current => {
+          if (current !== entry.after) throw new Error(`Can't undo: ${entry.path.replace(/\.md$/i, "")} has changed since.`);
+          return entry.before!;
+        });
+      }
+      this.history = this.history.filter(item => item !== change);
+      return change.files.map(entry => entry.path);
+    });
+    this.queue = result.catch(() => undefined);
+    return result;
+  }
+
+  /** Run one user action: one at a time, and recorded so it can be undone as a unit. */
+  private run<T>(label: string, action: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(async () => {
+      const journal = new Map<string, { file: TFile; before?: string }>();
+      this.journal = journal;
+      try {
+        const value = await action();
+        await this.record(label, journal);
+        return value;
+      } finally { this.journal = undefined; }
+    });
+    this.queue = result.catch(() => undefined);
+    return result;
+  }
+
+  private async record(label: string, journal: Map<string, { file: TFile; before?: string }>): Promise<void> {
+    const files: TaskChange["files"] = [];
+    for (const { file, before } of journal.values()) {
+      const after = await this.app.vault.read(file);
+      if (after !== before) files.push({ path: file.path, before, after });
+    }
+    if (!files.length) return;
+    const change = { label, files };
+    this.history.push(change);
+    if (this.history.length > UNDO_HISTORY) this.history.shift();
+    this.onChange?.(change);
+  }
+
+  /** Note the file's contents before the running action first changes it. */
+  private async remember(file: TFile, created = false): Promise<void> {
+    if (!this.journal || this.journal.has(file.path)) return;
+    this.journal.set(file.path, { file, before: created ? undefined : await this.app.vault.read(file) });
+  }
+
+  private async process(file: TFile, change: (content: string) => string): Promise<string> {
+    await this.remember(file);
+    return this.app.vault.process(file, change);
   }
 
   private completesRecurring(task: Task, draft?: TaskDraft): TFile | undefined {
@@ -141,7 +261,11 @@ export class TaskStore {
    * advanced and logged (as resolveRecurring does) instead of being checked; its other
    * property changes still apply, and an explicitly changed scheduled date wins over the next instance.
    */
-  async bulkChange(tasks: Task[], draft: (task: Task) => TaskDraft | undefined, options: BulkTaskOptions = {}): Promise<string[]> {
+  bulkChange(tasks: Task[], draft: (task: Task) => TaskDraft | undefined, options: BulkTaskOptions = {}, label = `Updated ${tasksName(tasks)}`): Promise<string[]> {
+    return this.run(label, () => this.bulkChangeNow(tasks, draft, options));
+  }
+
+  private async bulkChangeNow(tasks: Task[], draft: (task: Task) => TaskDraft | undefined, options: BulkTaskOptions = {}): Promise<string[]> {
     const changes = tasks.map(task => ({ task, draft: draft(task) }));
     const files = new Map<string, TFile>();
     for (const task of tasks) files.set(task.path, this.requireFile(task.path));
@@ -181,7 +305,7 @@ export class TaskStore {
     const written: string[] = [];
     try {
       for (const [path, content] of after) {
-        await this.app.vault.process(files.get(path)!, current => {
+        await this.process(files.get(path)!, current => {
           if (current !== before.get(path)) throw new Error("A note changed during the bulk action. Refresh and try again.");
           return content;
         });
@@ -224,6 +348,21 @@ export class TaskStore {
       if (!folder) await this.app.vault.createFolder(current);
       else if (!(folder instanceof TFolder)) throw new Error(`${current} is not a folder.`);
     }
-    return this.app.vault.create(normalized, "");
+    const created = await this.app.vault.create(normalized, "");
+    await this.remember(created, true);
+    return created;
   }
+}
+
+function dropLabel(tasks: Task[], group?: ListDropGroup, anchor?: Task): string {
+  const name = tasksName(tasks);
+  if (anchor) return `Moved ${name}`;
+  switch (group?.property) {
+    case "defer": return group.value === "Someday" ? `Snoozed ${name} to someday` : group.value ? `Snoozed ${name}` : `Stopped snoozing ${name}`;
+    case "date": case "scheduledDate": case "deadline": case "scheduledTime": case "deadlineTime": return `Rescheduled ${name}`;
+    case "status": return `${group.value === "Completed" ? "Completed" : "Reopened"} ${name}`;
+    case "priority": return `Changed priority of ${name}`;
+    case "tags": return `Changed tags of ${name}`;
+  }
+  return group?.destination ? `Moved ${name}` : `Updated ${name}`;
 }

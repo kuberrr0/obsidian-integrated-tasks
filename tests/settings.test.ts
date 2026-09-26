@@ -65,7 +65,7 @@ describe("settings compatibility", () => {
     const groups = tab.getSettingDefinitions();
     expect(groups.map(group => group.heading)).toEqual(["Task defaults", "Appearance", "List layout", "Kanban layout", "Calendar layout", "Dates"]);
     const definitions = groups.flatMap(group => group.items);
-    expect(definitions.map(({ name }) => name).sort()).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Task highlight on hover", "Show task counts in group headings", "Show subtask counts", "Wrap task titles", "Wrap task titles", "Wrap task titles"].sort());
+    expect(definitions.map(({ name }) => name).sort()).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Show undo notices", "Task highlight on hover", "Show task counts in group headings", "Show subtask counts", "Wrap task titles", "Wrap task titles", "Wrap task titles"].sort());
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();

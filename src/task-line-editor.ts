@@ -46,7 +46,7 @@ export function taskModeEditorText(text: string, dateFormat: string): string {
   if (text.slice(end).trim()) return text;
   const order = (item: InlineTaskToken): number => item.token?.kind === "deadline" ? 0
     : item.token?.kind === "priority" ? 1 : item.token?.kind === "scheduledDate" ? 2
-    : item.token?.kind === "durationMinutes" ? 3 : item.project ? 4 : 5;
+    : item.token?.kind === "durationMinutes" ? 3 : item.token?.kind === "defer" ? 4 : item.project ? 5 : 6;
   return [text.slice(0, tokens[0].from).trimEnd(), ...[...tokens].sort((a, b) => order(a) - order(b)).map(item => text.slice(item.from, item.to))].filter(Boolean).join(" ");
 }
 

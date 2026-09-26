@@ -2,6 +2,7 @@ import { deadlineIsDistant } from "./task-row-details";
 import { parseRecurringLog } from "./recurring-log";
 import { formatDate, todayIso } from "./date";
 import { formatDuration, parseTaskLine, type ParsedTokenRange } from "./parser";
+import { isDeferred } from "./query";
 
 export interface TaskToken extends Omit<ParsedTokenRange, "kind"> {
   kind: ParsedTokenRange["kind"] | "completed" | "skipped" | "failed";
@@ -13,6 +14,8 @@ export interface TaskToken extends Omit<ParsedTokenRange, "kind"> {
   time?: string;
   overdue?: boolean;
   distant?: boolean;
+  /** A defer that currently hides the task. */
+  active?: boolean;
   display?: { from: number; to: number; label: string; linkText?: string };
 }
 
@@ -43,6 +46,16 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
         dateLabel, time, linkText: link?.[1], display,
         overdue: !parsed.completed && (range.kind === "scheduledDate" ? parsed.scheduledDate! : parsed.deadline!) < todayIso() };
     }
+    if (range.kind === "defer") {
+      const active = isDeferred(parsed);
+      if (parsed.someday) return { ...range, label: "Someday", description: "Hidden until someday", active };
+      const dateLabel = formatDate(parsed.deferDate!, dateFormat);
+      const original = link?.[1] ?? source.slice(1);
+      const display = original === dateLabel ? undefined : {
+        from: range.from + (link?.index ?? 1), to: link ? range.from + link.index + link[0].length : range.to, label: dateLabel, linkText: link?.[1]
+      };
+      return { ...range, label: `Hidden until ${dateLabel}`, description: `Hidden until: ${dateLabel}`, dateLabel, linkText: link?.[1], display, active };
+    }
     switch (range.kind) {
       case "tags": return { ...range, label: link![1].trim(), description: `Tag: ${link![1].trim()}`, linkText: link![1] };
       case "durationMinutes": return { ...range, label: formatDuration(parsed.durationMinutes!), description: `Duration: ${formatDuration(parsed.durationMinutes!)}` };
@@ -52,7 +65,7 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
 }
 
 export function tokenClass(token: TaskToken): string {
-  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}${token.distant ? " is-distant" : ""}`;
+  return `tm-note-token tm-note-token-${token.kind}${token.priority ? ` is-p${token.priority}` : ""}${token.overdue ? " is-danger" : ""}${token.distant ? " is-distant" : ""}${token.active ? " is-active" : ""}`;
 }
 
 /** Standalone recurrence history entries, outside checklist metadata. */

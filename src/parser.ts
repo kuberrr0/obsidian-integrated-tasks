@@ -7,6 +7,8 @@ const CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
 const TAG = /(?:^|\s)#\[\[([^[\]\r\n|]+)\]\]\s*$/;
 const PRIORITY = /(?:^|\s)p([123])\s*$/i;
 const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
+// `>` directly followed by a date, a date link or `someday`; `a > b` stays prose.
+const DEFER = /(?:^|\s)>([^\s>][^>]*?)\s*$/;
 const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
 const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 // A heading may hold balanced [[links]]; the path part holds no brackets or '#'.
@@ -59,7 +61,7 @@ function plainScheduled(text: string, reference: Date, dateFormat: string[]): Re
 }
 
 export interface ParsedTokenRange {
-  kind: "tags" | "scheduledDate" | "deadline" | "durationMinutes" | "priority";
+  kind: "tags" | "scheduledDate" | "deadline" | "defer" | "durationMinutes" | "priority";
   from: number;
   to: number;
 }
@@ -138,6 +140,7 @@ function parseLine(
 
   for (;;) {
     let match: RegExpExecArray | null;
+    let defer: ReturnType<typeof parseDefer>;
     let changed = false;
 
     if ((match = TAG.exec(remainder)) && match[1].trim()) {
@@ -170,6 +173,12 @@ function parseLine(
         consumed.add("deadline");
         changed = true;
       }
+    } else if (!consumed.has("defer") && (match = DEFER.exec(remainder)) && (defer = parseDefer(match[1], reference, dateFormats))) {
+      Object.assign(metadata, defer);
+      recordToken("defer", match);
+      remainder = remainder.slice(0, match.index).trimEnd();
+      consumed.add("defer");
+      changed = true;
     } else if (!consumed.has("duration") && (match = DURATION.exec(remainder))) {
       const minutes = durationToMinutes(match[1]);
       if (minutes) {
@@ -225,6 +234,17 @@ function parseLine(
   };
 }
 
+/** A defer is a date without a time, or `someday`. */
+function parseDefer(value: string, reference: Date, dateFormats: string[]): Pick<ParsedTaskMetadata, "deferDate" | "someday"> | undefined {
+  if (/^someday$/i.test(value)) return { someday: true };
+  const date = parseDateTimeExpression(value, reference, dateFormats);
+  return date && !date.time ? { deferDate: date.date } : undefined;
+}
+
+function deferText(draft: Pick<ParsedTaskMetadata, "deferDate" | "someday">, dateText: (date: string) => string): string {
+  return draft.someday ? ">someday" : draft.deferDate ? `>${dateText(draft.deferDate)}` : "";
+}
+
 export function parseTaskInput(
   input: string,
   reference = new Date(),
@@ -243,6 +263,7 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
     draft.scheduledDate ? `${dateText(draft.scheduledDate)}${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
     draft.deadline ? `{${dateText(draft.deadline)}${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
+    deferText(draft, dateText),
     draft.priority ? `p${draft.priority}` : "",
     formatTags(draft.tags)
   ].filter(Boolean);
@@ -250,7 +271,7 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
   return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
 }
 
-const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "priority", "tags", "destination"];
+const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "defer", "priority", "tags", "destination"];
 
 /**
  * Edit an existing task line in place: keep indentation, checkbox spacing, title spelling,
@@ -286,6 +307,7 @@ export function rewriteTaskLine(raw: string, draft: TaskDraft, dateFormat?: stri
     durationMinutes: (parsed.durationMinutes ?? 0) === (draft.durationMinutes ?? 0) ? undefined : draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
     deadline: parsed.deadline === draft.deadline && (parsed.deadlineTime ?? "") === deadlineTime ? undefined
       : draft.deadline ? `{${dateText(draft.deadline)}${deadlineTime ? ` ${deadlineTime}` : ""}}` : "",
+    defer: deferText(parsed, dateText) === deferText(draft, dateText) ? undefined : deferText(draft, dateText),
     priority: (parsed.priority ?? 0) === (draft.priority ?? 0) ? undefined : draft.priority ? `p${draft.priority}` : "",
     tags: draftTags.length === parsedTags.length && draftTags.every(tag => parsedTags.includes(tag)) ? undefined : formatTags(draftTags)
   };

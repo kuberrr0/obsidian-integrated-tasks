@@ -1382,6 +1382,21 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 
 :is(.tm-task-due, .tm-note-task-deadline, .tm-note-token-deadline).is-distant { color: var(--text-muted); }
 
+/* Defers stay quiet; a defer that is hiding the task reads slightly stronger. */
+.tm-task-defer { display: inline-flex; align-items: center; gap: 4px; color: var(--text-faint); cursor: pointer; white-space: nowrap; }
+.tm-main-view .tm-task-item .tm-task-defer, .tm-main-view .tm-task-item .tm-task-defer > span { font-size: inherit; }
+.tm-task-defer:hover { color: var(--text-normal); }
+:is(.tm-task-defer, .tm-note-task-defer, .tm-note-token-defer).is-active { color: var(--text-muted); font-style: italic; }
+.tm-note-task-defer { display: inline-block; color: var(--text-faint); white-space: nowrap; }
+.tm-note-task-defer::before {
+  content: ""; display: inline-block; width: 0.95em; height: 0.95em; margin-inline-end: 4px; vertical-align: -0.12em;
+  background: currentColor;
+  -webkit-mask: var(--tm-note-token-icon) center / contain no-repeat;
+  mask: var(--tm-note-token-icon) center / contain no-repeat;
+}
+.tm-note-token-defer { color: var(--text-faint); }
+:is(.markdown-source-view.mod-cm6 .cm-editor, .markdown-reading-view) .tm-note-token-defer * { color: inherit; text-decoration: none; }
+
 .tm-editor-task-line {
   display: flex;
   align-items: first baseline;
@@ -1558,4 +1573,11 @@ button.tm-gantt-handle::before {
 /* Without hover, the start and end grips would never appear. */
 @media (hover: none) {
   button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: .85; }
+}
+
+/* Undo button inside a notice. */
+.notice .tm-undo-button {
+  margin-left: var(--size-4-2);
+  padding: var(--size-2-1) var(--size-4-2);
+  font-size: var(--font-ui-small);
 }

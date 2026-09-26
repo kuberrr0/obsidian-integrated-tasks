@@ -17,7 +17,7 @@ import { MarkdownView, Notice, Plugin, TFile, TFolder, type Editor, type TAbstra
 import { TaskEditorModal, type TaskEditorOptions } from "./task-editor";
 import { TaskIndex, type RefreshOptions } from "./task-index";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
-import { TaskStore } from "./task-store";
+import { TaskStore, type TaskChange } from "./task-store";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
 import { DEFAULT_SETTINGS, type SmartList, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
@@ -44,6 +44,7 @@ export default class TaskManagerPlugin extends Plugin {
     await this.loadSettings();
     this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat());
     this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates, () => this.settings.sectionHeadingLevel);
+    this.store.onChange = change => this.offerUndo(change);
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
@@ -142,6 +143,11 @@ export default class TaskManagerPlugin extends Plugin {
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
+    this.addCommand({ id: "undo-task-change", name: "Undo last task change", checkCallback: checking => {
+      if (!this.store.lastChange()) return false;
+      if (!checking) void this.undoTaskChange();
+      return true;
+    } });
     this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
 
     this.addCommand({ id: "toggle-task-mode", name: "Toggle task mode", callback: () => {
@@ -197,6 +203,36 @@ export default class TaskManagerPlugin extends Plugin {
     syncTaskMode();
   }
 
+  /** A short notice after each task action, with an Undo button. */
+  private offerUndo(change: TaskChange): void {
+    if (!this.settings.showUndoNotices) return;
+    const fragment = document.createDocumentFragment();
+    fragment.append(`${change.label}. `);
+    const button = document.createElement("button");
+    button.className = "tm-undo-button";
+    button.textContent = "Undo";
+    fragment.append(button);
+    const notice = new Notice(fragment, 6000);
+    button.addEventListener("click", event => {
+      event.stopPropagation();
+      notice.hide();
+      void this.undoTaskChange(change);
+    });
+  }
+
+  /** Undo the given action, or the most recent one. */
+  async undoTaskChange(change?: TaskChange): Promise<void> {
+    const target = change ?? this.store.lastChange();
+    if (!target) { new Notice("Nothing to undo."); return; }
+    try {
+      const paths = await this.store.undo(target);
+      for (const path of paths) await this.index.refreshPath(path);
+      new Notice(`Undone: ${target.label}`);
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : "Could not undo the change.");
+    }
+  }
+
   onunload(): void {
     this.unloaded = true;
     this.taskModeController?.dispose();
@@ -220,6 +256,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
     if (typeof this.settings.inboxPath !== "string" || !this.settings.inboxPath.trim()) this.settings.inboxPath = DEFAULT_SETTINGS.inboxPath;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
+    this.settings.showUndoNotices = this.settings.showUndoNotices !== false;
   }
 
   async saveSettings(): Promise<void> {

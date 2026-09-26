@@ -44,6 +44,7 @@ import { TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { DEFAULT_SETTINGS } from "../src/types";
+import { todayIso } from "../src/date";
 import type TaskManagerPlugin from "../src/main";
 
 beforeAll(() => installObsidianDom());
@@ -73,7 +74,7 @@ async function setup(notes: Array<[string, string]>) {
   const store = { toggle: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]), bulkChange: vi.fn().mockResolvedValue([]) };
   const plugin = {
     settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
-    openEditor: vi.fn(), openBulkEditor: vi.fn(), openTaskView: vi.fn(), openProjectEditor: vi.fn()
+    openEditor: vi.fn(), openBulkEditor: vi.fn(), openTaskView: vi.fn(), openProjectEditor: vi.fn(), undoTaskChange: vi.fn()
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const internals = view as unknown as { refresh(): void; content: HTMLElement };
@@ -103,13 +104,12 @@ describe("paged task lists", () => {
   });
 
   it("shows today's tasks even when overdue tasks fill the page", async () => {
-    const { view, content } = await setup([note("Late.md", 300, i => `- [ ] Late ${i} 2020-01-01`), note("Now.md", 5, i => `- [ ] Now ${i} ${new Date().toISOString().slice(0, 10)}`)]);
-    vi.setSystemTime(new Date());
+    // Local date: an ISO (UTC) date is yesterday or tomorrow for part of the day in many time zones.
+    const { view, content } = await setup([note("Late.md", 300, i => `- [ ] Late ${i} 2020-01-01`), note("Now.md", 5, i => `- [ ] Now ${i} ${todayIso()}`)]);
     await view.setState({ mode: "today" });
     const [overdue, today] = sections(content());
     expect(rows(content(), overdue)).toHaveLength(200);
-    expect(rows(content(), today).length).toBeGreaterThan(0);
-    vi.useRealTimers();
+    expect(rows(content(), today)).toHaveLength(5);
   });
 
   it("moves focus to the first new row when Show more is used from the keyboard, and observes the pane", async () => {
@@ -238,10 +238,45 @@ describe("keyboard", () => {
     await view.setState({ mode: "all" });
     key(rows(content())[0], "m");
     const titles = menus[0].items.map(item => item.title);
-    expect(titles).toEqual(["Move to A", "Move to B", "Schedule for today", "Schedule for tomorrow", "Schedule for next week", "Remove dates"]);
+    expect(titles).toEqual(["Move to A", "Move to B", "Schedule for today", "Schedule for tomorrow", "Schedule for next week", "Remove dates",
+      "Snooze until tomorrow", "Snooze until next week", "Snooze to someday"]);
     menus[0].items[1].click();
     await Promise.resolve();
     expect(store.bulkDrop).toHaveBeenLastCalledWith([index.allTasks()[0]], { destination: "B.md" }, undefined, undefined);
+  });
+});
+
+describe("undo and snooze", () => {
+  it("undoes the last task change on Cmd+Z, but not while typing in a field", async () => {
+    const { view, content, plugin } = await setup([note("A.md", 2)]);
+    await view.onOpen();
+    await view.setState({ mode: "all" });
+    key(rows(content())[0], "z", { metaKey: true });
+    expect(plugin.undoTaskChange).toHaveBeenCalledOnce();
+    key(rows(content())[0], "z", { metaKey: true, shiftKey: true });
+    const search = content().appendChild(document.createElement("input"));
+    key(search, "z", { metaKey: true });
+    expect(plugin.undoTaskChange).toHaveBeenCalledOnce();
+  });
+
+  it("snoozes from the Move to menu", async () => {
+    const { view, content, store, index } = await setup([note("A.md", 1)]);
+    await view.setState({ mode: "all" });
+    key(rows(content())[0], "m");
+    menus[0].items.find(item => item.title === "Snooze to someday")!.click();
+    await Promise.resolve();
+    expect(store.bulkDrop).toHaveBeenLastCalledWith([index.allTasks()[0]], { property: "defer", value: "Someday" }, undefined, undefined);
+  });
+
+  it("offers Stop snoozing only for a snoozed task, which stays visible in All Tasks", async () => {
+    const { view, content } = await setup([["A.md", "- [ ] Later >someday\n- [ ] Now"]]);
+    await view.setState({ mode: "all" });
+    const later = rows(content()).find(row => row.textContent!.includes("Later"))!;
+    expect(later.querySelector(".tm-task-defer")!.textContent).toContain("Someday");
+    key(later, "m");
+    key(rows(content()).find(row => row.textContent!.includes("Now"))!, "m");
+    expect(menus[0].items.map(item => item.title)).toContain("Stop snoozing");
+    expect(menus[1].items.map(item => item.title)).not.toContain("Stop snoozing");
   });
 });
 
