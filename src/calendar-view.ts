@@ -20,6 +20,8 @@ export interface CalendarOptions {
   edit: (task: Task) => void;
   toggle?: (task: Task, completed: boolean) => Promise<void>;
   bind?: (card: HTMLElement, task: Task) => void;
+  /** The colour of the task's project, which tints its card. */
+  color?: (task: Task) => string | undefined;
   dragStart?: (task: Task) => void;
   resize: (task: Task, date: string, time: string, duration: number) => Promise<void>;
   move: (task: Task, date: string, time?: string) => Promise<void>;
@@ -127,6 +129,8 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     // A plain container: the checkbox, title button and resize sliders are its interactive parts.
     const card = parent.createDiv({ cls: `tm-calendar-task${task.completed ? " is-completed" : ""}`,
       attr: { title: `${task.title}${task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ""}` } });
+    const color = options.color?.(task);
+    if (color) card.style.setProperty("--tm-project-color", color);
     const checkbox = card.createEl("input", { cls: "tm-calendar-check", type: "checkbox", attr: { "aria-label": `Complete ${taskTitleLabel(task.title)}` } });
     checkbox.checked = task.completed;
     checkbox.disabled = !options.toggle;

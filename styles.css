@@ -917,6 +917,9 @@ button.tm-gantt-handle.is-finish:focus-visible,
   border-color: transparent;
   border-radius: 6px;
 }
+.tm-main-view .tm-calendar .tm-calendar-task.is-selected {
+  background: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 12%, var(--background-primary));
+}
 
 /* The row keyboard focus is on (arrow keys) gets a faint tint: half the selection's, deeper when also selected.
    :focus-visible keeps it off rows focused by a mouse click. */
@@ -1280,11 +1283,11 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-calendar-week-heading.is-today > .tm-calendar-date { color: var(--text-error); }
 .tm-calendar .tm-calendar-day-scroll { border: 0; }
 .tm-calendar .tm-calendar-task:not(.is-timed) { position: relative; }
-.tm-calendar .tm-calendar-task { display: flex; align-items: center; gap: 5px; border: 0; border-radius: 5px; background: color-mix(in srgb, var(--interactive-accent) 22%, var(--background-primary)); color: color-mix(in srgb, var(--interactive-accent) 55%, var(--text-normal)); padding: 3px 5px; min-height: 24px; height: auto; font-size: var(--font-ui-small); line-height: 1.35; }
+.tm-calendar .tm-calendar-task { display: flex; align-items: center; gap: 5px; border: 0; border-radius: 5px; background: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 22%, var(--background-primary)); color: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 55%, var(--text-normal)); padding: 3px 5px; min-height: 24px; height: auto; font-size: var(--font-ui-small); line-height: 1.35; }
 .tm-calendar .tm-calendar-task-title { display: block; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
-.tm-calendar-check { flex-shrink: 0; width: 11px; height: 11px; border: 1.5px solid var(--interactive-accent); border-radius: 4px; }
-.tm-calendar-task.is-completed .tm-calendar-check { background: var(--interactive-accent); }
-.tm-calendar-task-flag { display: inline-flex; color: var(--interactive-accent); }
+.tm-calendar-check { flex-shrink: 0; width: 11px; height: 11px; border: 1.5px solid var(--tm-project-color, var(--interactive-accent)); border-radius: 4px; }
+.tm-calendar-task.is-completed .tm-calendar-check { background: var(--tm-project-color, var(--interactive-accent)); }
+.tm-calendar-task-flag { display: inline-flex; color: var(--tm-project-color, var(--interactive-accent)); }
 .tm-calendar-task-flag svg { width: 12px; height: 12px; }
 .tm-calendar-task-time { display: none; }
 .tm-calendar .tm-calendar-task.is-timed { display: block; text-align: left; padding-left: 23px; }
