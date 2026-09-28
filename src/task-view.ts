@@ -3,7 +3,7 @@ import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { renderTaskDetails } from "./task-row-details";
 import { renderThingsTaskDetails } from "./things-row-details";
-import { animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
+import { animateCardClose, animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
@@ -83,6 +83,10 @@ export class TaskMainView extends ItemView {
   private selection = new TaskSelection();
   /** The task open as a card in the Things style, with its unsaved title and notes. */
   private expanded?: { id: string } & TaskCardDraft;
+  /** Height of the rows the open card replaced, which it shrinks back to when closing. */
+  private cardRowsHeight = 0;
+  /** Set while the card plays its closing animation. */
+  private cardClosing?: Promise<void>;
   private contextSelectionOnPress = false;
   private visibleTasks: Task[] = [];
   private selectionRows = new Map<string, HTMLElement[]>();
@@ -196,10 +200,11 @@ export class TaskMainView extends ItemView {
 
   /** Coalesce bursts of index updates into one refresh per frame. */
   private scheduleRender(): void {
-    if (this.renderFrame !== undefined || this.closed) return;
+    // A closing card refreshes the view itself once its animation ends.
+    if (this.renderFrame !== undefined || this.closed || this.cardClosing) return;
     this.renderFrame = this.containerEl.win.requestAnimationFrame(() => {
       this.renderFrame = undefined;
-      if (!this.closed) this.refresh();
+      if (!this.closed && !this.cardClosing) this.refresh();
     });
   }
 
@@ -1292,6 +1297,7 @@ export class TaskMainView extends ItemView {
   }
 
   private async expandCard(task: Task): Promise<void> {
+    await this.cardClosing;
     if (this.expanded?.id === task.id) return;
     await this.saveCard();
     const fresh = this.plugin.index.taskById(task.id) ?? task;
@@ -1300,6 +1306,7 @@ export class TaskMainView extends ItemView {
     const replaced = [fresh.id, ...this.expandedDescendants()];
     const from = this.rowElements().filter(row => replaced.includes(row.getAttribute("data-task-id") ?? ""))
       .reduce((height, row) => height + row.getBoundingClientRect().height, 0);
+    this.cardRowsHeight = from;
     this.clearSelection();
     this.renderTaskResults();
     const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
@@ -1307,13 +1314,22 @@ export class TaskMainView extends ItemView {
     if (card && from) animateCardOpen(card, from);
   }
 
-  private async collapseCard(): Promise<void> {
-    const id = this.expanded?.id;
-    if (!id) return;
-    await this.saveCard();
-    this.expanded = undefined;
-    this.renderTaskResults();
-    this.content?.querySelector<HTMLElement>(`.tm-task-row[data-task-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+  /**
+   * Saves the card, shrinks it back into the space its rows take, then shows the rows.
+   * Refreshes wait until it has closed, so the save cannot redraw the card mid-animation.
+   */
+  private collapseCard(): Promise<void> {
+    if (this.cardClosing || !this.expanded) return this.cardClosing ?? Promise.resolve();
+    const id = this.expanded.id;
+    this.cardClosing = (async () => {
+      await this.saveCard();
+      const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
+      if (card) await animateCardClose(card, this.cardRowsHeight || card.querySelector(".tm-things-card-head")!.getBoundingClientRect().height + 10);
+      this.expanded = undefined;
+      this.refresh();
+      this.content?.querySelector<HTMLElement>(`.tm-task-row[data-task-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+    })().finally(() => { this.cardClosing = undefined; });
+    return this.cardClosing;
   }
 
   /** Writes the card's title and notes when they changed; the card stays open. */

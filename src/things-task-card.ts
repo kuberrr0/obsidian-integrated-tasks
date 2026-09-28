@@ -151,26 +151,48 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     return card;
 }
 
-/** How long a card takes to open. */
+/** How long a card takes to open or close. */
 export const CARD_OPEN_MS = 200;
+const CARD_EASING = "cubic-bezier(0.2, 0, 0, 1)";
+
+/** The card's collapsed look, where its row's title sat, and its open look; the two animations run between them. */
+function cardKeyframes(card: HTMLElement, rowsHeight: number): [Keyframe, Keyframe] | undefined {
+    const win = card.ownerDocument.defaultView;
+    if (!win || typeof card.animate !== "function" || win.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const style = win.getComputedStyle(card);
+    return [
+        { boxSizing: "border-box", overflow: "hidden", height: `${rowsHeight}px`, marginTop: "0px", marginBottom: "0px", paddingTop: "5px", backgroundColor: "transparent", boxShadow: "none" },
+        { boxSizing: "border-box", overflow: "hidden", height: `${card.getBoundingClientRect().height}px`, marginTop: style.marginTop, marginBottom: style.marginBottom, paddingTop: style.paddingTop, backgroundColor: style.backgroundColor, boxShadow: style.boxShadow }
+    ];
+}
+
+/** Everything below the title line: notes, checklist, properties and toolbar. */
+function cardDetails(card: HTMLElement): HTMLElement[] {
+    return Array.from(card.children).filter((child): child is HTMLElement => !child.classList.contains("tm-things-card-head"));
+}
+
+const DETAILS_HIDDEN: Keyframe = { opacity: 0, transform: "translateY(-4px)" };
+const DETAILS_SHOWN: Keyframe = { opacity: 1, transform: "none" };
 
 /**
  * Opens the card out of the space its row (and subtask rows) filled: it grows to its full height while
  * its surface fades in, and the notes, checklist and properties fade in below the title.
  */
 export function animateCardOpen(card: HTMLElement, fromHeight: number, duration = CARD_OPEN_MS): void {
-    const win = card.ownerDocument.defaultView;
-    if (!win || typeof card.animate !== "function" || win.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    const style = win.getComputedStyle(card);
-    const toHeight = card.getBoundingClientRect().height;
-    const easing = "cubic-bezier(0.2, 0, 0, 1)";
-    card.animate([
-        // Starts where the row's title sat, with no card surface yet.
-        { boxSizing: "border-box", overflow: "hidden", height: `${fromHeight}px`, marginTop: "0px", marginBottom: "0px", paddingTop: "5px", backgroundColor: "transparent", boxShadow: "none" },
-        { boxSizing: "border-box", overflow: "hidden", height: `${toHeight}px`, marginTop: style.marginTop, marginBottom: style.marginBottom, paddingTop: style.paddingTop, backgroundColor: style.backgroundColor, boxShadow: style.boxShadow }
-    ], { duration, easing });
-    for (const child of Array.from(card.children)) {
-        if (child.classList.contains("tm-things-card-head")) continue;
-        (child as HTMLElement).animate([{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], { duration, easing });
-    }
+    const frames = cardKeyframes(card, fromHeight);
+    if (!frames) return;
+    card.animate(frames, { duration, easing: CARD_EASING });
+    for (const child of cardDetails(card)) child.animate([DETAILS_HIDDEN, DETAILS_SHOWN], { duration, easing: CARD_EASING });
+}
+
+/**
+ * The reverse of opening: the details fade out and the card shrinks back into the space its rows take.
+ * Resolves when done; the card holds its closed look until the caller replaces it with the rows.
+ */
+export async function animateCardClose(card: HTMLElement, toHeight: number, duration = CARD_OPEN_MS): Promise<void> {
+    const frames = cardKeyframes(card, toHeight);
+    if (!frames) return;
+    const options: KeyframeAnimationOptions = { duration, easing: CARD_EASING, fill: "forwards" };
+    for (const child of cardDetails(card)) child.animate([DETAILS_SHOWN, DETAILS_HIDDEN], options);
+    try { await card.animate([frames[1], frames[0]], options).finished; } catch { /* Cancelled when the card is redrawn. */ }
 }

@@ -2,7 +2,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
 import { installObsidianDom } from "./helpers/obsidian-dom";
-import { animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardOptions } from "../src/things-task-card";
+import { animateCardClose, animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardOptions } from "../src/things-task-card";
 import { descriptionLines } from "../src/task-description";
 import { scanTasks } from "../src/parser";
 
@@ -40,6 +40,18 @@ describe("card opening animation", () => {
     expect(keyframes[0].backgroundColor).toBe("transparent");
     // The card itself, then every part below the title line.
     expect(animate).toHaveBeenCalledTimes(1 + Array.from(element.children).filter(child => !child.classList.contains("tm-things-card-head")).length);
+  });
+
+  it("closes in reverse over 200ms, holding the closed look until the rows replace it", async () => {
+    const { element } = card("- [ ] Task 1\n  - Notes");
+    const animate = vi.fn(() => ({ finished: Promise.resolve() }));
+    for (const node of [element, ...Array.from(element.children)]) (node as HTMLElement).animate = animate as unknown as HTMLElement["animate"];
+    vi.spyOn(element, "getBoundingClientRect").mockReturnValue({ height: 180 } as DOMRect);
+    await animateCardClose(element, 72);
+    const cardCall = (animate.mock.calls as unknown as [Keyframe[], KeyframeAnimationOptions][]).find(([frames]) => "height" in frames[0])!;
+    expect([cardCall[0][0].height, cardCall[0][1].height]).toEqual(["180px", "72px"]);
+    expect(cardCall[0][1].backgroundColor).toBe("transparent");
+    expect(cardCall[1]).toMatchObject({ duration: 200, fill: "forwards" });
   });
 
   it("opens instantly when the system asks for reduced motion", () => {
