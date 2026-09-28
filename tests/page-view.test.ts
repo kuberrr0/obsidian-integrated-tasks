@@ -75,7 +75,8 @@ function selectionView() {
   const bulkDrop = vi.fn().mockResolvedValue([]);
   const openEditor = vi.fn();
   const openBulkEditor = vi.fn();
-  const plugin = { settings: {}, openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
+  const update = vi.fn().mockResolvedValue(undefined);
+  const plugin = { settings: {} as Record<string, unknown>, openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop, update }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
   const view = new TaskMainView({} as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   const internals = view as unknown as {
@@ -116,7 +117,7 @@ function selectionView() {
     };
     return { row, classes, click, dblclick, contextmenu, pointerdown };
   });
-  return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor, plugin };
+  return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor, plugin, update };
 }
 
 it("left-click selects only the clicked task, with Mod to toggle and Shift for a range", () => {
@@ -146,6 +147,34 @@ it("double-click opens the task editor for just that task", () => {
   expect(view.getSelectedTasks()).toEqual([tasks[2]]);
   rows[1].dblclick({ metaKey: true });
   expect(openEditor).toHaveBeenCalledOnce();
+});
+
+it("in the Things style, double-click and Enter open the task as a card instead of the editor", async () => {
+  const { view, rows, tasks, openEditor, plugin } = selectionView();
+  plugin.settings.style = "things";
+  const card = () => (view as unknown as { expanded?: { id: string; title: string; notes: string } }).expanded;
+  rows[1].dblclick();
+  await Promise.resolve(); await Promise.resolve();
+  expect(openEditor).not.toHaveBeenCalled();
+  expect(card()).toEqual({ id: tasks[1].id, title: "B", notes: "" });
+  expect(view.getSelectedTasks()).toEqual([]);
+});
+
+it("saves only a changed card title or notes when the card closes", async () => {
+  const { view, tasks, plugin, update } = selectionView();
+  plugin.settings.style = "things";
+  const internals = view as unknown as { expanded?: { id: string; title: string; notes: string }; collapseCard(): Promise<void> };
+  internals.expanded = { id: tasks[0].id, title: "A", notes: "" };
+  await internals.collapseCard();
+  expect(update).not.toHaveBeenCalled();
+  expect(internals.expanded).toBeUndefined();
+  internals.expanded = { id: tasks[0].id, title: " Renamed ", notes: "A note" };
+  await internals.collapseCard();
+  expect(update).toHaveBeenCalledExactlyOnceWith(tasks[0], expect.objectContaining({ title: "Renamed", description: "A note", destination: "Work.md" }));
+  // A cleared title keeps the old one rather than erasing the task.
+  internals.expanded = { id: tasks[1].id, title: "  ", notes: "" };
+  await internals.collapseCard();
+  expect(update).toHaveBeenCalledOnce();
 });
 
 it("right-click on an already selected task opens task properties for the selection", () => {

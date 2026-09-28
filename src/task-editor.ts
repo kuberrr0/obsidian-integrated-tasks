@@ -2,7 +2,7 @@ import { TaskLineEditor } from "./task-line-editor";
 import { parseEditedTaskInput, parseTaskTreeInput } from "./task-input";
 import type { TaskEditorPreset } from "./types";
 import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
-import { destinationString } from "./structure";
+import { draftFromTask } from "./task-draft";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { todayIso, tomorrowIso } from "./date";
 import { parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
@@ -25,26 +25,7 @@ export interface TaskEditorOptions {
 }
 
 function initialDraft(options: TaskEditorOptions): TaskDraft {
-  if (options.task) {
-    return {
-      title: options.task.title,
-      scheduledDate: options.task.scheduledDate,
-      scheduledTime: options.task.scheduledTime,
-      deadline: options.task.deadline,
-      deadlineTime: options.task.deadlineTime,
-      deferDate: options.task.deferDate,
-      someday: options.task.someday,
-      repeat: options.task.repeat,
-      completedDate: options.task.completedDate,
-      durationMinutes: options.task.durationMinutes,
-      priority: options.task.priority,
-      tags: options.task.tags,
-      status: options.task.status,
-      completed: options.task.completed,
-      destination: destinationString(options.task.path, options.task.section),
-      indent: options.task.indent
-    };
-  }
+  if (options.task) return draftFromTask(options.task);
   return {
     title: "",
     scheduledDate: options.mode === "today" ? todayIso() : options.mode === "upcoming" ? tomorrowIso() : undefined,

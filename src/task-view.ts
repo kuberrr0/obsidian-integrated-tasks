@@ -3,6 +3,7 @@ import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { renderTaskDetails } from "./task-row-details";
 import { renderThingsTaskDetails } from "./things-row-details";
+import { cardNotes, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
@@ -10,6 +11,7 @@ import { renderDescriptionIndicator } from "./task-description-indicator";
 import { cloneTaskFilters } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
+import { draftFromTask } from "./task-draft";
 import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
@@ -79,6 +81,8 @@ export class TaskMainView extends ItemView {
   private taskResults?: HTMLElement;
   private listDrag?: ListDragController;
   private selection = new TaskSelection();
+  /** The task open as a card in the Things style, with its unsaved title and notes. */
+  private expanded?: { id: string } & TaskCardDraft;
   private contextSelectionOnPress = false;
   private visibleTasks: Task[] = [];
   private selectionRows = new Map<string, HTMLElement[]>();
@@ -162,7 +166,7 @@ export class TaskMainView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.registerDomEvent(this.containerEl.ownerDocument, "click", event => this.clearSelectionOutside(event), true);
+    this.registerDomEvent(this.containerEl.ownerDocument, "click", event => { this.clearSelectionOutside(event); this.collapseCardOutside(event); }, true);
     this.registerDomEvent(this.containerEl.ownerDocument, "pointerdown", event => this.viewOptions?.handleOutside(event));
     // Obsidian's own undo only covers the editor; in task views Cmd/Ctrl+Z undoes the last task change.
     this.registerDomEvent(this.containerEl, "keydown", event => {
@@ -178,6 +182,8 @@ export class TaskMainView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    await this.saveCard();
+    this.expanded = undefined;
     this.closed = true;
     this.unsubscribe?.();
     this.stopSummaryTimer();
@@ -852,7 +858,9 @@ export class TaskMainView extends ItemView {
     const key = this.listKey(target);
     const floor = this.listsRendered++ < MIN_ROW_LISTS ? MIN_LIST_ROWS : 0;
     const visibleIds = new Set(tasks.map((task) => task.id));
-    const ordered = orderTaskTree(tasks);
+    // An open card lists its subtasks itself.
+    const inCard = this.expandedDescendants();
+    const ordered = orderTaskTree(tasks).filter(task => !inCard.has(task.id));
     let rendered = 0;
     const renderRows = (count: number): HTMLElement | undefined => {
       const first = list.childElementCount;
@@ -1027,7 +1035,7 @@ export class TaskMainView extends ItemView {
       this.selection.clear();
       this.selection.click(task, this.visibleTasks);
       this.updateSelection();
-      this.plugin.openEditor({ ...this.state, task });
+      this.openTask(task);
     }, true);
     row.addEventListener("keydown", event => {
       this.contextSelectionOnPress = false;
@@ -1035,7 +1043,9 @@ export class TaskMainView extends ItemView {
       if (event.key === "Escape") { event.preventDefault(); this.clearSelection(); }
       if (event.key === " " || event.key === "Enter") {
         event.preventDefault(); event.stopPropagation();
-        this.editTask(task);
+        // Things opens a lone task as a card; a multi-selection still edits its properties together.
+        if (this.plugin.settings.style === "things" && this.getSelectedTasks().length <= 1) this.openTask(task);
+        else this.editTask(task);
       }
     });
   }
@@ -1201,6 +1211,7 @@ export class TaskMainView extends ItemView {
   }
 
   private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup): void {
+    if (this.expanded?.id === task.id && this.plugin.settings.style === "things") { this.renderTaskCard(list, task, depth); return; }
     const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
     this.bindSelection(row, task);
@@ -1250,10 +1261,7 @@ export class TaskMainView extends ItemView {
     }
     const metadata = content.createDiv({ cls: things ? "tm-things-secondary" : "tm-task-metadata" });
     const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
-    const tags = (task.tags ?? []).filter(tag => {
-      if (this.state.mode !== "tags") return true;
-      return this.pagePath ? this.app.metadataCache.getFirstLinkpathDest(tag, task.path)?.path !== this.pagePath : tag !== this.state.tag;
-    });
+    const tags = this.rowTags(task);
     const details = {
       grouping: this.metadataGrouping, dateFormat: this.plugin.dateFormat(), show: (property: TaskProperty) => property !== "defer",
       source: task.path !== implicitSource ? task.path : undefined, tags,
@@ -1267,6 +1275,98 @@ export class TaskMainView extends ItemView {
     row.createSpan({ cls: "tm-sr-only tm-selected-marker" });
     this.bindRowKeyboard(row, task, target);
     this.bindSwipe(row, task, checkbox);
+  }
+
+  /** A task page or tag list leaves out the tag it is showing. */
+  private rowTags(task: Task): string[] {
+    return (task.tags ?? []).filter(tag => {
+      if (this.state.mode !== "tags") return true;
+      return this.pagePath ? this.app.metadataCache.getFirstLinkpathDest(tag, task.path)?.path !== this.pagePath : tag !== this.state.tag;
+    });
+  }
+
+  /** Double-click or Enter: a card in place in the Things style, the task editor otherwise. */
+  private openTask(task: Task): void {
+    if (this.plugin.settings.style === "things") void this.expandCard(task);
+    else this.plugin.openEditor({ ...this.state, task });
+  }
+
+  private async expandCard(task: Task): Promise<void> {
+    if (this.expanded?.id === task.id) return;
+    await this.saveCard();
+    const fresh = this.plugin.index.taskById(task.id) ?? task;
+    this.expanded = { id: fresh.id, title: fresh.title, notes: cardNotes(fresh.description) };
+    this.clearSelection();
+    this.renderTaskResults();
+    this.content?.querySelector<HTMLInputElement>(".tm-things-card .tm-things-card-title")?.focus();
+  }
+
+  private async collapseCard(): Promise<void> {
+    const id = this.expanded?.id;
+    if (!id) return;
+    await this.saveCard();
+    this.expanded = undefined;
+    this.renderTaskResults();
+    this.content?.querySelector<HTMLElement>(`.tm-task-row[data-task-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+  }
+
+  /** Writes the card's title and notes when they changed; the card stays open. */
+  private async saveCard(): Promise<void> {
+    const card = this.expanded;
+    const task = card && this.plugin.index.taskById(card.id);
+    if (!card || !task) return;
+    const title = card.title.trim() || task.title;
+    const notes = card.notes.trim() === cardNotes(task.description).trim() ? undefined : card.notes;
+    if (title === task.title && notes === undefined) return;
+    try {
+      await this.plugin.store.update(task, { ...draftFromTask(task), title, description: notes });
+      await this.plugin.index.refreshPath(task.path);
+      if (this.expanded?.id === card.id) this.expanded = { ...this.expanded, title, notes: notes ?? this.expanded.notes };
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not save the task.");
+    }
+  }
+
+  /** Clicking anywhere outside the card (except a dialog or menu it opened) closes it. */
+  private collapseCardOutside(event: MouseEvent): void {
+    if (!this.expanded || event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.(".tm-things-card, .modal-container, .menu, .suggestion-container")) return;
+    void this.collapseCard();
+  }
+
+  /** Subtasks of the open card, at any depth. */
+  private expandedDescendants(): Set<string> {
+    const ids = new Set<string>();
+    if (!this.expanded || this.plugin.settings.style !== "things") return ids;
+    const visit = (id: string): void => {
+      for (const child of this.plugin.index.taskById(id)?.childIds ?? []) if (!ids.has(child)) { ids.add(child); visit(child); }
+    };
+    visit(this.expanded.id);
+    return ids;
+  }
+
+  private renderTaskCard(list: HTMLElement, task: Task, depth: number): void {
+    const expanded = this.expanded!;
+    renderThingsTaskCard(list, {
+      task, depth, draft: expanded, tags: this.rowTags(task),
+      children: task.childIds.map(id => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child)),
+      change: draft => { if (this.expanded?.id === task.id) this.expanded = { id: task.id, ...draft }; },
+      toggle: (item, completed) => {
+        void this.plugin.store.toggle(item, completed).catch((cause: unknown) => {
+          new Notice(cause instanceof Error ? cause.message : "Could not update the task.");
+        });
+      },
+      edit: property => void this.editFromCard(task.id, property),
+      collapse: () => void this.collapseCard()
+    });
+  }
+
+  /** Saves the card first, so the property editor works on the task as it now reads. */
+  private async editFromCard(id: string, property: TaskEditorProperty): Promise<void> {
+    await this.saveCard();
+    const task = this.plugin.index.taskById(id);
+    if (task) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
   }
 
   /**

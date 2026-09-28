@@ -1951,3 +1951,88 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-main-view.tm-style-things .tm-task-row.is-selected + .tm-task-row.tm-task-item.is-selected { border-top-left-radius: 0; border-top-right-radius: 0; }
 .tm-main-view.tm-style-things .tm-task-item:focus-visible { border-radius: 6px; background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary)); }
 .tm-main-view.tm-style-things .tm-task-item.is-selected:focus-visible { background: color-mix(in srgb, var(--text-normal) 14%, var(--background-primary)); }
+
+/* Things style: a task opened in place as a card. */
+.tm-things-card {
+  position: relative;
+  margin: 10px 0 10px calc(var(--tm-depth, 0) * 24px);
+  padding: 12px 14px 10px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 6px 18px rgba(0, 0, 0, 0.16), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
+  font-family: var(--font-interface);
+}
+.tm-things-card-head { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 10px; align-items: center; padding-left: 0; }
+.tm-things-card-head .tm-task-checkbox { --checkbox-size: 14px; --checkbox-radius: 3px; width: 14px; height: 14px; margin: 0; border-width: 1px; }
+.tm-main-view input.tm-things-card-title,
+.tm-main-view textarea.tm-things-card-notes {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-normal);
+  font-family: inherit;
+}
+.tm-main-view input.tm-things-card-title { height: auto; font-size: var(--font-ui-medium); font-weight: var(--font-medium); line-height: 1.4; }
+.tm-main-view textarea.tm-things-card-notes {
+  display: block;
+  min-height: 0;
+  margin: 8px 0 0 26px;
+  width: calc(100% - 26px);
+  overflow: hidden;
+  resize: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+}
+.tm-main-view :is(input.tm-things-card-title, textarea.tm-things-card-notes):focus { box-shadow: none; border: 0; }
+.tm-things-card-title::placeholder, .tm-things-card-notes::placeholder { color: var(--text-faint); }
+
+.tm-things-card-checklist { margin: 14px 0 0 26px; border-top: 1px solid var(--background-modifier-border); }
+.tm-things-card-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+.tm-things-card-check.is-completed span { color: var(--text-faint); text-decoration: line-through; }
+.tm-main-view input.tm-things-card-check-box {
+  --checkbox-radius: 50%;
+  width: 11px;
+  height: 11px;
+  margin: 0;
+  border: 1.5px solid var(--interactive-accent);
+  border-radius: 50%;
+}
+
+.tm-things-card-properties { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin: 14px 0 2px 26px; }
+.tm-things-card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tm-things-card-tag {
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-green) 38%, var(--background-primary));
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+.tm-things-card-property { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-ui-small); cursor: pointer; }
+.tm-things-card-label { color: var(--text-normal); font-weight: var(--font-semibold); }
+.tm-things-card-extra { color: var(--text-muted); }
+.tm-things-card-icon { display: inline-flex; color: var(--text-normal); }
+.tm-things-card-icon svg { width: 14px; height: 14px; }
+.tm-things-card-property.is-today .tm-things-card-icon { color: var(--color-yellow); }
+.tm-things-card-property.is-today .tm-things-card-icon svg,
+.tm-things-card-property .tm-things-card-icon svg.lucide-flag { fill: currentColor; }
+.tm-things-card-property:has(.lucide-calendar) .tm-things-card-icon { color: var(--color-red); }
+.tm-things-card-property.is-urgent :is(.tm-things-card-label, .tm-things-card-icon) { color: var(--text-error); }
+.tm-things-card-property:hover .tm-things-card-label { text-decoration: underline; text-decoration-color: var(--text-faint); }
+.tm-things-card-toolbar { display: flex; justify-content: flex-end; gap: 2px; margin-top: 4px; }
+.tm-things-card-toolbar .clickable-icon { color: var(--text-faint); }
+.tm-things-card-toolbar .clickable-icon:hover { color: var(--text-normal); }
