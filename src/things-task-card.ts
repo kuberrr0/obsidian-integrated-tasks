@@ -218,7 +218,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     if (!task.scheduledDate) add("calendar", "When", "scheduledDate", () => options.edit("scheduledDate"));
     if (!options.tags.length) add("tag", "Tags", "tags", () => options.edit("tags"));
     // The first subtask starts here; later ones follow with Enter.
-    if (!options.children.length) add("logs", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
+    if (!options.children.length) add("list-todo", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
     if (!task.priority) add("signal", "Priority", "priority", () => options.edit("priority"));
     if (!task.repeat) add("repeat", "Repeat", "repeat", () => options.edit("repeat"));
     if (!task.deadline) add("flag", "Deadline", "deadline", () => options.edit("deadline"));
