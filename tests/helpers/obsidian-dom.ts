@@ -34,6 +34,7 @@ export function installObsidianDom(): void {
     proto.createSpan = function (this: { createEl: (tag: string, info?: Info) => HTMLElement }, info?: Info) { return this.createEl("span", info); };
     proto.empty = function (this: Node) { while (this.firstChild) this.removeChild(this.firstChild); };
     proto.setText = function (this: Node, text: string) { this.textContent = text; };
+    proto.appendText = function (this: Node, text: string) { this.appendChild(document.createTextNode(text)); };
   }
   const element = HTMLElement.prototype as unknown as Record<string, unknown>;
   element.addClass = function (this: HTMLElement, ...names: string[]) { this.classList.add(...names); };

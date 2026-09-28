@@ -18,6 +18,7 @@ import { TaskEditorModal, type TaskEditorOptions } from "./task-editor";
 import { TaskIndex, type RefreshOptions } from "./task-index";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
 import { TaskStore, type TaskChange } from "./task-store";
+import { TasksImportModal } from "./tasks-import-modal";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
 import { DEFAULT_SETTINGS, type SmartList, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
@@ -145,6 +146,7 @@ export default class TaskManagerPlugin extends Plugin {
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
+    this.addCommand({ id: "import-tasks-plugin", name: "Import tasks from the Tasks plugin", callback: () => this.openTasksImport() });
     this.addCommand({ id: "quick-switch", name: "Quick switch to view, project, tag, or task", callback: () => this.openQuickSwitcher() });
     this.addCommand({ id: "undo-task-change", name: "Undo last task change", checkCallback: checking => {
       if (!this.store.lastChange()) return false;
@@ -204,6 +206,11 @@ export default class TaskManagerPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("layout-change", syncTaskMode));
     this.register(this.index.subscribe(syncTaskModeSoon));
     syncTaskMode();
+  }
+
+  openTasksImport(): void {
+    const file = this.app.workspace.getActiveFile?.();
+    new TasksImportModal(this.app, this, file?.extension === "md" ? file : undefined).open();
   }
 
   /** A short notice after each task action, with an Undo button. */

@@ -120,6 +120,12 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       },
       {
         section: "Task defaults",
+        name: "Import from the Tasks plugin",
+        desc: "Convert tasks written for the Tasks plugin into this plugin's format. You'll see a preview first, and you can undo the import.",
+        render: (setting: Setting) => { setting.addButton(button => button.setButtonText("Import…").onClick(() => this.plugin.openTasksImport())); }
+      },
+      {
+        section: "Task defaults",
         name: "Show undo notices",
         desc: "After you complete, move, edit, or delete tasks from the plugin's views, show a notice with an Undo button. The Undo last task change command and Cmd/Ctrl+Z in task views work either way.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showUndoNotices).onChange(async value => {

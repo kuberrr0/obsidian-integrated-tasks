@@ -195,6 +195,25 @@ export class TaskStore {
     });
   }
 
+  /**
+   * Rewrite whole notes as one undoable action (for example an import). Notes whose contents
+   * the transform leaves unchanged are not written; if any note changes meanwhile, nothing is kept.
+   */
+  rewriteNotes(files: TFile[], transform: (content: string, file: TFile) => string, label: string): Promise<string[]> {
+    return this.run(label, async () => {
+      const byPath = new Map(files.map(file => [file.path, file]));
+      const before = new Map<string, string>();
+      const after = new Map<string, string>();
+      for (const file of files) {
+        const content = await this.app.vault.read(file);
+        const next = transform(content, file);
+        before.set(file.path, content);
+        if (next !== content) after.set(file.path, next);
+      }
+      return this.commitChanges(byPath, before, after);
+    });
+  }
+
   lastChange(): TaskChange | undefined {
     return this.history[this.history.length - 1];
   }

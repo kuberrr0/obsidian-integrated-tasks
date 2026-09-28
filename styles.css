@@ -1750,3 +1750,13 @@ body .modal-container .modal.tm-bottom-sheet > .tm-editor-actions { flex-shrink:
 .tm-review-section > .tm-filter-hint { margin: 0 0 var(--size-4-2); }
 .tm-review-empty { min-height: 0; padding: var(--size-4-2) 0; text-align: start; }
 
+/* Tasks plugin import */
+.tm-import-modal .tm-import-scope { border: 0; padding: 0; margin: 0 0 var(--size-4-3); display: grid; gap: var(--size-2-2); }
+.tm-import-modal .tm-import-scope legend { font-weight: var(--font-semibold); margin-bottom: var(--size-2-2); }
+.tm-import-modal .tm-import-option { display: block; margin-bottom: var(--size-4-3); }
+.tm-import-modal .tm-import-option input[type=text] { margin-inline-start: var(--size-2-2); }
+.tm-import-summary { margin: var(--size-4-3) 0; padding: var(--size-4-2) var(--size-4-3); border-radius: var(--radius-m); background: var(--background-secondary); }
+.tm-import-examples { margin: var(--size-4-2) 0; padding-inline-start: var(--size-4-4); font-size: var(--font-ui-small); }
+.tm-import-examples li { margin-bottom: var(--size-2-3); overflow-wrap: anywhere; }
+.tm-import-skip { margin: var(--size-2-2) 0 0; color: var(--text-muted); font-size: var(--font-ui-small); }
+

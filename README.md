@@ -211,6 +211,22 @@ Choose your preferred date format and whether dates link to notes. These choices
 
 Search for **Integrated Task Manager** in Obsidian's command palette to open views, create tasks, switch layouts, and access other actions. Assign hotkeys to your favorites in Obsidian's Hotkeys settings.
 
+## Coming from the Tasks plugin
+
+Run **Import tasks from the Tasks plugin** from the command palette, or choose **Import…** in the plugin settings. It converts tasks written with the Tasks plugin's emoji or fields, in all notes or just the current one:
+
+| Tasks plugin | Becomes |
+| --- | --- |
+| 📅 due date | `{deadline}` |
+| ⏳ scheduled date | scheduled date |
+| 🛫 start date | `>` hidden until |
+| ✅ done date | `✓` completion date |
+| 🔁 every week | `every week` |
+| 🔺 ⏫ / 🔼 / 🔽 ⏬ | `p1` / `p2` / `p3` |
+| `#tag` | `#[[tag]]`, if you choose to convert tags |
+
+Dataview-style fields such as `[due:: 2026-10-01]` are converted too, `* [ ]` and `+ [ ]` checklists become `- [ ]`, and your Tasks global filter (such as `#task`) is removed. You see how many tasks will change, with examples, before anything is written. Custom statuses, dependencies, and repeat rules this plugin doesn't support are left as they are and listed in the preview. Tasks query blocks are not touched. The whole import is one change you can undo.
+
 ## Manual installation
 
 1. Place `main.js`, `manifest.json`, and `styles.css` in your vault's `.obsidian/plugins/integrated-task-manager/` folder.
