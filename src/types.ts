@@ -140,6 +140,8 @@ export interface TaskManagerSettings {
   newTaskPosition: "top" | "bottom";
   showUndoNotices: boolean;
   density: "comfortable" | "compact";
+  /** How task lists and task properties look, after the app each style is modelled on. */
+  style: "griply" | "things";
   /** Stamp tasks with the date they were completed. */
   completionDates: boolean;
   /** Weekly review sections marked as reviewed, for the ISO week they were reviewed in. */
@@ -168,6 +170,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   newTaskPosition: "top",
   showUndoNotices: true,
   density: "comfortable",
+  style: "griply",
   completionDates: false,
   weeklyReview: { week: "", reviewed: [] },
   ignoredPaths: [],

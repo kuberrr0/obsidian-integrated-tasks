@@ -280,6 +280,7 @@ export default class TaskManagerPlugin extends Plugin {
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
     this.settings.showUndoNotices = this.settings.showUndoNotices !== false;
     this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
+    this.settings.style = this.settings.style === "things" ? "things" : "griply";
     this.settings.completionDates = this.settings.completionDates === true;
     for (const key of ["ignoredPaths", "ignoredTags"] as const) {
       const list: unknown = this.settings[key];

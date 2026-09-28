@@ -63,7 +63,7 @@ export function taskTimeDurationLabel(time?: string, duration?: number): string 
     return `${samePeriod ? start.slice(0, -3) : start}-${end}${total >= 1440 ? ` (+${Math.floor(total / 1440)}d)` : ""}`;
 }
 
-interface TaskDetailsOptions {
+export interface TaskDetailsOptions {
     grouping: TaskGrouping;
     show?: (property: TaskProperty) => boolean;
     dateFormat: string;
@@ -74,7 +74,7 @@ interface TaskDetailsOptions {
     openSource: () => void;
 }
 
-function editable(element: HTMLElement, label: string, focusKey: string, action: () => void): void {
+export function editable(element: HTMLElement, label: string, focusKey: string, action: () => void): void {
     element.setAttribute("role", "button");
     element.setAttribute("tabindex", "0");
     element.setAttribute("aria-label", label);

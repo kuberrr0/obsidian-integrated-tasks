@@ -162,6 +162,19 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       },
       {
         section: "Appearance",
+        name: "Style",
+        desc: "How task lists and task properties look. Project properties look the same in every style.",
+        render: (setting: Setting) => { setting.addDropdown(dropdown => dropdown
+          .addOption("griply", "Griply").addOption("things", "Things")
+          .setValue(this.plugin.settings.style)
+          .onChange(async value => {
+            this.plugin.settings.style = value === "things" ? "things" : "griply";
+            await this.plugin.saveSettings();
+            this.plugin.refreshViews();
+          })); }
+      },
+      {
+        section: "Appearance",
         name: "Density",
         desc: "Compact shows more tasks at once with tighter rows and spacing.",
         render: (setting: Setting) => { setting.addDropdown(dropdown => dropdown

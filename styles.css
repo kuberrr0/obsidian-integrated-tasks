@@ -1851,3 +1851,101 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   .tm-options-panel:not([hidden]) { animation: tm-options-in 120ms ease-out; }
 }
 @keyframes tm-options-in { from { opacity: 0; transform: translateY(-4px); } }
+
+/* ── Things style ──────────────────────────────────────────────────────────
+   Single-line rows: a star or date box, the title with its notes, repeat and tag marks,
+   and the deadline at the end of the line; the note a task lives in sits quietly below.
+   Headings are accent-coloured with a rule, and a selection reads as one rounded block. */
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) {
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  min-height: 0;
+  padding: 5px 8px 5px calc(8px + var(--tm-depth) * 24px);
+  border-radius: 0;
+}
+.tm-main-view.tm-style-things.tm-density-compact .tm-task-row.tm-task-item:not(.tm-project-row) { padding-top: 3px; padding-bottom: 3px; }
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
+.tm-main-view.tm-style-things input.tm-task-checkbox {
+  --checkbox-size: 14px;
+  --checkbox-radius: 3px;
+  width: 14px;
+  height: 14px;
+  border-width: 1px;
+}
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content { gap: 1px; }
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary { flex-wrap: wrap; gap: 3px 6px; }
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) button.tm-task-title { font-weight: var(--font-medium); }
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-description-indicator { margin-inline-start: -2px; }
+
+.tm-things-lead { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
+.tm-things-box {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tm-things-box.tm-things-done { cursor: default; }
+.tm-things-today { display: inline-flex; align-items: center; color: var(--color-yellow); cursor: pointer; }
+.tm-things-today svg { width: 13px; height: 13px; fill: currentColor; }
+.tm-things-repeat { display: inline-flex; align-items: center; color: var(--text-faint); cursor: pointer; }
+.tm-things-repeat svg { width: 12px; height: 12px; }
+.tm-things-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--text-faint);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tm-things-deadline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-inline-start: auto;
+  padding-inline-start: 12px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tm-things-deadline.is-urgent { color: var(--text-error); }
+.tm-things-deadline .tm-task-detail-icon svg { fill: currentColor; }
+.tm-things-secondary { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.tm-things-source { overflow: hidden; color: var(--text-muted); font-size: var(--font-ui-smaller); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+:is(.tm-things-box, .tm-things-tag, .tm-things-source, .tm-things-repeat):not(.tm-things-done):hover,
+.tm-things-deadline:not(.is-urgent):hover { color: var(--text-normal); }
+.tm-task-row.is-completed :is(.tm-things-lead, .tm-things-tag, .tm-things-deadline, .tm-things-secondary) { opacity: 0.7; }
+
+/* Headings: accent text over a thin rule. */
+.tm-main-view.tm-style-things .tm-section { margin-bottom: var(--size-4-6); }
+.tm-main-view.tm-style-things .tm-section h2 {
+  margin-bottom: 4px;
+  padding: 0 8px 5px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-accent);
+  font-weight: var(--font-bold);
+}
+.tm-main-view.tm-style-things .tm-section.is-alert h2 { color: var(--text-error); }
+.tm-main-view.tm-style-things .tm-section h2 .tm-section-count { background: none; padding: 0; color: var(--text-faint); }
+
+/* Selection: a neutral rounded block; consecutive selected rows join into one. */
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item.is-selected {
+  background: color-mix(in srgb, var(--text-normal) 11%, var(--background-primary));
+  border-radius: 6px;
+}
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item.is-selected:has(+ .tm-task-row.is-selected) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.tm-main-view.tm-style-things .tm-task-row.is-selected + .tm-task-row.tm-task-item.is-selected { border-top-left-radius: 0; border-top-right-radius: 0; }
+.tm-main-view.tm-style-things .tm-task-item:focus-visible { border-radius: 6px; background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary)); }
+.tm-main-view.tm-style-things .tm-task-item.is-selected:focus-visible { background: color-mix(in srgb, var(--text-normal) 14%, var(--background-primary)); }

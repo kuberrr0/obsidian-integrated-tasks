@@ -2,6 +2,7 @@ import { taskTitleLabel } from "./task-title";
 import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { renderTaskDetails } from "./task-row-details";
+import { renderThingsTaskDetails } from "./things-row-details";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
@@ -24,7 +25,7 @@ import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } 
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { groupTasks, isDeferred, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
-import type { TaskFilter, Project, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus } from "./types";
+import type { TaskFilter, Project, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
@@ -287,6 +288,7 @@ export class TaskMainView extends ItemView {
       : this.layout === "kanban" ? this.plugin.settings.wrapKanbanTaskTitles : this.plugin.settings.wrapTaskTitles;
     container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("tm-density-compact", this.plugin.settings.density === "compact");
+    container.classList.toggle("tm-style-things", this.plugin.settings.style === "things");
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "dashboard") {
@@ -1229,6 +1231,8 @@ export class TaskMainView extends ItemView {
       row.addClass("has-project-color");
       row.style.setProperty("--tm-project-color", color);
     }
+    const things = this.plugin.settings.style === "things";
+    const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
     const title = primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title), "data-tm-focus-key": "title" } });
     title.addEventListener("click", () => this.editTask(task));
     renderDescriptionIndicator(primary, task.description);
@@ -1244,17 +1248,21 @@ export class TaskMainView extends ItemView {
       const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child) && child!.status !== "cancelled");
       primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.status === "done").length}/${children.length}` });
     }
-    const metadata = content.createDiv({ cls: "tm-task-metadata" });
+    const metadata = content.createDiv({ cls: things ? "tm-things-secondary" : "tm-task-metadata" });
     const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
     const tags = (task.tags ?? []).filter(tag => {
       if (this.state.mode !== "tags") return true;
       return this.pagePath ? this.app.metadataCache.getFirstLinkpathDest(tag, task.path)?.path !== this.pagePath : tag !== this.state.tag;
     });
-    renderTaskDetails(primary, metadata, task, {
-      grouping: this.metadataGrouping, dateFormat: this.plugin.dateFormat(), show: property => property !== "defer",
+    const details = {
+      grouping: this.metadataGrouping, dateFormat: this.plugin.dateFormat(), show: (property: TaskProperty) => property !== "defer",
       source: task.path !== implicitSource ? task.path : undefined, tags,
-      edit: property => this.editTask(task, property), openSource: () => { void this.openSource(task); }
-    });
+      edit: (property: TaskEditorProperty) => this.editTask(task, property), openSource: () => { void this.openSource(task); }
+    };
+    if (lead) {
+      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today" });
+      if (!lead.childElementCount) lead.remove();
+    } else renderTaskDetails(primary, metadata, task, details);
     if (!metadata.childElementCount) metadata.remove();
     row.createSpan({ cls: "tm-sr-only tm-selected-marker" });
     this.bindRowKeyboard(row, task, target);
