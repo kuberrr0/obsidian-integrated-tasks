@@ -132,3 +132,35 @@ describe("noteDateChanges", () => {
     }
   });
 });
+describe("Link tags in notes", () => {
+  const leave = (doc: string, text: string, linkTags: boolean) => {
+    let state = EditorState.create({ doc, selection: { anchor: 0 }, extensions: [noteDateInput(() => FORMAT, () => false, () => true, () => linkTags)] });
+    const line = state.doc.line(1);
+    state = state.update({ selection: { anchor: line.to } }).state;
+    state = state.update({ changes: { from: line.to, insert: text }, selection: { anchor: line.to + text.length }, userEvent: "input.type" }).state;
+    return state.update({ selection: { anchor: state.doc.length } }).state.doc.toString();
+  };
+
+  it("reads dates the same with Link tags off, moving a date after plain tags so it stays the schedule", () => {
+    expect(leave("- [ ] Buy milk\nNext", " tomorrow #errand", false)).toBe("- [ ] Buy milk #errand [[Sep 27, 2026]]\nNext");
+    expect(leave("- [ ] Buy milk\nNext", " #errand tomorrow", false)).toBe("- [ ] Buy milk #errand [[Sep 27, 2026]]\nNext");
+    expect(leave("- [ ] Buy milk\nNext", " tomorrow #errand p1 {friday}", false)).toBe("- [ ] Buy milk #errand [[Sep 27, 2026]] {[[Oct 2, 2026]]} p1\nNext");
+    expect(noteDateChanges("- [ ] Buy milk tomorrow #errand", FORMAT)).toEqual([
+      { from: 14, to: 23, insert: "" }, { from: 31, to: 31, insert: " [[Sep 27, 2026]]" }
+    ]);
+    // Only a date that ends the prose moves; a date inside it stays prose.
+    expect(leave("- [ ] Call\nNext", " #mom tomorrow about dinner", false)).toBe("- [ ] Call #mom tomorrow about dinner\nNext");
+  });
+
+  it("turns plain tags into task tags when leaving an edited task line, only with the setting on", () => {
+    expect(leave("- [ ] Call #mom about dinner\nNext", " tomorrow", true)).toBe("- [ ] Call about dinner [[Sep 27, 2026]] #[[mom]]\nNext");
+    expect(leave("- [ ] Call #mom about dinner\nNext", " soon", false)).toBe("- [ ] Call #mom about dinner soon\nNext");
+  });
+
+  it("leaves lines the caret only passes through", () => {
+    let state = EditorState.create({ doc: "- [ ] Call #mom\nNext", selection: { anchor: 0 }, extensions: [noteDateInput(() => FORMAT, () => false, () => true, () => true)] });
+    state = state.update({ selection: { anchor: 8 } }).state;
+    state = state.update({ selection: { anchor: state.doc.length } }).state;
+    expect(state.doc.toString()).toBe("- [ ] Call #mom\nNext");
+  });
+});

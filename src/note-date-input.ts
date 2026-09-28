@@ -4,6 +4,7 @@ import type momentFactory from "moment";
 import { formatDate, parseDateTimeExpression } from "./date";
 import { parseTaskLine, type ParsedTokenRange } from "./parser";
 import { nonBodyLines } from "./structure";
+import { linkPlainTags, PLAIN_TAG } from "./tag-links";
 
 const moment = obsidianMoment as unknown as typeof momentFactory;
 
@@ -70,7 +71,9 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
     if (replacement(whole) === undefined) return opaque(whole);
     lastDateLink = offset + whole.length;
     return blank(whole);
-  }).replace(/(^|\s)(?:\d+h(?:\d+m)?|\d+m|[pP][123])(?=\s|$)/g, (whole: string, space: string) => space + blank(whole.slice(space.length)));
+  }).replace(/(^|\s)(?:\d+h(?:\d+m)?|\d+m|[pP][123])(?=\s|$)/g, (whole: string, space: string) => space + blank(whole.slice(space.length)))
+    // Plain #tags are metadata too, whatever Link tags says: "Buy milk tomorrow #errand" still dates.
+    .replace(PLAIN_TAG, (whole: string, space: string) => space + blank(whole.slice(space.length)));
 
   const changes: Change[] = [];
   const end = prose.trimEnd().length;
@@ -87,7 +90,13 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
     if (!acceptsExpression(expression, previousWord, dateFormat)) continue;
     const insert = replacement(expression);
     if (insert === undefined) continue;
-    changes.push({ from, to: end, insert });
+    // A date before plain #tags would not be read as the schedule (they are prose to the task),
+    // so it moves to the end of the line, after them: "Buy milk tomorrow #errand" → "Buy milk #errand [[…]]".
+    if (new RegExp(PLAIN_TAG.source, "u").test(text.slice(end))) {
+      const gap = /\s*$/.exec(text.slice(0, from))![0].length;
+      const lineEnd = text.trimEnd().length;
+      changes.push({ from: from - gap, to: end, insert: "" }, { from: lineEnd, to: lineEnd, insert: ` ${insert}` });
+    } else changes.push({ from, to: end, insert });
     break;
   }
   if (deadline) changes.push(deadline);
@@ -172,7 +181,7 @@ const editedLines = StateField.define<ReadonlySet<number>>({
  * Resolve dates and order properties when the caret leaves a task line the user edited (including Enter).
  * Lines the caret merely passes through, and completed tasks, are never changed.
  */
-export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boolean, getLinkDates: () => boolean = () => true) {
+export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boolean, getLinkDates: () => boolean = () => true, getLinkTags: () => boolean = () => false) {
   const filter = EditorState.transactionFilter.of(transaction => {
     if (isTaskMode() || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
     if (!transaction.selection && !transaction.docChanged) return transaction;
@@ -203,8 +212,10 @@ export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boo
       const dateFormat = getDateFormat();
       for (const { text, number, from } of tasks) {
         if (nonBody.has(number - 1)) continue;
-        const resolvedDates = noteDateChanges(text, dateFormat, reference, getLinkDates());
-        let resolved = text;
+        // With Link tags on, plain #tags become task tags first, so the dates are read on the tidied line.
+        const tagged = getLinkTags() ? linkPlainTags(text) : text;
+        const resolvedDates = noteDateChanges(tagged, dateFormat, reference, getLinkDates());
+        let resolved = tagged;
         for (const change of resolvedDates.reverse()) {
           resolved = resolved.slice(0, change.from) + change.insert + resolved.slice(change.to);
         }

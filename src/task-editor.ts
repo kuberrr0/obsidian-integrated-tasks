@@ -3,6 +3,7 @@ import { parseEditedTaskInput, parseTaskTreeInput } from "./task-input";
 import type { TaskEditorPreset } from "./types";
 import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
 import { draftFromTask } from "./task-draft";
+import { linkPlainTags } from "./tag-links";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { todayIso, tomorrowIso } from "./date";
 import { parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
@@ -199,6 +200,11 @@ export class TaskEditorModal extends Modal {
     this.normalizeChecklist();
     const status = this.status();
     const checkbox = `${this.taskIndent}- [${STATUS_CHARS[status]}] `;
+    // With Link tags on, plain #tags typed here become task tags.
+    if (this.options.settings.linkTags) {
+      const linked = this.rawInput.value.split("\n").map(line => linkPlainTags(line)).join("\n");
+      if (linked !== this.rawInput.value) this.rawInput.value = linked;
+    }
     const markdown = checkbox + this.rawInput.value;
     if (!this.options.task) return parseTaskTreeInput(markdown, this.options.settings.inboxPath, new Date(), this.options.dateFormat, this.options.settings.linkDates);
     if (/\n[^\n]*\S/.test(this.rawInput.value)) {

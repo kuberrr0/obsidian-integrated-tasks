@@ -12,6 +12,7 @@ import { cloneTaskFilters } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
 import { draftFromTask, draftFromTitle, draftMatchesTask } from "./task-draft";
+import { linkPlainTags } from "./tag-links";
 import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
@@ -1446,7 +1447,7 @@ export class TaskMainView extends ItemView {
     const task = card && this.plugin.index.taskById(card.id);
     if (!card || !task) return;
     // Tokens typed into the title (dates, times, p1, #[[tags]], ~[[Note]]…) set properties, as in the task editor.
-    const draft = draftFromTitle(task, card.title, new Date(), this.plugin.dateFormat());
+    const draft = draftFromTitle(task, this.linkTags(card.title), new Date(), this.plugin.dateFormat());
     const notes = card.notes.trim() === cardNotes(task.description).trim() ? undefined : card.notes;
     if (draftMatchesTask(task, draft) && notes === undefined) return;
     try {
@@ -1499,7 +1500,7 @@ export class TaskMainView extends ItemView {
       collapse: () => void this.collapseCard(),
       renameChild: (child, title) => {
         // A subtask stays under its parent: its title's tokens set properties but do not move it.
-        const draft = draftFromTitle(child, title, new Date(), this.plugin.dateFormat(), false);
+        const draft = draftFromTitle(child, this.linkTags(title), new Date(), this.plugin.dateFormat(), false);
         if (draftMatchesTask(child, draft)) return;
         void this.plugin.store.update(child, draft)
           .then(() => this.plugin.index.refreshPath(child.path))
@@ -1509,13 +1510,18 @@ export class TaskMainView extends ItemView {
     });
   }
 
+  /** With Link tags on, plain #tags typed into a card become task tags. */
+  private linkTags(text: string): string {
+    return this.plugin.settings.linkTags ? linkPlainTags(text) : text;
+  }
+
   /** Writes a subtask typed in the card; after Enter, a fresh one opens right below it, like a Things checklist. */
   private async addCardSubtask(parentId: string, title: string, after: Task | undefined, next: boolean): Promise<void> {
     const parent = this.plugin.index.taskById(parentId);
     if (!parent) return;
     try {
       // Everything in a new subtask was just typed, so its natural-language dates count too.
-      const parsed = parseTaskInput(title, new Date(), this.plugin.dateFormat());
+      const parsed = parseTaskInput(this.linkTags(title), new Date(), this.plugin.dateFormat());
       await this.plugin.store.addSubtask(parent, parsed?.title.trim() ? parsed : { title }, after);
       await this.plugin.index.refreshPath(parent.path);
     } catch (cause) {

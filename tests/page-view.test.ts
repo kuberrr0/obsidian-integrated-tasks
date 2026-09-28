@@ -197,6 +197,16 @@ it("writes a subtask typed in the card and, after Enter, opens the next one belo
   expect(addSubtask).toHaveBeenLastCalledWith(tasks[0], expect.objectContaining({ title: "Third step", priority: 2, tags: ["Errand"] }), undefined);
 });
 
+it("turns a plain #tag typed into a card title into a task tag when Link tags is on", async () => {
+  const { view, tasks, plugin, update } = selectionView();
+  plugin.settings.style = "things";
+  plugin.settings.linkTags = true;
+  const internals = view as unknown as { expanded?: { id: string; title: string; notes: string }; collapseCard(): Promise<void> };
+  internals.expanded = { id: tasks[0].id, title: "A #errand", notes: "" };
+  await internals.collapseCard();
+  expect(update).toHaveBeenCalledExactlyOnceWith(tasks[0], expect.objectContaining({ title: "A", tags: ["errand"] }));
+});
+
 it("applies properties typed into a card title when the card closes", async () => {
   const { view, tasks, plugin, update } = selectionView();
   plugin.settings.style = "things";

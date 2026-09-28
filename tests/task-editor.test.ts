@@ -34,6 +34,19 @@ function editor() {
   };
 }
 const draft: TaskDraft = { title: "Write report", completed: false, destination: "Tasks/Inbox.md", indent: 0 };
+describe("Link tags in the task editor", () => {
+  it.each([true, false])("reads plain #tags as task tags only with the setting on (%s)", linkTags => {
+    const modal = new TaskEditorModal({} as App, { mode: "inbox", projects: [], settings: { ...DEFAULT_SETTINGS, linkTags }, dateFormat: "YYYY-MM-DD", onSave: async () => {} }) as unknown as {
+      readRaw(): TaskDraft; rawInput: { value: string }; completedInput: { checked: boolean }; statusInput: { value: string };
+    };
+    modal.rawInput = { value: "Call #mom about dinner" };
+    modal.completedInput = { checked: false };
+    modal.statusInput = { value: "" };
+    const result = modal.readRaw();
+    if (linkTags) expect(result).toMatchObject({ title: "Call about dinner", tags: ["mom"] });
+    else expect(result.title).toBe("Call #mom about dinner");
+  });
+});
 describe("implicit Inbox destination", () => {
   it("omits the Inbox token while retaining explicit project and section tokens", () => {
     const modal = editor();

@@ -53,7 +53,7 @@ export default class TaskManagerPlugin extends Plugin {
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
-    this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
+    this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates, () => this.settings.linkTags));
     this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => !this.settings.taskMode && isRepeatingTask(this.app, task),
       task => { this.completeRecurringTaskFromNote(task); }, undefined,
       { enabled: () => this.settings.completionDates, linkDates: () => this.settings.linkDates }));
@@ -266,6 +266,7 @@ export default class TaskManagerPlugin extends Plugin {
     for (const key of LEGACY_SETTINGS) delete (this.settings as unknown as Record<string, unknown>)[key];
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
+    this.settings.linkTags = this.settings.linkTags === true;
     if (typeof this.settings.dateFormat !== "string") this.settings.dateFormat = DEFAULT_SETTINGS.dateFormat;
     if (!Number.isInteger(this.settings.sectionHeadingLevel) || this.settings.sectionHeadingLevel < 1 || this.settings.sectionHeadingLevel > 6) this.settings.sectionHeadingLevel = 1;
     this.settings.showGroupTaskCounts = this.settings.showGroupTaskCounts === true;
