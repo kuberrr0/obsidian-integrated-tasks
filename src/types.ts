@@ -131,6 +131,10 @@ export interface TaskManagerSettings {
   taskHoverHighlight: "none" | "title" | "background" | "all";
   wrapTaskTitles: boolean;
   wrapCalendarTaskTitles: boolean;
+  /** Tint calendar task cards with their project's colour. */
+  calendarProjectColors: boolean;
+  /** Colour calendar task checkboxes by priority. */
+  calendarPriorityColors: boolean;
   wrapKanbanTaskTitles: boolean;
   inboxPath: string;
   newTaskPosition: "top" | "bottom";
@@ -157,6 +161,8 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   taskHoverHighlight: "none",
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: false,
+  calendarProjectColors: true,
+  calendarPriorityColors: true,
   wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
   newTaskPosition: "top",

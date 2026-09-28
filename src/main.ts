@@ -273,6 +273,8 @@ export default class TaskManagerPlugin extends Plugin {
     if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
+    this.settings.calendarProjectColors = this.settings.calendarProjectColors !== false;
+    this.settings.calendarPriorityColors = this.settings.calendarPriorityColors !== false;
     this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
     if (typeof this.settings.inboxPath !== "string" || !this.settings.inboxPath.trim()) this.settings.inboxPath = DEFAULT_SETTINGS.inboxPath;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;

@@ -349,7 +349,8 @@ export class TaskMainView extends ItemView {
         card.classList.toggle("tm-dashboard-calendar-wrap", this.plugin.settings.wrapCalendarTaskTitles);
         renderCalendar(card, {
           anchor: this.calendarAnchor, scope: this.calendarScope, tasks: tasks("all"), dateFormat: this.plugin.dateFormat(),
-          color: task => this.plugin.index.projectColor(task.path),
+          color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
+          priorityColors: this.plugin.settings.calendarPriorityColors,
           navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.render(); },
           create: preset => this.plugin.openEditor({ mode: "all", preset }),
           edit: task => this.plugin.openEditor({ mode: "all", task }),
@@ -503,7 +504,8 @@ export class TaskMainView extends ItemView {
         planning: true, planningOpen: this.calendarPlanningOpen,
         planningChanged: open => { this.calendarPlanningOpen = open; },
         anchor: this.calendarAnchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
-        color: task => this.plugin.index.projectColor(task.path),
+        color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
+        priorityColors: this.plugin.settings.calendarPriorityColors,
         navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.renderTaskResults(); },
         create: preset => this.plugin.openEditor({ ...this.state, preset }),
         edit: task => this.editTask(task),

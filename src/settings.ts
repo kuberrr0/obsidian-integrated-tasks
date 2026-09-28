@@ -198,6 +198,17 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
         })); }
+      })),
+      ...([
+        ["calendarProjectColors", "Color tasks by project", "Tint each task with its project's color."],
+        ["calendarPriorityColors", "Color checkboxes by priority", "Color each task's checkbox by its priority, as in the list layout."]
+      ] as const).map(([key, name, desc]) => ({
+        section: "Calendar layout", name, desc,
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
+          this.plugin.settings[key] = value;
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+        })); }
       }))
     ] satisfies (SettingDefinitionRender & { section: string })[];
   }
