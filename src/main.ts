@@ -16,6 +16,7 @@ import { renderNoteTokens } from "./note-token-reading";
 import { MarkdownView, Notice, Plugin, TFile, TFolder, type Editor, type TAbstractFile, type WorkspaceLeaf } from "obsidian";
 import { TaskEditorModal, type TaskEditorOptions } from "./task-editor";
 import { TaskIndex, type RefreshOptions } from "./task-index";
+import { IndexedDbCache } from "./index-cache";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
 import { TaskStore, type TaskChange } from "./task-store";
 import { TasksImportModal } from "./tasks-import-modal";
@@ -45,7 +46,7 @@ export default class TaskManagerPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat());
+    this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat(), new IndexedDbCache(this.app));
     this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates, () => this.settings.sectionHeadingLevel, () => this.settings.completionDates);
     this.store.onChange = change => this.offerUndo(change);
 
@@ -153,6 +154,9 @@ export default class TaskManagerPlugin extends Plugin {
     this.addCommand({ id: "insert-task-query", name: "Insert task query", editorCallback: editor => editor.replaceSelection(TASK_QUERY_TEMPLATE) });
     this.addCommand({ id: "import-tasks-plugin", name: "Import tasks from the Tasks plugin", callback: () => this.openTasksImport() });
     this.addCommand({ id: "quick-switch", name: "Quick switch to view, project, tag, or task", callback: () => this.openQuickSwitcher() });
+    this.addCommand({ id: "rebuild-task-index", name: "Rebuild task index", callback: () => {
+      void this.index.rebuild().then(() => new Notice("Task index rebuilt.")).catch(error => new Notice(String(error)));
+    } });
     this.addCommand({ id: "undo-task-change", name: "Undo last task change", checkCallback: checking => {
       if (!this.store.lastChange()) return false;
       if (!checking) void this.undoTaskChange();

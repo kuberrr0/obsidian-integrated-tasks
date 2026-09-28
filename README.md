@@ -242,6 +242,8 @@ In the plugin settings, you can choose your inbox, decide whether new tasks go a
 
 Choose your preferred date format and whether dates link to notes. These choices apply to new edits; use **Update dates** to apply them to existing tasks and recurring-task history.
 
+The plugin remembers the tasks it found in each note, on this device, so it starts quickly even in large vaults: only notes that changed since last time are read again. If task lists ever look out of date, run **Rebuild task index**.
+
 Search for **Integrated Task Manager** in Obsidian's command palette to open views, create tasks, switch layouts, and access other actions. Assign hotkeys to your favorites in Obsidian's Hotkeys settings.
 
 ## Coming from the Tasks plugin

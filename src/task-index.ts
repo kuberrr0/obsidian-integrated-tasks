@@ -2,6 +2,8 @@ import { parseProjectProperties, parseProjectParent } from "./project-properties
 import { scanSections, splitDestination, type NoteHeading } from "./structure";
 import { getAllTags, type App, type EventRef, type Events, TFile } from "obsidian";
 import { scanTasks } from "./parser";
+import { formatLocalDate } from "./date";
+import { noteRecord, restoreTasks, CACHE_SCHEMA, type CachedNote, type IndexCache, type NoteScan } from "./index-cache";
 import { sortTasks, taskMatchesQuery } from "./query";
 import { taskTagSummaries, type TaskTagSummary } from "./task-tags";
 import type { Project, ProjectProperties, Task, TaskManagerSettings, TaskQuery } from "./types";
@@ -15,6 +17,9 @@ export interface RefreshOptions {
 
 const SCAN_BATCH = 50;
 const SCAN_SLICE_MS = 30;
+// Cache writes wait for edits to settle, but not indefinitely while typing continues.
+const SAVE_DELAY_MS = 2000;
+const SAVE_MAX_DELAY_MS = 10_000;
 
 type ProjectEntry = ProjectProperties & { parent?: string };
 
@@ -47,17 +52,27 @@ export class TaskIndex {
   private tagsByPath?: Map<string, string>;
   private filesByTag?: Map<string, TFile>;
   private projectColors?: Map<string, string>;
+  // Notes parsed since the last cache write, with what they were parsed from.
+  private readonly unsaved = new Map<string, NoteScan>();
+  private readonly unsavedDeletes = new Set<string>();
+  private saveTimer?: ReturnType<typeof setTimeout>;
+  private firstUnsaved?: number;
 
   constructor(
     private readonly app: App,
     private readonly getSettings: () => TaskManagerSettings,
-    private readonly getDateFormat: () => string
+    private readonly getDateFormat: () => string,
+    private readonly cache?: IndexCache
   ) {}
 
   async initialize(): Promise<void> {
     // A plugin unloaded before layout-ready must not register listeners nothing will remove.
     if (this.destroyed) return;
     const { vault, metadataCache } = this.app;
+    const loading = this.cache?.load().catch((error: unknown) => {
+      console.warn("Task manager could not load its index cache.", error);
+      return new Map<string, CachedNote>();
+    });
     // Listen first so edits made while the vault is scanned are not missed.
     this.listen(vault, vault.on("create", (file) => {
       this.invalidateTags();
@@ -87,8 +102,22 @@ export class TaskIndex {
       // Every save reaches here; only project membership and properties come from metadata.
       if (file.extension === "md" && !this.isDeleted(file, file.path) && this.updateProjectStatus(file)) this.emit();
     }));
+    const cached = await loading;
     // All Tasks and project/tag discovery require every Markdown note.
-    if (await this.scanAll(vault.getMarkdownFiles(), false)) this.emit();
+    const files = vault.getMarkdownFiles();
+    if (!await this.scanAll(files, false, cached)) return;
+    if (cached) {
+      for (const file of files) cached.delete(file.path);
+      this.queueDelete([...cached.keys()]);
+    }
+    this.emit();
+  }
+
+  /** Discard the stored index and parse every note again. */
+  async rebuild(): Promise<void> {
+    this.unsavedDeletes.clear();
+    try { await this.cache?.clear(); } catch (error) { console.warn("Task manager could not clear its index cache.", error); }
+    await this.rescanAll({ force: true });
   }
 
   /** Scan every Markdown note again in yielding batches, and notify listeners once. */
@@ -102,6 +131,7 @@ export class TaskIndex {
     this.eventRefs.length = 0;
     this.pendingRefreshes.clear();
     this.listeners.clear();
+    void this.saveCache();
   }
 
   subscribe(listener: IndexListener): () => void {
@@ -143,6 +173,7 @@ export class TaskIndex {
   }
 
   private forget(path: string): void {
+    this.queueDelete([path]);
     this.scanTokens.delete(path);
     this.indexedContent.delete(path);
     this.tasksByPath.delete(path);
@@ -312,12 +343,13 @@ export class TaskIndex {
   }
 
   /** Scan notes in batches, yielding between them so a large vault does not freeze the app. */
-  private async scanAll(files: TFile[], force: boolean): Promise<boolean> {
+  private async scanAll(files: TFile[], force: boolean, cached?: Map<string, CachedNote>): Promise<boolean> {
     let yielded = performance.now();
+    const day = formatLocalDate(new Date());
     for (let start = 0; start < files.length; start += SCAN_BATCH) {
       if (this.destroyed) return false;
       // One unreadable note (for example, deleted mid-scan) must not stop the rest.
-      await Promise.all(files.slice(start, start + SCAN_BATCH).map((file) => this.scanFile(file, force)
+      await Promise.all(files.slice(start, start + SCAN_BATCH).map((file) => this.installCached(file, cached?.get(file.path), day) ? undefined : this.scanFile(file, force)
         .catch((error: unknown) => console.error(`Task manager could not index ${file.path}`, error))));
       if (performance.now() - yielded > SCAN_SLICE_MS) {
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -330,11 +362,29 @@ export class TaskIndex {
     return true;
   }
 
+  /** Uses a stored parse of an unchanged note instead of reading it. */
+  private installCached(file: TFile, note: CachedNote | undefined, day: string): boolean {
+    const path = file.path;
+    const stat = file.stat as TFile["stat"] | undefined;
+    // A note already being scanned, for example after an early modify event, keeps that scan.
+    if (!note || !stat || this.scanTokens.has(path) || this.isDeleted(file, path)) return false;
+    if (note.schema !== CACHE_SCHEMA || note.mtime !== stat.mtime || note.size !== stat.size || (note.day && note.day !== day) ||
+      note.dateFormat !== this.getDateFormat() || note.sectionHeadingLevel !== this.getSettings().sectionHeadingLevel) return false;
+    // No indexedContent is stored, so the next modify or rescan parses the note for real.
+    this.headingsByPath.set(path, note.headings);
+    this.tasksByPath.set(path, restoreTasks(note));
+    this.invalidateTasks();
+    return true;
+  }
+
   /** Returns whether the note was parsed; unchanged content is skipped unless forced. */
   private async scanFile(file: TFile, force = false): Promise<boolean> {
     const path = file.path;
     const token = ++this.scanCount;
     this.scanTokens.set(path, token);
+    // Taken before reading: a change during the read then makes the stored record stale, not wrong.
+    const stat = file.stat as TFile["stat"] | undefined;
+    const size = stat?.size, mtime = stat?.mtime;
     const content = await this.app.vault.cachedRead(file);
     if (this.scanTokens.get(path) !== token) return false;
     if (file.path !== path || this.isDeleted(file, path)) {
@@ -346,13 +396,58 @@ export class TaskIndex {
     const previous = this.indexedContent.get(path);
     if (!force && previous?.content === content && previous.day === day) return false;
     const level = this.getSettings().sectionHeadingLevel;
+    const dateFormat = this.getDateFormat();
+    const now = new Date();
     const headings = scanSections(content, level);
-    const tasks = scanTasks(path, content, new Date(), this.getDateFormat(), level);
+    const tasks = scanTasks(path, content, now, dateFormat, level);
     this.indexedContent.set(path, { content, day });
     this.headingsByPath.set(path, headings);
     this.tasksByPath.set(path, tasks);
     this.invalidateTasks();
+    if (this.cache && mtime !== undefined && size !== undefined) {
+      this.unsavedDeletes.delete(path);
+      this.unsaved.set(path, { mtime, size, dateFormat, sectionHeadingLevel: level, day: formatLocalDate(now) });
+      this.scheduleSave();
+    }
     return true;
+  }
+
+  private queueDelete(paths: string[]): void {
+    if (!this.cache || !paths.length) return;
+    for (const path of paths) {
+      this.unsaved.delete(path);
+      this.unsavedDeletes.add(path);
+    }
+    this.scheduleSave();
+  }
+
+  private scheduleSave(): void {
+    if (this.destroyed) return;
+    this.firstUnsaved ??= Date.now();
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => void this.saveCache(), Math.max(0, Math.min(SAVE_DELAY_MS, this.firstUnsaved + SAVE_MAX_DELAY_MS - Date.now())));
+  }
+
+  /** Writes queued notes in one batch, from the tasks already parsed. */
+  private async saveCache(): Promise<void> {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
+    this.firstUnsaved = undefined;
+    if (!this.cache) return;
+    const deleted = [...this.unsavedDeletes];
+    const notes: CachedNote[] = [];
+    for (const [path, scan] of this.unsaved) {
+      const tasks = this.tasksByPath.get(path);
+      if (tasks) notes.push(noteRecord(path, scan, tasks, this.headingsForPath(path)));
+    }
+    this.unsavedDeletes.clear();
+    this.unsaved.clear();
+    try {
+      if (deleted.length) await this.cache.delete(deleted);
+      if (notes.length) await this.cache.put(notes);
+    } catch (error) {
+      console.warn("Task manager could not save its index cache.", error);
+    }
   }
 
   /** Returns whether project membership, archive status, or project properties changed. */
