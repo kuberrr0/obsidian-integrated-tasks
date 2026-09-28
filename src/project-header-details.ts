@@ -11,7 +11,8 @@ export function projectDateLabel(date: string, now = new Date()): string {
 }
 
 export function renderProjectHeaderDetails(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date(), deadlineParent = parent, things = false): void {
-    if (project.scheduledDate || project.endDate) {
+    if (things) renderThingsProjectDates(parent, project, edit, dateFormat, now);
+    else if (project.scheduledDate || project.endDate) {
         const range = parent.createSpan({ cls: "tm-project-date-range" });
         if (project.scheduledDate) {
             const text = [projectDateLabel(project.scheduledDate, now), project.scheduledTime && taskTimeLabel(project.scheduledTime)].filter(Boolean).join(", ");
@@ -43,6 +44,23 @@ function editable(element: HTMLElement, label: string, field: keyof ProjectDraft
             if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault(); event.stopPropagation(); edit(field);
         });
+}
+
+/** The Things dates: a calendar line reading "Mon, Sep 14 – Fri, Oct 16", as an open task card shows its date; each end opens its own editor. */
+export function renderThingsProjectDates(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date()): void {
+    if (!project.scheduledDate && !project.endDate) return;
+    const dates = parent.createSpan({ cls: "tm-things-card-property tm-things-project-dates" });
+    setIcon(dates.createSpan({ cls: "tm-things-card-icon", attr: { "aria-hidden": "true" } }), "calendar");
+    const label = dates.createSpan({ cls: "tm-things-card-label" });
+    if (project.scheduledDate) {
+        const text = [longDate(project.scheduledDate, now), project.scheduledTime && taskTimeLabel(project.scheduledTime)].filter(Boolean).join(", ");
+        editable(label.createSpan({ text, attr: { title: `Start: ${formatDate(project.scheduledDate, dateFormat)}` } }), `project start date: ${text}`, "date", edit);
+    }
+    if (project.scheduledDate && project.endDate) label.createSpan({ text: " – ", attr: { "aria-hidden": "true" } });
+    if (project.endDate) {
+        const text = longDate(project.endDate, now);
+        editable(label.createSpan({ text, attr: { title: `End: ${formatDate(project.endDate, dateFormat)}` } }), `project end date: ${text}`, "endDate", edit);
+    }
 }
 
 /** The Things deadline: "Deadline: Thu, Sep 25" and how far off it is, in red once due; as an open task card shows it. */

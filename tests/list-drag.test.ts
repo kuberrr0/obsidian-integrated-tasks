@@ -99,3 +99,12 @@ describe("group property drops", () => {
     expect(draftForGroup(task, { destination: "Other.md#Later" }).destination).toBe("Other.md#Later");
   });
 });
+
+it("treats notes and sections as places in notes, and property values as not", async () => {
+  const { isStructuralGroup } = await import("../src/list-drag");
+  expect(isStructuralGroup({ destination: "A.md#Plan" })).toBe(true);
+  expect(isStructuralGroup({ property: "section", value: "Plan", destination: "A.md#Plan" })).toBe(true);
+  expect(isStructuralGroup({ property: "source", value: "A.md", destination: "A.md" })).toBe(true);
+  expect(isStructuralGroup({ property: "priority", value: 1 })).toBe(false);
+  expect(isStructuralGroup({ property: "date", value: "2026-09-29" })).toBe(false);
+});

@@ -20,7 +20,7 @@ import type { GanttZoom } from "./gantt";
 import { projectHierarchy } from "./project-hierarchy";
 import { kanbanColumns } from "./kanban";
 import { ListDragController } from "./list-drag-view";
-import { draftForGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
+import { draftForGroup, isStructuralGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
 import { renderCalendar } from "./calendar-view";
 import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { OPEN_STATUSES, STATUS_LABELS, TASK_STATUSES, checkboxLabel, statusClass } from "./task-status";
@@ -943,7 +943,9 @@ export class TaskMainView extends ItemView {
         const current = this.plugin.index.taskById(task.id);
         if (!current || current.raw !== task.raw) throw new Error("Task changed while dragging. Refresh and try again.");
       }
-      if (this.layout === "kanban" && group && selected.some(task => {
+      // A board column for a property value takes the task at its own place in its note; a column for a
+      // note or section is a place in the note, so the drop's position there is kept.
+      if (this.layout === "kanban" && group && !isStructuralGroup(group) && selected.some(task => {
         const previous = group.property ? taskGroupTarget(group.property, task) : undefined;
         return group.value !== previous?.value || (group.destination && group.destination !== draftForGroup(task).destination);
       })) {
@@ -1312,7 +1314,7 @@ export class TaskMainView extends ItemView {
   private renderBoardCard(primary: HTMLElement, below: HTMLElement, task: Task, details: { grouping: TaskGrouping; tags: string[]; source?: string; edit: (property: TaskEditorProperty) => void }): void {
     if (task.childIds.length) {
       const checklist = primary.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": "Has subtasks", title: `${task.childIds.length} subtask${task.childIds.length === 1 ? "" : "s"}` } });
-      setIcon(checklist, "list-todo");
+      setIcon(checklist, "list-checks");
     }
     const notes = cardNotes(task.description).trim();
     if (notes) below.before(below.parentElement!.createDiv({ cls: "tm-things-board-notes", text: notes }));

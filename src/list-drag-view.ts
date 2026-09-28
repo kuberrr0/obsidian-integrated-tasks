@@ -1,6 +1,6 @@
 import { Platform, setIcon } from "obsidian";
 import type { Task } from "./types";
-import type { ListDropGroup, ListPlacement } from "./list-drag";
+import { isStructuralGroup, type ListDropGroup, type ListPlacement } from "./list-drag";
 
 interface DropIntent {
   group?: ListDropGroup;
@@ -44,6 +44,13 @@ export class ListDragController {
   private targets = new Map<HTMLElement, (point: { clientX: number; clientY: number }) => DropIntent>();
   /** Rows by task, to find the dragged set and ancestors when placing the gap. */
   private rows = new Map<string, HTMLElement>();
+  /** Each row's task and group, to resolve drops made beside the gap rather than on a row. */
+  private rowTasks = new WeakMap<HTMLElement, Task>();
+  private rowGroups = new Map<string, ListDropGroup | undefined>();
+  /** The grabbed row and where the pointer grabbed it: moving left of that point over the gap outdents it. */
+  private home?: { row: HTMLElement; x: number };
+  /** Whether the gap was placed by the lift or by moving left over it, rather than by hovering a row. */
+  private sideways = false;
   /** The pointer drag in progress: its gap, collapsed source rows and current drop intent. */
   private gap?: HTMLElement;
   private gapKey?: string;
@@ -125,6 +132,49 @@ export class ListDragController {
     return key;
   }
 
+  /** The nearest row above the gap that still shows (dragged rows are folded away). */
+  private rowAboveGap(): HTMLElement | undefined {
+    for (let row = this.gap?.previousElementSibling; row; row = row.previousElementSibling) {
+      if (row instanceof HTMLElement && this.rowTasks.has(row) && !row.classList.contains("tm-drag-source") && !row.classList.contains("tm-drag-preview")) return row;
+    }
+    return undefined;
+  }
+
+  /** `row`, or the ancestor row that encloses it at `depth`. */
+  private rowAtDepth(row: HTMLElement, depth: number): HTMLElement | undefined {
+    let current: HTMLElement | undefined = row;
+    while (current && depthOf(current) > depth) {
+      const parentId: string | undefined = this.rowTasks.get(current)?.parentId;
+      current = parentId ? this.rows.get(parentId) : undefined;
+    }
+    return current && depthOf(current) === depth ? current : undefined;
+  }
+
+  /**
+   * Moving left over the gap, as over a row: far enough left of where the row was grabbed outdents it,
+   * a level per 24px. Nesting needs a task's title, so moving right does nothing. Undefined when the depth stays.
+   */
+  private besideGap(x: number): DropIntent | undefined {
+    if (!this.allowNesting || !this.home || !this.gap) return undefined;
+    const dx = x - this.home.x;
+    const depth = Math.max(0, depthOf(this.home.row) - (dx <= -16 ? Math.max(1, Math.floor(-dx / 24)) : 0));
+    const above = this.rowAboveGap();
+    if (depth >= depthOf(this.gap) || !above) return undefined;
+    // After the ancestor at that depth, which encloses the row above the gap.
+    const row = this.rowAtDepth(above, depth);
+    const anchor = row && this.rowTasks.get(row);
+    if (!row || !anchor) return undefined;
+    return { group: this.rowGroups.get(anchor.id), anchor, placement: "after", indicator: "outdent", gap: this.gapFor(row, anchor, anchor, "after") };
+  }
+
+  /** The last top-level task in a list, so a drop at the end of a section lands after it in the note. */
+  private lastRow(list: HTMLElement): Task | undefined {
+    const row = Array.from(list.children).reverse().find((row): row is HTMLElement =>
+      row instanceof HTMLElement && this.rowTasks.has(row) && !row.classList.contains("tm-drag-source")
+      && !row.classList.contains("tm-drag-preview") && depthOf(row) === 0);
+    return row && this.rowTasks.get(row);
+  }
+
   /** Where a drop on this row would put the gap: before it, after its subtree, or after an ancestor's. */
   private gapFor(row: HTMLElement, task: Task, anchor: Task, placement: ListPlacement): DropIntent["gap"] {
     const depth = depthOf(row);
@@ -165,6 +215,8 @@ export class ListDragController {
   private removeGap(animated: boolean): void {
     const gap = this.gap;
     this.gap = undefined;
+    this.home = undefined;
+    this.sideways = false;
     this.gapKey = undefined;
     this.intent = undefined;
     if (!gap) return;
@@ -197,7 +249,10 @@ export class ListDragController {
     this.targets.set(element, point => {
       const items = list();
       const heading = items !== element && !element.closest(".tm-kanban") && point.clientY < items.getBoundingClientRect().top;
-      return heading ? this.aboveHeading(items, group) : { group, indicator: "group", gap: { element: items, where: "end", depth: 0 } };
+      if (heading) return this.aboveHeading(items, group);
+      // In a section or note, the end of the list is a place in the note: after its last task.
+      const last = isStructuralGroup(group) ? this.lastRow(items) : undefined;
+      return { group, indicator: "group", gap: { element: items, where: "end", depth: 0 }, ...last ? { anchor: last, placement: "after" as const } : {} };
     });
     element.addEventListener("dragover", event => {
       if (!this.taskId || this.busy) return;
@@ -214,7 +269,9 @@ export class ListDragController {
   }
   row(row: HTMLElement, primary: HTMLElement, task: Task, group?: ListDropGroup): void {
     this.rows.set(task.id, row);
-    const handle = primary.createEl("button", { cls: "clickable-icon tm-list-drag-handle", attr: { "aria-label": `Drag ${task.title}`, title: "Drag to reorder; drop to the right to nest, or to the left to outdent" } });
+    this.rowTasks.set(row, task);
+    this.rowGroups.set(task.id, group);
+    const handle = primary.createEl("button", { cls: "clickable-icon tm-list-drag-handle", attr: { "aria-label": `Drag ${task.title}`, title: "Drag to reorder; drop on a task's title to nest under it, or to the left to outdent" } });
     setIcon(handle, "grip-vertical");
     primary.prepend(handle);
     row.draggable = true;
@@ -238,7 +295,10 @@ export class ListDragController {
       const rect = row.getBoundingClientRect();
       const left = primary.getBoundingClientRect().left;
       let anchor = task;
-      let placement: ListPlacement = this.allowNesting && event.clientX > left + 64 ? "child" : event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      // Nesting only over the title of the task to nest under; elsewhere on the row, above or below it.
+      const title = primary.querySelector(".tm-task-title")?.getBoundingClientRect();
+      const onTitle = Boolean(title && event.clientX >= title.left && event.clientX <= title.right && event.clientY >= title.top && event.clientY <= title.bottom);
+      let placement: ListPlacement = this.allowNesting && onTitle ? "child" : event.clientY < rect.top + rect.height / 2 ? "before" : "after";
       if (this.allowNesting && event.clientX < left - 16 && anchor.parentId) {
         let levels = Math.max(1, Math.floor((left - event.clientX) / 24));
         while (anchor.parentId && levels-- > 0) {
@@ -332,6 +392,8 @@ export class ListDragController {
         this.slide(row.closest(".tm-main-view") ?? doc, () => {
           this.placeGap({ indicator: "none", gap: { element: row, where: "before", depth: depthOf(row) } }, rect.height, doc, false);
           this.intent = undefined;
+          this.home = { row, x: origin.x };
+          this.sideways = true;
           this.liftSources(rows);
         });
       }
@@ -351,8 +413,11 @@ export class ListDragController {
       this.original = task;
       row.addClass("is-dragging");
       const found = hit(event);
-      // The gap marks the drop; hovering the gap itself keeps it where it is.
-      if (found && found.element !== this.gap) this.placeGap(found.target, sourceRect?.height ?? row.getBoundingClientRect().height, doc);
+      // The gap marks the drop. Hovering the gap keeps it where it is, except that moving left over
+      // the grabbed row's own slot (or where earlier left moves took it) outdents it.
+      const height = sourceRect?.height ?? row.getBoundingClientRect().height;
+      if (found && found.element !== this.gap) { this.sideways = false; this.placeGap(found.target, height, doc); }
+      else if (found && this.sideways) { const beside = this.besideGap(event.clientX); if (beside) this.placeGap(beside, height, doc); }
     });
     const reset = (): void => {
       preview?.remove();

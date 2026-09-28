@@ -83,3 +83,20 @@ it("shows the Things deadline in the Things style: the date and how far off it i
     expect(overdue.children[0].cls).toBe("tm-things-card-property tm-things-project-deadline is-urgent");
     expect(overdue.children[0].children[2].text).toBe("1 day ago");
 });
+it("shows the Things dates in the Things style: one calendar line whose start and end edit separately", () => {
+    const root = new Element(), edit = vi.fn();
+    renderProjectHeaderDetails(root as never, { ...project, scheduledDate: "2026-09-20", endDate: "2027-01-10", deadline: "2026-10-25" }, edit, "YYYY-MM-DD", now, undefined, true);
+    const [dates, deadline] = root.children;
+    expect(dates.cls).toBe("tm-things-card-property tm-things-project-dates");
+    expect(deadline.cls).toBe("tm-things-card-property tm-things-project-deadline");
+    const [icon, label] = dates.children;
+    expect(icon.cls).toBe("tm-things-card-icon");
+    expect(label.children.map(child => child.text).join("")).toBe("Sun, Sep 20 – Sun, Jan 10, 2027");
+    for (const [element, field] of [[label.children[0], "date"], [label.children[2], "endDate"]] as const) {
+        element.handlers.get("click")!({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+        expect(edit).toHaveBeenLastCalledWith(field);
+    }
+    const lone = new Element();
+    renderProjectHeaderDetails(lone as never, { ...project, endDate: "2026-09-25" }, vi.fn(), "YYYY-MM-DD", now, undefined, true);
+    expect(lone.children[0].children[1].children.map(child => child.text).join("")).toBe("Fri, Sep 25");
+});

@@ -60,7 +60,7 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
     // After the title: a checklist mark for subtasks (next to the notes mark), repeat and tags.
     if (task.childIds.length) {
         const checklist = parts.inline.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": "Has subtasks", title: `${task.childIds.length} subtask${task.childIds.length === 1 ? "" : "s"}` } });
-        setIcon(checklist, "list-todo");
+        setIcon(checklist, "list-checks");
         const notes = Array.from(parts.inline.children).find(child => child.classList.contains("tm-description-indicator"));
         notes?.after(checklist);
     }

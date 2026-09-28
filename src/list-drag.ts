@@ -13,6 +13,10 @@ export interface ListDropGroup {
   scheduledDate?: string;
   deadline?: string;
 }
+/** Groups that are places in notes (a note, or a section of one) rather than property values; a drop's position in them is a position in the note. */
+export function isStructuralGroup(group: ListDropGroup): boolean {
+  return !group.property ? Boolean(group.destination) : group.property === "section" || group.property === "source";
+}
 export function taskGroupTarget(property: TaskSort, exemplar: Task): ListDropGroup {
   return {
     property, value: property === "date" ? actionDate(exemplar) : propertyValue(exemplar, property),

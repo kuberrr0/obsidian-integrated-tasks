@@ -1007,6 +1007,9 @@ button.tm-gantt-handle.is-finish:focus-visible,
 }
 .tm-description-indicator svg { width: 1em; height: 1em; }
 .tm-calendar-task-title .tm-description-indicator { margin-inline-start: 0.35em; }
+/* Breathing room between a task title and the first icon that follows it. */
+.tm-task-primary > button.tm-task-title + .tm-description-indicator,
+.tm-task-primary > button.tm-task-title + .tm-task-recurring { margin-inline-start: 3px; }
 
 .tm-project-header-metadata .tm-project-progress { flex-shrink: 0; align-self: center; min-height: 0; }
 
@@ -1913,7 +1916,6 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary { flex-wrap: nowrap; align-items: center; gap: 6px; }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > * { flex-shrink: 0; }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > button.tm-task-title { flex: 0 1 auto; min-width: 0; font-weight: var(--font-medium); }
-.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-description-indicator { margin-inline-start: -2px; }
 
 .tm-things-lead { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
 .tm-things-box {
@@ -2114,6 +2116,11 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-things-card-property.is-p2 .tm-things-card-icon { color: var(--color-orange); }
 .tm-things-card-property.is-p3 .tm-things-card-icon { color: var(--color-blue); }
 .tm-things-card-property:hover .tm-things-card-label { text-decoration: underline; text-decoration-color: var(--text-faint); }
+/* A project's dates: the start and end each open their own editor, so each underlines on its own. */
+.tm-things-project-dates { cursor: default; }
+.tm-things-card-property.tm-things-project-dates:hover .tm-things-card-label { text-decoration: none; }
+.tm-things-project-dates [role="button"] { cursor: pointer; }
+.tm-things-project-dates [role="button"]:hover { text-decoration: underline; text-decoration-color: var(--text-faint); }
 .tm-things-card-toolbar { display: flex; justify-content: flex-end; gap: 2px; margin-top: 4px; }
 .tm-things-card-toolbar .clickable-icon { color: var(--text-faint); }
 .tm-things-card-toolbar .clickable-icon:hover { color: var(--text-normal); }

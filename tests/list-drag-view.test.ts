@@ -37,6 +37,8 @@ function list(markdown: string, options: { dragged?: (task: Task) => Task[]; all
     row.style.setProperty("--tm-depth", String(task.indent / 2));
     const primary = row.createDiv({ cls: "tm-task-primary" });
     const title = primary.createEl("button", { cls: "tm-task-title", text: task.title });
+    // Titles start after the handle and checkbox: x 80–380 of the row's 0–300.
+    title.style.left = "80px";
     const pill = row.createSpan({ cls: "tm-pill", attr: { role: "button" } });
     controller.row(row, primary, task);
     return { row, title, pill };
@@ -307,4 +309,65 @@ it("abandons an uncaptured press when the pointer leaves the row", () => {
   fire(rows[0].row, "pointermove", { clientX: 50 });
   expect(start).not.toHaveBeenCalled();
   expect(rows[0].row.draggable).toBe(true);
+});
+
+it("outdents a subtask dragged left over its own slot, a level per 24px", async () => {
+  const { tasks, rows, drop, point } = list("- [ ] A\n  - [ ] A child\n- [ ] B");
+  fire(rows[1].row, "pointerdown", { clientX: 100, clientY: 50 });
+  point(null);
+  fire(rows[1].row, "pointermove", { clientX: 100, clientY: 60 });
+  // A small sideways wobble over the slot changes nothing.
+  point(gap());
+  fire(rows[1].row, "pointermove", { clientX: 92, clientY: 60 });
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("1");
+  fire(rows[1].row, "pointermove", { clientX: 70, clientY: 60 });
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
+  expect(gap()!.previousElementSibling).toBe(rows[0].row);
+  fire(rows[1].row, "pointerup", { clientX: 70, clientY: 60 });
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[1], undefined, tasks[0], "after"));
+});
+
+it("nests only over the title of the task to nest under, not elsewhere on its row or beside the slot", async () => {
+  const { tasks, rows, drop, point } = list("- [ ] A\n- [ ] B");
+  fire(rows[1].row, "pointerdown", { clientX: 100, clientY: 50 });
+  point(null);
+  fire(rows[1].row, "pointermove", { clientX: 100, clientY: 60 });
+  // Far right beside the slot: still a sibling.
+  point(gap());
+  fire(rows[1].row, "pointermove", { clientX: 250, clientY: 60 });
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
+  // On A's row, left of its title: above or below A, not under it.
+  point(rows[0].row);
+  fire(rows[1].row, "pointermove", { clientX: 40, clientY: 30 });
+  expect(gap()!.previousElementSibling).toBe(rows[0].row);
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
+  // On A's title: under A.
+  fire(rows[1].row, "pointermove", { clientX: 120, clientY: 30 });
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("1");
+  fire(rows[1].row, "pointerup", { clientX: 120, clientY: 30 });
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[1], undefined, tasks[0], "child"));
+});
+
+it("leaves a gap placed by hovering a row alone when the pointer then rests on the gap", () => {
+  const { rows, point } = list("- [ ] A\n- [ ] B\n  - [ ] B child\n- [ ] C");
+  fire(rows[3].row, "pointerdown", { clientX: 30 });
+  point(rows[2].row);
+  fire(rows[3].row, "pointermove", { clientX: 30, clientY: 10 });
+  expect(gap()!.nextElementSibling).toBe(rows[2].row);
+  point(gap());
+  fire(rows[3].row, "pointermove", { clientX: -40, clientY: 12 });
+  expect(gap()!.nextElementSibling).toBe(rows[2].row);
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("1");
+});
+
+it("drops at the end of a section after its last task, so the note's order changes too", async () => {
+  const { tasks, rows, drop, controller, element, point } = list("- [ ] A\n- [ ] B\n  - [ ] B child");
+  const section = { destination: "Work.md#Plan" };
+  controller.group(element, section);
+  fire(rows[0].row, "pointerdown");
+  point(element);
+  fire(rows[0].row, "pointermove", { clientY: 30 });
+  expect(element.lastElementChild).toBe(gap());
+  fire(rows[0].row, "pointerup", { clientY: 30 });
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], section, tasks[1], "after"));
 });
