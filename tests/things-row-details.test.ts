@@ -42,12 +42,25 @@ describe("Things labels", () => {
 });
 
 describe("Things task row", () => {
-  it("puts a date box before the title, tags and repeat after it, and the deadline last", () => {
+  it("puts repeat and tags after the title, then date, time and deadline together at the end", () => {
     const { lead, inline } = row("- [ ] Plan 2026-10-08 10:00 30m {2026-09-30} every week #[[Errand]] #[[Office]]");
-    expect(classes(lead)).toEqual(["tm-things-box tm-things-when", "tm-things-box tm-things-time"]);
-    expect(Array.from(lead.children).map(child => child.textContent)).toEqual(["Oct 8", "10:00-10:30 AM"]);
-    expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag", "tm-things-tag", "tm-things-deadline"]);
-    expect(inline.querySelector(".tm-things-deadline")!.textContent).toBe("11 days left");
+    expect(lead.childElementCount).toBe(0);
+    expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag", "tm-things-tag", "tm-things-trailing"]);
+    const trailing = inline.querySelector<HTMLElement>(".tm-things-trailing")!;
+    expect(Array.from(trailing.children).map(child => [child.className, child.textContent])).toEqual([
+      ["tm-things-box tm-things-when", "Oct 8"], ["tm-things-box tm-things-time", "10:00-10:30 AM"], ["tm-things-deadline", "11 days left"]
+    ]);
+  });
+
+  it("marks a task with subtasks with a checklist icon right after its notes icon", () => {
+    const lead = document.createElement("span"), inline = document.createElement("div"), secondary = document.createElement("div");
+    inline.createSpan({ cls: "tm-task-title" });
+    inline.createSpan({ cls: "tm-description-indicator" });
+    inline.createSpan({ cls: "tm-task-recurring" });
+    const [task] = scanTasks("Note.md", "- [ ] Plan #[[Errand]]\n  - [ ] Step", now);
+    renderThingsTaskDetails({ lead, inline, secondary }, task, { now, grouping: "none", dateFormat: "MMM D, YYYY", tags: ["Errand"], edit: vi.fn(), openSource: vi.fn() });
+    expect(classes(inline)).toEqual(["tm-task-title", "tm-description-indicator", "tm-things-checklist", "tm-task-recurring", "tm-things-tag"]);
+    expect(classes(row("- [ ] Plan").inline)).toEqual([]);
   });
 
   it("stars tasks scheduled today or earlier, except in the Today list", () => {
@@ -63,17 +76,17 @@ describe("Things task row", () => {
   });
 
   it("shows the source note below the title and keeps properties editable", () => {
-    const { secondary, lead, edit, openSource } = row("- [ ] Plan 2026-10-08", { source: "Projects/New Project.md" });
+    const { secondary, inline, edit, openSource } = row("- [ ] Plan 2026-10-08", { source: "Projects/New Project.md" });
     expect(secondary.textContent).toBe("New Project");
     (secondary.firstElementChild as HTMLElement).click();
     expect(openSource).toHaveBeenCalledOnce();
-    (lead.firstElementChild as HTMLElement).click();
+    inline.querySelector<HTMLElement>(".tm-things-when")!.click();
     expect(edit).toHaveBeenCalledWith("scheduledDate");
   });
 
   it("leaves out properties the list is grouped by", () => {
-    const { lead, inline } = row("- [ ] Plan 2026-10-08 {2026-09-30}", { grouping: "scheduledDate" });
-    expect(lead.childElementCount).toBe(0);
+    const { inline } = row("- [ ] Plan 2026-10-08 {2026-09-30}", { grouping: "scheduledDate" });
+    expect(inline.querySelector(".tm-things-when")).toBeNull();
     expect(inline.querySelector(".tm-things-deadline")).not.toBeNull();
   });
 });
@@ -87,23 +100,22 @@ describe("Things project row", () => {
     return { lead, inline, secondary, edit };
   }
 
-  it("shows a future start as a date box, the remaining count, the deadline and the parent", () => {
+  it("shows the remaining count, then a future start and the deadline together at the end, and the parent below", () => {
     const { lead, inline, secondary, edit } = projectRow({ scheduledDate: "2026-10-08", deadline: "2026-10-25", openTasks: 3, parent: "Area.md" });
-    expect(lead.textContent).toBe("Oct 8");
-    expect(Array.from(inline.children).map(child => [child.className, child.textContent])).toEqual([
-      ["tm-things-count", "3"], ["tm-things-deadline", "36 days left"]
-    ]);
+    expect(lead.childElementCount).toBe(0);
+    expect(Array.from(inline.children).map(child => child.className)).toEqual(["tm-things-count", "tm-things-trailing"]);
+    expect(Array.from(inline.querySelector(".tm-things-trailing")!.children).map(child => child.textContent)).toEqual(["Oct 8", "36 days left"]);
     expect(secondary.textContent).toBe("Area");
     (inline.querySelector(".tm-things-deadline") as HTMLElement).click();
     expect(edit).toHaveBeenCalledWith("deadline");
   });
 
   it("shows a running project's date range and leaves out an empty count", () => {
-    const { lead, inline } = projectRow({ scheduledDate: "2026-09-07", endDate: "2026-09-25" });
-    expect(lead.textContent).toBe("Sep 7 – Sep 25");
-    expect(inline.childElementCount).toBe(0);
+    const { inline } = projectRow({ scheduledDate: "2026-09-07", endDate: "2026-09-25" });
+    expect(inline.textContent).toBe("Sep 7 – Sep 25");
+    expect(inline.querySelector(".tm-things-count")).toBeNull();
     // A start already past, without an end, needs no box.
-    expect(projectRow({ scheduledDate: "2026-09-07" }).lead.childElementCount).toBe(0);
+    expect(projectRow({ scheduledDate: "2026-09-07" }).inline.childElementCount).toBe(0);
   });
 
   it("marks an overdue project deadline as urgent", () => {

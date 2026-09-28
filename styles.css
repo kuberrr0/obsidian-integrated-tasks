@@ -1910,12 +1910,14 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   white-space: nowrap;
   cursor: pointer;
 }
+/* Dates, times and the deadline sit together at the end of the line. */
+.tm-things-trailing { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; margin-inline-start: auto; padding-inline-start: 12px; }
+.tm-things-checklist { display: inline-flex; align-items: center; color: var(--text-faint); }
+.tm-things-checklist svg { width: 12px; height: 12px; }
 .tm-things-deadline {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-inline-start: auto;
-  padding-inline-start: 12px;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   font-weight: var(--font-semibold);

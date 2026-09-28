@@ -80,7 +80,7 @@ describe("Things task card", () => {
     });
     const item = element.querySelector<HTMLElement>(".tm-things-card-check")!;
     expect(Array.from(item.children).map(child => child.className)).toEqual(
-      ["tm-things-card-check-box", "tm-things-lead", "tm-things-card-check-title", "tm-things-tag", "tm-things-deadline"]);
+      ["tm-things-card-check-box", "tm-things-lead", "tm-things-card-check-title", "tm-things-tag", "tm-things-trailing"]);
     expect(item.querySelector(".tm-things-lead .tm-things-today")).not.toBeNull();
     item.querySelector<HTMLElement>(".tm-things-deadline")!.click();
     expect(edit).toHaveBeenCalledWith("deadline");

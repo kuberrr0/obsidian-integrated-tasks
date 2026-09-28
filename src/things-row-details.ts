@@ -45,31 +45,25 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
     const actionDate = task.scheduledDate && task.deadline ? (task.scheduledDate < task.deadline ? task.scheduledDate : task.deadline) : task.scheduledDate ?? task.deadline;
     const showDate = (field: "scheduledDate" | "deadline") => show(field) && grouping !== field && !(grouping === "date" && task[field] === actionDate);
 
-    // When: a star for today (and anything overdue, which Things folds into Today), else a date box.
-    if (task.status === "done" && task.completedDate && show("completed") && grouping !== "completed") {
-        box(parts.lead, "tm-things-done", taskDoneDateLabel(task.completedDate, now), `Completed ${formatDate(task.completedDate, options.dateFormat)}`);
-    } else if (task.scheduledDate && showDate("scheduledDate")) {
-        const title = `Scheduled ${formatDate(task.scheduledDate, options.dateFormat)}`;
-        let when: HTMLElement | undefined;
-        if (task.scheduledDate <= today) {
-            if (options.todayMarker !== false) {
-                when = parts.lead.createSpan({ cls: `tm-things-today${task.scheduledDate < today ? " is-overdue" : ""}`, attr: { title } });
-                setIcon(when, "star");
-            }
-        } else when = box(parts.lead, "tm-things-when", thingsDateLabel(task.scheduledDate, now), title);
-        if (when) editable(when, `Edit scheduled date: ${formatDate(task.scheduledDate, options.dateFormat)}`, "scheduledDate", () => options.edit("scheduledDate"));
-    }
-    const time = taskTimeDurationLabel(
-        show("scheduledTime") && grouping !== "scheduledTime" ? task.scheduledTime : undefined,
-        show("duration") && grouping !== "duration" ? task.durationMinutes : undefined
-    );
-    if (time) {
-        const hasTime = Boolean(task.scheduledTime && show("scheduledTime") && grouping !== "scheduledTime");
-        const label = box(parts.lead, "tm-things-time", time, hasTime ? "Scheduled time" : "Duration");
-        editable(label, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, "time", () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
+    // Before the title: a star for today, and for anything overdue, which Things folds into Today.
+    // A completed date, when recorded, stands in for the scheduled one.
+    const done = task.status === "done" && task.completedDate && show("completed") && grouping !== "completed" ? task.completedDate : undefined;
+    const scheduled = !done && task.scheduledDate && showDate("scheduledDate") ? task.scheduledDate : undefined;
+    const scheduledTitle = scheduled ? `Scheduled ${formatDate(scheduled, options.dateFormat)}` : "";
+    const editScheduled = (element: HTMLElement): void => editable(element, `Edit scheduled date: ${formatDate(scheduled!, options.dateFormat)}`, "scheduledDate", () => options.edit("scheduledDate"));
+    if (scheduled && scheduled <= today && options.todayMarker !== false) {
+        const star = parts.lead.createSpan({ cls: `tm-things-today${scheduled < today ? " is-overdue" : ""}`, attr: { title: scheduledTitle } });
+        setIcon(star, "star");
+        editScheduled(star);
     }
 
-    // After the title: repeat and tags, then the deadline pushed to the end of the line.
+    // After the title: a checklist mark for subtasks (next to the notes mark), repeat and tags.
+    if (task.childIds.length) {
+        const checklist = parts.inline.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": "Has subtasks", title: `${task.childIds.length} subtask${task.childIds.length === 1 ? "" : "s"}` } });
+        setIcon(checklist, "logs");
+        const notes = Array.from(parts.inline.children).find(child => child.classList.contains("tm-description-indicator"));
+        notes?.after(checklist);
+    }
     if (task.repeat && show("repeat") && grouping !== "repeat") {
         const label = repeatLabel(task.repeat);
         const repeat = parts.inline.createSpan({ cls: "tm-things-repeat", attr: { title: `Repeats ${task.repeat}` } });
@@ -80,15 +74,30 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
         const label = parts.inline.createSpan({ cls: "tm-things-tag", text: tag });
         editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
     }
+
+    // At the end of the line: date and time boxes, then the deadline.
+    const trailing = parts.inline.createSpan({ cls: "tm-things-trailing" });
+    if (done) box(trailing, "tm-things-done", taskDoneDateLabel(done, now), `Completed ${formatDate(done, options.dateFormat)}`);
+    else if (scheduled && scheduled > today) editScheduled(box(trailing, "tm-things-when", thingsDateLabel(scheduled, now), scheduledTitle));
+    const time = taskTimeDurationLabel(
+        show("scheduledTime") && grouping !== "scheduledTime" ? task.scheduledTime : undefined,
+        show("duration") && grouping !== "duration" ? task.durationMinutes : undefined
+    );
+    if (time) {
+        const hasTime = Boolean(task.scheduledTime && show("scheduledTime") && grouping !== "scheduledTime");
+        const label = box(trailing, "tm-things-time", time, hasTime ? "Scheduled time" : "Duration");
+        editable(label, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, "time", () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
+    }
     const due = task.deadline && showDate("deadline") ? thingsDeadlineLabel(task.deadline, now) : "";
     const dueTime = task.deadlineTime && show("deadlineTime") && grouping !== "deadlineTime" ? taskTimeLabel(task.deadlineTime) : "";
     if (due || dueTime) {
         const urgent = !task.completed && (deadlineIsOverdue(task.deadline, task.deadlineTime, now) || task.deadline === today);
-        const deadline = parts.inline.createSpan({ cls: `tm-things-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${[task.deadline && formatDate(task.deadline, options.dateFormat), dueTime].filter(Boolean).join(", ")}` } });
+        const deadline = trailing.createSpan({ cls: `tm-things-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${[task.deadline && formatDate(task.deadline, options.dateFormat), dueTime].filter(Boolean).join(", ")}` } });
         setIcon(deadline.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
         deadline.createSpan({ text: [due, dueTime].filter(Boolean).join(", ") });
         editable(deadline, `Edit deadline: ${task.deadline ?? ""}${dueTime ? `, ${dueTime}` : ""}`, "deadline", () => options.edit("deadline"));
     }
+    if (!trailing.childElementCount) trailing.remove();
 
     // Below the title: the note the task lives in, when the list spans several.
     if (options.source && show("source") && grouping !== "source") {
@@ -104,35 +113,37 @@ export interface ThingsProjectOptions {
 }
 
 /**
- * A project row as Things lists one: a date box before the name, a count of its remaining tasks and
- * the deadline after it, and the parent project below.
+ * A project row as Things lists one: a count of its remaining tasks after the name, its dates and
+ * deadline at the end of the line, and the parent project below.
  */
 export function renderThingsProjectDetails(parts: ThingsRowParts, project: Project, options: ThingsProjectOptions): void {
     const now = options.now ?? new Date();
     const today = todayIso(now);
     // Ranges read as plain dates; a weekday on one end would be ambiguous.
     const label = (date: string): string => taskDoneDateLabel(date, now);
-    // When: a start date still ahead reads like a task's; a range shows while the project runs.
+    if (project.openTasks) parts.inline.createSpan({ cls: "tm-things-count", text: String(project.openTasks), attr: { title: `${project.openTasks} remaining` } });
+    // At the end of the line: the dates (a start still ahead reads like a task's; a range while it runs), then the deadline.
+    const trailing = parts.inline.createSpan({ cls: "tm-things-trailing" });
     if (project.scheduledDate && project.endDate) {
-        const range = box(parts.lead, "tm-things-when", `${label(project.scheduledDate)} – ${label(project.endDate)}`,
+        const range = box(trailing, "tm-things-when", `${label(project.scheduledDate)} – ${label(project.endDate)}`,
             `${formatDate(project.scheduledDate, options.dateFormat)} – ${formatDate(project.endDate, options.dateFormat)}`);
         editable(range, `Edit project dates: ${range.textContent ?? ""}`, "project-date", () => options.edit("date"));
     } else if (project.scheduledDate && project.scheduledDate > today) {
-        const start = box(parts.lead, "tm-things-when", thingsDateLabel(project.scheduledDate, now), `Starts ${formatDate(project.scheduledDate, options.dateFormat)}`);
+        const start = box(trailing, "tm-things-when", thingsDateLabel(project.scheduledDate, now), `Starts ${formatDate(project.scheduledDate, options.dateFormat)}`);
         editable(start, `Edit project start date: ${start.textContent ?? ""}`, "project-date", () => options.edit("date"));
     } else if (project.endDate) {
-        const end = box(parts.lead, "tm-things-when", `Until ${label(project.endDate)}`, `Ends ${formatDate(project.endDate, options.dateFormat)}`);
+        const end = box(trailing, "tm-things-when", `Until ${label(project.endDate)}`, `Ends ${formatDate(project.endDate, options.dateFormat)}`);
         editable(end, `Edit project end date: ${end.textContent ?? ""}`, "project-end", () => options.edit("endDate"));
     }
-    if (project.openTasks) parts.inline.createSpan({ cls: "tm-things-count", text: String(project.openTasks), attr: { title: `${project.openTasks} remaining` } });
     if (project.deadline) {
         const urgent = deadlineIsOverdue(project.deadline, project.deadlineTime, now) || project.deadline === today;
         const time = project.deadlineTime ? taskTimeLabel(project.deadlineTime) : "";
-        const deadline = parts.inline.createSpan({ cls: `tm-things-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${[formatDate(project.deadline, options.dateFormat), time].filter(Boolean).join(", ")}` } });
+        const deadline = trailing.createSpan({ cls: `tm-things-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${[formatDate(project.deadline, options.dateFormat), time].filter(Boolean).join(", ")}` } });
         setIcon(deadline.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
         deadline.createSpan({ text: [thingsDeadlineLabel(project.deadline, now), time].filter(Boolean).join(", ") });
         editable(deadline, `Edit project deadline: ${formatDate(project.deadline, options.dateFormat)}`, "project-deadline", () => options.edit("deadline"));
     }
+    if (!trailing.childElementCount) trailing.remove();
     if (project.parent) {
         const name = project.parent.replace(/\.md$/i, "");
         const parent = parts.secondary.createSpan({ cls: "tm-things-source", text: name.split("/").pop(), attr: { title: name } });
