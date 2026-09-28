@@ -7,7 +7,7 @@ import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
 import { renderDescriptionIndicator } from "./task-description-indicator";
 import { cloneTaskFilters } from "./task-filters";
-import { renderPropertyFilter } from "./filter-editor";
+import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
 import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
@@ -19,7 +19,6 @@ import { ListDragController } from "./list-drag-view";
 import { draftForGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
 import { renderCalendar } from "./calendar-view";
 import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
-import { TASK_PROPERTIES } from "./task-properties";
 import { OPEN_STATUSES, STATUS_LABELS, TASK_STATUSES, checkboxLabel, statusClass } from "./task-status";
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
@@ -99,6 +98,7 @@ export class TaskMainView extends ItemView {
   private rovingRow?: HTMLElement;
   private moveTargets = new Map<string, { title: string; target: ListDropGroup }>();
   private summaryTimer?: number;
+  private viewOptions?: ViewOptionsPanel;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
     super(leaf);
@@ -162,6 +162,7 @@ export class TaskMainView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.registerDomEvent(this.containerEl.ownerDocument, "click", event => this.clearSelectionOutside(event), true);
+    this.registerDomEvent(this.containerEl.ownerDocument, "pointerdown", event => this.viewOptions?.handleOutside(event));
     // Obsidian's own undo only covers the editor; in task views Cmd/Ctrl+Z undoes the last task change.
     this.registerDomEvent(this.containerEl, "keydown", event => {
       const key = event.key.toLowerCase();
@@ -201,6 +202,8 @@ export class TaskMainView extends ItemView {
     this.preserveView(() => {
       this.renderHeaderMetadata();
       this.renderTaskResults();
+      // Tag, note and section choices come from the current tasks.
+      this.viewOptions?.sync();
     });
   }
 
@@ -273,6 +276,7 @@ export class TaskMainView extends ItemView {
     this.resetRows();
     this.taskResults = undefined;
     this.headerMetadata = undefined;
+    this.viewOptions = undefined;
     this.liveRegion = container.createDiv({ cls: "tm-sr-only", attr: { "aria-live": "polite" } });
     container.addClass("tm-main-view");
     container.classList.toggle("is-dashboard-view", this.state.mode === "dashboard");
@@ -671,59 +675,25 @@ export class TaskMainView extends ItemView {
   }
 
   private renderFilters(container: HTMLElement, toggle: HTMLButtonElement): void {
-    const filters = container.createDiv({ cls: "tm-filters" });
-    const menu = filters.createDiv({ cls: "tm-property-menu" });
-    const sync = (): void => {
-      setIcon(toggle, "sliders-vertical");
-      const label = `View options: filter, sort, and group${this.propertyFilters.length ? ` (${this.propertyFilters.length} active filters)` : ""}`;
-      toggle.setAttribute("aria-label", label);
-      toggle.setAttribute("title", label);
-      toggle.setAttribute("aria-expanded", String(this.filtersExpanded));
-      filters.hidden = !this.filtersExpanded;
-      menu.hidden = !this.filtersExpanded;
-    };
-    toggle.addEventListener("click", () => { this.filtersExpanded = !this.filtersExpanded; sync(); });
-    menu.addEventListener("keydown", event => {
-      if (event.key === "Escape") { this.filtersExpanded = false; sync(); toggle.focus(); }
-    });
-    sync();
-    const ordering = menu.createDiv({ cls: "tm-view-option-controls" });
-    const selectOption = (label: string, value: string, choices: { key: string; label: string }[], change: (value: string) => void): void => {
-      const field = ordering.createEl("label", { cls: "tm-view-option" });
-      field.createSpan({ text: label });
-      const select = field.createEl("select", { attr: { "aria-label": label, "data-tm-focus-key": `option-${label}` } });
-      for (const choice of choices) select.createEl("option", { value: choice.key, text: choice.label });
-      select.value = value;
-      select.addEventListener("change", () => { change(select.value); this.renderTaskResults(); });
-    };
-    selectOption("Sort by", this.sort, [{ key: "date", label: "Action date and time" }, ...TASK_PROPERTIES
-      .filter(property => property.key !== "scheduledTime" && property.key !== "deadlineTime")
-      .map(property => ({ ...property, label: property.key === "scheduledDate" ? "Scheduled date and time" : property.key === "deadline" ? "Deadline date and time" : property.label }))], value => { this.sort = value as TaskSort; });
-    selectOption("Sort direction", this.descending ? "descending" : "ascending", [
-      { key: "ascending", label: "Ascending" }, { key: "descending", label: "Descending" }
-    ], value => { this.descending = value === "descending"; });
-    selectOption("Group by", this.grouping, [
-      { key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES
-    ], value => { this.grouping = value as TaskGrouping; });
-    menu.createEl("h3", { text: "Filters", cls: "tm-view-option-heading" });
-    menu.createDiv({ text: "Match all properties. Within a property, AND is evaluated before OR.", cls: "tm-filter-hint" });
-    const clear = menu.createEl("button", { text: "Clear all filters", attr: { "data-tm-focus-key": "clear-filters" } });
-    clear.addEventListener("click", () => { this.propertyFilters = []; this.render(); });
-    // Read lazily: the panel outlives task changes, so choices must reflect the current tasks.
-    const allTasks = (): Task[] => this.plugin.index.allTasks();
-    for (const property of TASK_PROPERTIES) {
-      const active = this.propertyFilters.find(filter => filter.property === property.key);
-      const submenu = menu.createDiv({ cls: "tm-property-submenu" });
-      const summary = submenu.createSpan({ cls: "tm-property-name", text: `${property.label}${active ? " •" : ""}` });
-      const panel = submenu.createDiv({ cls: "tm-property-conditions" });
-      renderPropertyFilter(panel, property, active, allTasks, filter => {
-        this.propertyFilters = this.propertyFilters.filter(item => item.property !== property.key);
-        if (filter) this.propertyFilters.push(filter);
-        summary.setText(`${property.label}${filter ? " •" : ""}`);
-        sync();
+    this.viewOptions = new ViewOptionsPanel(toggle.closest<HTMLElement>(".tm-view-header") ?? container, toggle, {
+      state: () => ({ sort: this.sort, descending: this.descending, grouping: this.grouping, filters: this.propertyFilters }),
+      update: change => {
+        if (change.sort !== undefined) this.sort = change.sort;
+        if (change.descending !== undefined) this.descending = change.descending;
+        if (change.grouping !== undefined) this.grouping = change.grouping;
+        if (change.filters !== undefined) this.propertyFilters = change.filters;
         this.renderTaskResults();
-      });
-    }
+      },
+      clear: () => {
+        this.propertyFilters = [];
+        this.sort = "date"; this.descending = false; this.grouping = "default";
+        this.renderTaskResults();
+      },
+      // Read lazily: the panel outlives task changes, so choices must reflect the current tasks.
+      tasks: () => this.plugin.index.allTasks(),
+      expanded: () => this.filtersExpanded,
+      setExpanded: open => { this.filtersExpanded = open; }
+    });
   }
 
   private renderSmartLists(container: HTMLElement): void {

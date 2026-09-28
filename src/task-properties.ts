@@ -1,7 +1,21 @@
 import { formatTags } from "./task-tags";
 import { formatDuration, repeatLabel } from "./parser";
 import { STATUS_LABELS, statusFromLabel } from "./task-status";
+import { todayIso } from "./date";
 import type { FilterOperator, Task, TaskFilter, TaskProperty } from "./types";
+
+const DATE_PROPERTIES = new Set<TaskProperty>(["scheduledDate", "deadline", "defer", "completed"]);
+
+/**
+ * Date filter values may be relative — `today`, `today+7`, `today-1` — so a saved smart list such as
+ * "Next 7 days" keeps meaning the next seven days. Other values are returned unchanged.
+ */
+export function resolveDateToken(value: string, now = new Date()): string {
+  const token = /^today(?:([+-])(\d+))?$/i.exec(value.trim());
+  if (!token) return value;
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (token[2] ? Number(token[2]) * (token[1] === "-" ? -1 : 1) : 0), 12);
+  return todayIso(date);
+}
 
 export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" | "choice" | "date" | "time" | "number" }[] = [
   { key: "title", label: "Title", kind: "text" },
@@ -77,7 +91,7 @@ function matchesCondition(task: Task, filter: TaskFilter): boolean {
   if (filter.operator === "missing") return !present;
   if (!present) return false;
   const normalized = String(value).toLocaleLowerCase();
-  const values = filter.values.map(item => item.toLocaleLowerCase());
+  const values = filter.values.map(item => (DATE_PROPERTIES.has(filter.property) ? resolveDateToken(item) : item).toLocaleLowerCase());
   if (filter.operator === "is") return values.includes(normalized);
   if (filter.operator === "isNot") return !values.includes(normalized);
   if (filter.operator === "contains") return normalized.includes(values[0] ?? "");

@@ -22,47 +22,7 @@ class Element extends EventTarget {
   all(): Element[] { return this.children.flatMap(el => [el, ...el.all()]); }
 }
 
-it("keeps sorting, grouping, and filters behind one toggle and applies each control", () => {
-  const view = new TaskMainView({} as WorkspaceLeaf, { index: { allTasks: () => [] } } as unknown as TaskManagerPlugin);
-  const internal = view as unknown as { renderHeader(root: HTMLElement): HTMLButtonElement; renderFilters(root: HTMLElement, toggle: HTMLButtonElement): void; renderTaskResults(): void; sort: string; descending: boolean; grouping: string; propertyFilters: unknown[]; state: { mode: string } };
-  // All Tasks: the Today header's summary is covered in view-rendering.test.ts.
-  internal.state.mode = "all";
-  const render = vi.spyOn(internal, "renderTaskResults").mockImplementation(() => {});
-  const root = new Element();
-  const toggle = internal.renderHeader(root as never) as unknown as Element;
-  internal.renderFilters(root as never, toggle as never);
-  const toolbar = root.children[1];
-  const actions = root.children[0].children[1];
-  expect(actions.children.at(-2)).toBe(toggle);
-  expect(actions.children.at(-1)!.attrs["aria-label"]).toBe("Add task");
-  expect(actions.children.at(-1)!.all().some(el => el.text === "Add task")).toBe(false);
-  const panel = toolbar.children.find(el => el.tag === "div")!;
-  expect(toolbar.children.filter(el => el.tag === "button")).toHaveLength(0);
-  expect(toolbar.children.some(el => el.tag === "input")).toBe(false);
-  expect(toolbar.hidden).toBe(true);
-  expect(toggle.text).toBe("");
-  expect(toggle.attrs["aria-label"]).toBe("View options: filter, sort, and group");
-  expect(panel.hidden).toBe(true);
-  toggle.dispatchEvent(new Event("click"));
-  expect(panel.hidden).toBe(false);
-  expect(toolbar.hidden).toBe(false);
-  const control = (label: string) => panel.all().find(el => el.attrs["aria-label"] === label)!;
-  const change = (label: string, value: string, event = "change") => {
-    const el = control(label); el.value = value; el.dispatchEvent(new Event(event));
-  };
-  change("Sort by", "priority");
-  change("Sort direction", "descending");
-  change("Group by", "tags");
-  expect(internal).toMatchObject({ sort: "priority", descending: true, grouping: "tags" });
-  expect(render).toHaveBeenCalledTimes(3);
-  change("Title condition", "contains");
-  change("Title value", "launch", "input");
-  expect(internal.propertyFilters).toEqual([{ property: "title", operator: "contains", values: ["launch"] }]);
-  expect(toggle.attrs["aria-label"]).toBe("View options: filter, sort, and group (1 active filters)");
-  panel.dispatchEvent(Object.assign(new Event("keydown"), { key: "Escape" }));
-  expect(panel.hidden).toBe(true);
-  expect(toggle.focus).toHaveBeenCalledOnce();
-});
+// The view options panel itself is covered in view-options.test.ts.
 
 it.each([true, false])("lists archived projects without an opt-in checkbox (active projects: %s)", hasActive => {
   const archived = { path: "Archive.md", name: "Archive", archived: true, openTasks: 0, completedTasks: 1 };

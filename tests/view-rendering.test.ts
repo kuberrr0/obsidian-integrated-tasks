@@ -166,15 +166,21 @@ describe("re-rendering", () => {
     expect((document.activeElement as HTMLElement).getAttribute("data-task-id")).toBe("A.md:3");
   });
 
-  it("keeps the filter panel, including a half-built filter, when tasks change", async () => {
+  it("keeps the options panel, an open dropdown and a half-built filter when tasks change", async () => {
     const { view, internals, content } = await setup([note("A.md", 3)]);
     await view.setState({ mode: "all" });
-    const panel = content().querySelector(".tm-filters");
-    const condition = content().querySelector<HTMLSelectElement>(".tm-property-conditions select")!;
-    condition.value = condition.options[1].value;
+    content().querySelector<HTMLButtonElement>(".tm-filter-toggle")!.click();
+    const panel = content().querySelector(".tm-options-panel")!;
+    content().querySelector<HTMLButtonElement>('[data-tm-focus-key="option-title"]')!.click();
+    content().querySelector<HTMLElement>(".tm-options-option.is-action")!.click();
+    const condition = content().querySelector<HTMLSelectElement>(".tm-options-conditions select")!;
+    condition.value = "contains";
+    content().querySelector<HTMLButtonElement>('[data-tm-focus-key="option-status"]')!.click();
     internals.refresh();
-    expect(content().querySelector(".tm-filters")).toBe(panel);
-    expect(content().querySelector<HTMLSelectElement>(".tm-property-conditions select")!.value).toBe(condition.options[1].value);
+    expect(content().querySelector(".tm-options-panel")).toBe(panel);
+    expect(panel.hasAttribute("hidden")).toBe(false);
+    expect(content().querySelector(".tm-options-dropdown [role=listbox]")!.getAttribute("aria-label")).toBe("Status");
+    expect(content().querySelector<HTMLSelectElement>(".tm-options-conditions select")!.value).toBe("contains");
   });
 
   it("coalesces index updates into one refresh per frame and cancels it when the view closes", async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TASK_PROPERTIES, matchesFilter } from "../src/task-properties";
 import { groupTasks, sortTasks, taskMatchesQuery } from "../src/query";
 import type { Task, TaskFilter } from "../src/types";
@@ -64,4 +64,20 @@ it("evaluates AND before OR, including presence and negation", () => {
   expect(matchesFilter({ ...task, title: "Review report" }, mixed)).toBe(true);
   expect(matchesFilter({ ...task, title: "Review draft" }, mixed)).toBe(false);
   expect(matchesFilter({ ...task, deadline: undefined }, { ...filter("deadline", "missing"), conditions: [{ join: "or", operator: "after", values: ["2026-10-01"] }] })).toBe(true);
+});
+
+describe("relative date filter values", () => {
+  it("resolve today, today+N and today-N at the time they're checked", async () => {
+    const { resolveDateToken, matchesFilter } = await import("../src/task-properties");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 30, 23, 59));
+    expect([resolveDateToken("today"), resolveDateToken("today+7"), resolveDateToken("today-1"), resolveDateToken("2026-01-01")]).toEqual(["2026-09-30", "2026-10-07", "2026-09-29", "2026-01-01"]);
+    const task = { deadline: "2026-10-01" } as never;
+    const tomorrow = { property: "deadline" as const, operator: "is" as const, values: ["today+1"] };
+    expect(matchesFilter(task, tomorrow)).toBe(true);
+    vi.setSystemTime(new Date(2026, 9, 1, 0, 1));
+    expect(matchesFilter(task, tomorrow)).toBe(false);
+    expect(matchesFilter(task, { property: "deadline", operator: "between", values: ["today", "today+7"] })).toBe(true);
+    vi.useRealTimers();
+  });
 });

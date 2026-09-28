@@ -39,7 +39,7 @@ The top of **Today** shows how your day is going: a progress circle of tasks don
 
 Press **Cmd/Ctrl+K** in a task view, or run **Quick switch to view, project, tag, or task**, to jump anywhere by typing: a view, a project, a tag, a smart list, or an open task by its title.
 
-Search by task title, description, or tag. Narrow the results by priority, dates, duration, status, note, or section. Sort and group the results to suit the way you're working.
+Open **View options** with the filter button at the top of a task view to sort, group, and filter. Each property has a quick list: pick several statuses, priorities, tags, or notes at once, or choose a date range such as **Overdue**, **Today**, or **Next 7 days**. Date ranges stay relative, so a smart list for “Next 7 days” always means the coming week. **More conditions…** opens the full editor for anything else, such as “is not”, a range between two dates, or several conditions joined with AND and OR. The button shows how many filters are active, and **Clear all** starts over.
 
 For a view you'll use again, choose **Create new smart list**. Save a list such as “Quick wins,” “Waiting on others,” or “High-priority work.” Smart lists update as your tasks change. Deleting a smart list leaves its tasks intact.
 
