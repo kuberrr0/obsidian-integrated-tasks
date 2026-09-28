@@ -19,6 +19,7 @@ import { TaskIndex, type RefreshOptions } from "./task-index";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
 import { TaskStore, type TaskChange } from "./task-store";
 import { TasksImportModal } from "./tasks-import-modal";
+import { TASK_QUERY_LANGUAGE, TASK_QUERY_TEMPLATE, TaskQueryBlock } from "./task-query-block";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
 import { DEFAULT_SETTINGS, type SmartList, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
@@ -60,6 +61,9 @@ export default class TaskManagerPlugin extends Plugin {
       renderNoteTokens(element, this.dateFormat());
       registerNoteTaskEdit(element, context, () => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel,
         task => this.toggleTaskFromReadingView(task, true), task => this.toggleTaskFromReadingView(task, false));
+    });
+    this.registerMarkdownCodeBlockProcessor(TASK_QUERY_LANGUAGE, (source, element, context) => {
+      context.addChild(new TaskQueryBlock(element, source, context.sourcePath, this));
     });
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
@@ -146,6 +150,7 @@ export default class TaskManagerPlugin extends Plugin {
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
+    this.addCommand({ id: "insert-task-query", name: "Insert task query", editorCallback: editor => editor.replaceSelection(TASK_QUERY_TEMPLATE) });
     this.addCommand({ id: "import-tasks-plugin", name: "Import tasks from the Tasks plugin", callback: () => this.openTasksImport() });
     this.addCommand({ id: "quick-switch", name: "Quick switch to view, project, tag, or task", callback: () => this.openQuickSwitcher() });
     this.addCommand({ id: "undo-task-change", name: "Undo last task change", checkCallback: checking => {

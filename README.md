@@ -129,6 +129,39 @@ With Task mode off, you can end a checklist item with a natural date, such as 鈥
 
 Tags connect related work across your vault. Open a tag from the sidebar to see its tasks; a task created in that view inherits the tag. When a tag has a linked note, Task mode can show that note as a tag task view too.
 
+## Show tasks inside any note
+
+Add a `task-query` code block to a note, such as a daily note, a project hub, or a meeting note, to show a live list of tasks there. Run **Insert task query** to start one:
+
+````
+```task-query
+title: This week
+deadline: before in 7 days
+tags: work
+sort: priority
+```
+````
+
+The list updates as your tasks change. Check tasks off, click a title to edit it, or click a date or tag to change it, right from the note. It works in Reading view and Live Preview.
+
+Write one option per line:
+
+| Option | Examples |
+| --- | --- |
+| `view` | `today`, `upcoming`, `inbox`, `all`, `overdue` |
+| `smart list` | `Quick wins` (uses that list's filters, sort, and grouping) |
+| `project` | `[[Website Refresh]]`, or `this` for the note the block is in |
+| `note` | `this`, `[[Inbox]]` (tasks written in that note) |
+| Any property | `priority: 1, 2` 路 `tags: work or home` 路 `status: completed` 路 `repeat: has` 路 `hidden until: someday` 路 `task title: contains report` |
+| Dates | `deadline: before next friday` 路 `scheduled: between today and in 7 days` 路 `completed: after 7 days ago` 路 `deadline: missing` |
+| `search` | words in the title, description, or tags |
+| `sort`, `group` | `sort: priority desc` 路 `group: source` |
+| `limit` | how many tasks to show (50 by default), with **Show all** for views and smart lists |
+| `title` | a heading for the list |
+| `show completed` | `yes` to include completed tasks |
+
+Dates such as `today` or `next friday` are worked out each time the list is shown, so the list stays current. If an option isn't understood, the block says which line and why. The Tasks plugin's `tasks` blocks are left alone, so both plugins can be used side by side.
+
 ## Update several tasks at once
 
 Select tasks to change their dates, priorities, tags, or other details together.

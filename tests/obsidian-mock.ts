@@ -27,3 +27,13 @@ export class FuzzySuggestModal {
 }
 export const renderResults = (): void => {};
 
+// Minimal lifecycle for Markdown render children (task query blocks, note checkboxes).
+export class MarkdownRenderChild {
+  private cleanups: Array<() => unknown> = [];
+  constructor(public containerEl: HTMLElement) {}
+  onload(): void {}
+  onunload(): void {}
+  load(): void { this.onload(); }
+  unload(): void { for (const cleanup of this.cleanups.splice(0)) cleanup(); this.onunload(); }
+  register(cleanup: () => unknown): void { this.cleanups.push(cleanup); }
+}

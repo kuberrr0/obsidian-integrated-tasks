@@ -1760,3 +1760,17 @@ body .modal-container .modal.tm-bottom-sheet > .tm-editor-actions { flex-shrink:
 .tm-import-examples li { margin-bottom: var(--size-2-3); overflow-wrap: anywhere; }
 .tm-import-skip { margin: var(--size-2-2) 0 0; color: var(--text-muted); font-size: var(--font-ui-small); }
 
+/* Task query blocks in notes */
+.tm-query-block { margin: var(--size-4-2) 0; padding: var(--size-4-2) var(--size-4-3); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); background: var(--background-primary); }
+.tm-query-title { display: flex; align-items: center; gap: var(--size-4-2); margin-bottom: var(--size-4-1); font-weight: var(--font-semibold); }
+.tm-query-group { margin: var(--size-4-2) 0 var(--size-2-2); color: var(--text-muted); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); text-transform: uppercase; letter-spacing: .04em; }
+.tm-query-block .tm-task-list { margin: 0; }
+.tm-query-block .tm-query-row { min-height: 0; padding-block: var(--size-2-2); }
+.tm-query-block button.tm-task-title { background: transparent; }
+.tm-query-block .tm-query-row.is-completed .tm-task-title { color: var(--text-muted); text-decoration: line-through; }
+.tm-query-empty, .tm-query-footer { color: var(--text-muted); font-size: var(--font-ui-small); }
+.tm-query-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--size-4-2); margin-top: var(--size-4-2); }
+.tm-query-error { color: var(--text-normal); font-size: var(--font-ui-small); }
+.tm-query-error strong { color: var(--text-error); }
+.tm-query-error ul { margin: var(--size-2-2) 0; padding-inline-start: var(--size-4-4); }
+.tm-query-help { color: var(--text-muted); }

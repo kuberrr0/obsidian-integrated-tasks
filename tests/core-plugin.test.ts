@@ -11,6 +11,7 @@ vi.mock("obsidian", async importOriginal => {
     registerView(): void {}
     registerEditorExtension(): void {}
     registerMarkdownPostProcessor(): void {}
+    registerMarkdownCodeBlockProcessor(): void {}
     addSettingTab(tab: unknown): void { this.settingTabs.push(tab); }
     addRibbonIcon() { return { setAttribute() {}, classList: { toggle() {} } }; }
     addCommand(command: unknown) { return command; }
