@@ -178,6 +178,17 @@ it("drops a task hovering a group's heading after the last task above the headin
   await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[3], { destination: "Work.md" }, tasks[0], "after"));
 });
 
+it("drops above every heading into the empty list waiting there", async () => {
+  const { tasks, rows, drop, first } = sections();
+  // Every task sits under a heading: the note's own list above them is empty.
+  first.replaceChildren();
+  fire(rows[3], "pointerdown");
+  fire(rows[3], "pointermove", { clientY: 50 });
+  expect(first.firstElementChild).toBe(gap());
+  fire(rows[3], "pointerup", { clientY: 50 });
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[3], { destination: "Work.md" }, undefined, undefined));
+});
+
 it("starts the group when nothing is above its heading, and leaves board columns as they are", () => {
   const list = sections();
   list.first.remove();

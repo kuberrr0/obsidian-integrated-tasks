@@ -776,6 +776,8 @@ button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var
 .tm-task-row[data-drop-position="child"]::after { content: "Nest inside"; }
 .tm-task-row[data-drop-position="outdent"]::after { content: "Outdent"; }
 .tm-task-list:empty { min-height: 28px; }
+/* The list above a project's headings takes no space until a drag opens its gap. */
+.tm-task-list.tm-drop-only:empty { min-height: 0; }
 button.tm-list-drag-handle { touch-action: none; }
 
 .tm-layout-controls {

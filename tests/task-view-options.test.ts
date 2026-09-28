@@ -43,7 +43,7 @@ it.each([true, false])("lists archived projects without an opt-in checkbox (acti
   expect(openProjectCreator).toHaveBeenCalledOnce();
 });
 
-it("starts a sectioned project at its first heading without an empty leading task list", () => {
+it("starts a sectioned project at its first heading, with only a drop-only list above it", () => {
   const view = new TaskMainView({} as WorkspaceLeaf, { settings: {}, index: { headingsForPath: () => [{ name: "Ready", line: 0 }] } } as unknown as TaskManagerPlugin);
   const internal = view as unknown as { renderProjectSections(root: HTMLElement, path: string, tasks: unknown[]): void; renderTaskList(root: HTMLElement, tasks: unknown[], target: unknown): void };
   const renderList = vi.spyOn(internal, "renderTaskList").mockImplementation(() => {});
@@ -51,6 +51,8 @@ it("starts a sectioned project at its first heading without an empty leading tas
   internal.renderProjectSections(root as never, "Project.md", [{ sectionLine: 0 }]);
   expect(root.children[0].tag).toBe("section");
   expect(root.children[0].children[0].text).toBe("Ready");
-  expect(renderList).toHaveBeenCalledOnce();
-  expect(renderList.mock.calls[0][0]).toBe(root.children[0]);
+  // The list above the headings is empty and only takes drops; the section's own list follows.
+  expect(renderList).toHaveBeenCalledTimes(2);
+  expect(renderList.mock.calls[0]).toEqual([root, [], { destination: "Project.md" }, true]);
+  expect(renderList.mock.calls[1][0]).toBe(root.children[0]);
 });

@@ -622,7 +622,9 @@ export class TaskMainView extends ItemView {
     }
     const unsectioned = bySection.get(undefined) ?? [];
     this.addMoveTarget(path.replace(/\.md$/i, "").split("/").pop() ?? path, { destination: path });
-    if (unsectioned.length || !headings.length) this.renderTaskList(container, unsectioned, { destination: path });
+    // With every task under a heading, an empty list still waits above the first one, so a task can be
+    // dragged there (above all headings); it takes no space until a drag opens its gap.
+    this.renderTaskList(container, unsectioned, { destination: path }, Boolean(headings.length && !unsectioned.length));
     for (const heading of headings) {
       const group = bySection.get(heading.line) ?? [];
       const section = container.createEl("section", { cls: "tm-section" });
@@ -905,8 +907,8 @@ export class TaskMainView extends ItemView {
     return target ? `${target.property ?? ""}|${target.value ?? ""}|${target.destination ?? ""}` : `list-${this.listsRendered}`;
   }
 
-  private renderTaskList(container: HTMLElement, tasks: Task[], target?: ListDropGroup): void {
-    const list = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
+  private renderTaskList(container: HTMLElement, tasks: Task[], target?: ListDropGroup, dropOnly = false): void {
+    const list = container.createDiv({ cls: `tm-task-list${dropOnly ? " tm-drop-only" : ""}`, attr: { role: "list" } });
     if (target) this.listDrag?.group(list, target);
     const key = this.listKey(target);
     const floor = this.listsRendered++ < MIN_ROW_LISTS ? MIN_LIST_ROWS : 0;
