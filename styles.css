@@ -2054,6 +2054,10 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-things-card-property .tm-things-card-icon svg.lucide-flag { fill: currentColor; }
 .tm-things-card-property:has(.lucide-calendar) .tm-things-card-icon { color: var(--color-red); }
 .tm-things-card-property.is-urgent :is(.tm-things-card-label, .tm-things-card-icon) { color: var(--text-error); }
+/* The priority line's icon takes the checkbox's priority colour. */
+.tm-things-card-property.is-p1 .tm-things-card-icon { color: var(--text-error); }
+.tm-things-card-property.is-p2 .tm-things-card-icon { color: var(--color-orange); }
+.tm-things-card-property.is-p3 .tm-things-card-icon { color: var(--color-blue); }
 .tm-things-card-property:hover .tm-things-card-label { text-decoration: underline; text-decoration-color: var(--text-faint); }
 .tm-things-card-toolbar { display: flex; justify-content: flex-end; gap: 2px; margin-top: 4px; }
 .tm-things-card-toolbar .clickable-icon { color: var(--text-faint); }

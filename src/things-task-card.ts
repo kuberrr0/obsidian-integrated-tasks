@@ -46,6 +46,9 @@ export function cardNotes(description: string | undefined): string {
     return (description ?? "").split("\n").map(line => line.replace(/^[-*+] (?!\[[ xX/?-]\])/, "")).join("\n");
 }
 
+/** Matches the project editor's P1 — High, P2 — Medium, P3 — Low. */
+const PRIORITY_NAMES: Record<number, string> = { 1: "High", 2: "Medium", 3: "Low" };
+
 /** "Thu, Oct 8", with the year outside the current one. */
 function longDate(date: string, now: Date): string {
     return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "ddd, MMM D" : "ddd, MMM D, YYYY");
@@ -195,6 +198,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     }
     const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
     if (time) line("clock", time, task.scheduledTime ? "scheduledDate" : "durationMinutes");
+    if (task.priority) line("signal", `${PRIORITY_NAMES[task.priority]} priority`, "priority", `P${task.priority}`, `is-p${task.priority}`);
     if (task.repeat) line("repeat", `Repeats ${repeatLabel(task.repeat).toLowerCase()}`, "repeat");
     if (task.deadline) {
         const urgent = !task.completed && (deadlineIsOverdue(task.deadline, task.deadlineTime, now) || task.deadline === today);
@@ -214,6 +218,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     if (!options.tags.length) add("tag", "Tags", "tags", () => options.edit("tags"));
     // The first subtask starts here; later ones follow with Enter.
     if (!options.children.length) add("logs", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
+    if (!task.priority) add("signal", "Priority", "priority", () => options.edit("priority"));
     if (!task.repeat) add("repeat", "Repeat", "repeat", () => options.edit("repeat"));
     if (!task.deadline) add("flag", "Deadline", "deadline", () => options.edit("deadline"));
     if (!toolbar.childElementCount) toolbar.remove();

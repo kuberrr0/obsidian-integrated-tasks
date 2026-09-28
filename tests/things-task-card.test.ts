@@ -107,7 +107,18 @@ describe("Things task card", () => {
     expect(lines.map(line => line.textContent)).toEqual(["Today", "Deadline: Wed, Sep 3011 days left"]);
     lines[1].click();
     expect(options.edit).toHaveBeenCalledWith("deadline");
-    expect(Array.from(element.querySelectorAll(".tm-things-card-toolbar button")).map(button => button.getAttribute("aria-label"))).toEqual(["Checklist", "Repeat"]);
+    expect(Array.from(element.querySelectorAll(".tm-things-card-toolbar button")).map(button => button.getAttribute("aria-label"))).toEqual(["Checklist", "Priority", "Repeat"]);
+    element.querySelector<HTMLElement>('[aria-label="Priority"]')!.click();
+    expect(options.edit).toHaveBeenLastCalledWith("priority");
+  });
+
+  it("shows a set priority as a line that opens the priority editor, in place of the toolbar button", () => {
+    const { element, options } = card("- [ ] Task 1 p2");
+    const line = element.querySelector<HTMLElement>(".tm-things-card-property.is-p2")!;
+    expect(line.textContent).toBe("Medium priorityP2");
+    line.click();
+    expect(options.edit).toHaveBeenCalledWith("priority");
+    expect(element.querySelector('[aria-label="Priority"]')).toBeNull();
   });
 
   it("renames a subtask in place, and Enter starts a new subtask right below it", () => {
