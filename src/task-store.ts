@@ -6,6 +6,8 @@ import { newTaskLines } from "./task-description";
 import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
 import { liveTaskBlock } from "./task-block";
+import { serializeTask } from "./parser";
+import { TASK_INDENT } from "./task-indentation";
 import type { ListPlacement } from "./list-drag";
 import { splitDestination } from "./structure";
 import { normalizePath, type App, TFile, TFolder } from "obsidian";
@@ -160,6 +162,25 @@ export class TaskStore {
       await this.process(file, (content) =>
         insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel())
       );
+    });
+  }
+
+  /**
+   * Adds a to-do subtask to `parent`: right after `after` (one of its subtasks, keeping that subtask's
+   * indentation) or, with no `after`, at the end of the parent's block one level deeper.
+   */
+  addSubtask(parent: Task, title: string, after?: Task): Promise<void> {
+    return this.run(`Added ${taskName(title)}`, async () => {
+      const file = this.requireFile(parent.path);
+      await this.process(file, content => {
+        const anchor = liveTaskBlock(content, after ?? parent, this.getDateFormat(), this.getSectionHeadingLevel());
+        const leading = /^[ \t]*/.exec(anchor.lines[0])![0];
+        const indent = after ? leading : leading + " ".repeat(TASK_INDENT);
+        const line = indent + serializeTask({ title, completed: false, destination: parent.path, indent: 0 }, this.getDateFormat(), this.getLinkDates());
+        const lines = content.split("\n");
+        lines.splice(anchor.end, 0, line);
+        return lines.join("\n");
+      });
     });
   }
 

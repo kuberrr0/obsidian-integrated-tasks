@@ -21,7 +21,7 @@ function card(markdown: string, overrides: Partial<TaskCardOptions> = {}) {
   const options: TaskCardOptions = {
     task, depth: 0, now, tags: task.tags ?? [], children: rest.filter(child => child.parentId === task.id),
     draft: { title: task.title, notes: cardNotes(task.description) },
-    change: vi.fn(), toggle: vi.fn(), edit: vi.fn(), collapse: vi.fn(), ...overrides
+    change: vi.fn(), toggle: vi.fn(), edit: vi.fn(), collapse: vi.fn(), renameChild: vi.fn(), addChild: vi.fn(), ...overrides
   };
   const element = renderThingsTaskCard(parent, options);
   return { element, options, task };
@@ -92,7 +92,7 @@ describe("Things task card", () => {
     const notes = element.querySelector<HTMLTextAreaElement>(".tm-things-card-notes")!;
     expect(title.value).toBe("Task 1");
     expect(notes.value).toBe("Some notes");
-    expect(Array.from(element.querySelectorAll(".tm-things-card-check-title")).map(item => item.textContent)).toEqual(["Subtask", "Another subtask"]);
+    expect(Array.from(element.querySelectorAll<HTMLInputElement>(".tm-things-card-check-title")).map(item => item.value)).toEqual(["Subtask", "Another subtask"]);
     title.value = "Task one";
     title.dispatchEvent(new Event("input"));
     expect(options.change).toHaveBeenLastCalledWith({ title: "Task one", notes: "Some notes" });
@@ -107,7 +107,48 @@ describe("Things task card", () => {
     expect(lines.map(line => line.textContent)).toEqual(["Today", "Deadline: Wed, Sep 3011 days left"]);
     lines[1].click();
     expect(options.edit).toHaveBeenCalledWith("deadline");
-    expect(Array.from(element.querySelectorAll(".tm-things-card-toolbar button")).map(button => button.getAttribute("aria-label"))).toEqual(["Repeat"]);
+    expect(Array.from(element.querySelectorAll(".tm-things-card-toolbar button")).map(button => button.getAttribute("aria-label"))).toEqual(["Checklist", "Repeat"]);
+  });
+
+  it("renames a subtask in place, and Enter starts a new subtask right below it", () => {
+    const { element, options } = card("- [ ] Task 1\n  - [ ] One\n  - [ ] Two");
+    const [one] = options.children;
+    const name = element.querySelector<HTMLInputElement>(`[data-tm-focus-key="card-subtask:${one.id}"]`)!;
+    name.focus();
+    name.value = "One renamed";
+    name.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(options.renameChild).toHaveBeenCalledExactlyOnceWith(one, "One renamed");
+    // A blank subtask opens between One and Two, focused.
+    const rows = Array.from(element.querySelectorAll(".tm-things-card-check"));
+    expect(rows.map(row => row.classList.contains("is-new"))).toEqual([false, true, false]);
+    const input = rows[1].querySelector<HTMLInputElement>(".tm-things-card-check-title")!;
+    expect(element.ownerDocument.activeElement).toBe(input);
+    input.value = "One and a half";
+    input.dispatchEvent(new Event("input"));
+    expect(options.change).toHaveBeenLastCalledWith(expect.objectContaining({ subtask: { after: one.id, text: "One and a half" } }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(options.addChild).toHaveBeenCalledExactlyOnceWith("One and a half", one, true);
+    expect(element.querySelector(".is-new")).toBeNull();
+  });
+
+  it("starts the first subtask from the Checklist button, and an empty one just goes away", () => {
+    const { element, options } = card("- [ ] Task 1");
+    element.querySelector<HTMLElement>('[aria-label="Checklist"]')!.click();
+    const input = element.querySelector<HTMLInputElement>(".is-new .tm-things-card-check-title")!;
+    expect(element.ownerDocument.activeElement).toBe(input);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(options.addChild).not.toHaveBeenCalled();
+    expect(element.querySelector(".is-new")).toBeNull();
+  });
+
+  it("keeps a subtask being typed across a redraw, and saves it when the card closes", () => {
+    const { element, options } = card("- [ ] Task 1", { draft: { title: "Task 1", notes: "", subtask: { text: "Half typed" } }, focus: "new" });
+    const input = element.querySelector<HTMLInputElement>(".is-new .tm-things-card-check-title")!;
+    expect(input.value).toBe("Half typed");
+    expect(element.ownerDocument.activeElement).toBe(input);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(options.addChild).toHaveBeenCalledExactlyOnceWith("Half typed", undefined, false);
+    expect(options.collapse).toHaveBeenCalledOnce();
   });
 
   it("closes on Escape or Mod+Enter and moves from the title to the notes on Enter", () => {

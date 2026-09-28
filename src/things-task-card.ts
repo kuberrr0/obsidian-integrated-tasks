@@ -7,10 +7,12 @@ import { checkboxLabel, statusClass } from "./task-status";
 import { renderThingsTaskDetails, thingsDeadlineLabel, type ThingsDetailsOptions } from "./things-row-details";
 import type { Task } from "./types";
 
-/** The card's unsaved title and notes, kept by the view so a re-render does not lose typing. */
+/** The card's unsaved title, notes and new subtask, kept by the view so a re-render does not lose typing. */
 export interface TaskCardDraft {
     title: string;
     notes: string;
+    /** A subtask being typed: after which subtask it goes (none: at the end) and its text so far. */
+    subtask?: { after?: string; text: string };
 }
 
 export interface TaskCardOptions {
@@ -26,6 +28,12 @@ export interface TaskCardOptions {
     now?: Date;
     change: (draft: TaskCardDraft) => void;
     toggle: (task: Task, completed: boolean) => void;
+    /** Renames a subtask. */
+    renameChild: (child: Task, title: string) => void;
+    /** Adds a subtask after `after` (or at the end); `next` starts another one below it once added. */
+    addChild: (title: string, after: Task | undefined, next: boolean) => void;
+    /** What to focus once drawn: a subtask's id, or "new" for the subtask being typed. */
+    focus?: string;
     edit: (property: TaskEditorProperty) => void;
     collapse: () => void;
 }
@@ -68,7 +76,8 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     title.value = draft.title;
     const notes = card.createEl("textarea", { cls: "tm-things-card-notes", attr: { "aria-label": "Notes", placeholder: "Notes", rows: "1", "data-tm-focus-key": "card-notes" } });
     notes.value = draft.notes;
-    const change = (): void => options.change({ title: title.value, notes: notes.value });
+    let subtask = draft.subtask;
+    const change = (): void => options.change({ title: title.value, notes: notes.value, subtask });
     title.addEventListener("input", () => {
         if (/[\r\n]/.test(title.value)) title.value = title.value.replace(/[\r\n]+/g, " ");
         autosize(title); change();
@@ -78,10 +87,13 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     title.addEventListener("keydown", event => {
         if (event.key === "Enter" && !event.isComposing && !event.metaKey && !event.ctrlKey) { event.preventDefault(); notes.focus(); }
     });
+    // Subtask edits save as you leave each one; closing the card saves the one still being edited.
+    const commits: Array<() => void> = [];
     card.addEventListener("keydown", event => {
         // Escape, or Cmd/Ctrl+Enter, closes the card and saves it.
         if (event.key === "Escape" || (event.key === "Enter" && (event.metaKey || event.ctrlKey))) {
             event.preventDefault(); event.stopPropagation();
+            for (const commit of commits) commit();
             options.collapse();
         }
         // Keep row shortcuts (M, S, arrows) from acting while typing.
@@ -92,21 +104,76 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     if (card.isConnected) fit();
     requestAnimationFrame(fit);
 
-    if (options.children.length) {
-        const checklist = card.createDiv({ cls: "tm-things-card-checklist", attr: { role: "list", "aria-label": "Subtasks" } });
-        for (const child of options.children) {
-            // Not a label: clicking a property must open its editor, not tick the box.
-            const item = checklist.createDiv({ cls: `tm-things-card-check${child.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
-            const box = item.createEl("input", { type: "checkbox", cls: "tm-things-card-check-box", attr: { "aria-label": checkboxLabel(child) } });
-            box.checked = child.completed;
-            box.addEventListener("change", () => options.toggle(child, box.checked));
-            // Subtasks show their properties as task rows do: a star or date box, then tags and the deadline.
-            const lead = item.createSpan({ cls: "tm-things-lead" });
-            item.createSpan({ cls: "tm-things-card-check-title", text: child.title });
-            if (options.childDetails) renderThingsTaskDetails({ lead, inline: item, secondary: item }, child, options.childDetails(child));
-            if (!lead.childElementCount) lead.remove();
-        }
+    // The checklist: subtask names edit in place, and Enter starts a new subtask right below.
+    const checklist = card.createDiv({ cls: "tm-things-card-checklist", attr: { role: "list", "aria-label": "Subtasks" } });
+    const items = new Map<string, HTMLElement>();
+    let newRow: HTMLElement | undefined;
+    const startSubtask = (after: Task | undefined, text = ""): HTMLInputElement => {
+        newRow?.remove();
+        const row = checklist.createDiv({ cls: "tm-things-card-check is-new", attr: { role: "listitem" } });
+        const anchor = after && items.get(after.id);
+        if (anchor) anchor.after(row);
+        row.createEl("input", { type: "checkbox", cls: "tm-things-card-check-box", attr: { "aria-hidden": "true", tabindex: "-1", disabled: "" } });
+        const input = row.createEl("input", { type: "text", cls: "tm-things-card-check-title", attr: { "aria-label": "New subtask", "data-tm-focus-key": "card-subtask-new" } });
+        input.value = text;
+        newRow = row;
+        subtask = { after: after?.id, text };
+        let finished = false;
+        // Enter adds it and starts the next; leaving it adds it; either way an empty one just goes away.
+        const finish = (next: boolean): void => {
+            if (finished) return;
+            finished = true;
+            const value = input.value.trim();
+            if (newRow === row) newRow = undefined;
+            row.remove();
+            subtask = undefined;
+            change();
+            if (value) options.addChild(value, after, next);
+        };
+        input.addEventListener("input", () => { subtask = { after: after?.id, text: input.value }; change(); });
+        input.addEventListener("keydown", event => {
+            if (event.key !== "Enter" || event.isComposing || event.metaKey || event.ctrlKey) return;
+            event.preventDefault();
+            finish(true);
+        });
+        // Only a real blur: a redraw removing the row keeps the text in the draft for the new card.
+        input.addEventListener("blur", () => { if (row.isConnected) finish(false); });
+        commits.push(() => finish(false));
+        change();
+        return input;
+    };
+    for (const child of options.children) {
+        // Not a label: clicking a property must open its editor, not tick the box.
+        const item = checklist.createDiv({ cls: `tm-things-card-check${child.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
+        items.set(child.id, item);
+        const box = item.createEl("input", { type: "checkbox", cls: "tm-things-card-check-box", attr: { "aria-label": checkboxLabel(child) } });
+        box.checked = child.completed;
+        box.addEventListener("change", () => options.toggle(child, box.checked));
+        // Subtasks show their properties as task rows do: a star before the name, then tags, dates and the deadline.
+        const lead = item.createSpan({ cls: "tm-things-lead" });
+        const name = item.createEl("input", { type: "text", cls: "tm-things-card-check-title", attr: { "aria-label": `Subtask: ${child.title}`, "data-tm-focus-key": `card-subtask:${child.id}` } });
+        name.value = child.title;
+        let saved = child.title;
+        const commit = (): void => {
+            const value = name.value.trim();
+            if (!value) { name.value = saved; return; }
+            if (value === saved) return;
+            saved = value;
+            options.renameChild(child, value);
+        };
+        name.addEventListener("blur", commit);
+        name.addEventListener("keydown", event => {
+            if (event.key !== "Enter" || event.isComposing || event.metaKey || event.ctrlKey) return;
+            event.preventDefault();
+            commit();
+            startSubtask(child).focus();
+        });
+        commits.push(commit);
+        if (options.childDetails) renderThingsTaskDetails({ lead, inline: item, secondary: item }, child, options.childDetails(child));
+        if (!lead.childElementCount) lead.remove();
     }
+    // A subtask still being typed survives a redraw.
+    const typing = draft.subtask ? startSubtask(options.children.find(child => child.id === draft.subtask!.after), draft.subtask.text) : undefined;
 
     const properties = card.createDiv({ cls: "tm-things-card-properties" });
     const line = (icon: string, label: string, property: TaskEditorProperty, extra?: string, cls = ""): HTMLElement => {
@@ -138,16 +205,21 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
 
     // Things keeps buttons for the properties not set yet at the card's bottom right.
     const toolbar = card.createDiv({ cls: "tm-things-card-toolbar" });
-    const add = (icon: string, label: string, property: TaskEditorProperty): void => {
-        const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { type: "button", "aria-label": label, title: label, "data-tm-focus-key": `card-add-${property}` } });
+    const add = (icon: string, label: string, key: string, action: () => void): void => {
+        const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { type: "button", "aria-label": label, title: label, "data-tm-focus-key": `card-add-${key}` } });
         setIcon(button, icon);
-        button.addEventListener("click", event => { event.stopPropagation(); options.edit(property); });
+        button.addEventListener("click", event => { event.stopPropagation(); action(); });
     };
-    if (!task.scheduledDate) add("calendar", "When", "scheduledDate");
-    if (!options.tags.length) add("tag", "Tags", "tags");
-    if (!task.repeat) add("repeat", "Repeat", "repeat");
-    if (!task.deadline) add("flag", "Deadline", "deadline");
+    if (!task.scheduledDate) add("calendar", "When", "scheduledDate", () => options.edit("scheduledDate"));
+    if (!options.tags.length) add("tag", "Tags", "tags", () => options.edit("tags"));
+    // The first subtask starts here; later ones follow with Enter.
+    if (!options.children.length) add("logs", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
+    if (!task.repeat) add("repeat", "Repeat", "repeat", () => options.edit("repeat"));
+    if (!task.deadline) add("flag", "Deadline", "deadline", () => options.edit("deadline"));
     if (!toolbar.childElementCount) toolbar.remove();
+
+    const focus = options.focus === "new" ? typing : options.focus ? card.querySelector<HTMLInputElement>(`[data-tm-focus-key="card-subtask:${CSS.escape(options.focus)}"]`) : undefined;
+    if (focus?.isConnected) { focus.focus(); focus.setSelectionRange(focus.value.length, focus.value.length); }
     return card;
 }
 

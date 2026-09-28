@@ -83,6 +83,8 @@ export class TaskMainView extends ItemView {
   private selection = new TaskSelection();
   /** The task open as a card in the Things style, with its unsaved title and notes. */
   private expanded?: { id: string } & TaskCardDraft;
+  /** What the card focuses on its next draw: a subtask's id, or "new" for the subtask being typed. */
+  private cardFocus?: string;
   /** Height of the rows the open card replaced, which it shrinks back to when closing. */
   private cardRowsHeight = 0;
   /** Set while the card plays its closing animation. */
@@ -1379,8 +1381,10 @@ export class TaskMainView extends ItemView {
 
   private renderTaskCard(list: HTMLElement, task: Task, depth: number): void {
     const expanded = this.expanded!;
+    const focus = this.cardFocus;
+    this.cardFocus = undefined;
     renderThingsTaskCard(list, {
-      task, depth, draft: expanded, tags: this.rowTags(task),
+      task, depth, draft: expanded, tags: this.rowTags(task), focus,
       childDetails: child => ({
         grouping: "none", dateFormat: this.plugin.dateFormat(), show: property => property !== "defer", tags: this.rowTags(child),
         todayMarker: this.state.mode !== "today", edit: property => void this.editFromCard(child.id, property), openSource: () => {}
@@ -1393,8 +1397,34 @@ export class TaskMainView extends ItemView {
         });
       },
       edit: property => void this.editFromCard(task.id, property),
-      collapse: () => void this.collapseCard()
+      collapse: () => void this.collapseCard(),
+      renameChild: (child, title) => {
+        void this.plugin.store.update(child, { ...draftFromTask(child), title })
+          .then(() => this.plugin.index.refreshPath(child.path))
+          .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not rename the subtask."); });
+      },
+      addChild: (title, after, next) => void this.addCardSubtask(task.id, title, after, next)
     });
+  }
+
+  /** Writes a subtask typed in the card; after Enter, a fresh one opens right below it, like a Things checklist. */
+  private async addCardSubtask(parentId: string, title: string, after: Task | undefined, next: boolean): Promise<void> {
+    const parent = this.plugin.index.taskById(parentId);
+    if (!parent) return;
+    try {
+      await this.plugin.store.addSubtask(parent, title, after);
+      await this.plugin.index.refreshPath(parent.path);
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not add the subtask.");
+      return;
+    }
+    if (!next || this.expanded?.id !== parentId || this.cardClosing) return;
+    // The new subtask sits right after `after` (or last); the next one starts after it.
+    const children = this.plugin.index.taskById(parentId)?.childIds ?? [];
+    const added = after ? children[children.indexOf(after.id) + 1] : children[children.length - 1];
+    this.expanded = { ...this.expanded, subtask: { after: added, text: "" } };
+    this.cardFocus = "new";
+    this.renderTaskResults();
   }
 
   /** Saves the card first, so the property editor works on the task as it now reads. */

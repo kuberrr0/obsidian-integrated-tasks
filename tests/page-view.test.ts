@@ -76,7 +76,8 @@ function selectionView() {
   const openEditor = vi.fn();
   const openBulkEditor = vi.fn();
   const update = vi.fn().mockResolvedValue(undefined);
-  const plugin = { settings: {} as Record<string, unknown>, openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop, update }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
+  const addSubtask = vi.fn().mockResolvedValue(undefined);
+  const plugin = { settings: {} as Record<string, unknown>, openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop, update, addSubtask }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
   const view = new TaskMainView({} as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   const internals = view as unknown as {
@@ -117,7 +118,7 @@ function selectionView() {
     };
     return { row, classes, click, dblclick, contextmenu, pointerdown };
   });
-  return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor, plugin, update };
+  return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor, plugin, update, addSubtask };
 }
 
 it("left-click selects only the clicked task, with Mod to toggle and Shift for a range", () => {
@@ -175,6 +176,22 @@ it("saves only a changed card title or notes when the card closes", async () => 
   internals.expanded = { id: tasks[1].id, title: "  ", notes: "" };
   await internals.collapseCard();
   expect(update).toHaveBeenCalledOnce();
+});
+
+it("writes a subtask typed in the card and, after Enter, opens the next one below it", async () => {
+  const { view, tasks, plugin, addSubtask } = selectionView();
+  plugin.settings.style = "things";
+  const internals = view as unknown as { expanded?: { id: string; title: string; notes: string; subtask?: unknown }; cardFocus?: string; addCardSubtask(id: string, title: string, after: unknown, next: boolean): Promise<void> };
+  internals.expanded = { id: tasks[0].id, title: "A", notes: "" };
+  await internals.addCardSubtask(tasks[0].id, "First step", undefined, true);
+  expect(addSubtask).toHaveBeenCalledExactlyOnceWith(tasks[0], "First step", undefined);
+  expect(plugin.index.refreshPath).toHaveBeenCalledWith("Work.md");
+  expect(internals.expanded.subtask).toEqual({ after: undefined, text: "" });
+  expect(internals.cardFocus).toBe("new");
+  // Leaving the field (rather than Enter) adds the subtask without opening another.
+  internals.expanded = { id: tasks[0].id, title: "A", notes: "" };
+  await internals.addCardSubtask(tasks[0].id, "Second step", undefined, false);
+  expect(internals.expanded.subtask).toBeUndefined();
 });
 
 it("right-click on an already selected task opens task properties for the selection", () => {

@@ -56,6 +56,23 @@ it("applies the bottom setting to both creation and destination moves", async ()
   expect(read()).toBe("# Plan\nIntroduction\n- [ ] Old\n  - [ ] Child\n- [ ] New\n- [ ] Moved\n  - [ ] Moved child\n# Later\n");
 });
 
+describe("adding subtasks", () => {
+  it("adds the first subtask one level under the parent, after its notes", async () => {
+    const content = "- [ ] Parent\n    - A note\n- [ ] Next\n";
+    const { store, read } = setup(content);
+    await store.addSubtask(scanTasks("Project.md", content)[0], "First step");
+    expect(read()).toBe("- [ ] Parent\n    - A note\n    - [ ] First step\n- [ ] Next\n");
+  });
+
+  it("adds a subtask right after a sibling and its own children, at the sibling's indentation", async () => {
+    const content = "- [ ] Parent\n\t- [ ] One\n\t\t- [ ] One child\n\t- [ ] Two\n";
+    const { store, read } = setup(content);
+    const [parent, one] = scanTasks("Project.md", content);
+    await store.addSubtask(parent, "One and a half", one);
+    expect(read()).toBe("- [ ] Parent\n\t- [ ] One\n\t\t- [ ] One child\n\t- [ ] One and a half\n\t- [ ] Two\n");
+  });
+});
+
 describe("task deletion", () => {
   it("deletes a task and its subtree while keeping other tasks and headings", async () => {
     const content = "# Plan\n- [ ] Parent\n  - [ ] Child\n    Child notes\n- [ ] Keep\n";

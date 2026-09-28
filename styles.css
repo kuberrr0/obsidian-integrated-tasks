@@ -2003,7 +2003,26 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   font-size: var(--font-ui-small);
 }
 .tm-things-card-check.is-completed .tm-things-card-check-title { color: var(--text-faint); text-decoration: line-through; }
-.tm-things-card-check-title { flex: 0 1 auto; min-width: 0; }
+.tm-things-card-checklist:empty { display: none; }
+/* Subtask names are plain text you can click into; they size to their text so properties follow them. */
+.tm-main-view input.tm-things-card-check-title {
+  flex: 0 1 auto;
+  min-width: 4ch;
+  max-width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  field-sizing: content;
+}
+.tm-main-view input.tm-things-card-check-title:focus { border: 0; box-shadow: none; }
+.tm-things-card-check.is-new { cursor: text; }
+.tm-things-card-check.is-new .tm-things-card-check-title { flex: 1 1 auto; }
+.tm-things-card-check.is-new .tm-things-card-check-box { opacity: 0.6; }
 .tm-things-card-check > :not(.tm-things-card-check-title) { flex-shrink: 0; }
 .tm-main-view input.tm-things-card-check-box {
   --checkbox-radius: 50%;
