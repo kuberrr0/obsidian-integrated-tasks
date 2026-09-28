@@ -3,7 +3,7 @@ import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { renderTaskDetails } from "./task-row-details";
 import { renderThingsTaskDetails } from "./things-row-details";
-import { cardNotes, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
+import { animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
@@ -1296,9 +1296,15 @@ export class TaskMainView extends ItemView {
     await this.saveCard();
     const fresh = this.plugin.index.taskById(task.id) ?? task;
     this.expanded = { id: fresh.id, title: fresh.title, notes: cardNotes(fresh.description) };
+    // The card takes the place of the row and its subtask rows; it grows out of the space they filled.
+    const replaced = [fresh.id, ...this.expandedDescendants()];
+    const from = this.rowElements().filter(row => replaced.includes(row.getAttribute("data-task-id") ?? ""))
+      .reduce((height, row) => height + row.getBoundingClientRect().height, 0);
     this.clearSelection();
     this.renderTaskResults();
-    this.content?.querySelector<HTMLInputElement>(".tm-things-card .tm-things-card-title")?.focus();
+    const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
+    card?.querySelector<HTMLTextAreaElement>(".tm-things-card-title")?.focus({ preventScroll: true });
+    if (card && from) animateCardOpen(card, from);
   }
 
   private async collapseCard(): Promise<void> {

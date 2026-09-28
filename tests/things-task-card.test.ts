@@ -2,7 +2,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
 import { installObsidianDom } from "./helpers/obsidian-dom";
-import { cardNotes, renderThingsTaskCard, type TaskCardOptions } from "../src/things-task-card";
+import { animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardOptions } from "../src/things-task-card";
 import { descriptionLines } from "../src/task-description";
 import { scanTasks } from "../src/parser";
 
@@ -27,6 +27,32 @@ function card(markdown: string, overrides: Partial<TaskCardOptions> = {}) {
   return { element, options, task };
 }
 
+describe("card opening animation", () => {
+  it("grows the card out of its row over 200ms and fades its details in", () => {
+    const { element } = card("- [ ] Task 1\n  - Notes");
+    const animate = vi.fn();
+    for (const node of [element, ...Array.from(element.children)]) (node as HTMLElement).animate = animate;
+    vi.spyOn(element, "getBoundingClientRect").mockReturnValue({ height: 180 } as DOMRect);
+    animateCardOpen(element, 24);
+    const [keyframes, timing] = animate.mock.calls[0] as [Keyframe[], KeyframeAnimationOptions];
+    expect(timing.duration).toBe(200);
+    expect([keyframes[0].height, keyframes[1].height]).toEqual(["24px", "180px"]);
+    expect(keyframes[0].backgroundColor).toBe("transparent");
+    // The card itself, then every part below the title line.
+    expect(animate).toHaveBeenCalledTimes(1 + Array.from(element.children).filter(child => !child.classList.contains("tm-things-card-head")).length);
+  });
+
+  it("opens instantly when the system asks for reduced motion", () => {
+    const { element } = card("- [ ] Task 1");
+    const animate = vi.fn();
+    element.animate = animate;
+    const matchMedia = vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
+    animateCardOpen(element, 24);
+    expect(animate).not.toHaveBeenCalled();
+    matchMedia.mockRestore();
+  });
+});
+
 describe("card notes", () => {
   it("shows top-level bullets as plain lines and saves them back as bullets", () => {
     expect(cardNotes("- First\n- Second\n  - Nested\n- [ ] A checkbox line")).toBe("First\nSecond\n  - Nested\n- [ ] A checkbox line");
@@ -50,7 +76,7 @@ describe("Things task card", () => {
 
   it("edits title and notes in place and lists subtasks as a checklist", () => {
     const { element, options } = card("- [ ] Task 1 2026-09-19 {2026-09-30} #[[Errand]] #[[Office]]\n  - Some notes\n  - [ ] Subtask\n  - [x] Another subtask");
-    const title = element.querySelector<HTMLInputElement>(".tm-things-card-title")!;
+    const title = element.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
     const notes = element.querySelector<HTMLTextAreaElement>(".tm-things-card-notes")!;
     expect(title.value).toBe("Task 1");
     expect(notes.value).toBe("Some notes");
@@ -74,7 +100,7 @@ describe("Things task card", () => {
 
   it("closes on Escape or Mod+Enter and moves from the title to the notes on Enter", () => {
     const { element, options } = card("- [ ] Task 1");
-    const title = element.querySelector<HTMLInputElement>(".tm-things-card-title")!;
+    const title = element.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
     const notes = element.querySelector<HTMLTextAreaElement>(".tm-things-card-notes")!;
     title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(element.ownerDocument.activeElement).toBe(notes);

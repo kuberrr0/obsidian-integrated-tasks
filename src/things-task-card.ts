@@ -63,11 +63,16 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     const checkbox = head.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "card-checkbox" } });
     checkbox.checked = task.completed;
     checkbox.addEventListener("change", () => options.toggle(task, checkbox.checked));
-    const title = head.createEl("input", { type: "text", cls: "tm-things-card-title", value: draft.title, attr: { "aria-label": "Title", placeholder: "New To-Do", "data-tm-focus-key": "card-title" } });
+    // A text area so long titles wrap, as in Things; it stays one logical line.
+    const title = head.createEl("textarea", { cls: "tm-things-card-title", attr: { "aria-label": "Title", placeholder: "New To-Do", rows: "1", "data-tm-focus-key": "card-title" } });
+    title.value = draft.title;
     const notes = card.createEl("textarea", { cls: "tm-things-card-notes", attr: { "aria-label": "Notes", placeholder: "Notes", rows: "1", "data-tm-focus-key": "card-notes" } });
     notes.value = draft.notes;
     const change = (): void => options.change({ title: title.value, notes: notes.value });
-    title.addEventListener("input", change);
+    title.addEventListener("input", () => {
+        if (/[\r\n]/.test(title.value)) title.value = title.value.replace(/[\r\n]+/g, " ");
+        autosize(title); change();
+    });
     notes.addEventListener("input", () => { autosize(notes); change(); });
     // Enter in the title moves on to the notes, as in Things.
     title.addEventListener("keydown", event => {
@@ -82,7 +87,10 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
         // Keep row shortcuts (M, S, arrows) from acting while typing.
         else event.stopPropagation();
     });
-    requestAnimationFrame(() => autosize(notes));
+    // Size now when already on the page, so the opening animation measures the final height.
+    const fit = (): void => { autosize(title); autosize(notes); };
+    if (card.isConnected) fit();
+    requestAnimationFrame(fit);
 
     if (options.children.length) {
         const checklist = card.createDiv({ cls: "tm-things-card-checklist", attr: { role: "list", "aria-label": "Subtasks" } });
@@ -141,4 +149,28 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     if (!task.deadline) add("flag", "Deadline", "deadline");
     if (!toolbar.childElementCount) toolbar.remove();
     return card;
+}
+
+/** How long a card takes to open. */
+export const CARD_OPEN_MS = 200;
+
+/**
+ * Opens the card out of the space its row (and subtask rows) filled: it grows to its full height while
+ * its surface fades in, and the notes, checklist and properties fade in below the title.
+ */
+export function animateCardOpen(card: HTMLElement, fromHeight: number, duration = CARD_OPEN_MS): void {
+    const win = card.ownerDocument.defaultView;
+    if (!win || typeof card.animate !== "function" || win.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const style = win.getComputedStyle(card);
+    const toHeight = card.getBoundingClientRect().height;
+    const easing = "cubic-bezier(0.2, 0, 0, 1)";
+    card.animate([
+        // Starts where the row's title sat, with no card surface yet.
+        { boxSizing: "border-box", overflow: "hidden", height: `${fromHeight}px`, marginTop: "0px", marginBottom: "0px", paddingTop: "5px", backgroundColor: "transparent", boxShadow: "none" },
+        { boxSizing: "border-box", overflow: "hidden", height: `${toHeight}px`, marginTop: style.marginTop, marginBottom: style.marginBottom, paddingTop: style.paddingTop, backgroundColor: style.backgroundColor, boxShadow: style.boxShadow }
+    ], { duration, easing });
+    for (const child of Array.from(card.children)) {
+        if (child.classList.contains("tm-things-card-head")) continue;
+        (child as HTMLElement).animate([{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], { duration, easing });
+    }
 }
