@@ -2,7 +2,7 @@ import { taskTitleLabel } from "./task-title";
 import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { renderTaskDetails } from "./task-row-details";
-import { renderThingsTaskDetails } from "./things-row-details";
+import { renderThingsProjectDetails, renderThingsTaskDetails } from "./things-row-details";
 import { animateCardClose, animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
@@ -810,14 +810,23 @@ export class TaskMainView extends ItemView {
     if (heading) section.createEl("h2", { text: title }).createSpan({ cls: "tm-section-count", text: String(projects.length) });
     const list = section.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
     for (const { project, depth } of projectHierarchy(projects)) {
-      const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
+      const things = this.plugin.settings.style === "things";
+      const row = list.createDiv({ cls: `tm-task-row tm-project-row${things ? " tm-things-project-row" : ""}`, attr: { role: "listitem" } });
       row.style.setProperty("--tm-depth", String(depth));
       const icon = row.createSpan({ cls: "tm-project-icon" });
       renderProjectProgress(icon, project, false);
       const content = row.createDiv({ cls: "tm-task-content" });
       const primary = content.createDiv({ cls: "tm-task-primary" });
+      const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
       button.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
+      if (lead) {
+        const secondary = content.createDiv({ cls: "tm-things-secondary" });
+        renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.plugin.openProjectEditor(project.path, field) });
+        if (!lead.childElementCount) lead.remove();
+        if (!secondary.childElementCount) secondary.remove();
+        continue;
+      }
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
       const parentColor = project.parentPath ? this.plugin.index.projectColor(project.parentPath) : undefined;
       if (parentColor) metadata.style.setProperty("--tm-project-color", parentColor);

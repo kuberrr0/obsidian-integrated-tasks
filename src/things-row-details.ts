@@ -2,7 +2,8 @@ import { setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { repeatLabel } from "./parser";
 import { deadlineIsOverdue, editable, taskDayDistance, taskDoneDateLabel, taskTimeDurationLabel, taskTimeLabel, type TaskDetailsOptions } from "./task-row-details";
-import type { Task } from "./types";
+import type { ProjectDraft } from "./project-creator";
+import type { Project, Task } from "./types";
 
 /** Where the Things style places a row's details: before the title, after it on the same line, and on a quieter line below. */
 export interface ThingsRowParts {
@@ -93,5 +94,48 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
     if (options.source && show("source") && grouping !== "source") {
         const source = parts.secondary.createSpan({ cls: "tm-things-source", text: options.source.replace(/\.md$/i, "").split("/").pop(), attr: { title: options.source } });
         editable(source, `Open source note: ${options.source}`, "source", options.openSource);
+    }
+}
+
+export interface ThingsProjectOptions {
+    dateFormat: string;
+    now?: Date;
+    edit: (field: keyof ProjectDraft) => void;
+}
+
+/**
+ * A project row as Things lists one: a date box before the name, a count of its remaining tasks and
+ * the deadline after it, and the parent project below.
+ */
+export function renderThingsProjectDetails(parts: ThingsRowParts, project: Project, options: ThingsProjectOptions): void {
+    const now = options.now ?? new Date();
+    const today = todayIso(now);
+    // Ranges read as plain dates; a weekday on one end would be ambiguous.
+    const label = (date: string): string => taskDoneDateLabel(date, now);
+    // When: a start date still ahead reads like a task's; a range shows while the project runs.
+    if (project.scheduledDate && project.endDate) {
+        const range = box(parts.lead, "tm-things-when", `${label(project.scheduledDate)} – ${label(project.endDate)}`,
+            `${formatDate(project.scheduledDate, options.dateFormat)} – ${formatDate(project.endDate, options.dateFormat)}`);
+        editable(range, `Edit project dates: ${range.textContent ?? ""}`, "project-date", () => options.edit("date"));
+    } else if (project.scheduledDate && project.scheduledDate > today) {
+        const start = box(parts.lead, "tm-things-when", thingsDateLabel(project.scheduledDate, now), `Starts ${formatDate(project.scheduledDate, options.dateFormat)}`);
+        editable(start, `Edit project start date: ${start.textContent ?? ""}`, "project-date", () => options.edit("date"));
+    } else if (project.endDate) {
+        const end = box(parts.lead, "tm-things-when", `Until ${label(project.endDate)}`, `Ends ${formatDate(project.endDate, options.dateFormat)}`);
+        editable(end, `Edit project end date: ${end.textContent ?? ""}`, "project-end", () => options.edit("endDate"));
+    }
+    if (project.openTasks) parts.inline.createSpan({ cls: "tm-things-count", text: String(project.openTasks), attr: { title: `${project.openTasks} remaining` } });
+    if (project.deadline) {
+        const urgent = deadlineIsOverdue(project.deadline, project.deadlineTime, now) || project.deadline === today;
+        const time = project.deadlineTime ? taskTimeLabel(project.deadlineTime) : "";
+        const deadline = parts.inline.createSpan({ cls: `tm-things-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${[formatDate(project.deadline, options.dateFormat), time].filter(Boolean).join(", ")}` } });
+        setIcon(deadline.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
+        deadline.createSpan({ text: [thingsDeadlineLabel(project.deadline, now), time].filter(Boolean).join(", ") });
+        editable(deadline, `Edit project deadline: ${formatDate(project.deadline, options.dateFormat)}`, "project-deadline", () => options.edit("deadline"));
+    }
+    if (project.parent) {
+        const name = project.parent.replace(/\.md$/i, "");
+        const parent = parts.secondary.createSpan({ cls: "tm-things-source", text: name.split("/").pop(), attr: { title: name } });
+        editable(parent, `Edit parent project: ${name}`, "project-parent", () => options.edit("parent"));
     }
 }

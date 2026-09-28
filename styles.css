@@ -2037,3 +2037,36 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-things-card-toolbar { display: flex; justify-content: flex-end; gap: 2px; margin-top: 4px; }
 .tm-things-card-toolbar .clickable-icon { color: var(--text-faint); }
 .tm-things-card-toolbar .clickable-icon:hover { color: var(--text-normal); }
+
+/* Things style: project rows in the Projects list read like Things' project rows. */
+.tm-main-view.tm-style-things .tm-task-row.tm-things-project-row {
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+  min-height: 0;
+  padding: 5px 8px 5px calc(8px + var(--tm-depth) * 24px);
+}
+.tm-main-view.tm-style-things.tm-density-compact .tm-task-row.tm-things-project-row { padding-top: 3px; padding-bottom: 3px; }
+.tm-main-view.tm-style-things .tm-things-project-row > .tm-project-icon { justify-self: center; height: 1.4em; font-size: var(--font-ui-medium); }
+.tm-main-view.tm-style-things .tm-things-project-row .tm-task-content { display: flex; flex-direction: column; gap: 1px; padding: 0; min-width: 0; font-family: var(--font-interface); }
+.tm-main-view.tm-style-things .tm-things-project-row .tm-task-primary { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; }
+.tm-main-view.tm-style-things .tm-things-project-row .tm-task-primary > * { flex-shrink: 0; }
+.tm-main-view.tm-style-things .tm-things-project-row .tm-task-primary > button.tm-task-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-things-count {
+  padding: 0 4px;
+  border: 1px solid var(--text-faint);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+  line-height: 1.35;
+}

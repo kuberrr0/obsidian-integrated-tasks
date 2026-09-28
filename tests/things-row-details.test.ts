@@ -2,9 +2,9 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
 import { installObsidianDom } from "./helpers/obsidian-dom";
-import { renderThingsTaskDetails, thingsDateLabel, thingsDeadlineLabel } from "../src/things-row-details";
+import { renderThingsProjectDetails, renderThingsTaskDetails, thingsDateLabel, thingsDeadlineLabel } from "../src/things-row-details";
 import { scanTasks } from "../src/parser";
-import type { TaskGrouping } from "../src/types";
+import type { Project, TaskGrouping } from "../src/types";
 
 beforeAll(() => {
   installObsidianDom();
@@ -75,5 +75,38 @@ describe("Things task row", () => {
     const { lead, inline } = row("- [ ] Plan 2026-10-08 {2026-09-30}", { grouping: "scheduledDate" });
     expect(lead.childElementCount).toBe(0);
     expect(inline.querySelector(".tm-things-deadline")).not.toBeNull();
+  });
+});
+
+describe("Things project row", () => {
+  function projectRow(properties: Partial<Project>) {
+    const lead = document.createElement("span"), inline = document.createElement("div"), secondary = document.createElement("div");
+    const project: Project = { name: "New Project", path: "Projects/New Project.md", openTasks: 0, completedTasks: 0, archived: false, ...properties };
+    const edit = vi.fn();
+    renderThingsProjectDetails({ lead, inline, secondary }, project, { dateFormat: "MMM D, YYYY", now, edit });
+    return { lead, inline, secondary, edit };
+  }
+
+  it("shows a future start as a date box, the remaining count, the deadline and the parent", () => {
+    const { lead, inline, secondary, edit } = projectRow({ scheduledDate: "2026-10-08", deadline: "2026-10-25", openTasks: 3, parent: "Area.md" });
+    expect(lead.textContent).toBe("Oct 8");
+    expect(Array.from(inline.children).map(child => [child.className, child.textContent])).toEqual([
+      ["tm-things-count", "3"], ["tm-things-deadline", "36 days left"]
+    ]);
+    expect(secondary.textContent).toBe("Area");
+    (inline.querySelector(".tm-things-deadline") as HTMLElement).click();
+    expect(edit).toHaveBeenCalledWith("deadline");
+  });
+
+  it("shows a running project's date range and leaves out an empty count", () => {
+    const { lead, inline } = projectRow({ scheduledDate: "2026-09-07", endDate: "2026-09-25" });
+    expect(lead.textContent).toBe("Sep 7 – Sep 25");
+    expect(inline.childElementCount).toBe(0);
+    // A start already past, without an end, needs no box.
+    expect(projectRow({ scheduledDate: "2026-09-07" }).lead.childElementCount).toBe(0);
+  });
+
+  it("marks an overdue project deadline as urgent", () => {
+    expect(projectRow({ deadline: "2026-09-15" }).inline.querySelector(".tm-things-deadline")!.className).toBe("tm-things-deadline is-urgent");
   });
 });
