@@ -217,6 +217,34 @@ it("puts the row back without dropping when released away from any target", asyn
   expect(rows[0].row.classList.contains("tm-drag-source")).toBe(false);
 });
 
+it("cancels the drag on Escape: the row goes back, nothing drops, and the key goes no further", async () => {
+  const { rows, drop, point } = list("- [ ] A\n- [ ] B");
+  const later = vi.fn();
+  document.addEventListener("keydown", later);
+  fire(rows[0].row, "pointerdown");
+  point(rows[1].row);
+  fire(rows[0].row, "pointermove", { clientY: 30 });
+  expect(gap()!.previousElementSibling).toBe(rows[1].row);
+  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  document.body.dispatchEvent(escape);
+  expect(escape.defaultPrevented).toBe(true);
+  expect(later).not.toHaveBeenCalled();
+  expect(rows[0].row.releasePointerCapture).toHaveBeenCalledWith(1);
+  // The release that follows does nothing, and neither does moving on.
+  fire(rows[0].row, "pointermove", { clientY: 60 });
+  fire(rows[0].row, "pointerup", { clientY: 30 });
+  await settle();
+  expect(drop).not.toHaveBeenCalled();
+  expect(gap()).toBeNull();
+  expect(preview()).toBeNull();
+  expect(rows[0].row.classList.contains("tm-drag-source")).toBe(false);
+  // Once the drag is over, Escape is left alone.
+  const after = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  document.body.dispatchEvent(after);
+  expect(after.defaultPrevented).toBe(false);
+  document.removeEventListener("keydown", later);
+});
+
 it.each(["pointercancel", "lostpointercapture"])("abandons the drag on %s without dropping", async type => {
   const { rows, drop, point } = list("- [ ] A\n- [ ] B");
   fire(rows[0].row, "pointerdown");

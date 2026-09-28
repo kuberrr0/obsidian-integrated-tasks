@@ -324,6 +324,7 @@ export class ListDragController {
         }
         // Keep the layout's ancestor styles, including kanban card formatting.
         row.parentElement?.appendChild(preview);
+        listenForEscape();
         // The dragged rows' slots close, and the gap opens where the grabbed row was.
         const rows = moving.map(item => this.rows.get(item.id)).filter((item): item is HTMLElement => Boolean(item?.isConnected));
         if (!rows.includes(row)) rows.push(row);
@@ -356,12 +357,36 @@ export class ListDragController {
     const reset = (): void => {
       preview?.remove();
       preview = undefined;
+      stopEscape?.();
       pointer = undefined; dragging = false; row.draggable = true; row.removeClass("is-dragging"); this.taskId = undefined; this.clear();
     };
     const cancelDrag = (): void => {
       this.removeGap(false);
       this.restoreSources(false);
       reset();
+    };
+    /** No drop: the row flies back and its slot reopens. */
+    const flyBack = (): void => {
+      stopEscape?.();
+      this.removeGap(true);
+      this.restoreSources(true);
+      void glide(sourceRect ?? row.getBoundingClientRect()).then(reset);
+    };
+    // Escape abandons the drag in flight; the key goes no further (it would clear the selection or close a card).
+    let stopEscape: (() => void) | undefined;
+    const listenForEscape = (): void => {
+      const doc = row.ownerDocument;
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key !== "Escape" || !dragging || pointer === undefined) return;
+        event.preventDefault(); event.stopPropagation();
+        const id = pointer;
+        pointer = undefined;
+        suppressClickUntil = Date.now() + 250;
+        try { row.releasePointerCapture(id); } catch { /* Already released. */ }
+        flyBack();
+      };
+      doc.addEventListener("keydown", onKey, true);
+      stopEscape = () => { doc.removeEventListener("keydown", onKey, true); stopEscape = undefined; };
     };
     row.addEventListener("pointerup", event => {
       if (pointer !== event.pointerId) return;
@@ -387,10 +412,7 @@ export class ListDragController {
         });
         return;
       }
-      // No drop target: the row flies back and its slot reopens.
-      this.removeGap(true);
-      this.restoreSources(true);
-      void glide(sourceRect ?? row.getBoundingClientRect()).then(reset);
+      flyBack();
     });
     row.addEventListener("pointerleave", () => { if (!dragging) reset(); });
     row.addEventListener("pointercancel", () => { if (dragging) cancelDrag(); else reset(); });
