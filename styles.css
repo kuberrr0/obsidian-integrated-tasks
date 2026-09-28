@@ -1412,7 +1412,8 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 
 /* Deadline appearance is shared by task views, Reading view and Live Preview. */
 :is(.tm-task-due, .tm-note-task-deadline, .tm-note-token-deadline) {
-  border: 1px solid var(--background-modifier-border);
+  /* The border follows the deadline's text colour: upcoming, overdue, or distant. */
+  border: 1px solid currentColor;
   border-radius: 999px;
   background: transparent;
 }
