@@ -1,9 +1,9 @@
 import { taskTitleLabel } from "./task-title";
 import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
-import { renderTaskDetails } from "./task-row-details";
+import { editable, renderTaskDetails } from "./task-row-details";
 import { renderThingsProjectDetails, renderThingsTaskDetails } from "./things-row-details";
-import { animateCardClose, animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
+import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardProperties, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
@@ -1266,7 +1266,10 @@ export class TaskMainView extends ItemView {
       row.style.setProperty("--tm-project-color", color);
     }
     const things = this.plugin.settings.style === "things";
-    const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
+    // Things board cards read like an open task card; list rows are one line.
+    const board = things && this.layout === "kanban";
+    if (board) row.addClass("tm-things-board-card");
+    const lead = things && !board ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
     const title = primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title), "data-tm-focus-key": "title" } });
     title.addEventListener("click", () => this.editTask(task));
     renderDescriptionIndicator(primary, task.description);
@@ -1290,7 +1293,8 @@ export class TaskMainView extends ItemView {
       source: task.path !== implicitSource ? task.path : undefined, tags,
       edit: (property: TaskEditorProperty) => this.editTask(task, property), openSource: () => { void this.openSource(task); }
     };
-    if (lead) {
+    if (board) this.renderBoardCard(primary, metadata, task, details);
+    else if (lead) {
       renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today" });
       if (!lead.childElementCount) lead.remove();
     } else renderTaskDetails(primary, metadata, task, details);
@@ -1298,6 +1302,26 @@ export class TaskMainView extends ItemView {
     row.createSpan({ cls: "tm-sr-only tm-selected-marker" });
     this.bindRowKeyboard(row, task, target);
     this.bindSwipe(row, task, checkbox);
+  }
+
+  /**
+   * A Things board card, laid out like an open task card: the title (with its notes and subtask marks),
+   * a few lines of its notes, its property lines, and below them the note it lives in.
+   */
+  private renderBoardCard(primary: HTMLElement, below: HTMLElement, task: Task, details: { grouping: TaskGrouping; tags: string[]; source?: string; edit: (property: TaskEditorProperty) => void }): void {
+    if (task.childIds.length) {
+      const checklist = primary.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": "Has subtasks", title: `${task.childIds.length} subtask${task.childIds.length === 1 ? "" : "s"}` } });
+      setIcon(checklist, "list-todo");
+    }
+    const notes = cardNotes(task.description).trim();
+    if (notes) below.before(below.parentElement!.createDiv({ cls: "tm-things-board-notes", text: notes }));
+    const properties = renderThingsCardProperties(below.parentElement!, task, details.tags, details.edit);
+    if (properties) below.before(properties);
+    // Left out when the board is grouped by note: the column already names it.
+    if (details.source && details.grouping !== "source") {
+      const source = below.createSpan({ cls: "tm-things-source", text: details.source.replace(/\.md$/i, "").split("/").pop(), attr: { title: details.source } });
+      editable(source, `Open source note: ${details.source}`, "source", () => { void this.openSource(task); });
+    }
   }
 
   /** A task page or tag list leaves out the tag it is showing. */

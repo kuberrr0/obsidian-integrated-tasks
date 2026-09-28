@@ -2156,3 +2156,52 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   font-weight: var(--font-medium);
   line-height: 1.35;
 }
+
+/* Things style: board cards read like an open task card rather than a squeezed one-line row. */
+.tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card {
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+  min-height: 0;
+  padding: 12px 14px 10px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.12), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
+}
+.tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card.has-project-color {
+  box-shadow: inset 3px 0 0 var(--tm-project-color), 0 1px 2px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card.is-selected {
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--interactive-accent) 22%, var(--background-primary));
+}
+.tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-task-item.tm-things-board-card .tm-checkbox-target { align-self: start; padding-top: 3px; }
+.tm-main-view.tm-style-things .tm-kanban .tm-things-board-card .tm-task-content { display: flex; flex-direction: column; gap: 8px; padding: 0; }
+.tm-main-view.tm-style-things .tm-kanban .tm-things-board-card .tm-task-primary { flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.tm-main-view.tm-style-things .tm-kanban .tm-things-board-card .tm-task-primary > button.tm-task-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: visible;
+  font-weight: var(--font-medium);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+.tm-things-board-notes {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+.tm-kanban .tm-things-board-card .tm-things-card-properties { gap: 5px; margin: 0; }
+.tm-kanban .tm-things-board-card .tm-things-secondary { gap: 6px; }
+/* In a narrow column the "since …" and "N days left" notes sit under their label, not beside it. */
+.tm-kanban .tm-things-board-card .tm-things-card-property { display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 7px; align-items: start; }
+.tm-kanban .tm-things-board-card .tm-things-card-icon { margin-top: 2px; }
+.tm-kanban .tm-things-board-card .tm-things-card-extra { grid-column: 2; font-size: var(--font-ui-smaller); }
+.tm-kanban .tm-things-board-card .tm-things-card-property:is(.is-p1, .is-p2, .is-p3) .tm-things-card-extra { display: none; }

@@ -463,6 +463,23 @@ describe("weekly review", () => {
   });
 });
 
+it("lays board cards out like an open task card in the Things style", async () => {
+  const { view, content, plugin } = await setup([["A.md", "- [ ] Plan the day 2026-09-17 {2026-09-30} p1 #[[Errand]]\n    - Pack a map\n    - [ ] Step\n- [ ] Plain"]]);
+  plugin.settings.style = "things";
+  await view.setState({ mode: "all", layout: "kanban" });
+  const card = Array.from(content().querySelectorAll<HTMLElement>(".tm-things-board-card")).find(row => row.textContent!.includes("Plan the day"))!;
+  const parts = Array.from(card.querySelector(".tm-task-content")!.children).map(child => child.className);
+  expect(parts).toEqual(["tm-task-primary", "tm-things-board-notes", "tm-things-card-properties"]);
+  expect(card.querySelector(".tm-task-primary .tm-things-checklist")).not.toBeNull();
+  expect(card.querySelector(".tm-things-board-notes")!.textContent).toBe("Pack a map");
+  expect(Array.from(card.querySelectorAll(".tm-things-card-tag")).map(tag => tag.textContent)).toEqual(["Errand"]);
+  expect(card.querySelectorAll(".tm-things-card-property").length).toBe(3);
+  // No one-line row parts on a board card.
+  expect(card.querySelector(".tm-things-lead, .tm-things-trailing")).toBeNull();
+  const plain = Array.from(content().querySelectorAll<HTMLElement>(".tm-things-board-card")).find(row => row.textContent!.includes("Plain"))!;
+  expect(Array.from(plain.querySelector(".tm-task-content")!.children).map(child => child.className)).toEqual(["tm-task-primary"]);
+});
+
 it("lays tag rows out on one line in the Things style", async () => {
   const { view, content, plugin } = await setup([["A.md", "- [ ] One #[[Errand]]\n- [ ] Two #[[Errand]]\n- [x] Three #[[Errand]]\n- [x] Four #[[Office]]"]]);
   plugin.settings.style = "things";

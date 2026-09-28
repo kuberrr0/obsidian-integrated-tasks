@@ -66,7 +66,6 @@ function autosize(area: HTMLTextAreaElement): void {
 export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptions): HTMLElement {
     const { task, draft } = options;
     const now = options.now ?? new Date();
-    const today = todayIso(now);
     const card = parent.createDiv({ cls: `tm-things-card tm-task-item${task.completed ? " is-completed" : ""}`, attr: { "data-task-id": task.id, role: "listitem" } });
     card.style.setProperty("--tm-depth", String(options.depth));
 
@@ -178,35 +177,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     // A subtask still being typed survives a redraw.
     const typing = draft.subtask ? startSubtask(options.children.find(child => child.id === draft.subtask!.after), draft.subtask.text) : undefined;
 
-    const properties = card.createDiv({ cls: "tm-things-card-properties" });
-    const line = (icon: string, label: string, property: TaskEditorProperty, extra?: string, cls = ""): HTMLElement => {
-        const element = properties.createDiv({ cls: `tm-things-card-property${cls ? ` ${cls}` : ""}` });
-        setIcon(element.createSpan({ cls: "tm-things-card-icon", attr: { "aria-hidden": "true" } }), icon);
-        element.createSpan({ cls: "tm-things-card-label", text: label });
-        if (extra) element.createSpan({ cls: "tm-things-card-extra", text: extra });
-        editable(element, `Edit ${label}`, `card-${property}`, () => options.edit(property));
-        return element;
-    };
-    if (options.tags.length) {
-        const tags = properties.createDiv({ cls: "tm-things-card-tags" });
-        for (const tag of options.tags) editable(tags.createSpan({ cls: "tm-things-card-tag", text: tag }), `Edit tags: ${tag}`, `card-tag:${tag}`, () => options.edit("tags"));
-    }
-    // The scheduled time (and duration) joins its date on one line, as the deadline's time does.
-    const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
-    if (task.scheduledDate) {
-        const isToday = task.scheduledDate <= today;
-        const day = isToday ? "Today" : longDate(task.scheduledDate, now);
-        line(isToday ? "star" : "calendar", time ? `${day}, ${time}` : day, "scheduledDate",
-            task.scheduledDate < today ? `since ${longDate(task.scheduledDate, now)}` : undefined, isToday ? "is-today" : "");
-    } else if (time) line("clock", time, task.scheduledTime ? "scheduledDate" : "durationMinutes");
-    if (task.priority) line("signal", `${PRIORITY_NAMES[task.priority]} priority`, "priority", `P${task.priority}`, `is-p${task.priority}`);
-    if (task.repeat) line("repeat", `Repeats ${repeatLabel(task.repeat).toLowerCase()}`, "repeat");
-    if (task.deadline) {
-        const urgent = !task.completed && (deadlineIsOverdue(task.deadline, task.deadlineTime, now) || task.deadline === today);
-        const label = `Deadline: ${longDate(task.deadline, now)}${task.deadlineTime ? `, ${taskTimeLabel(task.deadlineTime)}` : ""}`;
-        line("flag", label, "deadline", thingsDeadlineLabel(task.deadline, now), urgent ? "is-urgent" : "");
-    }
-    if (!properties.childElementCount) properties.remove();
+    renderThingsCardProperties(card, task, options.tags, options.edit, now);
 
     // Things keeps buttons for the properties not set yet at the card's bottom right.
     const toolbar = card.createDiv({ cls: "tm-things-card-toolbar" });
@@ -227,6 +198,45 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     const focus = options.focus === "new" ? typing : options.focus ? card.querySelector<HTMLInputElement>(`[data-tm-focus-key="card-subtask:${CSS.escape(options.focus)}"]`) : undefined;
     if (focus?.isConnected) { focus.focus(); focus.setSelectionRange(focus.value.length, focus.value.length); }
     return card;
+}
+
+/**
+ * The property lines an open card (and a board card) shows: tags, when (with its time), priority,
+ * repeat and deadline, each opening its editor. Draws nothing when the task has none of them.
+ */
+export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags: string[], edit: (property: TaskEditorProperty) => void, now = new Date()): HTMLElement | undefined {
+    const today = todayIso(now);
+    const properties = parent.createDiv({ cls: "tm-things-card-properties" });
+    const line = (icon: string, label: string, property: TaskEditorProperty, extra?: string, cls = ""): HTMLElement => {
+        const element = properties.createDiv({ cls: `tm-things-card-property${cls ? ` ${cls}` : ""}` });
+        setIcon(element.createSpan({ cls: "tm-things-card-icon", attr: { "aria-hidden": "true" } }), icon);
+        element.createSpan({ cls: "tm-things-card-label", text: label });
+        if (extra) element.createSpan({ cls: "tm-things-card-extra", text: extra });
+        editable(element, `Edit ${label}`, `card-${property}`, () => edit(property));
+        return element;
+    };
+    if (tags.length) {
+        const pills = properties.createDiv({ cls: "tm-things-card-tags" });
+        for (const tag of tags) editable(pills.createSpan({ cls: "tm-things-card-tag", text: tag }), `Edit tags: ${tag}`, `card-tag:${tag}`, () => edit("tags"));
+    }
+    // The scheduled time (and duration) joins its date on one line, as the deadline's time does.
+    const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
+    if (task.scheduledDate) {
+        const isToday = task.scheduledDate <= today;
+        const day = isToday ? "Today" : longDate(task.scheduledDate, now);
+        line(isToday ? "star" : "calendar", time ? `${day}, ${time}` : day, "scheduledDate",
+            task.scheduledDate < today ? `since ${longDate(task.scheduledDate, now)}` : undefined, isToday ? "is-today" : "");
+    } else if (time) line("clock", time, task.scheduledTime ? "scheduledDate" : "durationMinutes");
+    if (task.priority) line("signal", `${PRIORITY_NAMES[task.priority]} priority`, "priority", `P${task.priority}`, `is-p${task.priority}`);
+    if (task.repeat) line("repeat", `Repeats ${repeatLabel(task.repeat).toLowerCase()}`, "repeat");
+    if (task.deadline) {
+        const urgent = !task.completed && (deadlineIsOverdue(task.deadline, task.deadlineTime, now) || task.deadline === today);
+        const label = `Deadline: ${longDate(task.deadline, now)}${task.deadlineTime ? `, ${taskTimeLabel(task.deadlineTime)}` : ""}`;
+        line("flag", label, "deadline", thingsDeadlineLabel(task.deadline, now), urgent ? "is-urgent" : "");
+    }
+    if (properties.childElementCount) return properties;
+    properties.remove();
+    return undefined;
 }
 
 /** How long a card takes to open or close. */
