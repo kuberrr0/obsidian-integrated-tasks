@@ -68,3 +68,18 @@ it.each([
     renderProjectHeaderDetails(root as never, { ...project, deadline }, vi.fn(), "YYYY-MM-DD", now);
     expect(root.children[0].cls).toBe(cls);
 });
+it("shows the Things deadline in the Things style: the date and how far off it is, red once due", () => {
+    const root = new Element(), edit = vi.fn();
+    renderProjectHeaderDetails(root as never, { ...project, deadline: "2026-10-25" }, edit, "YYYY-MM-DD", now, undefined, true);
+    const [deadline] = root.children;
+    expect(deadline.cls).toBe("tm-things-card-property tm-things-project-deadline");
+    expect(deadline.children.map(child => [child.cls, child.text])).toEqual([
+        ["tm-things-card-icon", ""], ["tm-things-card-label", "Deadline: Sun, Oct 25"], ["tm-things-card-extra", "36 days left"]
+    ]);
+    deadline.handlers.get("click")!({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    expect(edit).toHaveBeenCalledWith("deadline");
+    const overdue = new Element();
+    renderProjectHeaderDetails(overdue as never, { ...project, deadline: "2026-09-18" }, edit, "YYYY-MM-DD", now, undefined, true);
+    expect(overdue.children[0].cls).toBe("tm-things-card-property tm-things-project-deadline is-urgent");
+    expect(overdue.children[0].children[2].text).toBe("1 day ago");
+});

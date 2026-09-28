@@ -1,5 +1,7 @@
 import { setIcon } from "obsidian";
-import { formatDate } from "./date";
+import { formatDate, todayIso } from "./date";
+import { thingsDeadlineLabel } from "./things-row-details";
+import { longDate } from "./things-task-card";
 import { deadlineIsDistant, deadlineIsOverdue, taskDeadlineLabel, taskTimeLabel } from "./task-row-details";
 import type { ProjectDraft } from "./project-creator";
 import type { Project } from "./types";
@@ -8,7 +10,7 @@ export function projectDateLabel(date: string, now = new Date()): string {
     return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "MMM D" : "MMM D, YYYY");
 }
 
-export function renderProjectHeaderDetails(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date(), deadlineParent = parent): void {
+export function renderProjectHeaderDetails(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date(), deadlineParent = parent, things = false): void {
     if (project.scheduledDate || project.endDate) {
         const range = parent.createSpan({ cls: "tm-project-date-range" });
         if (project.scheduledDate) {
@@ -23,7 +25,8 @@ export function renderProjectHeaderDetails(parent: HTMLElement, project: Project
             editable(end, `project end date: ${text}`, "endDate", edit);
         }
     }
-    renderProjectDeadline(deadlineParent, project, edit, dateFormat, now);
+    if (things) renderThingsProjectDeadline(deadlineParent, project, edit, dateFormat, now);
+    else renderProjectDeadline(deadlineParent, project, edit, dateFormat, now);
     if (project.parent) {
         const name = project.parent.replace(/\.md$/i, "");
         const source = parent.createSpan({ cls: "tm-task-source", text: name.split("/").pop(), attr: { title: name } });
@@ -40,6 +43,17 @@ function editable(element: HTMLElement, label: string, field: keyof ProjectDraft
             if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault(); event.stopPropagation(); edit(field);
         });
+}
+
+/** The Things deadline: "Deadline: Thu, Sep 25" and how far off it is, in red once due; as an open task card shows it. */
+export function renderThingsProjectDeadline(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date()): void {
+    if (!project.deadline) return;
+    const urgent = deadlineIsOverdue(project.deadline, project.deadlineTime, now) || project.deadline === todayIso(now);
+    const due = parent.createSpan({ cls: `tm-things-card-property tm-things-project-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${formatDate(project.deadline, dateFormat)}` } });
+    setIcon(due.createSpan({ cls: "tm-things-card-icon", attr: { "aria-hidden": "true" } }), "flag");
+    due.createSpan({ cls: "tm-things-card-label", text: `Deadline: ${longDate(project.deadline, now)}${project.deadlineTime ? `, ${taskTimeLabel(project.deadlineTime)}` : ""}` });
+    due.createSpan({ cls: "tm-things-card-extra", text: thingsDeadlineLabel(project.deadline, now) });
+    editable(due, `project deadline: ${formatDate(project.deadline, dateFormat)}`, "deadline", edit);
 }
 
 export function renderProjectDeadline(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date()): void {

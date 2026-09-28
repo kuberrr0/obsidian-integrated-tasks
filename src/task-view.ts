@@ -677,7 +677,7 @@ export class TaskMainView extends ItemView {
     const parentColor = project.parentPath ? this.plugin.index.projectColor(project.parentPath) : undefined;
     if (parentColor) metadata.style.setProperty("--tm-project-color", parentColor);
     else metadata.style.removeProperty("--tm-project-color");
-    renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat());
+    renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat(), undefined, undefined, this.plugin.settings.style === "things");
     renderProjectProgress(metadata, project);
   }
 

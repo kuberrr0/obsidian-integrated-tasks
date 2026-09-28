@@ -50,7 +50,7 @@ export function cardNotes(description: string | undefined): string {
 const PRIORITY_NAMES: Record<number, string> = { 1: "High", 2: "Medium", 3: "Low" };
 
 /** "Thu, Oct 8", with the year outside the current one. */
-function longDate(date: string, now: Date): string {
+export function longDate(date: string, now: Date): string {
     return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "ddd, MMM D" : "ddd, MMM D, YYYY");
 }
 
