@@ -122,3 +122,20 @@ describe("Things project row", () => {
     expect(projectRow({ deadline: "2026-09-15" }).inline.querySelector(".tm-things-deadline")!.className).toBe("tm-things-deadline is-urgent");
   });
 });
+
+describe("tag pills", () => {
+  it("open the tag's view when a handler is given, and the tag editor otherwise", () => {
+    const inline = document.createElement("div");
+    const task = scanTasks("Note.md", "- [ ] Plan #[[Errand]]", now)[0];
+    const edit = vi.fn(), openTag = vi.fn();
+    renderThingsTaskDetails({ lead: document.createElement("span"), inline, secondary: document.createElement("div") }, task, {
+      now, grouping: "none", dateFormat: "MMM D, YYYY", tags: ["Errand"], edit, openSource: vi.fn(), openTag
+    });
+    inline.querySelector<HTMLElement>(".tm-things-tag")!.click();
+    expect(openTag).toHaveBeenCalledExactlyOnceWith("Errand");
+    expect(edit).not.toHaveBeenCalled();
+    const { inline: plain, edit: fallback } = row("- [ ] Plan #[[Errand]]");
+    plain.querySelector<HTMLElement>(".tm-things-tag")!.click();
+    expect(fallback).toHaveBeenCalledWith("tags");
+  });
+});

@@ -13,6 +13,12 @@ vi.mock("obsidian", async (importOriginal) => ({
   setIcon: vi.fn()
 }));
 vi.mock("../src/note-token-editor", () => ({ noteTokenEditor: vi.fn() }));
+// No DOM here: record what the view asks the choice popover to show.
+vi.mock("../src/choice-popover", async original => ({
+  ...await original<typeof import("../src/choice-popover")>(),
+  openChoicePopover: vi.fn(() => ({ element: {}, close: () => {} }))
+}));
+import { openChoicePopover, type ChoicePopoverOptions } from "../src/choice-popover";
 
 import TaskManagerPlugin from "../src/main";
 import { TaskMainView } from "../src/task-view";
@@ -205,6 +211,46 @@ it("turns a plain #tag typed into a card title into a task tag when Link tags is
   internals.expanded = { id: tasks[0].id, title: "A #errand", notes: "" };
   await internals.collapseCard();
   expect(update).toHaveBeenCalledExactlyOnceWith(tasks[0], expect.objectContaining({ title: "A", tags: ["errand"] }));
+});
+
+it("removes a tag from the card's cross, and saves and closes the card before opening a tag's view", async () => {
+  const { view, plugin, update } = selectionView();
+  const tagged = scanTasks("Work.md", "- [ ] Tagged #[[Errand]] #[[Office]]")[0];
+  plugin.index.taskById = (id: string) => (id === tagged.id ? tagged : undefined) as never;
+  const openTag = vi.fn().mockResolvedValue(undefined);
+  Object.assign(plugin, { openTag });
+  const internals = view as unknown as { expanded?: { id: string; title: string; notes: string }; removeCardTag(id: string, tag: string): Promise<void>; openTagView(tag: string): Promise<void> };
+  await internals.removeCardTag(tagged.id, "Errand");
+  expect(update).toHaveBeenCalledExactlyOnceWith(tagged, expect.objectContaining({ tags: ["Office"] }));
+  internals.expanded = { id: tagged.id, title: "Tagged again", notes: "" };
+  await internals.openTagView("Office");
+  expect(update).toHaveBeenLastCalledWith(tagged, expect.objectContaining({ title: "Tagged again" }));
+  expect(internals.expanded).toBeUndefined();
+  expect(openTag).toHaveBeenCalledExactlyOnceWith("Office");
+});
+
+it("moves a card's task to the project picked from its project button, and closes the card", async () => {
+  const { view, tasks, plugin, update } = selectionView();
+  plugin.settings.inboxPath = "Inbox.md";
+  const projects = [
+    { name: "Website", path: "Projects/Website.md", openTasks: 1, completedTasks: 0, archived: false, color: "#f00" },
+    { name: "Old", path: "Projects/Old.md", openTasks: 0, completedTasks: 0, archived: true },
+    { name: "Autumn", path: "Projects/Autumn.md", openTasks: 1, completedTasks: 0, archived: false, parentPath: "Projects/Studio.md" }
+  ];
+  Object.assign(plugin.index, { projects: () => projects });
+  const internals = view as unknown as { expanded?: { id: string; title: string; notes: string }; openProjectPicker(id: string, anchor: HTMLElement): void };
+  internals.expanded = { id: tasks[0].id, title: "A", notes: "" };
+  const anchor = {} as HTMLElement;
+  internals.openProjectPicker(tasks[0].id, anchor);
+  const shown = vi.mocked(openChoicePopover).mock.lastCall![0] as ChoicePopoverOptions;
+  // Inbox, the task's own note (not a project), then the active projects by name.
+  expect(shown.anchor).toBe(anchor);
+  expect(shown.choices.map(choice => [choice.label, choice.detail])).toEqual([["Inbox", undefined], ["Work", undefined], ["Autumn", "Studio"], ["Website", undefined]]);
+  expect(shown.choices[3].color).toBe("#f00");
+  expect(shown.selected).toBe("Work.md");
+  shown.choose("Projects/Website.md");
+  await vi.waitFor(() => expect(update).toHaveBeenCalledExactlyOnceWith(tasks[0], expect.objectContaining({ destination: "Projects/Website.md" })));
+  expect(internals.expanded).toBeUndefined();
 });
 
 it("applies properties typed into a card title when the card closes", async () => {
@@ -441,13 +487,25 @@ it("opens properties for one selected task and clears selection when opening ano
   expect(openEditor).toHaveBeenCalledWith(expect.objectContaining({ task: tasks[1] }));
 });
 
-it.each(["scheduledDate", "deadline", "durationMinutes", "priority", "tags"])("property clicks focus %s in the bulk editor when selected", property => {
+it.each(["tags", "repeat"])("property clicks focus %s in the bulk editor when selected", property => {
   const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
   rows[0].contextmenu(); rows[1].contextmenu(undefined, { metaKey: true });
   internals.editTask(tasks[0], property);
   expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view, property);
   expect(openEditor).not.toHaveBeenCalled();
   expect(view.getSelectedTasks()).toHaveLength(2);
+});
+
+it.each(["scheduledDate", "deadline", "durationMinutes", "priority"])("edits %s in a popover, for the whole selection, instead of a modal", property => {
+  const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  const popover = vi.spyOn(view as unknown as { openDateEditor(tasks: Task[], property: string): boolean }, "openDateEditor").mockReturnValue(true);
+  rows[0].contextmenu(); rows[1].contextmenu(undefined, { metaKey: true });
+  internals.editTask(tasks[0], property);
+  expect(popover).toHaveBeenCalledExactlyOnceWith([tasks[0], tasks[1]], property);
+  internals.editTask(tasks[2], property);
+  expect(popover).toHaveBeenLastCalledWith([tasks[2]], property);
+  expect(openBulkEditor).not.toHaveBeenCalled();
+  expect(openEditor).not.toHaveBeenCalled();
 });
 
 it("restores tag page state and clears it when navigating to All Tasks", async () => {
@@ -593,7 +651,7 @@ it.each([false, true])("lets property controls handle clicks before opening an e
   expect(openEditor).not.toHaveBeenCalled();
   expect(openBulkEditor).not.toHaveBeenCalled();
   // The property handler receives the event and requests its own field.
-  internals.editTask(tasks[0], "deadline");
-  if (selected) expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view, "deadline");
-  else expect(openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: tasks[0], focusProperty: "deadline" }));
+  internals.editTask(tasks[0], "repeat");
+  if (selected) expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view, "repeat");
+  else expect(openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: tasks[0], focusProperty: "repeat" }));
 });

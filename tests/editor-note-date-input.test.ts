@@ -132,6 +132,7 @@ describe("noteDateChanges", () => {
     }
   });
 });
+
 describe("Link tags in notes", () => {
   const leave = (doc: string, text: string, linkTags: boolean) => {
     let state = EditorState.create({ doc, selection: { anchor: 0 }, extensions: [noteDateInput(() => FORMAT, () => false, () => true, () => linkTags)] });

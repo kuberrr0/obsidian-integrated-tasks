@@ -28,6 +28,16 @@ export interface TaskCardOptions {
     now?: Date;
     change: (draft: TaskCardDraft) => void;
     toggle: (task: Task, completed: boolean) => void;
+    /** Adds tags typed into the card; without it, tags open the task editor. */
+    addTags?: (tags: string[]) => void;
+    /** Existing tags, suggested while typing one. */
+    tagSuggestions?: string[];
+    /** Takes a tag off the task. */
+    removeTag?: (tag: string) => void;
+    /** The note the task lives in, as a button that opens a list to move it elsewhere. */
+    project?: { label: string; choose: (anchor: HTMLElement) => void };
+    /** Opens a tag's own view. */
+    openTag?: (tag: string) => void;
     /** Renames a subtask. */
     renameChild: (child: Task, title: string) => void;
     /** Adds a subtask after `after` (or at the end); `next` starts another one below it once added. */
@@ -177,17 +187,36 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     // A subtask still being typed survives a redraw.
     const typing = draft.subtask ? startSubtask(options.children.find(child => child.id === draft.subtask!.after), draft.subtask.text) : undefined;
 
-    renderThingsCardProperties(card, task, options.tags, options.edit, now);
+    renderThingsCardProperties(card, task, options.tags, options.edit, now, { open: options.openTag, remove: options.removeTag, add: options.addTags, suggestions: options.tagSuggestions });
 
-    // Things keeps buttons for the properties not set yet at the card's bottom right.
+    // Things keeps buttons for the properties not set yet at the card's bottom right;
+    // the note the task lives in sits at the left, and moves it to another project.
     const toolbar = card.createDiv({ cls: "tm-things-card-toolbar" });
+    if (options.project) {
+        const project = options.project;
+        const button = toolbar.createEl("button", { cls: "tm-things-card-project", attr: { type: "button", "aria-label": `Project: ${project.label}. Move to another project`, title: "Move to another project", "aria-haspopup": "listbox", "data-tm-focus-key": "card-project" } });
+        setIcon(button.createSpan({ cls: "tm-things-card-project-icon", attr: { "aria-hidden": "true" } }), "folder");
+        button.createSpan({ cls: "tm-things-card-project-label", text: project.label });
+        setIcon(button.createSpan({ cls: "tm-things-card-project-chevron", attr: { "aria-hidden": "true" } }), "chevron-down");
+        button.addEventListener("click", event => { event.stopPropagation(); project.choose(button); });
+    }
     const add = (icon: string, label: string, key: string, action: () => void): void => {
         const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { type: "button", "aria-label": label, title: label, "data-tm-focus-key": `card-add-${key}` } });
         setIcon(button, icon);
         button.addEventListener("click", event => { event.stopPropagation(); action(); });
     };
     if (!task.scheduledDate) add("calendar", "When", "scheduledDate", () => options.edit("scheduledDate"));
-    if (!options.tags.length) add("tag", "Tags", "tags", () => options.edit("tags"));
+    // Without tags, the Tags button opens the same inline "+" as the pills row, at the top of the properties.
+    if (!options.tags.length) add("tag", "Tags", "tags", () => {
+        const addTags = options.addTags;
+        if (!addTags) { options.edit("tags"); return; }
+        if (card.querySelector(".tm-things-add-tag")) return;
+        const properties = card.querySelector<HTMLElement>(".tm-things-card-properties") ?? card.createDiv({ cls: "tm-things-card-properties" });
+        if (!properties.parentElement || properties.nextElementSibling !== toolbar) toolbar.before(properties);
+        const pills = properties.createDiv({ cls: "tm-things-card-tags" });
+        properties.prepend(pills);
+        renderAddTag(pills, { add: addTags, suggestions: options.tagSuggestions ?? [] }, true);
+    });
     // The first subtask starts here; later ones follow with Enter.
     if (!options.children.length) add("list-todo", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
     if (!task.priority) add("signal", "Priority", "priority", () => options.edit("priority"));
@@ -204,7 +233,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
  * The property lines an open card (and a board card) shows: tags, when (with its time), priority,
  * repeat and deadline, each opening its editor. Draws nothing when the task has none of them.
  */
-export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags: string[], edit: (property: TaskEditorProperty) => void, now = new Date()): HTMLElement | undefined {
+export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags: string[], edit: (property: TaskEditorProperty) => void, now = new Date(), actions?: TagActions): HTMLElement | undefined {
     const today = todayIso(now);
     const properties = parent.createDiv({ cls: "tm-things-card-properties" });
     const line = (icon: string, label: string, property: TaskEditorProperty, extra?: string, cls = ""): HTMLElement => {
@@ -217,7 +246,18 @@ export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags
     };
     if (tags.length) {
         const pills = properties.createDiv({ cls: "tm-things-card-tags" });
-        for (const tag of tags) editable(pills.createSpan({ cls: "tm-things-card-tag", text: tag }), `Edit tags: ${tag}`, `card-tag:${tag}`, () => edit("tags"));
+        for (const tag of tags) {
+            const pill = pills.createSpan({ cls: "tm-things-card-tag", text: tag });
+            if (actions?.open) editable(pill, `Open tag: ${tag}`, `card-tag:${tag}`, () => actions.open!(tag));
+            else editable(pill, `Edit tags: ${tag}`, `card-tag:${tag}`, () => edit("tags"));
+            // Hovering shows a cross that takes the tag off the task.
+            if (actions?.remove) {
+                const remove = pill.createEl("button", { cls: "tm-things-tag-remove", attr: { type: "button", "aria-label": `Remove tag ${tag}`, title: "Remove tag", tabindex: "-1" } });
+                setIcon(remove, "x");
+                remove.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); actions.remove!(tag); });
+            }
+        }
+        if (actions?.add) renderAddTag(pills, { add: actions.add, suggestions: actions.suggestions ?? [] });
     }
     // The scheduled time (and duration) joins its date on one line, as the deadline's time does.
     const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
@@ -237,6 +277,69 @@ export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags
     if (properties.childElementCount) return properties;
     properties.remove();
     return undefined;
+}
+
+/** Adding tags right in the card: what to do with them, and which existing tags to suggest. */
+export interface TagAdding {
+    add: (tags: string[]) => void;
+    suggestions: string[];
+}
+
+/** What a card's (or board card's) tag pills can do besides opening the tag editor. */
+export interface TagActions {
+    /** Opens the tag's own view. */
+    open?: (tag: string) => void;
+    /** Takes the tag off the task (a cross on hover). */
+    remove?: (tag: string) => void;
+    /** Adds typed tags (the "+" pill). */
+    add?: (tags: string[]) => void;
+    suggestions?: string[];
+}
+
+/** "#errand, [[Office]]" → ["errand", "Office"]: typed tags without their marks, comma-separated. */
+export function typedTags(text: string): string[] {
+    return [...new Set(text.split(",").map(tag => tag.trim().replace(/^#/, "").replace(/^\[\[(.*)\]\]$/, "$1").trim()).filter(Boolean))];
+}
+
+let suggestionLists = 0;
+
+/**
+ * A "+" pill after the tags (no fill, dashed border) that becomes a small input when clicked:
+ * Enter adds what was typed, suggesting existing tags; Escape, or leaving it empty, puts the pill back.
+ */
+export function renderAddTag(pills: HTMLElement, adding: TagAdding, open = false): void {
+    const pill = pills.createEl("button", { cls: "tm-things-card-tag tm-things-add-tag", attr: { type: "button", "aria-label": "Add tag", title: "Add tag", "data-tm-focus-key": "card-add-tag" } });
+    setIcon(pill, "plus");
+    const start = (): void => {
+        const list = `tm-tag-suggestions-${++suggestionLists}`;
+        const input = createInput(pills, list, adding.suggestions);
+        pill.replaceWith(input.wrapper);
+        input.field.focus();
+        let done = false;
+        const finish = (save: boolean): void => {
+            if (done) return;
+            done = true;
+            const tags = save ? typedTags(input.field.value) : [];
+            input.wrapper.replaceWith(pill);
+            if (tags.length) adding.add(tags);
+        };
+        input.field.addEventListener("keydown", event => {
+            if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.stopPropagation(); finish(true); }
+            else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); finish(false); pill.focus(); }
+        });
+        input.field.addEventListener("blur", () => { if (input.wrapper.isConnected) finish(true); });
+    };
+    pill.addEventListener("click", event => { event.stopPropagation(); start(); });
+    if (open) start();
+}
+
+function createInput(parent: HTMLElement, list: string, suggestions: string[]): { wrapper: HTMLElement; field: HTMLInputElement } {
+    const wrapper = parent.createSpan({ cls: "tm-things-card-tag tm-things-add-tag is-editing" });
+    const field = wrapper.createEl("input", { type: "text", attr: { "aria-label": "New tag", placeholder: "Tag", list, spellcheck: "false" } });
+    const options = wrapper.createEl("datalist", { attr: { id: list } });
+    for (const name of suggestions) options.createEl("option", { attr: { value: name } });
+    wrapper.remove();
+    return { wrapper, field };
 }
 
 /** How long a card takes to open or close. */

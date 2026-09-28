@@ -72,7 +72,8 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
     }
     if (show("tags") && grouping !== "tags") for (const tag of options.tags) {
         const label = parts.inline.createSpan({ cls: "tm-things-tag", text: tag });
-        editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
+        if (options.openTag) editable(label, `Open tag: ${tag}`, `tag:${tag}`, () => options.openTag!(tag));
+        else editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
     }
 
     // At the end of the line: date and time boxes, then the deadline.

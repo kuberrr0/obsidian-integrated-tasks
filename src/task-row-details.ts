@@ -72,6 +72,8 @@ export interface TaskDetailsOptions {
     tags: string[];
     edit: (property: TaskEditorProperty) => void;
     openSource: () => void;
+    /** Opens a tag's own view; without it, a tag opens the tag editor. */
+    openTag?: (tag: string) => void;
 }
 
 export function editable(element: HTMLElement, label: string, focusKey: string, action: () => void): void {
@@ -146,6 +148,7 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
         const icon = label.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
         setIcon(icon, "tag");
         label.createSpan({ text: tag });
-        editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
+        if (options.openTag) editable(label, `Open tag: ${tag}`, `tag:${tag}`, () => options.openTag!(tag));
+        else editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
     }
 }

@@ -12,7 +12,10 @@ import { cloneTaskFilters } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
 import { draftFromTask, draftFromTitle, draftMatchesTask } from "./task-draft";
+import { openDatePopover } from "./date-popover";
+import { openChoicePopover, PRIORITY_CHOICES, type Choice } from "./choice-popover";
 import { linkPlainTags } from "./tag-links";
+import type { BulkTaskPatch } from "./bulk-tasks";
 import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
@@ -1011,12 +1014,16 @@ export class TaskMainView extends ItemView {
     if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || !this.getSelectedTasks().length) return;
     // Clicking any task row changes the selection itself, so only clicks elsewhere clear it.
     const target = event.target as HTMLElement | null;
+    // Working in the date popover edits the selection; it does not end it.
+    if (target?.closest?.(".tm-date-popover, .tm-choice-popover")) return;
     const onRow = Array.from(this.selectionRows.values()).some(rows => rows.some(row => target && row.contains(target)));
     if (!onRow) this.clearSelection();
   }
 
   private editTask(task: Task, focusProperty?: TaskEditorProperty): void {
     if (!this.selection.has(task)) this.clearSelection();
+    // Dates, times and durations edit in a popover beside the property, for the whole selection.
+    if (focusProperty && this.openDateEditor(this.selection.has(task) ? this.getSelectedTasks() : [task], focusProperty)) return;
     if (this.selection.has(task)) {
       if (focusProperty) this.plugin.openBulkEditor(this, focusProperty);
       else this.plugin.openBulkEditor(this);
@@ -1347,7 +1354,8 @@ export class TaskMainView extends ItemView {
     const details = {
       grouping: this.metadataGrouping, dateFormat: this.plugin.dateFormat(), show: (property: TaskProperty) => property !== "defer",
       source: task.path !== implicitSource ? task.path : undefined, tags,
-      edit: (property: TaskEditorProperty) => this.editTask(task, property), openSource: () => { void this.openSource(task); }
+      edit: (property: TaskEditorProperty) => this.editTask(task, property), openSource: () => { void this.openSource(task); },
+      openTag: (tag: string) => void this.openTagView(tag)
     };
     if (board) this.renderBoardCard(primary, metadata, task, details);
     else if (lead) {
@@ -1464,7 +1472,7 @@ export class TaskMainView extends ItemView {
   private collapseCardOutside(event: MouseEvent): void {
     if (!this.expanded || event.button !== 0) return;
     const target = event.target as HTMLElement | null;
-    if (target?.closest?.(".tm-things-card, .modal-container, .menu, .suggestion-container")) return;
+    if (target?.closest?.(".tm-things-card, .tm-date-popover, .tm-choice-popover, .modal-container, .menu, .suggestion-container")) return;
     void this.collapseCard();
   }
 
@@ -1487,7 +1495,8 @@ export class TaskMainView extends ItemView {
       task, depth, draft: expanded, tags: this.rowTags(task), focus,
       childDetails: child => ({
         grouping: "none", dateFormat: this.plugin.dateFormat(), show: property => property !== "defer", tags: this.rowTags(child),
-        todayMarker: this.state.mode !== "today", edit: property => void this.editFromCard(child.id, property), openSource: () => {}
+        todayMarker: this.state.mode !== "today", edit: property => void this.editFromCard(child.id, property), openSource: () => {},
+        openTag: tag => void this.openTagView(tag)
       }),
       children: task.childIds.map(id => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child)),
       change: draft => { if (this.expanded?.id === task.id) this.expanded = { id: task.id, ...draft }; },
@@ -1506,13 +1515,87 @@ export class TaskMainView extends ItemView {
           .then(() => this.plugin.index.refreshPath(child.path))
           .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not rename the subtask."); });
       },
-      addChild: (title, after, next) => void this.addCardSubtask(task.id, title, after, next)
+      addChild: (title, after, next) => void this.addCardSubtask(task.id, title, after, next),
+      addTags: tags => void this.addCardTags(task.id, tags),
+      removeTag: tag => void this.removeCardTag(task.id, tag),
+      project: { label: task.path.replace(/\.md$/i, "").split("/").pop() ?? task.path, choose: anchor => this.openProjectPicker(task.id, anchor) },
+      openTag: tag => void this.openTagView(tag),
+      tagSuggestions: this.plugin.index.tagSummaries().map(tag => tag.name)
     });
   }
 
   /** With Link tags on, plain #tags typed into a card become task tags. */
   private linkTags(text: string): string {
     return this.plugin.settings.linkTags ? linkPlainTags(text) : text;
+  }
+
+  /** Opens a tag's view; an open card is saved and closed first, so nothing typed in it is lost. */
+  private async openTagView(tag: string): Promise<void> {
+    if (this.expanded) { await this.saveCard(); this.expanded = undefined; }
+    await this.plugin.openTag(tag).catch((error: unknown) => { new Notice(String(error)); });
+  }
+
+  /**
+   * The card's project button: Inbox and the active projects (the task's own note checked, even when it
+   * is not a project); choosing one moves the task, with its subtasks, there and closes the card.
+   */
+  private openProjectPicker(id: string, anchor: HTMLElement): void {
+    const task = this.plugin.index.taskById(id);
+    if (!task) return;
+    const inbox = this.plugin.settings.inboxPath;
+    const projects = this.plugin.index.projects().filter(project => !project.archived).sort((a, b) => a.name.localeCompare(b.name));
+    const name = (path: string): string => path.replace(/\.md$/i, "").split("/").pop() ?? path;
+    const choices: Choice[] = [{ value: inbox, label: "Inbox", icon: "inbox" }];
+    if (task.path !== inbox && !projects.some(project => project.path === task.path)) choices.push({ value: task.path, label: name(task.path), icon: "file-text" });
+    projects.forEach((project, index) => choices.push({
+      value: project.path, label: project.name, icon: "circle", color: project.color, separated: index === 0,
+      detail: project.parentPath ? name(project.parentPath) : undefined
+    }));
+    openChoicePopover({ anchor, label: "Move to project", choices, selected: task.path, choose: path => void this.moveCardTask(id, path) });
+  }
+
+  private async moveCardTask(id: string, path: string): Promise<void> {
+    await this.saveCard();
+    const task = this.plugin.index.taskById(id);
+    if (!task || task.path === path) return;
+    try {
+      await this.plugin.store.update(task, { ...draftFromTask(task), destination: path });
+      // Its id changes with its note, so the card closes; the task shows up in its new project.
+      if (this.expanded?.id === id) this.expanded = undefined;
+      await this.plugin.index.refreshPath(task.path);
+      await this.plugin.index.refreshPath(path);
+      new Notice(`Moved to ${path.replace(/\.md$/i, "").split("/").pop()}`);
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not move the task.");
+    }
+  }
+
+  /** The cross on a card's tag takes that tag off the task. */
+  private async removeCardTag(id: string, tag: string): Promise<void> {
+    await this.saveCard();
+    const task = this.plugin.index.taskById(id);
+    if (!task?.tags?.includes(tag)) return;
+    try {
+      await this.plugin.store.update(task, { ...draftFromTask(task), tags: task.tags.filter(item => item !== tag) });
+      await this.plugin.index.refreshPath(task.path);
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not remove the tag.");
+    }
+  }
+
+  /** Tags typed into the card join the task's own. */
+  private async addCardTags(id: string, tags: string[]): Promise<void> {
+    await this.saveCard();
+    const task = this.plugin.index.taskById(id);
+    if (!task) return;
+    const next = [...new Set([...(task.tags ?? []), ...tags])];
+    if (next.length === (task.tags ?? []).length) return;
+    try {
+      await this.plugin.store.update(task, { ...draftFromTask(task), tags: next });
+      await this.plugin.index.refreshPath(task.path);
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not add the tag.");
+    }
   }
 
   /** Writes a subtask typed in the card; after Enter, a fresh one opens right below it, like a Things checklist. */
@@ -1539,9 +1622,69 @@ export class TaskMainView extends ItemView {
 
   /** Saves the card first, so the property editor works on the task as it now reads. */
   private async editFromCard(id: string, property: TaskEditorProperty): Promise<void> {
+    const anchor = this.popoverAnchor();
     await this.saveCard();
     const task = this.plugin.index.taskById(id);
-    if (task) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
+    if (task && !this.openDateEditor([task], property, anchor)) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
+  }
+
+  /** Priority edits in a small list beside the property: P1–P3 or none, for every task given. */
+  private openPriorityEditor(tasks: Task[], anchor = this.popoverAnchor()): boolean {
+    const first = tasks[0];
+    const target = anchor ?? (first && this.selectionRows.get(first.id)?.[0]) ?? this.content;
+    if (!first || !target) return false;
+    const shared = tasks.every(task => task.priority === first.priority);
+    openChoicePopover({
+      anchor: target, label: "Priority", choices: PRIORITY_CHOICES, selected: shared ? String(first.priority ?? "") : undefined,
+      choose: value => {
+        const priority = value ? Number(value) as Task["priority"] : undefined;
+        const changed = tasks.filter(task => task.priority !== priority);
+        if (!changed.length) return;
+        void this.plugin.store.bulkUpdate(changed, { priority }).then(async paths => {
+          for (const path of paths) await this.plugin.index.refreshPath(path);
+        }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); });
+      }
+    });
+    return true;
+  }
+
+  /** The property just clicked or focused, for a popover to open beside; else the view. */
+  private popoverAnchor(): HTMLElement | undefined {
+    const active = this.content?.ownerDocument.activeElement as HTMLElement | null | undefined;
+    return active && this.content?.contains(active) ? active : undefined;
+  }
+
+  /**
+   * Opens the date popover for a schedule (with its time and duration) or a deadline (with its time),
+   * saving to every task given. Returns false for properties it does not edit.
+   */
+  private openDateEditor(tasks: Task[], property: TaskEditorProperty, anchor = this.popoverAnchor()): boolean {
+    if (property === "priority") return this.openPriorityEditor(tasks, anchor);
+    const kind = property === "deadline" ? "deadline" : property === "scheduledDate" || property === "durationMinutes" ? "scheduled" : undefined;
+    const first = tasks[0];
+    if (!kind || !first) return false;
+    const target = anchor ?? this.selectionRows.get(first.id)?.[0] ?? this.content;
+    if (!target) return false;
+    openDatePopover({
+      anchor: target, kind, dateFormat: this.plugin.dateFormat(),
+      value: kind === "deadline" ? { date: first.deadline, time: first.deadlineTime } : { date: first.scheduledDate, time: first.scheduledTime, duration: first.durationMinutes },
+      save: value => {
+        // Only what changed is written, so a multi-selection keeps each task's other values.
+        const patch: BulkTaskPatch = {};
+        if (kind === "deadline") {
+          if (value.date !== first.deadline) patch.deadline = value.date;
+          if (value.time !== first.deadlineTime) patch.deadlineTime = value.time;
+        } else {
+          if (value.date !== first.scheduledDate) patch.scheduledDate = value.date;
+          if (value.time !== first.scheduledTime) patch.scheduledTime = value.time;
+          if (value.duration !== first.durationMinutes) patch.durationMinutes = value.duration;
+        }
+        void this.plugin.store.bulkUpdate(tasks, patch).then(async paths => {
+          for (const path of paths) await this.plugin.index.refreshPath(path);
+        }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); });
+      }
+    });
+    return true;
   }
 
   /**

@@ -2,7 +2,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
 import { installObsidianDom } from "./helpers/obsidian-dom";
-import { animateCardClose, animateCardOpen, cardNotes, renderThingsTaskCard, type TaskCardOptions } from "../src/things-task-card";
+import { animateCardClose, animateCardOpen, cardNotes, renderThingsTaskCard, typedTags, type TaskCardOptions } from "../src/things-task-card";
 import { descriptionLines } from "../src/task-description";
 import { scanTasks } from "../src/parser";
 
@@ -69,6 +69,81 @@ describe("card notes", () => {
   it("shows top-level bullets as plain lines and saves them back as bullets", () => {
     expect(cardNotes("- First\n- Second\n  - Nested\n- [ ] A checkbox line")).toBe("First\nSecond\n  - Nested\n- [ ] A checkbox line");
     expect(descriptionLines(cardNotes("- First\n- Second"), 0)).toEqual(descriptionLines("- First\n- Second", 0));
+  });
+});
+
+describe("the card's project button", () => {
+  it("names the task's note at the toolbar's left and opens the project list from itself", () => {
+    const choose = vi.fn();
+    const { element } = card("- [ ] Task 1 2026-09-19 #[[Errand]] {2026-09-30} p1 every week", { project: { label: "Autumn Open House", choose } });
+    const toolbar = element.querySelector<HTMLElement>(".tm-things-card-toolbar")!;
+    const button = toolbar.firstElementChild as HTMLElement;
+    expect(button.className).toBe("tm-things-card-project");
+    expect(button.textContent).toBe("Autumn Open House");
+    button.click();
+    expect(choose).toHaveBeenCalledExactlyOnceWith(button);
+  });
+});
+
+describe("adding tags in the card", () => {
+  it("reads typed tags without their marks", () => {
+    expect(typedTags(" #errand, [[Office]] ,, errand ")).toEqual(["errand", "Office"]);
+  });
+
+  it("turns the + pill after the tags into an input that adds on Enter and suggests existing tags", () => {
+    const addTags = vi.fn();
+    const { element } = card("- [ ] Task 1 #[[Errand]]", { addTags, tagSuggestions: ["Errand", "Office"] });
+    const pills = element.querySelector<HTMLElement>(".tm-things-card-tags")!;
+    expect(Array.from(pills.children).map(child => child.className)).toEqual(["tm-things-card-tag", "tm-things-card-tag tm-things-add-tag"]);
+    pills.querySelector<HTMLElement>(".tm-things-add-tag")!.click();
+    const input = pills.querySelector<HTMLInputElement>(".tm-things-add-tag input")!;
+    expect(element.ownerDocument.activeElement).toBe(input);
+    expect(Array.from(pills.querySelectorAll("datalist option")).map(option => option.getAttribute("value"))).toEqual(["Errand", "Office"]);
+    input.value = "Office, #Calls";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(addTags).toHaveBeenCalledExactlyOnceWith(["Office", "Calls"]);
+    // The pill is back, ready for another.
+    expect(pills.querySelector("input")).toBeNull();
+    expect(pills.querySelector(".tm-things-add-tag")).not.toBeNull();
+  });
+
+  it("opens a tag's view from its pill, and removes it from the cross shown on hover", () => {
+    const openTag = vi.fn(), removeTag = vi.fn(), edit = vi.fn();
+    const { element } = card("- [ ] Task 1 #[[Errand]] #[[Office]]", { openTag, removeTag, edit });
+    const pills = Array.from(element.querySelectorAll<HTMLElement>(".tm-things-card-tags > .tm-things-card-tag:not(.tm-things-add-tag)"));
+    expect(pills.map(pill => pill.textContent)).toEqual(["Errand", "Office"]);
+    pills[1].click();
+    expect(openTag).toHaveBeenCalledExactlyOnceWith("Office");
+    const cross = pills[0].querySelector<HTMLElement>(".tm-things-tag-remove")!;
+    expect(cross.getAttribute("aria-label")).toBe("Remove tag Errand");
+    cross.click();
+    expect(removeTag).toHaveBeenCalledExactlyOnceWith("Errand");
+    // The cross does not also open the tag.
+    expect(openTag).toHaveBeenCalledOnce();
+    expect(edit).not.toHaveBeenCalled();
+  });
+
+  it("puts the pill back without adding on Escape", () => {
+    const addTags = vi.fn();
+    const { element } = card("- [ ] Task 1 #[[Errand]]", { addTags });
+    element.querySelector<HTMLElement>(".tm-things-add-tag")!.click();
+    const input = element.querySelector<HTMLInputElement>(".tm-things-add-tag input")!;
+    input.value = "Nope";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(addTags).not.toHaveBeenCalled();
+    expect(element.querySelector(".tm-things-add-tag input")).toBeNull();
+  });
+
+  it("opens the tag input from the Tags button when the task has none, instead of the editor", () => {
+    const addTags = vi.fn(), edit = vi.fn();
+    const { element } = card("- [ ] Task 1", { addTags, edit });
+    element.querySelector<HTMLElement>('.tm-things-card-toolbar [aria-label="Tags"]')!.click();
+    const input = element.querySelector<HTMLInputElement>(".tm-things-card-properties .tm-things-card-tags .tm-things-add-tag input")!;
+    expect(element.ownerDocument.activeElement).toBe(input);
+    expect(edit).not.toHaveBeenCalled();
+    input.value = "Errand";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(addTags).toHaveBeenCalledExactlyOnceWith(["Errand"]);
   });
 });
 
