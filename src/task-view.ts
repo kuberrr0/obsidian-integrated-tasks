@@ -1390,7 +1390,8 @@ export class TaskMainView extends ItemView {
     }
     const notes = cardNotes(task.description).trim();
     if (notes) below.before(below.parentElement!.createDiv({ cls: "tm-things-board-notes", text: notes }));
-    const properties = renderThingsCardProperties(below.parentElement!, task, details.tags, details.edit);
+    // Grouped by tag, the column names it; grouped by anything else, the card keeps every property.
+    const properties = renderThingsCardProperties(below.parentElement!, task, details.grouping === "tags" ? [] : details.tags, details.edit, undefined, { open: tag => void this.openTagView(tag) });
     if (properties) below.before(properties);
     // Left out when the board is grouped by note: the column already names it.
     if (details.source && details.grouping !== "source") {

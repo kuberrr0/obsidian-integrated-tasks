@@ -84,10 +84,16 @@ describe("Things task row", () => {
     expect(edit).toHaveBeenCalledWith("scheduledDate");
   });
 
-  it("leaves out properties the list is grouped by", () => {
-    const { inline } = row("- [ ] Plan 2026-10-08 {2026-09-30}", { grouping: "scheduledDate" });
-    expect(inline.querySelector(".tm-things-when")).toBeNull();
-    expect(inline.querySelector(".tm-things-deadline")).not.toBeNull();
+  it("keeps a grouped property on each row, except the note or tag the list is grouped by", () => {
+    const line = "- [ ] Plan 2026-10-08 10:00 {2026-09-30} every week #[[Errand]]";
+    for (const grouping of ["date", "scheduledDate", "deadline", "scheduledTime", "repeat", "priority"] as const) {
+      const { inline } = row(line, { grouping, source: "Work.md" });
+      expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag", "tm-things-trailing"]);
+      expect(inline.querySelectorAll(".tm-things-trailing > *")).toHaveLength(3);
+    }
+    expect(row(line, { grouping: "tags" }).inline.querySelector(".tm-things-tag")).toBeNull();
+    expect(row(line, { grouping: "source", source: "Work.md" }).secondary.childElementCount).toBe(0);
+    expect(row(line, { grouping: "date", source: "Work.md" }).secondary.textContent).toBe("Work");
   });
 });
 

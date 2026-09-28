@@ -40,14 +40,15 @@ function box(parent: HTMLElement, cls: string, text: string, title: string): HTM
 export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, options: ThingsDetailsOptions): void {
     const now = options.now ?? new Date();
     const today = todayIso(now);
-    const { grouping } = options;
+    // Only a note or tag grouping hides its property (the group heading already names it);
+    // grouped by a date, priority, repeat and the like, each row still shows its own value.
+    const byNote = options.grouping === "source", byTag = options.grouping === "tags";
     const show = options.show ?? ((): boolean => true);
-    const actionDate = task.scheduledDate && task.deadline ? (task.scheduledDate < task.deadline ? task.scheduledDate : task.deadline) : task.scheduledDate ?? task.deadline;
-    const showDate = (field: "scheduledDate" | "deadline") => show(field) && grouping !== field && !(grouping === "date" && task[field] === actionDate);
+    const showDate = (field: "scheduledDate" | "deadline") => show(field);
 
     // Before the title: a star for today, and for anything overdue, which Things folds into Today.
     // A completed date, when recorded, stands in for the scheduled one.
-    const done = task.status === "done" && task.completedDate && show("completed") && grouping !== "completed" ? task.completedDate : undefined;
+    const done = task.status === "done" && task.completedDate && show("completed") ? task.completedDate : undefined;
     const scheduled = !done && task.scheduledDate && showDate("scheduledDate") ? task.scheduledDate : undefined;
     const scheduledTitle = scheduled ? `Scheduled ${formatDate(scheduled, options.dateFormat)}` : "";
     const editScheduled = (element: HTMLElement): void => editable(element, `Edit scheduled date: ${formatDate(scheduled!, options.dateFormat)}`, "scheduledDate", () => options.edit("scheduledDate"));
@@ -64,13 +65,13 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
         const notes = Array.from(parts.inline.children).find(child => child.classList.contains("tm-description-indicator"));
         notes?.after(checklist);
     }
-    if (task.repeat && show("repeat") && grouping !== "repeat") {
+    if (task.repeat && show("repeat")) {
         const label = repeatLabel(task.repeat);
         const repeat = parts.inline.createSpan({ cls: "tm-things-repeat", attr: { title: `Repeats ${task.repeat}` } });
         setIcon(repeat, "repeat");
         editable(repeat, `Edit repeat: ${label}`, "repeat", () => options.edit("repeat"));
     }
-    if (show("tags") && grouping !== "tags") for (const tag of options.tags) {
+    if (show("tags") && !byTag) for (const tag of options.tags) {
         const label = parts.inline.createSpan({ cls: "tm-things-tag", text: tag });
         if (options.openTag) editable(label, `Open tag: ${tag}`, `tag:${tag}`, () => options.openTag!(tag));
         else editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
@@ -81,16 +82,16 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
     if (done) box(trailing, "tm-things-done", taskDoneDateLabel(done, now), `Completed ${formatDate(done, options.dateFormat)}`);
     else if (scheduled && scheduled > today) editScheduled(box(trailing, "tm-things-when", thingsDateLabel(scheduled, now), scheduledTitle));
     const time = taskTimeDurationLabel(
-        show("scheduledTime") && grouping !== "scheduledTime" ? task.scheduledTime : undefined,
-        show("duration") && grouping !== "duration" ? task.durationMinutes : undefined
+        show("scheduledTime") ? task.scheduledTime : undefined,
+        show("duration") ? task.durationMinutes : undefined
     );
     if (time) {
-        const hasTime = Boolean(task.scheduledTime && show("scheduledTime") && grouping !== "scheduledTime");
+        const hasTime = Boolean(task.scheduledTime && show("scheduledTime"));
         const label = box(trailing, "tm-things-time", time, hasTime ? "Scheduled time" : "Duration");
         editable(label, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, "time", () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
     }
     const due = task.deadline && showDate("deadline") ? thingsDeadlineLabel(task.deadline, now) : "";
-    const dueTime = task.deadlineTime && show("deadlineTime") && grouping !== "deadlineTime" ? taskTimeLabel(task.deadlineTime) : "";
+    const dueTime = task.deadlineTime && show("deadlineTime") ? taskTimeLabel(task.deadlineTime) : "";
     if (due || dueTime) {
         const urgent = !task.completed && (deadlineIsOverdue(task.deadline, task.deadlineTime, now) || task.deadline === today);
         const deadline = trailing.createSpan({ cls: `tm-things-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${[task.deadline && formatDate(task.deadline, options.dateFormat), dueTime].filter(Boolean).join(", ")}` } });
@@ -101,7 +102,7 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
     if (!trailing.childElementCount) trailing.remove();
 
     // Below the title: the note the task lives in, when the list spans several.
-    if (options.source && show("source") && grouping !== "source") {
+    if (options.source && show("source") && !byNote) {
         const source = parts.secondary.createSpan({ cls: "tm-things-source", text: options.source.replace(/\.md$/i, "").split("/").pop(), attr: { title: options.source } });
         editable(source, `Open source note: ${options.source}`, "source", options.openSource);
     }
