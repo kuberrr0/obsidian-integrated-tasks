@@ -917,6 +917,17 @@ button.tm-gantt-handle.is-finish:focus-visible,
   border-radius: 6px;
 }
 
+/* The row keyboard focus is on (arrow keys) gets a faint tint: half the selection's, deeper when also selected.
+   :focus-visible keeps it off rows focused by a mouse click. */
+.tm-main-view .tm-task-item:focus-visible {
+  outline: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--interactive-accent) 6%, var(--background-primary));
+}
+.tm-main-view .tm-task-item.is-selected:focus-visible {
+  background: color-mix(in srgb, var(--interactive-accent) 18%, var(--background-primary));
+}
+
 /* Per-layout wrapping keeps clipping confined to the title, not card controls. */
 .tm-main-view:not(.tm-wrap-task-titles) .tm-kanban button.tm-task-title {
   white-space: nowrap;
