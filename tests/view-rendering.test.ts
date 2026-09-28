@@ -327,7 +327,7 @@ describe("undo and snooze", () => {
     const { view, content } = await setup([["A.md", "- [ ] Later >someday\n- [ ] Now"]]);
     await view.setState({ mode: "all" });
     const later = rows(content()).find(row => row.textContent!.includes("Later"))!;
-    expect(later.querySelector(".tm-task-defer")!.textContent).toContain("Someday");
+    expect(later.querySelector(".tm-task-defer")).toBeNull();
     key(later, "m");
     key(rows(content()).find(row => row.textContent!.includes("Now"))!, "m");
     expect(menus[0].items.map(item => item.title)).toContain("Stop snoozing");

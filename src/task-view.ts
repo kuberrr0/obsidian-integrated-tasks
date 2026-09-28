@@ -1224,7 +1224,7 @@ export class TaskMainView extends ItemView {
       return this.pagePath ? this.app.metadataCache.getFirstLinkpathDest(tag, task.path)?.path !== this.pagePath : tag !== this.state.tag;
     });
     renderTaskDetails(primary, metadata, task, {
-      grouping: this.metadataGrouping, dateFormat: this.plugin.dateFormat(),
+      grouping: this.metadataGrouping, dateFormat: this.plugin.dateFormat(), show: property => property !== "defer",
       source: task.path !== implicitSource ? task.path : undefined, tags,
       edit: property => this.editTask(task, property), openSource: () => { void this.openSource(task); }
     });
