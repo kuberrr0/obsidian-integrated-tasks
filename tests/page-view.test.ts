@@ -99,6 +99,11 @@ function selectionView() {
       handlers.get("click")!(event);
       return event;
     };
+    const dblclick = (options: Record<string, unknown> = {}) => {
+      const event = { target: row, preventDefault: vi.fn(), stopPropagation: vi.fn(), ...options };
+      handlers.get("dblclick")!(event);
+      return event;
+    };
     const contextmenu = (target: unknown = row, options: Record<string, unknown> = {}) => {
       const event = { target, preventDefault: vi.fn(), ...options };
       handlers.get("contextmenu")!(event);
@@ -109,25 +114,53 @@ function selectionView() {
       handlers.get("pointerdown")!(event);
       return event;
     };
-    return { row, classes, click, contextmenu, pointerdown };
+    return { row, classes, click, dblclick, contextmenu, pointerdown };
   });
   return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor, plugin };
 }
 
-it("left-click opens task properties for a selection and the task editor otherwise", () => {
+it("left-click selects only the clicked task, with Mod to toggle and Shift for a range", () => {
   const { view, rows, tasks, openEditor, openBulkEditor } = selectionView();
   rows[0].click();
-  rows[2].click({ shiftKey: true, metaKey: true });
-  expect(view.getSelectedTasks()).toEqual([]);
-  expect(openEditor).toHaveBeenCalledTimes(2);
-  expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task: tasks[2] }));
-  rows[0].contextmenu(); rows[2].contextmenu(undefined, { shiftKey: true });
-  expect(view.getSelectedTasks()).toHaveLength(3);
-  rows[1].click();
-  expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view);
-  expect(view.getSelectedTasks()).toHaveLength(3);
+  expect(view.getSelectedTasks()).toEqual([tasks[0]]);
+  rows[2].click({ shiftKey: true });
+  expect(view.getSelectedTasks()).toEqual(tasks);
+  rows[1].click({ metaKey: true });
+  expect(view.getSelectedTasks()).toEqual([tasks[0], tasks[2]]);
+  // A plain click on an already selected task still narrows the selection to it.
+  rows[2].click();
+  expect(view.getSelectedTasks()).toEqual([tasks[2]]);
   const title = { closest: () => ({ tagName: "BUTTON" }) };
-  expect(rows[1].click({ target: title }).preventDefault).not.toHaveBeenCalled();
+  expect(rows[1].click({ target: title }).preventDefault).toHaveBeenCalled();
+  expect(view.getSelectedTasks()).toEqual([tasks[1]]);
+  expect(openEditor).not.toHaveBeenCalled();
+  expect(openBulkEditor).not.toHaveBeenCalled();
+});
+
+it("double-click opens the task editor for just that task", () => {
+  const { view, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  rows[0].click(); rows[2].click({ metaKey: true });
+  rows[2].dblclick();
+  expect(openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: tasks[2] }));
+  expect(openBulkEditor).not.toHaveBeenCalled();
+  expect(view.getSelectedTasks()).toEqual([tasks[2]]);
+  rows[1].dblclick({ metaKey: true });
+  expect(openEditor).toHaveBeenCalledOnce();
+});
+
+it("right-click on an already selected task opens task properties for the selection", () => {
+  const { view, rows, openBulkEditor } = selectionView();
+  rows[0].pointerdown(); rows[0].contextmenu();
+  expect(openBulkEditor).not.toHaveBeenCalled();
+  rows[1].click({ metaKey: true });
+  rows[1].pointerdown();
+  const event = rows[1].contextmenu();
+  expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view);
+  expect(event.preventDefault).toHaveBeenCalled();
+  expect(view.getSelectedTasks().map(task => task.title)).toEqual(["A", "B"]);
+  // With a modifier, right-click only changes the selection.
+  rows[1].pointerdown({ metaKey: true }); rows[1].contextmenu(undefined, { metaKey: true });
+  expect(openBulkEditor).toHaveBeenCalledOnce();
 });
 
 it("drags the selected set together and drags an unselected task without selecting it", async () => {
@@ -173,7 +206,7 @@ it("right-click selects titles and other controls, retaining an existing multi-s
   const { view, rows } = selectionView();
   rows[0].contextmenu(); rows[2].contextmenu(undefined, { metaKey: true });
   const title = { closest: () => ({ tagName: "BUTTON" }) };
-  expect(rows[2].contextmenu(title).preventDefault).not.toHaveBeenCalled();
+  rows[2].contextmenu(title);
   expect(view.getSelectedTasks().map(task => task.title)).toEqual(["A", "C"]);
   rows[1].contextmenu(title);
   expect(view.getSelectedTasks().map(task => task.title)).toEqual(["B"]);
@@ -300,15 +333,16 @@ it.each([
   expect(openEditor).toHaveBeenCalledWith(expect.objectContaining({ preset: expect.objectContaining(expected) }));
 });
 
-it("clears selection on outside left clicks, but preserves it on selected rows and right clicks", () => {
+it("clears selection on outside left clicks, but preserves it on task rows and right clicks", () => {
   const { view, internals, rows } = selectionView();
   rows[0].contextmenu();
   internals.clearSelectionOutside({ button: 0, target: rows[0].row });
   expect(view.getSelectedTasks()).toHaveLength(1);
   internals.clearSelectionOutside({ button: 2, target: {} });
   expect(view.getSelectedTasks()).toHaveLength(1);
+  // Another row's own click handler decides the selection, e.g. extending it with Shift.
   internals.clearSelectionOutside({ button: 0, target: rows[1].row });
-  expect(view.getSelectedTasks()).toHaveLength(0);
+  expect(view.getSelectedTasks()).toHaveLength(1);
   rows[0].contextmenu();
   internals.clearSelectionOutside({ button: 0, target: {} });
   expect(view.getSelectedTasks()).toHaveLength(0);
@@ -459,7 +493,7 @@ it("Mod-clicking a selected title deselects only that task without opening an ed
   const title = { closest: () => ({ tagName: "BUTTON" }) };
   const event = rows[0].click({ metaKey: true, target: title });
   expect(view.getSelectedTasks()).toEqual([tasks[2]]);
-  expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+  expect(event.stopPropagation).toHaveBeenCalledOnce();
   expect(openEditor).not.toHaveBeenCalled();
   expect(openBulkEditor).not.toHaveBeenCalled();
   rows[2].click({ metaKey: true });

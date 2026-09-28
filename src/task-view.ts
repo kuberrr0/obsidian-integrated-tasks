@@ -938,10 +938,10 @@ export class TaskMainView extends ItemView {
 
   private clearSelectionOutside(event: MouseEvent): void {
     if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || !this.getSelectedTasks().length) return;
+    // Clicking any task row changes the selection itself, so only clicks elsewhere clear it.
     const target = event.target as HTMLElement | null;
-    const selected = this.getSelectedTasks().some(task =>
-      this.selectionRows.get(task.id)?.some(row => target && row.contains(target)));
-    if (!selected) this.clearSelection();
+    const onRow = Array.from(this.selectionRows.values()).some(rows => rows.some(row => target && row.contains(target)));
+    if (!onRow) this.clearSelection();
   }
 
   private editTask(task: Task, focusProperty?: TaskEditorProperty): void {
@@ -970,6 +970,9 @@ export class TaskMainView extends ItemView {
       const control = element?.closest?.("button, [role=button], input, label, a, select, textarea, .tm-calendar-task-title, .tm-calendar-resize-handle");
       return Boolean(control && control !== row);
     };
+    // Titles select like the rest of the row; other controls keep their own click action.
+    const title = (target: EventTarget | null): boolean => Boolean((target as HTMLElement | null)?.closest?.(".tm-task-title, .tm-calendar-task-title"));
+    const control = (target: EventTarget | null): boolean => interactive(target) && !title(target);
     const selectForContextMenu = (event: MouseEvent): void => {
       const additive = Platform.isMacOS ? event.metaKey : event.ctrlKey;
       if (!this.selection.has(task) || event.shiftKey || additive) {
@@ -978,10 +981,14 @@ export class TaskMainView extends ItemView {
       row.focus({ preventScroll: true });
       this.updateSelection();
     };
+    // Right-clicking a task that was already selected edits the selection's properties.
+    let selectedBeforeContext = false;
+    const plainContext = (event: MouseEvent): boolean => !event.shiftKey && !event.altKey && !(Platform.isMacOS ? event.metaKey : event.ctrlKey);
     // Select on press: contextmenu may wait for release or the native menu gesture.
     row.addEventListener("pointerdown", event => {
       this.contextSelectionOnPress = event.button === 2 || (Platform.isMacOS && event.button === 0 && event.ctrlKey);
       if (this.contextSelectionOnPress) {
+        selectedBeforeContext = this.selection.has(task);
         selectForContextMenu(event);
       }
     });
@@ -989,20 +996,36 @@ export class TaskMainView extends ItemView {
     row.addEventListener("contextmenu", event => {
       // Consume the context gesture even if the row moved after press.
       // Consume the gesture across the view, even if its menu targets another row.
-      if (!this.contextSelectionOnPress) selectForContextMenu(event);
+      if (!this.contextSelectionOnPress) {
+        selectedBeforeContext = this.selection.has(task);
+        selectForContextMenu(event);
+      }
       this.contextSelectionOnPress = false;
+      if (selectedBeforeContext && plainContext(event) && this.selection.has(task)) {
+        event.preventDefault();
+        this.plugin.openBulkEditor(this);
+      }
+      selectedBeforeContext = false;
     });
     row.addEventListener("pointercancel", () => { this.contextSelectionOnPress = false; });
+    // A click selects: alone, or with Cmd/Ctrl to toggle and Shift for a range.
     row.addEventListener("click", event => {
-      if ((Platform.isMacOS ? event.metaKey : event.ctrlKey) && this.selection.has(task)) {
-        event.preventDefault(); event.stopImmediatePropagation();
-        this.selection.click(task, this.visibleTasks, false, true);
-        this.updateSelection();
-        return;
-      }
-      if (interactive(event.target)) return;
+      if (Platform.isMacOS && event.ctrlKey) return;
+      const additive = Platform.isMacOS ? event.metaKey : event.ctrlKey;
+      if (!additive && !event.shiftKey && control(event.target)) return;
       event.preventDefault(); event.stopPropagation();
-      this.editTask(task);
+      this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
+      row.focus({ preventScroll: true });
+      this.updateSelection();
+    }, true);
+    // A double-click opens the task's editor.
+    row.addEventListener("dblclick", event => {
+      if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey || control(event.target)) return;
+      event.preventDefault(); event.stopPropagation();
+      this.selection.clear();
+      this.selection.click(task, this.visibleTasks);
+      this.updateSelection();
+      this.plugin.openEditor({ ...this.state, task });
     }, true);
     row.addEventListener("keydown", event => {
       this.contextSelectionOnPress = false;
