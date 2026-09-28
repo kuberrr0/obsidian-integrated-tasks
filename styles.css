@@ -2035,10 +2035,10 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   border: 1.5px solid var(--interactive-accent);
   border-radius: 50%;
 }
-/* A done subtask: a filled circle with a check, drawn here so every theme shows the mark. */
+/* A done subtask: just a check, no circle, in the done subtask's own faint colour; drawn here so every theme shows it. */
 .tm-main-view input.tm-things-card-check-box:checked {
-  border-color: var(--interactive-accent);
-  background-color: var(--interactive-accent);
+  border-color: transparent;
+  background-color: transparent;
 }
 .tm-main-view input.tm-things-card-check-box:checked::after {
   content: "";
@@ -2046,8 +2046,8 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   inset: -1.5px;
   width: auto;
   height: auto;
-  background-color: var(--text-on-accent);
-  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M3.2 6.3l1.9 1.9 3.8-4.1' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-color: var(--text-faint);
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 6.4l2.7 2.7L10 3.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: 100%;
