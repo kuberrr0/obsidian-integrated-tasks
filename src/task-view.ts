@@ -985,8 +985,10 @@ export class TaskMainView extends ItemView {
     else this.plugin.openEditor({ ...this.state, task });
   }
 
-  private prepareDrag(task: Task): void {
+  /** A selected task drags the whole selection along; returns what moves. */
+  private prepareDrag(task: Task): Task[] {
     this.draggedTasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
+    return this.draggedTasks;
   }
 
   private bindSelection(row: HTMLElement, task: Task): void {
