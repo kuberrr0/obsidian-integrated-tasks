@@ -101,7 +101,7 @@ export class TaskEditorModal extends Modal {
       taskLine.setAttribute("data-tm-priority", String(parsed?.priority ?? ""));
       error.empty();
     };
-    this.rawInput = new TaskLineEditor(editorHost, source, this.options.dateFormat, updatePriority);
+    this.rawInput = new TaskLineEditor(editorHost, source, this.options.dateFormat, updatePriority, "Call the dentist next Tuesday 3pm 30m {next Friday 5pm} >Monday every month p2 #[[Health]] ~[[Errands]]");
     updatePriority();
 
     const actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
