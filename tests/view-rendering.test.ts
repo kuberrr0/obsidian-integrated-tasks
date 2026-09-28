@@ -463,6 +463,18 @@ describe("weekly review", () => {
   });
 });
 
+it("lays tag rows out on one line in the Things style", async () => {
+  const { view, content, plugin } = await setup([["A.md", "- [ ] One #[[Errand]]\n- [ ] Two #[[Errand]]\n- [x] Three #[[Errand]]\n- [x] Four #[[Office]]"]]);
+  plugin.settings.style = "things";
+  await view.setState({ mode: "tags" });
+  const rows = Array.from(content().querySelectorAll<HTMLElement>(".tm-things-tag-row"));
+  expect(rows.map(row => Array.from(row.querySelector(".tm-task-primary")!.children).map(child => [child.className, child.textContent]))).toEqual([
+    [["tm-task-title", "Errand"], ["tm-things-count", "2"], ["tm-things-trailing tm-things-tag-done", "1 completed"]],
+    [["tm-task-title", "Office"], ["tm-things-trailing tm-things-tag-done", "1 completed"]]
+  ]);
+  expect(content().querySelector(".tm-things-tag-row .tm-task-metadata")).toBeNull();
+});
+
 it("shows the tag list's empty message outside the list", async () => {
   const { view, content } = await setup([note("A.md", 1)]);
   await view.setState({ mode: "tags" });

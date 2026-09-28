@@ -746,14 +746,19 @@ export class TaskMainView extends ItemView {
       const tags = this.plugin.index.tagSummaries().filter(tag => tag.name.toLocaleLowerCase().includes(this.search.toLocaleLowerCase()));
       empty.hidden = tags.length > 0;
       empty.setText(this.search ? "No matching tags" : "No tags yet. Add a tag to a task to see it here.");
+      const things = this.plugin.settings.style === "things";
       for (const tag of tags) {
-        const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
+        const row = list.createDiv({ cls: `tm-task-row tm-project-row${things ? " tm-things-project-row tm-things-tag-row" : ""}`, attr: { role: "listitem" } });
         const icon = row.createSpan({ cls: "tm-project-icon" });
         setIcon(icon, "tag");
         const content = row.createDiv({ cls: "tm-task-content" });
-        const title = content.createEl("button", { cls: "tm-task-title", text: tag.name, attr: { "data-tm-focus-key": `tag:${tag.name}` } });
+        // Things: one line, with the open count boxed after the name and the completed count at the end.
+        const line = things ? content.createDiv({ cls: "tm-task-primary" }) : content;
+        const title = line.createEl("button", { cls: "tm-task-title", text: tag.name, attr: { "data-tm-focus-key": `tag:${tag.name}` } });
         title.addEventListener("click", () => void this.plugin.openTag(tag.name).catch(error => new Notice(String(error))));
-        content.createDiv({ cls: "tm-task-metadata", text: `${tag.openTasks} open · ${tag.completedTasks} completed` });
+        if (!things) { content.createDiv({ cls: "tm-task-metadata", text: `${tag.openTasks} open · ${tag.completedTasks} completed` }); continue; }
+        if (tag.openTasks) line.createSpan({ cls: "tm-things-count", text: String(tag.openTasks), attr: { title: `${tag.openTasks} open` } });
+        if (tag.completedTasks) line.createSpan({ cls: "tm-things-trailing tm-things-tag-done", text: `${tag.completedTasks} completed` });
       }
     };
     search.addEventListener("input", () => { this.search = search.value; render(); });

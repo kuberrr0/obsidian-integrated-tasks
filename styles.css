@@ -1864,7 +1864,8 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   border-radius: 0;
 }
 .tm-main-view.tm-style-things.tm-density-compact .tm-task-row.tm-task-item:not(.tm-project-row) { padding-top: 3px; padding-bottom: 3px; }
-.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
+/* The checkbox sits in the middle of the whole row, however many lines the title and project take. */
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: center; padding-top: 0; }
 .tm-main-view.tm-style-things input.tm-task-checkbox {
   --checkbox-size: 14px;
   --checkbox-radius: 3px;
@@ -2038,7 +2039,7 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-things-card-tag {
   padding: 1px 9px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-green) 38%, var(--background-primary));
+  background: color-mix(in srgb, var(--interactive-accent) 40%, var(--background-primary));
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
@@ -2072,7 +2073,13 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   padding: 5px 8px 5px calc(8px + var(--tm-depth) * 24px);
 }
 .tm-main-view.tm-style-things.tm-density-compact .tm-task-row.tm-things-project-row { padding-top: 3px; padding-bottom: 3px; }
-.tm-main-view.tm-style-things .tm-things-project-row > .tm-project-icon { justify-self: center; height: 1.4em; font-size: var(--font-ui-medium); }
+/* Like a task's checkbox, the icon sits in the middle of the whole row, even when a parent line shows below. */
+.tm-main-view.tm-style-things .tm-things-project-row > .tm-project-icon { align-self: center; justify-self: center; height: 1.4em; font-size: var(--font-ui-medium); }
+/* Tag rows: a quieter icon and name than projects, and the completed count at the end of the line. */
+.tm-main-view.tm-style-things .tm-things-tag-row > .tm-project-icon { color: var(--text-faint); }
+.tm-main-view.tm-style-things .tm-things-tag-row > .tm-project-icon svg { width: 14px; height: 14px; }
+.tm-main-view.tm-style-things .tm-things-tag-row .tm-task-primary > button.tm-task-title { font-weight: var(--font-medium); }
+.tm-things-tag-done { color: var(--text-faint); font-size: var(--font-ui-smaller); white-space: nowrap; }
 .tm-main-view.tm-style-things .tm-things-project-row .tm-task-content { display: flex; flex-direction: column; gap: 1px; padding: 0; min-width: 0; font-family: var(--font-interface); }
 .tm-main-view.tm-style-things .tm-things-project-row .tm-task-primary { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; }
 .tm-main-view.tm-style-things .tm-things-project-row .tm-task-primary > * { flex-shrink: 0; }
