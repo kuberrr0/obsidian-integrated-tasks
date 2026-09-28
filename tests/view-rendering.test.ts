@@ -47,14 +47,19 @@ import { DEFAULT_SETTINGS } from "../src/types";
 import { todayIso } from "../src/date";
 import type TaskManagerPlugin from "../src/main";
 
-beforeAll(() => installObsidianDom());
+beforeAll(() => {
+  installObsidianDom();
+  // happy-dom has no pointer capture; row drags and swipes call it.
+  HTMLElement.prototype.setPointerCapture ??= () => {};
+  HTMLElement.prototype.releasePointerCapture ??= () => {};
+});
 afterEach(() => { document.body.innerHTML = ""; menus.length = 0; vi.unstubAllGlobals(); });
 
 function note(path: string, count: number, line: (i: number) => string = i => `- [ ] ${path} task ${i}`): [string, string] {
   return [path, Array.from({ length: count }, (_, i) => line(i)).join("\n")];
 }
 
-async function setup(notes: Array<[string, string]>) {
+async function setup(notes: Array<[string, string]>, frontmatter: Record<string, Record<string, unknown>> = {}) {
   const files = new Map(notes.map(([path]) => [path, Object.assign(new TFile(), { path, extension: "md", basename: path.replace(/\.md$/, "") })]));
   const contents = new Map(notes);
   let emitModify: (file: TFile) => void = () => {};
@@ -66,7 +71,7 @@ async function setup(notes: Array<[string, string]>) {
       on: (event: string, callback: (file: TFile) => void) => { if (event === "modify") emitModify = callback; return {}; },
       offref: () => {}
     },
-    metadataCache: { getFileCache: () => ({}), on: () => ({}), offref: () => {}, getFirstLinkpathDest: () => null },
+    metadataCache: { getFileCache: (file: TFile) => frontmatter[file.path] ? { frontmatter: frontmatter[file.path] } : {}, on: () => ({}), offref: () => {}, getFirstLinkpathDest: () => null },
     workspace: { getLeaf: () => ({ openFile: vi.fn() }) }
   } as unknown as App;
   const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
@@ -74,12 +79,12 @@ async function setup(notes: Array<[string, string]>) {
   const store = { toggle: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]), bulkChange: vi.fn().mockResolvedValue([]) };
   const plugin = {
     settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
-    openEditor: vi.fn(), openBulkEditor: vi.fn(), openTaskView: vi.fn(), openProjectEditor: vi.fn(), undoTaskChange: vi.fn()
+    openEditor: vi.fn(), openBulkEditor: vi.fn(), openTaskView: vi.fn(), openProjectEditor: vi.fn(), undoTaskChange: vi.fn(), openQuickSwitcher: vi.fn(), saveSettings: vi.fn()
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const internals = view as unknown as { refresh(): void; content: HTMLElement };
   const edit = async (path: string, content: string) => { contents.set(path, content); emitModify(files.get(path)!); await new Promise(resolve => setTimeout(resolve, 0)); };
-  return { view, internals, index, store, plugin, edit, content: () => internals.content };
+  return { view, internals, index, store, plugin, edit, files, content: () => internals.content };
 }
 
 const rows = (container: HTMLElement, section?: HTMLElement) => Array.from((section ?? container).querySelectorAll<HTMLElement>(".tm-task-item"));
@@ -277,6 +282,131 @@ describe("undo and snooze", () => {
     key(rows(content()).find(row => row.textContent!.includes("Now"))!, "m");
     expect(menus[0].items.map(item => item.title)).toContain("Stop snoozing");
     expect(menus[1].items.map(item => item.title)).not.toContain("Stop snoozing");
+  });
+});
+
+describe("today header, density and gestures", () => {
+  const pointer = (target: HTMLElement, type: string, x: number, y = 0, pointerType = "touch") =>
+    target.dispatchEvent(new PointerEvent(type, { pointerType, pointerId: 1, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  const swipe = (row: HTMLElement, dx: number, dy = 0, pointerType = "touch") => {
+    pointer(row, "pointerdown", 100, 100, pointerType);
+    pointer(row, "pointermove", 100 + dx / 2, 100 + dy / 2, pointerType);
+    pointer(row, "pointermove", 100 + dx, 100 + dy, pointerType);
+    pointer(row, "pointerup", 100 + dx, 100 + dy, pointerType);
+  };
+
+  it("summarises today in the Today header", async () => {
+    const today = todayIso();
+    const { view, content } = await setup([["A.md", `- [x] Done ${today}\n- [ ] Write ${today} 1h30m\n- [ ] Late 2020-01-01\n- [ ] Later ${today} 23:59`]]);
+    await view.setState({ mode: "today" });
+    const summary = content().querySelector<HTMLElement>(".tm-today-summary")!;
+    expect(summary.querySelector(".tm-project-progress[role=progressbar]")!.getAttribute("aria-label")).toBe("Today: 1 of 3 tasks completed");
+    expect(summary.textContent).toContain("1h30m planned");
+    expect(summary.textContent).toContain("1 overdue");
+    expect(summary.textContent).toMatch(/Next: Later at 11:59 PM · (in|now)/);
+    await view.setState({ mode: "all" });
+    expect(content().querySelector(".tm-today-summary")).toBeNull();
+  });
+
+  it("colours the source label of tasks from coloured projects, except on the project's own page", async () => {
+    const { view, content } = await setup([note("Site.md", 1), note("Loose.md", 1)], { "Site.md": { tags: ["project"], color: "blue" } });
+    await view.setState({ mode: "all" });
+    const [site, loose] = [rows(content()).find(row => row.textContent!.includes("Site"))!, rows(content()).find(row => row.textContent!.includes("Loose"))!];
+    expect(site.style.getPropertyValue("--tm-project-color")).toBe("var(--color-blue)");
+    expect(site.querySelector(".tm-project-dot")).toBeNull();
+    expect(loose.style.getPropertyValue("--tm-project-color")).toBe("");
+    await view.setState({ mode: "all", pagePath: "Site.md" });
+    expect(rows(content())[0].style.getPropertyValue("--tm-project-color")).toBe("");
+  });
+
+  it("applies the compact density class", async () => {
+    const { view, content, plugin } = await setup([note("A.md", 1)]);
+    (plugin.settings as Record<string, unknown>).density = "compact";
+    await view.setState({ mode: "all" });
+    expect(content().classList.contains("tm-density-compact")).toBe(true);
+  });
+
+  it("completes on a right swipe and snoozes until tomorrow on a left swipe, touch only", async () => {
+    const { view, content, store, index } = await setup([note("A.md", 2)]);
+    await view.setState({ mode: "all" });
+    swipe(rows(content())[0], 100);
+    expect(store.toggle).toHaveBeenCalledWith(index.allTasks()[0], true);
+    swipe(rows(content())[1], -100);
+    await Promise.resolve();
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    expect(store.bulkDrop).toHaveBeenLastCalledWith([index.allTasks()[1]], { property: "defer", value: todayIso(tomorrow) }, undefined, undefined);
+    store.toggle.mockClear(); store.bulkDrop.mockClear();
+    swipe(rows(content())[0], 40);
+    swipe(rows(content())[0], 30, 120);
+    swipe(rows(content())[0], 100, 0, "mouse");
+    expect(store.toggle).not.toHaveBeenCalled();
+    expect(store.bulkDrop).not.toHaveBeenCalled();
+  });
+
+  it("opens the quick switcher on Cmd+K", async () => {
+    const { view, content, plugin } = await setup([note("A.md", 1)]);
+    await view.onOpen();
+    await view.setState({ mode: "all" });
+    key(rows(content())[0], "k", { metaKey: true });
+    expect(plugin.openQuickSwitcher).toHaveBeenCalledOnce();
+  });
+});
+
+describe("weekly review", () => {
+  const plus = (days: number) => { const date = new Date(); date.setDate(date.getDate() + days); return todayIso(date); };
+  const reviewSections = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>(".tm-review-section"));
+  const section = (container: HTMLElement, title: string) => reviewSections(container).find(item => item.querySelector("h2")!.textContent!.startsWith(title))!;
+
+  async function review() {
+    const setupResult = await setup([
+      ["Work.md", [`- [ ] Late ${plus(-3)}`, `- [ ] Due soon {${plus(3)}}`, `- [ ] Due later {${plus(30)}}`, "- [ ] Maybe >someday", `- [ ] Hidden late ${plus(-3)} >someday`].join("\n")],
+      ["Old.md", "- [ ] Forgotten idea"],
+      ["Done project.md", "- [x] Shipped"]
+    ], { "Done project.md": { tags: ["project"] }, "Work.md": { tags: ["project"] } });
+    Object.assign(setupResult.files.get("Old.md")!, { stat: { mtime: Date.now() - 60 * 86_400_000 } });
+    Object.assign(setupResult.files.get("Work.md")!, { stat: { mtime: Date.now() } });
+    await setupResult.view.setState({ mode: "review" });
+    return setupResult;
+  }
+
+  it("lists what needs attention, section by section", async () => {
+    const { content } = await review();
+    expect(reviewSections(content()).map(item => item.querySelector("h2 span")!.textContent)).toEqual([
+      "Completed this week", "Overdue", "Routines behind", "Deadlines in the next 7 days", "Untouched for a month", "Projects without a next action", "Someday"]);
+    const titles = (title: string) => rows(content(), section(content(), title)).map(row => row.querySelector(".tm-task-title")!.textContent);
+    expect(titles("Overdue")).toEqual(["Late"]);
+    expect(titles("Deadlines in the next 7 days")).toEqual(["Due soon"]);
+    expect(titles("Untouched for a month")).toEqual(["Forgotten idea"]);
+    expect(titles("Someday").sort()).toEqual(["Hidden late", "Maybe"]);
+    expect(section(content(), "Projects without a next action").textContent).toContain("Done project");
+    expect(section(content(), "Projects without a next action").textContent).not.toContain("Work");
+    expect(section(content(), "Completed this week").textContent).toContain("Turn on Record completion dates");
+  });
+
+  it("lists tasks completed in the last 7 days, and inline repeats that fell behind", async () => {
+    const { view, content, plugin } = await setup([["A.md", [`- [x] Shipped ✓${plus(-2)}`, `- [x] Long ago ✓${plus(-20)}`, `- [ ] Water plants ${plus(-4)} every week`].join("\n")]]);
+    plugin.settings.completionDates = true;
+    await view.setState({ mode: "review" });
+    const titles = (title: string) => rows(content(), section(content(), title)).map(row => row.querySelector(".tm-task-title")!.textContent);
+    expect(titles("Completed this week")).toEqual(["Shipped"]);
+    expect(titles("Routines behind")).toEqual(["Water plants"]);
+    expect(titles("Overdue")).toEqual([]);
+  });
+
+  it("marks sections reviewed for the week, collapsing them, and starts over", async () => {
+    const { view, content, plugin } = await review();
+    section(content(), "Overdue").querySelector<HTMLInputElement>(".tm-review-check input")!.click();
+    await vi.waitFor(() => expect(plugin.saveSettings).toHaveBeenCalled());
+    const week = plugin.settings.weeklyReview;
+    expect(week.reviewed).toEqual(["overdue"]);
+    expect(new Date(`${week.week}T12:00`).getDay()).toBe(1);
+    await vi.waitFor(() => expect(section(content(), "Overdue").classList.contains("is-reviewed")).toBe(true));
+    expect(rows(content(), section(content(), "Overdue"))).toHaveLength(0);
+    expect(content().querySelector(".tm-review-progress")!.textContent).toContain("1 of 7 reviewed");
+    plugin.settings.weeklyReview = { week: "2020-01-06", reviewed: ["overdue"] };
+    await view.setState({ mode: "review" });
+    view.render();
+    expect(section(content(), "Overdue").classList.contains("is-reviewed")).toBe(false);
   });
 });
 

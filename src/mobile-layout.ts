@@ -1,3 +1,5 @@
+import { Platform } from "obsidian";
+
 /** Track the visible viewport as mobile keyboards resize or pan the webview. */
 export function trackModalViewport(modal: HTMLElement, content: HTMLElement): () => void {
   const win = modal.ownerDocument.defaultView;
@@ -34,5 +36,48 @@ export function trackModalViewport(modal: HTMLElement, content: HTMLElement): ()
     container.classList.remove("tm-editor-container");
     container.style.removeProperty("--tm-viewport-height");
     container.style.removeProperty("--tm-viewport-top");
+  };
+}
+
+const SHEET_HANDLE_HEIGHT = 32;
+const SHEET_DISMISS_DISTANCE = 80;
+
+/** On phones and narrow windows, show an editor modal as a bottom sheet that a downward swipe on its handle closes. */
+export function presentAsBottomSheet(modal: HTMLElement, close: () => void): () => void {
+  const win = modal.ownerDocument?.defaultView;
+  if (!win || !(Platform.isMobile || win.matchMedia?.("(max-width: 600px)").matches)) return () => {};
+  const container = modal.parentElement;
+  modal.classList.add("tm-bottom-sheet");
+  container?.classList.add("tm-bottom-sheet-container");
+  let drag: { pointer: number; startY: number } | undefined;
+  const distance = (event: PointerEvent): number => Math.max(0, event.clientY - (drag?.startY ?? event.clientY));
+  const start = (event: PointerEvent): void => {
+    if (drag || event.button !== 0) return;
+    // Text fields keep their own touch gestures, such as selecting and scrolling text.
+    if ((event.target as Element | null)?.closest?.("input, textarea, select, button, [contenteditable], .cm-editor")) return;
+    if (event.clientY - modal.getBoundingClientRect().top > SHEET_HANDLE_HEIGHT) return;
+    drag = { pointer: event.pointerId, startY: event.clientY };
+  };
+  const move = (event: PointerEvent): void => {
+    if (drag?.pointer === event.pointerId) modal.style.transform = `translateY(${distance(event)}px)`;
+  };
+  const end = (event: PointerEvent): void => {
+    if (drag?.pointer !== event.pointerId) return;
+    const dismissed = event.type === "pointerup" && distance(event) > SHEET_DISMISS_DISTANCE;
+    drag = undefined;
+    modal.style.removeProperty("transform");
+    if (dismissed) close();
+  };
+  modal.addEventListener("pointerdown", start);
+  win.addEventListener("pointermove", move);
+  win.addEventListener("pointerup", end);
+  win.addEventListener("pointercancel", end);
+  return () => {
+    modal.removeEventListener("pointerdown", start);
+    win.removeEventListener("pointermove", move);
+    win.removeEventListener("pointerup", end);
+    win.removeEventListener("pointercancel", end);
+    modal.classList.remove("tm-bottom-sheet");
+    container?.classList.remove("tm-bottom-sheet-container");
   };
 }

@@ -26,6 +26,7 @@ class Element extends EventTarget {
   children: Element[] = [];
   attrs: Record<string, string> = {};
   text = ""; value = ""; checked = false; disabled = false;
+  style = { setProperty: (): void => {} };
   ownerDocument = { defaultView: { setTimeout, clearTimeout } };
   onkeydown?: (event: KeyboardEvent) => void;
   createEl(_tag: string, options: { text?: string; attr?: Record<string, string> } = {}): Element {
@@ -36,6 +37,7 @@ class Element extends EventTarget {
   empty(): void { this.children = []; }
   addClass(): void {}
   setAttribute(key: string, value: string): void { this.attrs[key] = value; }
+  getAttribute(key: string): string | null { return this.attrs[key] ?? null; }
   setText(text: string): void { this.text = text; }
   focus(): void {}
   all(): Element[] { return this.children.flatMap(child => [child, ...child.all()]); }
@@ -47,7 +49,8 @@ it("shows all fields, retains invalid input, and submits the complete draft", as
   view.contentEl = new Element(); view.modalEl = new Element(); view.close = vi.fn();
   modal.onOpen();
   const fields = view.contentEl.all().filter(el => el.attrs["aria-label"]);
-  expect(fields.map(el => el.attrs["aria-label"])).toEqual(["Project name", "Start date", "End date", "Deadline", "Priority", "Parent project", "Tags", "Archived"]);
+  expect(fields.map(el => el.attrs["aria-label"])).toEqual(["Project name", "Start date", "End date", "Deadline", "Priority", "Parent project", "Tags", "Archived",
+    "Project color", "None", "Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink", "Gray", "Custom color"]);
   fields[0].value = "Launch"; fields[1].value = "garbage";
   const button = view.modalEl.all().find(el => el.text === "Create project")!;
   button.dispatchEvent(new Event("click"));

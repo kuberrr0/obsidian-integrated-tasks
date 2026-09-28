@@ -18,6 +18,12 @@ export function updateTaskDateTokens(content: string, sourceFormats: string[], t
         updated = updated.slice(0, range.from) + `>${linkDates ? `[[${label}]]` : label}` + updated.slice(range.to);
         continue;
       }
+      // The Tasks plugin's `✅ YYYY-MM-DD` keeps its own form.
+      if (range.kind === "completedDate" && task.completedDate && !text.startsWith("✅", range.from)) {
+        const label = formatDate(task.completedDate, targetFormat);
+        updated = updated.slice(0, range.from) + `✓${linkDates ? `[[${label}]]` : label}` + updated.slice(range.to);
+        continue;
+      }
       if (range.kind !== "scheduledDate" && range.kind !== "deadline") continue;
       const date = task[range.kind];
       if (!date) continue;

@@ -2,6 +2,24 @@ import type { ProjectDateField } from "./gantt";
 import { formatDate, parseStrictDateExpression } from "./date";
 import type { Priority, ProjectProperties } from "./types";
 
+export const PROJECT_COLORS = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink", "gray"] as const;
+export type ProjectColorName = typeof PROJECT_COLORS[number];
+
+/** The canonical frontmatter value: a lowercase colour name or hex, or undefined when invalid. */
+export function projectColorName(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const text = raw.trim().toLowerCase();
+  // Strict whitelist: the result is written into inline styles.
+  return (PROJECT_COLORS as readonly string[]).includes(text) || /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(text) ? text : undefined;
+}
+
+/** A safe CSS colour for a frontmatter `color` value. */
+export function projectColorValue(raw: unknown): string | undefined {
+  const name = projectColorName(raw);
+  if (!name) return undefined;
+  return name.startsWith("#") ? name : name === "gray" ? "var(--color-base-50)" : `var(--color-${name})`;
+}
+
 /** Normalize note properties to the same display values used by tasks. */
 export function parseProjectProperties(frontmatter: Record<string, unknown> | undefined, dateFormat?: string): ProjectProperties {
   const values = new Map(Object.entries(frontmatter ?? {}).map(([key, value]) => [key.toLowerCase().replace(/[\s_-]/g, ""), value]));
@@ -22,7 +40,8 @@ export function parseProjectProperties(frontmatter: Record<string, unknown> | un
     scheduledDate: date(values.get("date") ?? values.get("startdate") ?? values.get("scheduleddate")),
     endDate: date(values.get("enddate")),
     deadline: date(values.get("deadline")),
-    priority: rawPriority && Object.prototype.hasOwnProperty.call(priorities, rawPriority) ? priorities[rawPriority] : undefined
+    priority: rawPriority && Object.prototype.hasOwnProperty.call(priorities, rawPriority) ? priorities[rawPriority] : undefined,
+    color: projectColorValue(values.get("color") ?? values.get("colour"))
   };
 }
 

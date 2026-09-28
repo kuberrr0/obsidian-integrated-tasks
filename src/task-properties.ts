@@ -1,5 +1,5 @@
 import { formatTags } from "./task-tags";
-import { formatDuration } from "./parser";
+import { formatDuration, repeatLabel } from "./parser";
 import type { FilterOperator, Task, TaskFilter, TaskProperty } from "./types";
 
 export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" | "choice" | "date" | "time" | "number" }[] = [
@@ -11,6 +11,8 @@ export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" |
   { key: "deadline", label: "Deadline", kind: "date" },
   { key: "deadlineTime", label: "Deadline time", kind: "time" },
   { key: "defer", label: "Hidden until", kind: "date" },
+  { key: "repeat", label: "Repeat", kind: "text" },
+  { key: "completed", label: "Completed date", kind: "date" },
   { key: "priority", label: "Priority", kind: "choice" },
   { key: "tags", label: "Tags", kind: "text" },
   { key: "source", label: "Source note / list", kind: "choice" },
@@ -23,11 +25,12 @@ export function propertyValue(task: Task, property: TaskProperty): string | numb
   if (property === "source") return task.path;
   if (property === "duration") return task.durationMinutes;
   if (property === "defer") return task.someday ? "Someday" : task.deferDate;
+  if (property === "completed") return task.completedDate;
   return task[property];
 }
 
 export function propertyLabel(property: TaskProperty, value: string | number): string {
-  return property === "priority" ? `P${value}` : property === "duration" ? formatDuration(Number(value)) : String(value);
+  return property === "priority" ? `P${value}` : property === "duration" ? formatDuration(Number(value)) : property === "repeat" ? repeatLabel(String(value)) : String(value);
 }
 
 export function filterOperators(kind: string): [FilterOperator, string][] {

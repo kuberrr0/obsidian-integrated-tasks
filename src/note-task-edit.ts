@@ -20,19 +20,20 @@ export function handleTaskEditClick(event: MouseEvent, resolve: (checkbox: HTMLE
   open(task);
 }
 
-/** Claim ordinary recurring-task clicks before the native checkbox write. */
-export function handleRecurringTaskClick(event: MouseEvent, resolve: (checkbox: HTMLElement) => Task | undefined, complete?: (task: Task) => boolean): void {
-  if (!complete || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+/** Claim ordinary checkbox clicks before the native checkbox write: `complete` for open tasks (repeats), `reopen` for checked ones. */
+export function handleRecurringTaskClick(event: MouseEvent, resolve: (checkbox: HTMLElement) => Task | undefined, complete?: (task: Task) => boolean, reopen?: (task: Task) => boolean): void {
+  if ((!complete && !reopen) || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
   const checkbox = (event.target as HTMLElement | null)?.closest?.<HTMLElement>('input[type="checkbox"]');
   if (!checkbox) return;
   const task = resolve(checkbox);
-  if (!task || task.completed || !complete(task)) return;
+  const claim = task?.completed ? reopen : complete;
+  if (!task || !claim?.(task)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
 }
 
 /** Share gesture handling between Live Preview and Reading view. */
-export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElement) => Task | undefined, open: OpenTask, complete?: (task: Task) => boolean): () => void {
+export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElement) => Task | undefined, open: OpenTask, complete?: (task: Task) => boolean, reopen?: (task: Task) => boolean): () => void {
   const window = root.win;
   let timer: number | undefined;
   let press: { checkbox: HTMLElement; id: number; x: number; y: number } | undefined;
@@ -84,7 +85,7 @@ export function bindNoteTaskEdit(root: HTMLElement, resolve: (checkbox: HTMLElem
       return;
     }
     handleTaskEditClick(event, resolve, open);
-    handleRecurringTaskClick(event, resolve, complete);
+    handleRecurringTaskClick(event, resolve, complete, reopen);
   };
   const contextMenu = (event: MouseEvent): void => {
     if (event.target === press?.checkbox || (event.target === held && Date.now() <= suppressUntil)) block(event);
@@ -154,7 +155,7 @@ function sectionTasks(path: string, text: string, format: string, level: number)
   return tasks;
 }
 
-export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostProcessorContext, getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1, complete?: (task: Task) => boolean): void {
+export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostProcessorContext, getDateFormat: () => string, open: OpenTask, getSectionHeadingLevel: () => number = () => 1, complete?: (task: Task) => boolean, reopen?: (task: Task) => boolean): void {
   // Most rendered sections have no checklist; they need no listeners (three of them on the document).
   if (!root.matches?.("li.task-list-item") && !root.querySelector?.("li.task-list-item")) return;
   const child = new MarkdownRenderChild(root);
@@ -169,5 +170,5 @@ export function registerNoteTaskEdit(root: HTMLElement, context: MarkdownPostPro
     if (relativeLine === null || !/^\d+$/.test(relativeLine)) return;
     const line = section.lineStart + Number(relativeLine);
     return sectionTasks(context.sourcePath, section.text, getDateFormat(), getSectionHeadingLevel()).get(line);
-  }, open, complete));
+  }, open, complete, reopen));
 }

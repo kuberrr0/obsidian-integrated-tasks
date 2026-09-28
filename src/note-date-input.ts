@@ -45,7 +45,9 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
     const label = dateTime && formatDate(dateTime.date, dateFormat);
     if (label) defer = { from: deferRange.from + 1, to: deferRange.to, insert: linkDates ? `[[${label}]]` : label };
   }
-  const source = deferRange ? text.slice(0, deferRange.from) + blank(text.slice(deferRange.from, deferRange.to)) + text.slice(deferRange.to) : text;
+  // A defer, an `every …` repeat and a completion date are never read as a schedule.
+  const source = ranges.filter(range => range.kind === "defer" || range.kind === "repeat" || range.kind === "completedDate")
+    .reduce((value, range) => value.slice(0, range.from) + blank(value.slice(range.from, range.to)) + value.slice(range.to), text);
   const protectedText = blank(checkbox) + source.slice(checkbox.length)
     .replace(/(`+)[\s\S]*?\1|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\S+@\S+\.\S+/g, opaque);
   const replacement = (expression: string): string | undefined => {
@@ -98,7 +100,7 @@ function orderNoteProperties(text: string, dateFormat: string, reference: Date):
   const ranges: ParsedTokenRange[] = [];
   parseTaskLine(text, reference, dateFormat, false, ranges);
   ranges.sort((a, b) => a.from - b.from);
-  const order: ParsedTokenRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "defer", "priority", "tags"];
+  const order: ParsedTokenRange["kind"][] = ["scheduledDate", "repeat", "durationMinutes", "deadline", "defer", "priority", "tags", "completedDate"];
   const tokens = [...ranges].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
     .map(range => text.slice(range.from, range.to));
   for (let index = ranges.length - 1; index >= 0; index--) {

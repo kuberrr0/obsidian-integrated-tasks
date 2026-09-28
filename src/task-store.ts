@@ -1,5 +1,6 @@
 import { updateRecurringLogDates } from "./recurring-log";
-import { recurringFile, repeatRules, nextRepeatDate, repeatAnchor, storedRepeatAnchor, advanceRecurringTask, appendRecurringLog, REPEAT_ANCHOR, type RecurringOutcome } from "./recurring-task";
+import { recurringFile, repeatRules, nextRepeatDate, repeatAnchor, storedRepeatAnchor, advanceRecurringTask, appendRecurringLog, advanceInlineRepeat, REPEAT_ANCHOR, type RecurringOutcome } from "./recurring-task";
+import { todayIso } from "./date";
 import { updateTaskDateTokens } from "./task-date-update";
 import { newTaskLines } from "./task-description";
 import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
@@ -47,7 +48,8 @@ export class TaskStore {
     private readonly getDateFormat: () => string,
     private readonly getNewTaskPosition: () => TaskManagerSettings["newTaskPosition"] = () => "top",
     private readonly getLinkDates: () => boolean = () => true,
-    private readonly getSectionHeadingLevel: () => number = () => 1
+    private readonly getSectionHeadingLevel: () => number = () => 1,
+    private readonly getCompletionDates: () => boolean = () => false
   ) {}
 
   updateDates(sourceFormats: string[]): Promise<string[]> {
@@ -76,12 +78,15 @@ export class TaskStore {
 
   toggle(task: Task, completed: boolean): Promise<void> {
     return this.run(`${completed ? "Completed" : "Reopened"} ${taskName(task.title)}`, async () => {
-      if (completed && recurringFile(this.app, task)) {
+      if (completed && (recurringFile(this.app, task) || task.repeat)) {
         await this.resolveRecurringNow(task, "COMPLETED");
         return;
       }
       const file = this.requireFile(task.path);
-      await this.process(file, (content) => toggleTaskInContent(content, task, completed, this.getSectionHeadingLevel()));
+      const draft = this.stampCompletion(task, { ...draftForGroup(task), completed });
+      await this.process(file, (content) => draft.completedDate === task.completedDate
+        ? toggleTaskInContent(content, task, completed, this.getSectionHeadingLevel())
+        : updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates(), this.getSectionHeadingLevel()));
     });
   }
 
@@ -92,7 +97,15 @@ export class TaskStore {
 
   private async resolveRecurringNow(task: Task, outcome: RecurringOutcome): Promise<string[]> {
     const recurring = recurringFile(this.app, task);
-    if (!recurring) throw new Error("Task does not link to a recurring-task note.");
+    if (!recurring) {
+      if (!task.repeat) throw new Error("Task does not repeat.");
+      if (task.completed) throw new Error("Select an open repeating task.");
+      // An inline repeat has no routine note: advance its dates in place, with no log or anchor.
+      const file = this.requireFile(task.path);
+      const draft: TaskDraft = { ...draftForGroup(task), ...advanceInlineRepeat(task), completed: false };
+      await this.process(file, content => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates(), this.getSectionHeadingLevel()));
+      return [file.path];
+    }
     const source = this.requireFile(task.path);
     const files = new Map([[recurring.path, recurring], [source.path, source]]);
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
@@ -157,7 +170,7 @@ export class TaskStore {
         return;
       }
       const file = this.requireFile(task.path);
-      await this.process(file, (content) => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates(), this.getSectionHeadingLevel()));
+      await this.process(file, (content) => updateTaskInContent(content, task, this.stampCompletion(task, draft), this.getDateFormat(), this.getLinkDates(), this.getSectionHeadingLevel()));
     });
   }
 
@@ -252,8 +265,16 @@ export class TaskStore {
     return this.app.vault.process(file, change);
   }
 
-  private completesRecurring(task: Task, draft?: TaskDraft): TFile | undefined {
-    return !task.completed && draft?.completed ? recurringFile(this.app, task) : undefined;
+  /** The routine note a completing draft resolves through, `true` for an inline repeat; a routine note wins. */
+  private completesRecurring(task: Task, draft?: TaskDraft): TFile | true | undefined {
+    if (task.completed || !draft?.completed) return undefined;
+    return recurringFile(this.app, task) ?? (draft.repeat ? true : undefined);
+  }
+
+  /** With completion dates on, a draft that completes a task records today and one that reopens it drops the date, unless the draft sets its own. */
+  private stampCompletion(task: Task, draft: TaskDraft): TaskDraft {
+    if (!this.getCompletionDates() || task.completed === draft.completed || draft.completedDate !== task.completedDate) return draft;
+    return { ...draft, completedDate: draft.completed ? todayIso() : undefined };
   }
 
   /**
@@ -278,18 +299,27 @@ export class TaskStore {
       const file = this.completesRecurring(change.task, change.draft);
       return file ? [{ change, file }] : [];
     });
-    for (const { file } of recurring) files.set(file.path, file);
+    for (const { file } of recurring) if (file instanceof TFile) files.set(file.path, file);
     const before = new Map(await Promise.all([...files].map(async ([path, file]) => [path, await this.app.vault.read(file)] as const)));
     const contents = new Map(before);
     const anchors = new Map<TFile, string | undefined>();
     for (const { change, file } of recurring) {
       const original = change.task;
+      const draft = change.draft!;
+      if (file === true) {
+        const next = advanceInlineRepeat({ ...original, repeat: draft.repeat });
+        change.draft = { ...draft, completed: false,
+          scheduledDate: draft.scheduledDate === original.scheduledDate ? next.scheduledDate : draft.scheduledDate,
+          deadline: draft.deadline === original.deadline ? next.deadline : draft.deadline };
+        continue;
+      }
       const advanced = this.advanceRecurring(contents, original, file, "COMPLETED");
       anchors.set(file, advanced.anchor);
       change.task = advanced.task;
       change.draft = { ...change.draft!, completed: false,
         scheduledDate: change.draft!.scheduledDate === original.scheduledDate ? advanced.task.scheduledDate : change.draft!.scheduledDate };
     }
+    for (const change of changes) if (change.draft) change.draft = this.stampCompletion(change.task, change.draft);
     const planned = planBulkTasks(contents, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates(), sectionHeadingLevel: this.getSectionHeadingLevel() });
     const after = new Map<string, string>();
     for (const [path, content] of before) {

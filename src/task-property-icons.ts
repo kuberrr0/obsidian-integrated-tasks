@@ -8,6 +8,8 @@ export const TASK_PROPERTY_ICONS = {
   durationMinutes: "clock-3",
   priority: "signal",
   tags: "tag",
+  repeat: "repeat",
+  completedDate: "circle-check",
   completed: "circle-check",
   skipped: "skip-forward",
   failed: "circle-x"

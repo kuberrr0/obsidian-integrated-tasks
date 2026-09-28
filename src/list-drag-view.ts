@@ -103,7 +103,8 @@ export class ListDragController {
       return undefined;
     };
     row.addEventListener("pointerdown", event => {
-      if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || this.busy) return;
+      // Touch drags on a row are swipe gestures (see TaskMainView.bindSwipe), not reordering.
+      if (event.pointerType === "touch" || event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || this.busy) return;
       const target = event.target as HTMLElement;
       if (target.closest("input, label, select, textarea, a, button") &&
           !target.closest(".tm-task-title, .tm-list-drag-handle")) return;

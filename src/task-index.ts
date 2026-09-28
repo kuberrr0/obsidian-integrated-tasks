@@ -46,6 +46,7 @@ export class TaskIndex {
   private readonly tagLinks = new Map<string, TFile | null>();
   private tagsByPath?: Map<string, string>;
   private filesByTag?: Map<string, TFile>;
+  private projectColors?: Map<string, string>;
 
   constructor(
     private readonly app: App,
@@ -215,10 +216,10 @@ export class TaskIndex {
       .map((path) => {
         const tasks = this.tasksForPath(path);
         const properties = this.projectProperties.get(path);
-        const parentPath = properties?.parent ? this.app.metadataCache.getFirstLinkpathDest(properties.parent, path)?.path : undefined;
         return {
           ...properties,
-          parentPath,
+          color: this.projectColor(path),
+          parentPath: this.parentPath(path),
           path,
           name: path.split("/").pop()?.replace(/\.md$/i, "") ?? path,
           headings: this.headingsForPath(path),
@@ -228,6 +229,38 @@ export class TaskIndex {
         };
       })
       .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  /** The project's CSS colour, or its nearest coloured ancestor's; undefined for non-project notes. */
+  projectColor(path: string): string | undefined {
+    if (!this.projectColors) {
+      const colors = new Map<string, string>();
+      const done = new Set<string>();
+      for (const start of this.projectPaths) {
+        const chain = new Set<string>();
+        let path: string | undefined = start;
+        let color: string | undefined;
+        while (path && this.projectPaths.has(path) && !done.has(path) && !chain.has(path)) {
+          chain.add(path);
+          color = this.projectProperties.get(path)?.color;
+          if (color) break;
+          path = this.parentPath(path);
+        }
+        // Stopping at a cycle or a missing parent leaves the chain uncoloured.
+        if (!color && path && done.has(path)) color = colors.get(path);
+        for (const member of chain) {
+          done.add(member);
+          if (color) colors.set(member, color);
+        }
+      }
+      this.projectColors = colors;
+    }
+    return this.projectColors.get(path);
+  }
+
+  private parentPath(path: string): string | undefined {
+    const parent = this.projectProperties.get(path)?.parent;
+    return parent ? this.app.metadataCache.getFirstLinkpathDest(parent, path)?.path : undefined;
   }
 
   headingsForPath(path: string): NoteHeading[] {
@@ -325,6 +358,7 @@ export class TaskIndex {
   /** Returns whether project membership, archive status, or project properties changed. */
   private updateProjectStatus(file: TFile): boolean {
     const path = file.path;
+    this.projectColors = undefined;
     const cache = this.app.metadataCache.getFileCache(file);
     const tags = cache ? getAllTags(cache) : null;
     const wasArchived = this.archivedPaths.has(path);
@@ -346,6 +380,8 @@ export class TaskIndex {
 
   private emit(): void {
     this.invalidateTags();
+    // Parent links resolve differently after any vault or metadata change.
+    this.projectColors = undefined;
     for (const listener of this.listeners) listener();
   }
 }

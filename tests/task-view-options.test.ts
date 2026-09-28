@@ -24,7 +24,9 @@ class Element extends EventTarget {
 
 it("keeps sorting, grouping, and filters behind one toggle and applies each control", () => {
   const view = new TaskMainView({} as WorkspaceLeaf, { index: { allTasks: () => [] } } as unknown as TaskManagerPlugin);
-  const internal = view as unknown as { renderHeader(root: HTMLElement): HTMLButtonElement; renderFilters(root: HTMLElement, toggle: HTMLButtonElement): void; renderTaskResults(): void; sort: string; descending: boolean; grouping: string; propertyFilters: unknown[] };
+  const internal = view as unknown as { renderHeader(root: HTMLElement): HTMLButtonElement; renderFilters(root: HTMLElement, toggle: HTMLButtonElement): void; renderTaskResults(): void; sort: string; descending: boolean; grouping: string; propertyFilters: unknown[]; state: { mode: string } };
+  // All Tasks: the Today header's summary is covered in view-rendering.test.ts.
+  internal.state.mode = "all";
   const render = vi.spyOn(internal, "renderTaskResults").mockImplementation(() => {});
   const root = new Element();
   const toggle = internal.renderHeader(root as never) as unknown as Element;

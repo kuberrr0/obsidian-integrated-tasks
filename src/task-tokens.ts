@@ -1,7 +1,7 @@
 import { deadlineIsDistant } from "./task-row-details";
 import { parseRecurringLog } from "./recurring-log";
 import { formatDate, todayIso } from "./date";
-import { formatDuration, parseTaskLine, type ParsedTokenRange } from "./parser";
+import { formatDuration, parseTaskLine, repeatLabel, type ParsedTokenRange } from "./parser";
 import { isDeferred } from "./query";
 
 export interface TaskToken extends Omit<ParsedTokenRange, "kind"> {
@@ -56,7 +56,15 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
       };
       return { ...range, label: `Hidden until ${dateLabel}`, description: `Hidden until: ${dateLabel}`, dateLabel, linkText: link?.[1], display, active };
     }
+    if (range.kind === "completedDate") {
+      const dateLabel = formatDate(parsed.completedDate!, dateFormat);
+      const prefix = /^(?:✓|✅\s*)/.exec(source)![0].length;
+      // Always displayed, so Live Preview can hide the prefix behind the pill's icon.
+      const display = { from: range.from + (link?.index ?? prefix), to: link ? range.from + link.index + link[0].length : range.to, label: dateLabel, linkText: link?.[1] };
+      return { ...range, label: `Done ${dateLabel}`, description: `Completed: ${dateLabel}`, dateLabel, linkText: link?.[1], display };
+    }
     switch (range.kind) {
+      case "repeat": return { ...range, label: repeatLabel(parsed.repeat!), description: `Repeats ${parsed.repeat}` };
       case "tags": return { ...range, label: link![1].trim(), description: `Tag: ${link![1].trim()}`, linkText: link![1] };
       case "durationMinutes": return { ...range, label: formatDuration(parsed.durationMinutes!), description: `Duration: ${formatDuration(parsed.durationMinutes!)}` };
       case "priority": return { ...range, label: `P${parsed.priority}`, description: `Priority ${parsed.priority}`, priority: parsed.priority };

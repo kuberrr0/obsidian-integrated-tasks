@@ -16,3 +16,14 @@ export const getIcon = (name: string) => ({
   setAttribute: () => {},
   outerHTML: `<svg xmlns="http://www.w3.org/2000/svg" data-icon="${name}" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>`
 });
+
+// Lets modules that subclass the suggest modal load; tests that open one mock it fully.
+export class FuzzySuggestModal {
+  limit = 100;
+  constructor(public app: unknown) {}
+  setPlaceholder(): void {}
+  open(): void {}
+  close(): void {}
+}
+export const renderResults = (): void => {};
+

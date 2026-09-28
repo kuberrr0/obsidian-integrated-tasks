@@ -14,6 +14,25 @@ const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
 // A heading may hold balanced [[links]]; the path part holds no brackets or '#'.
 const DESTINATION = /(?:^|\s)~\[\[([^[\]#\r\n]+(?:#(?:[^[\]\r\n]|\[\[[^[\]\r\n]*\]\])*)?)\]\]\s*$/;
 const BLOCK_ID = /\s\^[A-Za-z0-9-]+\s*$/;
+// Only a whole trailing rule after some title text; "every time" stays prose.
+const REPEAT = /\s(every\s+(?:(?:other|second|third|fourth|\d+(?:st|nd|rd|th)?)\s+)?(?:day|week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?)\s*$/i;
+// `✓` directly followed by a date; the Tasks plugin's `✅ YYYY-MM-DD` is read too.
+const COMPLETED = /(?:^|\s)(?:✓([^\s✓][^✓]*?)|✅\s*(\d{4}-\d{2}-\d{2}))\s*$/;
+const REPEAT_RULE = /^every (?:(other|second|third|fourth|\d+(?:st|nd|rd|th)?) )?(day|week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?$/;
+
+/** A normalised `every …` rule (lower case, single spaces), or undefined when it is not one. */
+export function parseRepeatRule(value: string): string | undefined {
+  const rule = value.trim().toLowerCase().replace(/\s+/g, " ");
+  const match = REPEAT_RULE.exec(rule);
+  if (!match) return undefined;
+  const count = match[1] ? ({ other: 2, second: 2, third: 3, fourth: 4 }[match[1]] ?? parseInt(match[1], 10)) : 1;
+  return Number.isInteger(count) && count >= 1 && count <= 1000 ? rule : undefined;
+}
+
+/** Display text for a repeat rule, e.g. "Every Monday". */
+export function repeatLabel(rule: string): string {
+  return rule.replace(/^every/, "Every").replace(/\b(sun|mon|tues|wednes|thurs|fri|satur)day/g, day => day[0].toUpperCase() + day.slice(1));
+}
 
 interface PlainDateShape { wordCounts: Set<number>; needsDigit: boolean }
 const plainDateShapes = new Map<string, PlainDateShape>();
@@ -61,7 +80,7 @@ function plainScheduled(text: string, reference: Date, dateFormat: string[]): Re
 }
 
 export interface ParsedTokenRange {
-  kind: "tags" | "scheduledDate" | "deadline" | "defer" | "durationMinutes" | "priority";
+  kind: "tags" | "scheduledDate" | "deadline" | "defer" | "durationMinutes" | "priority" | "repeat" | "completedDate";
   from: number;
   to: number;
 }
@@ -141,6 +160,7 @@ function parseLine(
   for (;;) {
     let match: RegExpExecArray | null;
     let defer: ReturnType<typeof parseDefer>;
+    let text: string | undefined;
     let changed = false;
 
     if ((match = TAG.exec(remainder)) && match[1].trim()) {
@@ -157,6 +177,12 @@ function parseLine(
         consumed.add("destination");
         changed = true;
       }
+    } else if (!consumed.has("completedDate") && (match = COMPLETED.exec(remainder)) && (text = parseCompletedDate(match[1] ?? match[2], reference, dateFormats))) {
+      metadata.completedDate = text;
+      recordToken("completedDate", match);
+      remainder = remainder.slice(0, match.index).trimEnd();
+      consumed.add("completedDate");
+      changed = true;
     } else if (!consumed.has("priority") && (match = PRIORITY.exec(remainder))) {
       metadata.priority = Number(match[1]) as Priority;
       recordToken("priority", match);
@@ -188,6 +214,12 @@ function parseLine(
         consumed.add("duration");
         changed = true;
       }
+    } else if (!consumed.has("repeat") && (match = REPEAT.exec(remainder)) && (text = parseRepeatRule(match[1]))) {
+      metadata.repeat = text;
+      recordToken("repeat", match);
+      remainder = remainder.slice(0, match.index).trimEnd();
+      consumed.add("repeat");
+      changed = true;
     } else if (!consumed.has("scheduled") && (match = ((match = SCHEDULED.exec(remainder)) && parseDateTimeExpression(match[1], reference, dateFormats))
       ? match : plainScheduled(remainder, reference, dateFormats))) {
       const date = parseDateTimeExpression(match[1], reference, dateFormats);
@@ -214,7 +246,8 @@ function parseLine(
 
     if (!changed && naturalDates && !consumed.has("scheduled")) {
       const date = findInputDate(remainder, reference);
-      if (date) {
+      // "every Friday" describes a repeat, not a schedule.
+      if (date && !/(?:^|\s)(?:every|each)\s*$/i.test(remainder.slice(0, date.index))) {
         metadata.scheduledDate = date.date;
         if (date.time) metadata.scheduledTime = date.time;
         remainder = `${remainder.slice(0, date.index)}${remainder.slice(date.index + date.text.length)}`.replace(/ {2,}/g, " ").trim();
@@ -241,6 +274,11 @@ function parseDefer(value: string, reference: Date, dateFormats: string[]): Pick
   return date && !date.time ? { deferDate: date.date } : undefined;
 }
 
+function parseCompletedDate(value: string, reference: Date, dateFormats: string[]): string | undefined {
+  const date = parseDateTimeExpression(value, reference, dateFormats, true);
+  return date && !date.time ? date.date : undefined;
+}
+
 function deferText(draft: Pick<ParsedTaskMetadata, "deferDate" | "someday">, dateText: (date: string) => string): string {
   return draft.someday ? ">someday" : draft.deferDate ? `>${dateText(draft.deferDate)}` : "";
 }
@@ -261,17 +299,19 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
   const dateText = (date: string): string => linkDates ? `[[${formatDate(date, dateFormat)}]]` : formatDate(date, dateFormat);
   const metadata = [
     draft.scheduledDate ? `${dateText(draft.scheduledDate)}${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
+    draft.repeat ?? "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
     draft.deadline ? `{${dateText(draft.deadline)}${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
     deferText(draft, dateText),
     draft.priority ? `p${draft.priority}` : "",
-    formatTags(draft.tags)
+    formatTags(draft.tags),
+    draft.completedDate ? `✓${dateText(draft.completedDate)}` : ""
   ].filter(Boolean);
   const metadataGap = metadata.length ? " " : "";
   return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
 }
 
-const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "defer", "priority", "tags", "destination"];
+const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "repeat", "durationMinutes", "deadline", "defer", "priority", "tags", "completedDate", "destination"];
 
 /**
  * Edit an existing task line in place: keep indentation, checkbox spacing, title spelling,
@@ -304,12 +344,14 @@ export function rewriteTaskLine(raw: string, draft: TaskDraft, dateFormat?: stri
   const wanted: Partial<Record<LineRange["kind"], string | undefined>> = {
     scheduledDate: parsed.scheduledDate === draft.scheduledDate && (parsed.scheduledTime ?? "") === scheduledTime ? undefined
       : draft.scheduledDate ? `${dateText(draft.scheduledDate)}${scheduledTime ? ` ${scheduledTime}` : ""}` : "",
+    repeat: (parsed.repeat ?? "") === (draft.repeat ?? "") ? undefined : draft.repeat ?? "",
     durationMinutes: (parsed.durationMinutes ?? 0) === (draft.durationMinutes ?? 0) ? undefined : draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
     deadline: parsed.deadline === draft.deadline && (parsed.deadlineTime ?? "") === deadlineTime ? undefined
       : draft.deadline ? `{${dateText(draft.deadline)}${deadlineTime ? ` ${deadlineTime}` : ""}}` : "",
     defer: deferText(parsed, dateText) === deferText(draft, dateText) ? undefined : deferText(draft, dateText),
     priority: (parsed.priority ?? 0) === (draft.priority ?? 0) ? undefined : draft.priority ? `p${draft.priority}` : "",
-    tags: draftTags.length === parsedTags.length && draftTags.every(tag => parsedTags.includes(tag)) ? undefined : formatTags(draftTags)
+    tags: draftTags.length === parsedTags.length && draftTags.every(tag => parsedTags.includes(tag)) ? undefined : formatTags(draftTags),
+    completedDate: parsed.completedDate === draft.completedDate ? undefined : draft.completedDate ? `✓${dateText(draft.completedDate)}` : ""
   };
 
   // Each part carries the whitespace that preceded it; undefined `wanted` keeps the source text.
@@ -336,6 +378,13 @@ export function rewriteTaskLine(raw: string, draft: TaskDraft, dateFormat?: stri
   if (blockId) parts.push({ kind: "blockId", gap: raw.slice(previous, blockId.from), text: raw.slice(blockId.from, blockId.to) });
   const body = parts.reduce((text, part) => text + (text ? part.gap || " " : "") + part.text, title);
   return indent + marker + body + raw.slice(blockId?.to ?? contentEnd);
+}
+
+/** Add, replace or (with no date) remove a line's completion date in place. */
+export function withCompletedDate(raw: string, date: string | undefined, dateFormat?: string, linkDates = true, reference = new Date()): string {
+  const parsed = parseTaskLine(raw, reference, dateFormat);
+  if (!parsed || parsed.completedDate === date) return raw;
+  return rewriteTaskLine(raw, { ...parsed, destination: "", completedDate: date }, dateFormat, linkDates, reference);
 }
 
 export function serializeTaskInput(draft: TaskDraft, dateFormat?: string, linkDates = true): string {

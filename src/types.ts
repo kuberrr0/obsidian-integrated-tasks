@@ -10,6 +10,10 @@ export interface ParsedTaskMetadata {
   deferDate?: string;
   /** Hidden from Inbox, Today and Upcoming until the defer is cleared. */
   someday?: boolean;
+  /** Inline repeat rule such as "every week"; completing the task advances its dates in place. */
+  repeat?: string;
+  /** ISO date the task was completed, when completion dates are recorded. */
+  completedDate?: string;
   durationMinutes?: number;
   priority?: Priority;
   tags?: string[];
@@ -32,7 +36,11 @@ export interface Task extends ParsedTaskMetadata {
   childIds: string[];
 }
 
-export type ProjectProperties = Pick<ParsedTaskMetadata, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "priority"> & { endDate?: string };
+export type ProjectProperties = Pick<ParsedTaskMetadata, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "priority"> & {
+  endDate?: string;
+  /** A validated CSS colour from the `color` property; on `Project`, inherited from the nearest coloured ancestor. */
+  color?: string;
+};
 
 export interface Project extends ProjectProperties {
   parent?: string;
@@ -45,7 +53,7 @@ export interface Project extends ProjectProperties {
   archived: boolean;
 }
 
-export type TaskViewMode = "dashboard" | "inbox" | "today" | "upcoming" | "all" | "projects" | "tags" | "smartLists";
+export type TaskViewMode = "dashboard" | "inbox" | "today" | "upcoming" | "all" | "projects" | "tags" | "smartLists" | "review";
 
 export interface TaskViewState {
   smartListId?: string;
@@ -56,7 +64,7 @@ export interface TaskViewState {
   markdownState?: Record<string, unknown>;
 }
 
-export type TaskProperty = "tags" | "title" | "priority" | "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "defer" | "duration" | "source" | "section" | "status";
+export type TaskProperty = "tags" | "title" | "priority" | "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "defer" | "repeat" | "completed" | "duration" | "source" | "section" | "status";
 export type TaskSort = "date" | TaskProperty;
 export type TaskGrouping = "default" | "none" | "date" | TaskProperty;
 export type FilterOperator = "has" | "missing" | "is" | "isNot" | "contains" | "before" | "after" | "between";
@@ -121,6 +129,11 @@ export interface TaskManagerSettings {
   inboxPath: string;
   newTaskPosition: "top" | "bottom";
   showUndoNotices: boolean;
+  density: "comfortable" | "compact";
+  /** Stamp tasks with the date they were completed. */
+  completionDates: boolean;
+  /** Weekly review sections marked as reviewed, for the ISO week they were reviewed in. */
+  weeklyReview: { week: string; reviewed: string[] };
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
@@ -137,7 +150,10 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
   newTaskPosition: "top",
-  showUndoNotices: true
+  showUndoNotices: true,
+  density: "comfortable",
+  completionDates: false,
+  weeklyReview: { week: "", reviewed: [] }
 };
 
 export type TaskEditorPreset = Partial<Omit<TaskDraft, "indent">>;

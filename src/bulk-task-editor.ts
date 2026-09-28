@@ -3,13 +3,13 @@ import type { TaskEditorProperty } from "./task-editor";
 import { formatTags, parseTags } from "./task-tags";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { formatDate, formatDateTime, parseDateTimeExpression } from "./date";
-import { durationToMinutes, formatDuration, parseTaskInput, serializeTask, serializeTaskInput } from "./parser";
+import { durationToMinutes, formatDuration, parseRepeatRule, parseTaskInput, serializeTask, serializeTaskInput } from "./parser";
 import { destinationString } from "./structure";
-import { trackModalViewport } from "./mobile-layout";
+import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
 import type { BulkTaskPatch } from "./bulk-tasks";
 import type { Project, Task } from "./types";
 
-type Field = "tags" | "scheduled" | "deadline" | "defer" | "duration" | "priority" | "destination" | "description";
+type Field = "tags" | "scheduled" | "deadline" | "defer" | "repeat" | "duration" | "priority" | "destination" | "description";
 interface BulkEditorOptions {
   focusProperty?: TaskEditorProperty;
   tasks: Task[];
@@ -25,6 +25,7 @@ export function bulkPropertyValues(task: Task, dateFormat: string): Record<Field
     scheduled: task.scheduledDate ? formatDateTime(task.scheduledDate, task.scheduledTime, dateFormat) : "",
     deadline: task.deadline ? formatDateTime(task.deadline, task.deadlineTime, dateFormat) : "",
     defer: task.someday ? "someday" : task.deferDate ? formatDate(task.deferDate, dateFormat) : "",
+    repeat: task.repeat ?? "",
     duration: task.durationMinutes ? formatDuration(task.durationMinutes) : "",
     tags: formatTags(task.tags),
     priority: task.priority ? String(task.priority) : "",
@@ -51,6 +52,12 @@ export function bulkPropertyPatch(values: Partial<Record<Field, string>>, dateFo
     patch.deferDate = parsed?.date;
     patch.someday = /^someday$/i.test(value) || undefined;
   }
+  if ("repeat" in values) {
+    const value = values.repeat!.trim();
+    const rule = value ? parseRepeatRule(/^every\b/i.test(value) ? value : `every ${value}`) : undefined;
+    if (value && !rule) throw new Error("Use a repeat such as every week, every 2 weeks, every month, or every monday.");
+    patch.repeat = rule;
+  }
   if ("duration" in values) {
     const value = values.duration!.trim();
     const duration = durationToMinutes(value.replace(/\s+/g, ""));
@@ -70,8 +77,8 @@ export function bulkPropertyPatch(values: Partial<Record<Field, string>>, dateFo
   return patch;
 }
 
-const labels: Record<Field, string> = { scheduled: "Scheduled date", deadline: "Deadline", defer: "Hidden until", duration: "Duration", priority: "Priority", tags: "Tags", destination: "Project", description: "Description" };
-const propertyKeys = ["scheduledDate", "scheduledTime", "deadline", "deadlineTime", "deferDate", "someday", "durationMinutes", "priority", "tags", "destination"] as const;
+const labels: Record<Field, string> = { scheduled: "Scheduled date", deadline: "Deadline", defer: "Hidden until", repeat: "Repeat", duration: "Duration", priority: "Priority", tags: "Tags", destination: "Project", description: "Description" };
+const propertyKeys = ["scheduledDate", "scheduledTime", "deadline", "deadlineTime", "deferDate", "someday", "repeat", "durationMinutes", "priority", "tags", "destination"] as const;
 
 export function commonBulkValues(tasks: Task[], dateFormat: string): Partial<Record<Field, string>> {
   const snapshots = tasks.map(task => bulkPropertyValues(task, dateFormat));
@@ -94,7 +101,7 @@ export function bulkInlinePatch(text: string, initial: string, dateFormat: strin
   const parse = (value: string) => {
     if (/[\r\n]/.test(value)) throw new Error("Enter task properties on one line.");
     const parsed = parseTaskInput(`Properties ${value}`, new Date(), dateFormat);
-    if (!parsed || parsed.title !== "Properties") throw new Error("Use task property syntax for dates, duration, hidden-until date, priority, tags, and project.");
+    if (!parsed || parsed.title !== "Properties") throw new Error("Use task property syntax for dates, repeat, duration, hidden-until date, priority, tags, and project.");
     return parsed;
   };
   const before = parse(initial);
@@ -117,11 +124,13 @@ export class BulkTaskEditorModal extends Modal {
   private actions?: HTMLElement;
   private focusTimer?: number;
   private stopViewportTracking?: () => void;
+  private stopBottomSheet?: () => void;
   private handleKeydown?: (event: KeyboardEvent) => void;
   constructor(app: App, private readonly options: BulkEditorOptions) { super(app); }
 
   onOpen(): void {
     this.modalEl.addClass("tm-editor-modal", "tm-bulk-editor-modal");
+    this.stopBottomSheet = presentAsBottomSheet(this.modalEl, () => this.close());
     this.modalEl.setAttribute("aria-label", "Edit task properties");
     const content = this.contentEl;
     content.empty();
@@ -129,7 +138,7 @@ export class BulkTaskEditorModal extends Modal {
     this.initialText = bulkInlineText(common, this.options.dateFormat);
     const host = content.createDiv({ cls: "tm-editor-inline tm-editor-raw-field" });
     const error = content.createDiv({ cls: "tm-editor-error", attr: { role: "alert" } });
-    this.editor = new TaskLineEditor(host, this.initialText, this.options.dateFormat, () => error.empty(), "Add a date, duration, >hidden-until date, p1–p3, #[[tag]], or ~[[Project]]");
+    this.editor = new TaskLineEditor(host, this.initialText, this.options.dateFormat, () => error.empty(), "Add a date, every week, duration, >hidden-until date, p1–p3, #[[tag]], or ~[[Project]]");
 
     this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
     const remove = this.actions.createEl("button", { cls: "tm-delete-task tm-editor-icon-action", attr: { "aria-label": "Delete task", title: "Delete selected tasks and their subtasks" } });
@@ -173,6 +182,7 @@ export class BulkTaskEditorModal extends Modal {
     if (this.focusTimer !== undefined) window.clearTimeout(this.focusTimer);
     this.editor.destroy();
     this.stopViewportTracking?.();
+    this.stopBottomSheet?.();
     this.actions?.remove();
     if (this.handleKeydown) this.contentEl.removeEventListener("keydown", this.handleKeydown, true);
     this.contentEl.empty();

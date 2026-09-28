@@ -7,7 +7,7 @@ const project: Project = { name: "Launch", path: "Projects/Launch.md", parentPat
 it("loads aliased fields and link lists, then updates properties without replacing custom metadata", () => {
   const frontmatter = { tags: ["project", "work", "archived"], start_date: ["[[2026-09-18|Friday]]"], EndDate: "2026-09-20", Deadline: "2026-09-21", Priority: "medium", Parent: ["[[Studio]]"], custom: { retained: true } };
   const draft = projectEditDraft(project, frontmatter);
-  expect(draft).toEqual({ name: "Launch", date: "[[2026-09-18|Friday]]", endDate: "2026-09-20", deadline: "2026-09-21", priority: "2", parent: "Projects/Studio.md", tags: "project, work", archived: true });
+  expect(draft).toEqual({ name: "Launch", date: "[[2026-09-18|Friday]]", endDate: "2026-09-20", deadline: "2026-09-21", priority: "2", parent: "Projects/Studio.md", tags: "project, work", archived: true, color: "" });
   applyProjectDraft(frontmatter, { ...draft, endDate: "", priority: "1", archived: false }, "YYYY-MM-DD", true);
   expect(frontmatter).toEqual({ tags: ["project", "work"], start_date: "[[2026-09-18]]", EndDate: null, Deadline: "[[2026-09-21]]", Priority: 1, Parent: "[[Projects/Studio]]", custom: { retained: true } });
 });

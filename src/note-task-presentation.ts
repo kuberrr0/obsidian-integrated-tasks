@@ -1,6 +1,6 @@
 import { parseTaskLine } from "./parser";
 import { taskTokens, type TaskToken } from "./task-tokens";
-import { deadlineIsDistant, deadlineIsOverdue, taskDeadlineLabel, taskScheduleLabel, taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
+import { deadlineIsDistant, deadlineIsOverdue, taskDeadlineLabel, taskDoneDateLabel, taskScheduleLabel, taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
 import { notePropertyIconStyle } from "./task-property-icons";
 import { isDeferred } from "./query";
 import { todayIso } from "./date";
@@ -22,6 +22,10 @@ export function noteTaskPresentation(line: string, dateFormat?: string, now = ne
     }
     return { from: tokens[0].from, to: tokens[tokens.length - 1].to, priority: task.priority, tokens: tokens.map(token => {
         if (token.kind === "durationMinutes" && task.scheduledTime) return { ...token, label: "" };
+        if (token.kind === "completedDate") {
+            const dateLabel = taskDoneDateLabel(task.completedDate!, now);
+            return { ...token, dateLabel, label: `Done ${dateLabel}` };
+        }
         if (token.kind === "defer") {
             if (!task.deferDate) return { ...token, active: true };
             const dateLabel = taskScheduleLabel(task.deferDate, now);
@@ -41,14 +45,15 @@ export function noteTaskPresentation(line: string, dateFormat?: string, now = ne
 export function renderNoteTaskDetails(root: HTMLElement, presentation: NoteTaskPresentation, link: (token: TaskToken, label: string) => HTMLElement | undefined): void {
     const document = root.ownerDocument;
     root.classList.add("tm-note-task-details");
-    for (const kind of ["deadline", "defer", "scheduledDate", "durationMinutes", "tags"] as const) {
+    for (const kind of ["deadline", "defer", "scheduledDate", "durationMinutes", "repeat", "tags", "completedDate"] as const) {
         for (const token of presentation.tokens.filter(token => token.kind === kind && token.label)) {
             const item = document.createDocumentFragment().createSpan();
             item.className = `tm-note-task-${kind}${token.overdue ? " is-overdue" : ""}${token.distant ? " is-distant" : ""}${token.active ? " is-active" : ""}`;
             item.setAttribute("data-tm-property-offset", String(token.from - presentation.from));
             item.setAttribute("title", token.description);
             item.setAttribute("aria-label", token.description);
-            if (kind !== "scheduledDate" && kind !== "durationMinutes") item.setAttribute("style", notePropertyIconStyle(kind));
+            if (kind !== "scheduledDate" && kind !== "durationMinutes" && kind !== "completedDate") item.setAttribute("style", notePropertyIconStyle(kind));
+            if (kind === "completedDate") item.appendChild(document.createTextNode("Done "));
             const label = kind === "durationMinutes" && presentation.tokens.some(token => token.kind === "scheduledDate") ? `, ${token.label}` : token.dateLabel ?? token.label;
             const anchor = token.linkText ? link(token, label) : undefined;
             if (anchor) item.appendChild(anchor);

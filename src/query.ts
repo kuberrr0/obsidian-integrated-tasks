@@ -37,6 +37,7 @@ export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string
       return false;
     case "dashboard":
     case "smartLists":
+    case "review":
     case "tags":
     case "all":
       return true;
@@ -82,12 +83,16 @@ export function groupByActionDate(tasks: Task[]): Map<string, Task[]> {
   return groups;
 }
 
+const MISSING_GROUP: Partial<Record<Exclude<TaskGrouping, "default" | "none">, string>> = {
+  scheduledDate: "scheduled date", scheduledTime: "scheduled time", deadlineTime: "deadline time", completed: "completion date"
+};
+
 /** Group an already sorted list, keeping its selected order within each group. */
 export function groupTasks(tasks: Task[], grouping: Exclude<TaskGrouping, "default" | "none">): Map<string, Task[]> {
   const groups = new Map<string, Task[]>();
   for (const task of tasks) {
     const value = grouping === "date" ? actionDate(task) : propertyValue(task, grouping);
-    const key = value === undefined || value === "" ? grouping === "defer" ? "Not hidden" : `No ${grouping === "date" ? "date" : grouping === "scheduledDate" ? "scheduled date" : grouping === "scheduledTime" ? "scheduled time" : grouping === "deadlineTime" ? "deadline time" : grouping}`
+    const key = value === undefined || value === "" ? grouping === "defer" ? "Not hidden" : `No ${MISSING_GROUP[grouping] ?? grouping}`
       : grouping === "date" ? String(value) : propertyLabel(grouping, value);
     const group = groups.get(key) ?? [];
     group.push(task);

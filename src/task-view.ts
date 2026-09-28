@@ -2,8 +2,9 @@ import { taskTitleLabel } from "./task-title";
 import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { renderTaskDetails } from "./task-row-details";
-import { recurringFile } from "./recurring-task";
+import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
+import { renderTodaySummary, todaySummary } from "./today-summary";
 import { renderDescriptionIndicator } from "./task-description-indicator";
 import { cloneTaskFilters } from "./task-filters";
 import { renderPropertyFilter } from "./filter-editor";
@@ -21,7 +22,7 @@ import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { TASK_PROPERTIES } from "./task-properties";
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
-import { groupTasks, orderTaskTree, sortTasks } from "./query";
+import { groupTasks, isDeferred, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
 import type { TaskFilter, Project, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
 
@@ -33,6 +34,12 @@ const ROW_PAGE = 200;
 // even after the shared page budget is spent, so no visible group looks empty.
 const MIN_LIST_ROWS = 20;
 const MIN_ROW_LISTS = 10;
+// The weekly review lists undated tasks in notes unedited for this long.
+const STALE_DAYS = 30;
+// Swipe gestures on touch screens, in pixels.
+const SWIPE_START = 12;
+const SWIPE_COMMIT = 80;
+const SWIPE_MAX = 120;
 
 /** What had focus before a re-render, so the same control can be focused afterwards. */
 interface FocusKey { taskId?: string; index?: number; part?: string; key?: string }
@@ -45,7 +52,8 @@ const TITLES: Record<TaskViewMode, string> = {
   all: "All Tasks",
   projects: "Projects",
   tags: "Tags",
-  smartLists: "Smart Lists"
+  smartLists: "Smart Lists",
+  review: "Weekly Review"
 };
 
 export class TaskMainView extends ItemView {
@@ -88,6 +96,7 @@ export class TaskMainView extends ItemView {
   private pendingFocus?: { path: string; title: string };
   private rovingRow?: HTMLElement;
   private moveTargets = new Map<string, { title: string; target: ListDropGroup }>();
+  private summaryTimer?: number;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
     super(leaf);
@@ -153,10 +162,12 @@ export class TaskMainView extends ItemView {
     this.registerDomEvent(this.containerEl.ownerDocument, "click", event => this.clearSelectionOutside(event), true);
     // Obsidian's own undo only covers the editor; in task views Cmd/Ctrl+Z undoes the last task change.
     this.registerDomEvent(this.containerEl, "keydown", event => {
-      if (!(Platform.isMacOS ? event.metaKey : event.ctrlKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "z") return;
+      const key = event.key.toLowerCase();
+      if (!(Platform.isMacOS ? event.metaKey : event.ctrlKey) || event.shiftKey || event.altKey || (key !== "z" && key !== "k")) return;
       if ((event.target as HTMLElement | null)?.closest?.("input:not([type=checkbox]), textarea, select, [contenteditable=true]")) return;
       event.preventDefault();
-      void this.plugin.undoTaskChange();
+      if (key === "k") this.plugin.openQuickSwitcher();
+      else void this.plugin.undoTaskChange();
     });
     this.unsubscribe = this.plugin.index.subscribe(() => this.scheduleRender());
     this.render();
@@ -165,6 +176,7 @@ export class TaskMainView extends ItemView {
   async onClose(): Promise<void> {
     this.closed = true;
     this.unsubscribe?.();
+    this.stopSummaryTimer();
     if (this.renderFrame !== undefined) this.containerEl.win.cancelAnimationFrame(this.renderFrame);
     this.renderFrame = undefined;
     this.disconnectRowObservers();
@@ -268,11 +280,17 @@ export class TaskMainView extends ItemView {
     const wrapTitles = this.state.mode === "dashboard" ? this.plugin.settings.wrapTaskTitles : this.layout === "calendar" ? this.plugin.settings.wrapCalendarTaskTitles
       : this.layout === "kanban" ? this.plugin.settings.wrapKanbanTaskTitles : this.plugin.settings.wrapTaskTitles;
     container.classList.toggle("tm-wrap-task-titles", wrapTitles);
+    container.classList.toggle("tm-density-compact", this.plugin.settings.density === "compact");
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "dashboard") {
       container.classList.remove("is-calendar-view", "is-kanban-view");
       this.renderTaskDashboard(container);
+      return;
+    }
+    if (this.state.mode === "review") {
+      container.classList.remove("is-calendar-view", "is-kanban-view");
+      this.renderWeeklyReview(container);
       return;
     }
     if (this.state.mode === "smartLists" && !this.state.smartListId) {
@@ -308,6 +326,7 @@ export class TaskMainView extends ItemView {
     this.selection.retain([...today, ...upcoming]);
     renderDashboard(container, {
       today: card => {
+        renderTodaySummary(card, todaySummary(this.plugin.index.query({ mode: "today", showCompleted: true })), false);
         if (today.length) this.renderTaskList(card, today);
         else card.createDiv({ cls: "tm-empty", text: "No tasks for today" });
       },
@@ -356,8 +375,93 @@ export class TaskMainView extends ItemView {
     this.selectionRows.clear();
   }
 
+  /**
+   * A checklist for the weekly review: each section lists tasks or projects to look at,
+   * and can be marked reviewed for the current week (collapsing it).
+   */
+  private renderWeeklyReview(container: HTMLElement): void {
+    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), true, task => this.prepareDrag(task));
+    const today = todayIso();
+    const week = addDays(today, -((new Date().getDay() + 6) % 7));
+    const saved = this.plugin.settings.weeklyReview;
+    const reviewed = new Set(saved?.week === week ? saved.reviewed : []);
+    const tasks = this.plugin.index.allTasks();
+    const open = tasks.filter(task => !task.completed);
+    const staleBefore = Date.now() - STALE_DAYS * 86_400_000;
+    const modified = new Map<string, number>();
+    const noteModified = (path: string): number => {
+      if (!modified.has(path)) {
+        const file = this.app.vault.getAbstractFileByPath(path);
+        modified.set(path, file instanceof TFile ? file.stat?.mtime ?? Date.now() : Date.now());
+      }
+      return modified.get(path)!;
+    };
+    const repeating = (task: Task): boolean => isRepeatingTask(this.app, task);
+    const hasNextAction = new Set(open.filter(task => !isDeferred(task, today)).map(task => task.path));
+    const sections: Array<{ id: string; title: string; hint: string; empty: string; tasks?: Task[]; projects?: Project[] }> = [
+      { id: "completed", title: "Completed this week", hint: "What you finished in the last 7 days.",
+        empty: this.plugin.settings.completionDates ? "Nothing completed in the last 7 days." : "Turn on Record completion dates in settings to see what you finished.",
+        tasks: tasks.filter(task => task.completed && task.completedDate !== undefined && task.completedDate > addDays(today, -7) && task.completedDate <= today) },
+      { id: "overdue", title: "Overdue", hint: "Reschedule, finish, or let go of these.", empty: "Nothing is overdue.",
+        tasks: open.filter(task => !isDeferred(task, today) && (actionDate(task) ?? today) < today && !repeating(task)) },
+      { id: "routines", title: "Routines behind", hint: "Repeating tasks past their date.", empty: "All routines are up to date.",
+        tasks: open.filter(task => repeating(task) && task.scheduledDate !== undefined && task.scheduledDate < today) },
+      { id: "deadlines", title: "Deadlines in the next 7 days", hint: "Make time for these before they're due.", empty: "No deadlines this week.",
+        tasks: open.filter(task => task.deadline !== undefined && task.deadline >= today && task.deadline <= addDays(today, 7)) },
+      { id: "stale", title: "Untouched for a month", hint: `Undated tasks in notes nobody has edited for ${STALE_DAYS} days.`, empty: "No stale tasks.",
+        tasks: open.filter(task => !actionDate(task) && !task.someday && !task.deferDate && noteModified(task.path) < staleBefore) },
+      { id: "projects", title: "Projects without a next action", hint: "Add a next step, or archive the project.", empty: "Every active project has a next action.",
+        projects: this.plugin.index.projects().filter(project => !project.archived && !hasNextAction.has(project.path)) },
+      { id: "someday", title: "Someday", hint: "Anything here ready to schedule or delete?", empty: "No someday tasks.",
+        tasks: open.filter(task => task.someday) }
+    ];
+
+    const header = container.createDiv({ cls: "tm-view-header" });
+    const title = header.createDiv({ cls: "tm-title-group" }).createDiv();
+    title.createEl("h1", { text: "Weekly Review" });
+    const progress = title.createDiv({ cls: "tm-task-metadata tm-review-progress" });
+    progress.createSpan({ text: `Week of ${formatDate(week, this.plugin.dateFormat())}` });
+    progress.createSpan({ text: `${sections.filter(section => reviewed.has(section.id)).length} of ${sections.length} reviewed` });
+    const actions = header.createDiv({ cls: "tm-header-actions" });
+    const restart = actions.createEl("button", { text: "Start over", attr: { "data-tm-focus-key": "review-restart" } });
+    restart.disabled = !reviewed.size;
+    const save = async (next: Set<string>): Promise<void> => {
+      this.plugin.settings.weeklyReview = { week, reviewed: [...next] };
+      await this.plugin.saveSettings();
+      this.render();
+    };
+    restart.addEventListener("click", () => void save(new Set()).catch(error => new Notice(String(error))));
+
+    const visible: Task[] = [];
+    for (const section of sections) {
+      const done = reviewed.has(section.id);
+      const element = container.createEl("section", { cls: `tm-section tm-review-section${done ? " is-reviewed" : ""}` });
+      const heading = element.createEl("h2");
+      heading.createSpan({ text: section.title });
+      heading.createSpan({ cls: "tm-section-count", text: String(section.tasks?.length ?? section.projects?.length ?? 0) });
+      const check = heading.createEl("label", { cls: "tm-review-check" });
+      const box = check.createEl("input", { type: "checkbox", attr: { "data-tm-focus-key": `review:${section.id}` } });
+      box.checked = done;
+      check.createSpan({ text: "Reviewed" });
+      box.addEventListener("change", () => {
+        const next = new Set(reviewed);
+        if (box.checked) next.add(section.id); else next.delete(section.id);
+        void save(next).catch(error => new Notice(String(error)));
+      });
+      if (done) continue;
+      element.createDiv({ cls: "tm-filter-hint", text: section.hint });
+      const count = section.tasks?.length ?? section.projects?.length ?? 0;
+      if (!count) { element.createDiv({ cls: "tm-empty tm-review-empty", text: section.empty }); continue; }
+      if (section.projects) this.renderProjectGroup(element, "", section.projects, false);
+      else { this.renderTaskList(element, section.tasks!); visible.push(...section.tasks!); }
+    }
+    this.selection.retain(visible);
+    this.updateSelection();
+    this.updateRoving();
+  }
+
   private renderTaskResults(): void {
-    if (this.state.mode === "dashboard") { this.render(); return; }
+    if (this.state.mode === "dashboard" || this.state.mode === "review") { this.render(); return; }
     const container = this.taskResults;
     if (!container) return;
     this.preserveView(() => this.renderTaskResultsNow(container));
@@ -534,11 +638,32 @@ export class TaskMainView extends ItemView {
     const metadata = this.headerMetadata;
     if (!metadata) return;
     metadata.empty();
+    const today = this.state.mode === "today" && !this.taskSourcePath;
     const project = this.taskSourcePath ? this.plugin.index.projects().find(project => project.path === this.taskSourcePath) : undefined;
-    metadata.hidden = !project;
+    metadata.hidden = !project && !today;
+    if (today) {
+      renderTodaySummary(metadata, todaySummary(this.plugin.index.query({ mode: "today", showCompleted: true })));
+      this.startSummaryTimer();
+    } else this.stopSummaryTimer();
     if (!project) return;
+    // The header's source label names the parent project, so it takes the parent's colour.
+    const parentColor = project.parentPath ? this.plugin.index.projectColor(project.parentPath) : undefined;
+    if (parentColor) metadata.style.setProperty("--tm-project-color", parentColor);
+    else metadata.style.removeProperty("--tm-project-color");
     renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat());
     renderProjectProgress(metadata, project);
+  }
+
+  /** Keeps the Today header's "next task" countdown current between task changes. */
+  private startSummaryTimer(): void {
+    const win = this.containerEl?.win;
+    if (this.summaryTimer !== undefined || !win) return;
+    this.summaryTimer = win.setInterval(() => { if (this.headerMetadata?.isConnected) this.renderHeaderMetadata(); else this.stopSummaryTimer(); }, 30_000);
+  }
+
+  private stopSummaryTimer(): void {
+    if (this.summaryTimer !== undefined) this.containerEl?.win?.clearInterval(this.summaryTimer);
+    this.summaryTimer = undefined;
   }
 
   private renderFilters(container: HTMLElement, toggle: HTMLButtonElement): void {
@@ -688,11 +813,10 @@ export class TaskMainView extends ItemView {
     this.renderProjectGroup(container, "Archived", archived);
   }
 
-  private renderProjectGroup(container: HTMLElement, title: string, projects: Project[]): void {
+  private renderProjectGroup(container: HTMLElement, title: string, projects: Project[], heading = true): void {
     if (!projects.length) return;
-    const section = container.createEl("section", { cls: "tm-section" });
-    const heading = section.createEl("h2", { text: title });
-    heading.createSpan({ cls: "tm-section-count", text: String(projects.length) });
+    const section = heading ? container.createEl("section", { cls: "tm-section" }) : container;
+    if (heading) section.createEl("h2", { text: title }).createSpan({ cls: "tm-section-count", text: String(projects.length) });
     const list = section.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
     for (const { project, depth } of projectHierarchy(projects)) {
       const row = list.createDiv({ cls: "tm-task-row tm-project-row", attr: { role: "listitem" } });
@@ -704,6 +828,8 @@ export class TaskMainView extends ItemView {
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
       button.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
+      const parentColor = project.parentPath ? this.plugin.index.projectColor(project.parentPath) : undefined;
+      if (parentColor) metadata.style.setProperty("--tm-project-color", parentColor);
       renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat(), undefined, primary);
       if (!metadata.childElementCount) metadata.remove();
     }
@@ -1074,10 +1200,17 @@ export class TaskMainView extends ItemView {
     const content = row.createDiv({ cls: "tm-task-content" });
     const primary = content.createDiv({ cls: "tm-task-primary" });
     this.listDrag?.row(row, primary, task, target);
+    // A project's colour marks its tasks' source label and board card; its own page needs no marker.
+    const color = this.plugin.index.projectColor(task.path);
+    if (color && task.path !== this.taskSourcePath) {
+      row.addClass("has-project-color");
+      row.style.setProperty("--tm-project-color", color);
+    }
     const title = primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title), "data-tm-focus-key": "title" } });
     title.addEventListener("click", () => this.editTask(task));
     renderDescriptionIndicator(primary, task.description);
     try {
+      // Routine-note repeats get an icon; inline `every …` repeats show a Repeat pill in the details instead.
       if (recurringFile(this.app, task)) {
         const icon = primary.createSpan({ cls: "tm-task-recurring", attr: { role: "img", "aria-label": "Recurring task", title: "Recurring task" } });
         setIcon(icon, "repeat-2");
@@ -1102,6 +1235,66 @@ export class TaskMainView extends ItemView {
     if (!metadata.childElementCount) metadata.remove();
     row.createSpan({ cls: "tm-sr-only tm-selected-marker" });
     this.bindRowKeyboard(row, task, target);
+    this.bindSwipe(row, task, checkbox);
+  }
+
+  /**
+   * Touch gestures on a row: swipe right to complete (or reopen), left to snooze until tomorrow.
+   * Only horizontal touch drags count; vertical movement scrolls as usual and mouse input is ignored.
+   */
+  private bindSwipe(row: HTMLElement, task: Task, checkbox: HTMLInputElement): void {
+    let start: { x: number; y: number; id: number } | undefined;
+    let offset = 0;
+    let swiping = false;
+    let suppressClick = false;
+    const reset = (): void => {
+      start = undefined; swiping = false; offset = 0;
+      row.removeClass("is-swiping", "is-swipe-armed");
+      row.removeAttribute("data-swipe");
+      row.style.removeProperty("--tm-swipe-offset");
+    };
+    row.addEventListener("pointerdown", event => {
+      if (event.pointerType !== "touch" || (event.target as HTMLElement).closest("input")) return;
+      start = { x: event.clientX, y: event.clientY, id: event.pointerId };
+    });
+    row.addEventListener("pointermove", event => {
+      if (!start || event.pointerId !== start.id) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (!swiping) {
+        if (Math.abs(dy) > SWIPE_START && Math.abs(dy) > Math.abs(dx)) { reset(); return; }
+        if (Math.abs(dx) < SWIPE_START || Math.abs(dx) < Math.abs(dy) * 2) return;
+        swiping = true;
+        row.setPointerCapture?.(event.pointerId);
+        row.addClass("is-swiping");
+      }
+      event.preventDefault();
+      offset = Math.max(-SWIPE_MAX, Math.min(SWIPE_MAX, dx));
+      row.style.setProperty("--tm-swipe-offset", `${offset}px`);
+      row.setAttribute("data-swipe", offset > 0 ? (task.completed ? "reopen" : "complete") : "snooze");
+      row.toggleClass("is-swipe-armed", Math.abs(offset) >= SWIPE_COMMIT);
+    });
+    // Keep Obsidian's own mobile swipe gestures (such as opening a sidebar) from also reacting.
+    row.addEventListener("touchmove", event => { if (swiping) { event.stopPropagation(); event.preventDefault(); } }, { passive: false });
+    row.addEventListener("pointerup", event => {
+      if (!start || event.pointerId !== start.id) return;
+      const committed = swiping ? offset : 0;
+      if (swiping) suppressClick = true;
+      reset();
+      if (committed >= SWIPE_COMMIT) {
+        checkbox.checked = !task.completed;
+        checkbox.dispatchEvent(new Event("change"));
+      } else if (committed <= -SWIPE_COMMIT) {
+        this.prepareDrag(task);
+        void this.dropListTask(task, { property: "defer", value: addDays(todayIso(), 1) });
+      }
+    });
+    row.addEventListener("pointercancel", reset);
+    row.addEventListener("click", event => {
+      if (!suppressClick) return;
+      suppressClick = false;
+      event.preventDefault(); event.stopImmediatePropagation();
+    }, true);
   }
 
   private async openSource(task: Task): Promise<void> {

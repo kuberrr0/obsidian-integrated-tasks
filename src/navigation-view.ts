@@ -7,7 +7,8 @@ const NAV_ITEMS: Array<{ mode: TaskViewMode; label: string }> = [
   { mode: "dashboard", label: "Dashboard" },
   { mode: "inbox", label: "Inbox" }, { mode: "today", label: "Today" },
   { mode: "upcoming", label: "Upcoming" }, { mode: "all", label: "All Tasks" },
-  { mode: "projects", label: "Projects" }, { mode: "tags", label: "Tags" }
+  { mode: "projects", label: "Projects" }, { mode: "tags", label: "Tags" },
+  { mode: "review", label: "Weekly Review" }
 ];
 
 export class TaskNavigationView extends ItemView {
@@ -72,6 +73,7 @@ export class TaskNavigationView extends ItemView {
     const scrollTop = container.scrollTop;
     container.empty();
     container.addClass("tm-navigation");
+    container.classList.toggle("tm-density-compact", this.plugin.settings.density === "compact");
     const header = container.createDiv({ cls: "nav-header tm-nav-header" });
     const toolbar = header.createDiv({ cls: "nav-buttons-container", attr: { role: "toolbar", "aria-label": "Task actions" } });
     const buttons: HTMLButtonElement[] = [];
@@ -137,7 +139,13 @@ export class TaskNavigationView extends ItemView {
       const children = group.createDiv({ cls: "tree-item-children nav-folder-children tm-nav-children" });
       if (entry.mode === "projects") {
         const projects = this.plugin.index.projects().filter(project => !project.archived);
-        for (const project of projects) item(children, `project:${project.path}`, project.name, this.activeProject === project.path, () => this.plugin.openProject(project.path));
+        for (const project of projects) {
+          const row = item(children, `project:${project.path}`, project.name, this.activeProject === project.path, () => this.plugin.openProject(project.path));
+          if (!project.color) continue;
+          const dot = row.createSpan({ cls: "tm-project-dot", attr: { "aria-hidden": "true" } });
+          dot.style.setProperty("--tm-project-color", project.color);
+          row.prepend(dot);
+        }
         if (!projects.length) children.createDiv({ cls: "tm-nav-empty", text: "No projects yet" });
       } else if (entry.mode === "all") {
         const lists = this.plugin.settings.smartLists;

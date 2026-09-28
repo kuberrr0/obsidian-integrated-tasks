@@ -1,5 +1,5 @@
 import { noteRecurringCompletion } from "./note-recurring-completion";
-import { recurringFile, type RecurringOutcome } from "./recurring-task";
+import { isRepeatingTask, recurringFile, type RecurringOutcome } from "./recurring-task";
 import { shiftCalendar, type CalendarScope } from "./calendar";
 import { scanTasks } from "./parser";
 import { applyProjectDraft, projectEditDraft } from "./project-editor";
@@ -23,6 +23,7 @@ import { DEFAULT_SETTINGS, type SmartList, type Task, type TaskManagerSettings, 
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
+import { TaskQuickSwitcher } from "./quick-switcher";
 
 const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay"];
 
@@ -43,21 +44,21 @@ export default class TaskManagerPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat());
-    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates, () => this.settings.sectionHeadingLevel);
+    this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates, () => this.settings.sectionHeadingLevel, () => this.settings.completionDates);
     this.store.onChange = change => this.offerUndo(change);
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
     this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
-    this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => {
-      if (this.settings.taskMode) return false;
-      try { return Boolean(recurringFile(this.app, task)); } catch { return false; }
-    }, task => { this.completeRecurringTaskFromNote(task); }));
+    this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => !this.settings.taskMode && isRepeatingTask(this.app, task),
+      task => { this.completeRecurringTaskFromNote(task); }, undefined,
+      { enabled: () => this.settings.completionDates, linkDates: () => this.settings.linkDates }));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel, task => this.completeRecurringTaskFromNote(task)));
     this.registerMarkdownPostProcessor((element, context) => {
       renderNoteTokens(element, this.dateFormat());
-      registerNoteTaskEdit(element, context, () => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel, task => this.completeRecurringTaskFromNote(task));
+      registerNoteTaskEdit(element, context, () => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel,
+        task => this.toggleTaskFromReadingView(task, true), task => this.toggleTaskFromReadingView(task, false));
     });
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
@@ -69,7 +70,8 @@ export default class TaskManagerPlugin extends Plugin {
       ["upcoming", "Open upcoming", "open-upcoming"],
       ["all", "Open all tasks", "open-all-tasks"],
       ["projects", "Open projects", "open-projects"],
-      ["tags", "Open tags", "open-tags"]
+      ["tags", "Open tags", "open-tags"],
+      ["review", "Open weekly review", "open-weekly-review"]
     ];
     for (const [mode, name, id] of commands) {
       this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new Notice(String(error))) });
@@ -143,6 +145,7 @@ export default class TaskManagerPlugin extends Plugin {
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
+    this.addCommand({ id: "quick-switch", name: "Quick switch to view, project, tag, or task", callback: () => this.openQuickSwitcher() });
     this.addCommand({ id: "undo-task-change", name: "Undo last task change", checkCallback: checking => {
       if (!this.store.lastChange()) return false;
       if (!checking) void this.undoTaskChange();
@@ -257,6 +260,8 @@ export default class TaskManagerPlugin extends Plugin {
     if (typeof this.settings.inboxPath !== "string" || !this.settings.inboxPath.trim()) this.settings.inboxPath = DEFAULT_SETTINGS.inboxPath;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
     this.settings.showUndoNotices = this.settings.showUndoNotices !== false;
+    this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
+    this.settings.completionDates = this.settings.completionDates === true;
   }
 
   async saveSettings(): Promise<void> {
@@ -327,10 +332,18 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   private refreshSmartLists(): void {
+    this.refreshNavigation();
+    this.refreshViews();
+  }
+
+  refreshNavigation(): void {
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
       if (leaf.view instanceof TaskNavigationView) leaf.view.refresh();
     }
-    this.refreshViews();
+  }
+
+  openQuickSwitcher(): void {
+    new TaskQuickSwitcher(this.app, this).open();
   }
 
   openProjectCreator(): void {
@@ -420,7 +433,7 @@ export default class TaskManagerPlugin extends Plugin {
 
   private completeRecurringTaskFromNote(task: Task): boolean {
     if (this.settings.taskMode || task.completed) return false;
-    try { if (!recurringFile(this.app, task)) return false; }
+    try { if (!recurringFile(this.app, task) && !task.repeat) return false; }
     catch (error) { new Notice(String(error)); return true; }
     const key = `${task.path}:${task.line}:${task.raw}`;
     if (this.pendingRecurringNotes.has(key)) return true;
@@ -435,6 +448,19 @@ export default class TaskManagerPlugin extends Plugin {
     return true;
   }
 
+  /** Reading view writes checkbox clicks itself; with completion dates on, the store completes (stamping it) or reopens the task instead. */
+  private toggleTaskFromReadingView(task: Task, completed: boolean): boolean {
+    if (completed && this.completeRecurringTaskFromNote(task)) return true;
+    if (this.settings.taskMode || !this.settings.completionDates) return false;
+    this.recurringNoteQueue = this.recurringNoteQueue.then(async () => {
+      const markdown = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (markdown?.file?.path === task.path) await markdown.save();
+      await this.store.toggle(task, completed);
+      await this.index.refreshPath(task.path);
+    }).catch(error => { new Notice(error instanceof Error ? error.message : "Could not update the task."); });
+    return true;
+  }
+
   private recurringTaskCommand(checking: boolean, outcome: RecurringOutcome): boolean {
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
     const markdown = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -446,9 +472,12 @@ export default class TaskManagerPlugin extends Plugin {
       task = scanTasks(markdown.file.path, markdown.editor.getValue(), new Date(), this.dateFormat(), this.settings.sectionHeadingLevel)
         .find(candidate => candidate.line === markdown.editor.getCursor().line);
     }
-    if (!task || task.completed || !task.scheduledDate) return false;
-    try { if (!recurringFile(this.app, task)) return false; }
-    catch (error) { if (!checking) new Notice(String(error)); return false; }
+    if (!task || task.completed) return false;
+    // A routine note needs a scheduled date; an inline repeat advances from today when unscheduled.
+    try {
+      const routine = recurringFile(this.app, task);
+      if (routine ? !task.scheduledDate : !task.repeat) return false;
+    } catch (error) { if (!checking) new Notice(String(error)); return false; }
     if (!checking) {
       const selected = task;
       void (async () => {
@@ -503,9 +532,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.taskModeRibbon?.setAttribute("title", `Task mode: ${enabled ? "On" : "Off"}`);
     this.taskModeRibbon?.setAttribute("aria-pressed", String(enabled));
     this.taskModeRibbon?.classList.toggle("is-active", enabled);
-    for (const leaf of this.app.workspace.getLeavesOfType(TASK_NAV_VIEW)) {
-      if (leaf.view instanceof TaskNavigationView) leaf.view.refresh();
-    }
+    this.refreshNavigation();
   }
 
   private async convertToProject(file: TFile): Promise<void> {

@@ -1,14 +1,14 @@
 import { TaskLineEditor } from "./task-line-editor";
 import { parseEditedTaskInput, parseTaskTreeInput } from "./task-input";
 import type { TaskEditorPreset } from "./types";
-import { trackModalViewport } from "./mobile-layout";
+import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
 import { destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { todayIso, tomorrowIso } from "./date";
 import { parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
 import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from "./types";
 
-export type TaskEditorProperty = "scheduledDate" | "deadline" | "defer" | "durationMinutes" | "priority" | "tags";
+export type TaskEditorProperty = "scheduledDate" | "deadline" | "defer" | "durationMinutes" | "priority" | "tags" | "repeat";
 
 export interface TaskEditorOptions {
   focusProperty?: TaskEditorProperty;
@@ -33,6 +33,8 @@ function initialDraft(options: TaskEditorOptions): TaskDraft {
       deadlineTime: options.task.deadlineTime,
       deferDate: options.task.deferDate,
       someday: options.task.someday,
+      repeat: options.task.repeat,
+      completedDate: options.task.completedDate,
       durationMinutes: options.task.durationMinutes,
       priority: options.task.priority,
       tags: options.task.tags,
@@ -54,6 +56,7 @@ function initialDraft(options: TaskEditorOptions): TaskDraft {
 export class TaskEditorModal extends Modal {
   private draft: TaskDraft;
   private stopViewportTracking?: () => void;
+  private stopBottomSheet?: () => void;
   private actions?: HTMLElement;
   private focusTimer?: number;
   private handleKeydown?: (event: KeyboardEvent) => void;
@@ -68,6 +71,7 @@ export class TaskEditorModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("tm-editor-modal");
+    this.stopBottomSheet = presentAsBottomSheet(this.modalEl, () => this.close());
     const { contentEl } = this;
     contentEl.empty();
     this.modalEl.setAttribute("aria-label", this.options.task ? "Edit task" : "New task");
@@ -165,6 +169,7 @@ export class TaskEditorModal extends Modal {
     this.rawInput.destroy();
     window.clearTimeout(this.focusTimer);
     this.stopViewportTracking?.();
+    this.stopBottomSheet?.();
     this.actions?.remove();
     if (this.handleKeydown) this.contentEl.removeEventListener("keydown", this.handleKeydown, true);
     this.contentEl.empty();

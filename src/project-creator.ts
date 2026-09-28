@@ -1,6 +1,7 @@
 import { Modal, type App } from "obsidian";
 import { formatDate, parseDateExpression } from "./date";
-import { trackModalViewport } from "./mobile-layout";
+import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
+import { PROJECT_COLORS, projectColorName, projectColorValue } from "./project-properties";
 import type { Project } from "./types";
 
 export interface ProjectDraft {
@@ -12,6 +13,8 @@ export interface ProjectDraft {
   parent: string;
   tags: string;
   archived: boolean;
+  /** A colour name or hex; "" removes the property and undefined leaves it unchanged. */
+  color?: string;
 }
 interface ProjectCreatorOptions {
   projects: Project[];
@@ -27,8 +30,10 @@ export class ProjectCreatorModal extends Modal {
   private focusTimer?: number;
   private focusWindow: Window | null = null;
   private stopViewportTracking?: () => void;
+  private stopBottomSheet?: () => void;
   constructor(app: App, private readonly options: ProjectCreatorOptions) { super(app); }
   onOpen(): void {
+    this.stopBottomSheet = presentAsBottomSheet(this.modalEl, () => this.close());
     this.modalEl.addClass("tm-editor-modal");
     const content = this.contentEl;
     content.empty();
@@ -55,7 +60,13 @@ export class ProjectCreatorModal extends Modal {
     const archiveRow = content.createEl("label", { cls: "tm-toggle" });
     const archived = archiveRow.createEl("input", { type: "checkbox", attr: { "aria-label": "Archived" } });
     archiveRow.createSpan({ text: "Archived" });
-    const fields = { name, date, endDate, deadline, priority, parent, tags, archived };
+    const colorRow = content.createDiv({ cls: "tm-editor-field" });
+    const colorLabel = colorRow.createEl("label", { text: "Color" });
+    let color = this.options.initial?.color;
+    // New projects show None checked; an edit with an unreadable colour checks nothing and keeps it.
+    const colorPicker = renderProjectColorPicker(colorRow, this.options.initial ? color : "", value => { color = value; });
+    colorLabel.addEventListener("click", () => colorPicker.focus());
+    const fields = { name, date, endDate, deadline, priority, parent, tags, archived, color: colorPicker };
     if (this.options.initial) {
       const initial = this.options.initial;
       for (const key of ["name", "date", "endDate", "deadline", "priority", "parent", "tags"] as const) fields[key].value = initial[key];
@@ -68,7 +79,7 @@ export class ProjectCreatorModal extends Modal {
     const submit = async (): Promise<void> => {
       if (create.disabled) return;
       const draft = { name: name.value, date: date.value, endDate: endDate.value, deadline: deadline.value,
-        priority: priority.value, parent: parent.value, tags: tags.value, archived: archived.checked };
+        priority: priority.value, parent: parent.value, tags: tags.value, archived: archived.checked, color };
       create.disabled = cancel.disabled = true;
       try {
         if (this.options.initial) projectDraftProperties(draft, this.options.dateFormat, this.options.linkDates);
@@ -101,10 +112,59 @@ export class ProjectCreatorModal extends Modal {
     window?.clearTimeout(this.focusTimer);
     this.focusWindow = null;
     this.stopViewportTracking?.();
+    this.stopBottomSheet?.();
     this.actions?.remove();
     this.contentEl.onkeydown = null;
     this.contentEl.empty();
   }
+}
+
+const titleCase = (name: string): string => name[0].toUpperCase() + name.slice(1);
+
+/** Swatches with radio-group semantics, plus a hex field; reports "" for None and invalid hex text as typed. */
+export function renderProjectColorPicker(parent: HTMLElement, initial: string | undefined, change: (color: string) => void): { focus: () => void } {
+  const container = parent.createDiv({ cls: "tm-project-color-field" });
+  const group = container.createDiv({ cls: "tm-project-color-swatches", attr: { role: "radiogroup", "aria-label": "Project color" } });
+  const swatches = ["", ...PROJECT_COLORS].map(name => {
+    const label = name ? titleCase(name) : "None";
+    const swatch = group.createEl("button", { cls: `tm-project-color-swatch${name ? "" : " is-none"}`, attr: { type: "button", role: "radio", "aria-label": label, title: label } });
+    if (name) swatch.style.setProperty("--tm-project-color", projectColorValue(name)!);
+    return { name, swatch };
+  });
+  const hex = container.createEl("input", { cls: "tm-project-color-hex", type: "text", attr: { "aria-label": "Custom color", placeholder: "#rrggbb", maxlength: "7", spellcheck: "false" } });
+  const paint = (selected: string | undefined): void => {
+    const index = swatches.findIndex(entry => entry.name === selected);
+    swatches.forEach((entry, position) => {
+      entry.swatch.setAttribute("aria-checked", String(position === index));
+      // One tab stop: the checked swatch, else the first.
+      entry.swatch.setAttribute("tabindex", position === Math.max(0, index) ? "0" : "-1");
+    });
+  };
+  const select = (name: string): void => { hex.value = ""; paint(name); change(name); };
+  const initialName = initial === undefined ? undefined : projectColorName(initial) ?? "";
+  if (initialName?.startsWith("#")) hex.value = initialName;
+  paint(initialName);
+  swatches.forEach(({ name, swatch }, index) => {
+    swatch.addEventListener("click", () => select(name));
+    swatch.addEventListener("keydown", event => {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      const last = swatches.length - 1;
+      const next = event.key === "ArrowRight" || event.key === "ArrowDown" ? (index === last ? 0 : index + 1)
+        : event.key === "ArrowLeft" || event.key === "ArrowUp" ? (index === 0 ? last : index - 1)
+        : event.key === "Home" ? 0 : event.key === "End" ? last : undefined;
+      if (next === undefined) return;
+      event.preventDefault();
+      select(swatches[next].name);
+      swatches[next].swatch.focus();
+    });
+  });
+  hex.addEventListener("input", () => {
+    const text = hex.value.trim();
+    const name = projectColorName(text);
+    paint(text ? (name ?? "#") : "");
+    change(text ? (name ?? text) : "");
+  });
+  return { focus: () => (swatches.find(entry => entry.swatch.getAttribute("tabindex") === "0") ?? swatches[0]).swatch.focus() };
 }
 
 /** Validate everything before creating a file; JSON values are valid YAML scalars/lists. */
@@ -125,12 +185,16 @@ export function projectDraftProperties(draft: ProjectDraft, dateFormat: string, 
     return linkDates ? `[[${formatted}]]` : formatted;
   };
   if (draft.priority && !/^[123]$/.test(draft.priority)) throw new Error("Select a valid priority.");
+  const color = draft.color ? projectColorName(draft.color) : undefined;
+  if (draft.color && !color) throw new Error("Enter a color as a hex value such as #3366ff.");
   const tags = [...new Set(["project", ...draft.tags.split(/[,\s]+/).map(tag => tag.replace(/^#/, "")).filter(tag => Boolean(tag) && tag !== "archived")])];
   if (draft.archived && !tags.includes("archived")) tags.push("archived");
   return {
     tags, date: date(draft.date, "start date"), "end date": date(draft.endDate, "end date"),
     deadline: date(draft.deadline, "deadline"), priority: draft.priority ? Number(draft.priority) : null,
-    parent: draft.parent ? `[[${draft.parent.replace(/\.md$/i, "")}]]` : null
+    parent: draft.parent ? `[[${draft.parent.replace(/\.md$/i, "")}]]` : null,
+    // No placeholder when unset: an empty colour means none.
+    ...(color ? { color } : {})
   };
 }
 

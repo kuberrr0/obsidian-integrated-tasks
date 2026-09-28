@@ -1,4 +1,4 @@
-import { formatDuration } from "./parser";
+import { formatDuration, repeatLabel } from "./parser";
 import { setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { isDeferred } from "./query";
@@ -25,6 +25,11 @@ export function taskDeadlineLabel(date: string, now = new Date()): string {
     const count = Math.abs(days);
     const value = count >= 365 ? `${Math.floor(count / 365)}y` : count >= 30 ? `${Math.floor(count / 30)}m` : `${count}d`;
     return `${value}${days < 0 ? " ago" : ""}`;
+}
+
+/** "Sep 27", or "Sep 27, 2025" outside the current year. */
+export function taskDoneDateLabel(date: string, now = new Date()): string {
+    return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "MMM D" : "MMM D, YYYY");
 }
 
 export function deadlineIsDistant(date: string | undefined, now = new Date()): boolean {
@@ -120,6 +125,17 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
         setIcon(icon, "eye-off");
         defer.createSpan({ text: label });
         editable(defer, `Edit hidden until: ${label}`, "defer", () => options.edit("defer"));
+    }
+    if (task.repeat && show("repeat") && grouping !== "repeat") {
+        const label = repeatLabel(task.repeat);
+        const repeat = metadata.createSpan({ cls: "tm-task-repeat", attr: { title: `Repeats ${task.repeat}` } });
+        const icon = repeat.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
+        setIcon(icon, "repeat");
+        repeat.createSpan({ text: label });
+        editable(repeat, `Edit repeat: ${label}`, "repeat", () => options.edit("repeat"));
+    }
+    if (task.completed && task.completedDate && show("completed") && grouping !== "completed") {
+        metadata.createSpan({ cls: "tm-task-done", text: `Done ${taskDoneDateLabel(task.completedDate, now)}`, attr: { title: `Completed ${formatDate(task.completedDate, options.dateFormat)}` } });
     }
     if (options.source && show("source") && grouping !== "source") {
         const source = metadata.createSpan({ cls: "tm-task-source", text: options.source.replace(/\.md$/i, "").split("/").pop(), attr: { title: options.source } });

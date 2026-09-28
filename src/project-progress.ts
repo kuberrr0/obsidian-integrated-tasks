@@ -11,6 +11,7 @@ export function renderProjectProgress(parent: HTMLElement, project: Project, sho
         "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(percentage),
         title: `${percentage}% — ${project.completedTasks} of ${total} tasks completed`
     } });
+    if (project.color) progress.style.setProperty("--tm-project-color", project.color);
     const circle = progress.createSpan({ cls: "tm-project-progress-circle", attr: { "aria-hidden": "true" } });
     circle.style.setProperty("--tm-project-progress", `${ratio * 100}%`);
     if (showPercentage) progress.createSpan({ cls: "tm-project-percentage", text: `${percentage}%` });

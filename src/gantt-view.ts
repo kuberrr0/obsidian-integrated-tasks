@@ -237,6 +237,10 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
         button.setAttribute("title", `${handle === "start" ? "Start" : fieldFor(handle) === "deadline" ? "Deadline" : "End"}: ${formatDate(date, options.dateFormat)} — drag or use arrow keys`);
       }
     };
+    if (project.color) {
+      bar.addClass("tm-project-colored");
+      for (const element of [bar, ...handles.values()]) element.style.setProperty("--tm-project-color", project.color);
+    }
     paint(project);
     painters.push(() => paint(project));
     for (const [handle, button] of handles) {

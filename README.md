@@ -31,8 +31,13 @@ Quick-created tasks go to `Inbox.md` by default. You can choose another inbox no
 | **Projects** | Review project progress and open a project's tasks. |
 | **Tags** | Bring related tasks together across different notes. |
 | **Smart Lists** | Return to your own saved views of the work. |
+| **Weekly Review** | Step through what needs attention once a week. |
 
 Today and Upcoming consider both the scheduled date and the deadline, using whichever comes first. Tasks without either date remain available in All Tasks and their source notes.
+
+The top of **Today** shows how your day is going: a progress circle of tasks done against tasks planned, the time you've planned, how many tasks are overdue, and your next timed task with a countdown.
+
+Press **Cmd/Ctrl+K** in a task view, or run **Quick switch to view, project, tag, or task**, to jump anywhere by typing: a view, a project, a tag, a smart list, or an open task by its title.
 
 Search by task title, description, or tag. Narrow the results by priority, dates, duration, status, note, or section. Sort and group the results to suit the way you're working.
 
@@ -74,6 +79,7 @@ Everything you can do by dragging also works from the keyboard. Long lists show 
 | Alt + → / ← | Make it a subtask of the task above, or move it out of its parent |
 | M | Move to another section, column, or note, reschedule it, or snooze it |
 | Cmd/Ctrl + Z | Undo the last task change |
+| Cmd/Ctrl + K | Jump to a view, project, tag, smart list, or task |
 
 ### Calendar: make time for your work
 
@@ -98,6 +104,8 @@ Use your note's sections as a board, or group tasks by properties such as priori
 Create a project from the task sidebar, or open an existing note and run **Convert to project** from the command palette. Use headings to divide its tasks into sections, and give the project dates, a deadline, and a priority.
 
 Projects show completion progress, including subtasks. Assign a parent project to organize related projects together.
+
+Give a project a colour in the project editor, or with a `color` property such as `color: blue` or `color: "#3b82f6"`. Its tasks' source label takes the colour in mixed lists, board cards get a coloured stripe, and its bar in the Gantt chart uses the colour. Subprojects without their own colour use their parent's.
 
 **Task mode** opens project notes as task views. Opening a project from the Projects list enables it automatically. Turn Task mode off whenever you want to return to the regular note view.
 
@@ -137,6 +145,26 @@ Click a selected task title or run **Edit task properties** to make a shared cha
 
 You can also drag a selection to move tasks together, drop it onto the calendar to reschedule it, or delete selected tasks along with their subtasks.
 
+## Review your week
+
+Open **Weekly Review** from the sidebar, the quick switcher, or the command palette. It walks through what needs your attention, one section at a time:
+
+- **Completed this week**, when completion dates are turned on
+- **Overdue** tasks to reschedule, finish, or let go of
+- **Routines behind** their date
+- **Deadlines in the next 7 days**
+- **Untouched for a month**: undated tasks in notes nobody has edited for 30 days
+- **Projects without a next action**
+- **Someday** tasks, to schedule or delete
+
+Work on tasks right in the review, with the same checkboxes, keys, and swipes as other views. Tick **Reviewed** on each section as you finish it; it folds away, and your progress is kept until the week ends. **Start over** clears it.
+
+## Use it on your phone
+
+Swipe a task to the right to complete it, or to the left to snooze it until tomorrow. Both show an Undo notice, like other changes.
+
+On phones, the task editors open as a sheet from the bottom of the screen. Drag the sheet's handle down to close it.
+
 ## Undo a change
 
 After you complete, move, edit, snooze, or delete tasks from a task view, a notice shows what changed with an **Undo** button. You can also press **Cmd/Ctrl+Z** in a task view or run **Undo last task change** from the command palette. The last 20 changes can be undone.
@@ -151,7 +179,15 @@ In a task view, press **M** on a task and choose a **Snooze** option, or set **H
 
 ## Build recurring routines
 
-Use recurring tasks for daily habits, weekly reviews, or occasional reminders.
+For a simple repeat, end the task with a rule such as `every week`, `every 2 weeks`, `every month`, or `every monday`:
+
+```
+- [ ] Water plants Sep 28, 2026 every week
+```
+
+Completing it moves its date to the next occurrence instead of checking it off; a deadline moves by the same number of days. A repeat with only a deadline repeats from the deadline. Note that a title ending in a rule, such as “Clean every day”, becomes a repeating task.
+
+For habits you want a history of, use a routine note instead:
 
 1. Create a note for the routine, such as **Weekly review**.
 2. In that note's properties, add the tag `recurring-task` and a text property named `repeat`, with a value such as `every friday`.
@@ -161,11 +197,15 @@ Check off the recurring task to record its completion and advance it to the next
 
 You can also use **Skip recurring task** or **Fail recurring task** from the command palette. In a regular note, place your cursor on the task first; in Task mode, select one recurring task.
 
-Repeat rules include every day, every week, every other week, every month, every year, and named weekdays. Overdue routines advance one occurrence at a time. Monthly and yearly routines remember the day they started on, so a routine on the 31st returns to the 31st after a shorter month.
+Repeat rules include every day, every week, every other week, every month, every year, and named weekdays. Overdue routines advance one occurrence at a time. Monthly and yearly routines remember the day they started on, so a routine on the 31st returns to the 31st after a shorter month. (Simple repeats don't: they follow the shorter month from then on.) If a task has both a routine note and a rule, the routine note wins.
+
+## Record when tasks were done
+
+Turn on **Record completion dates** in the settings to stamp each task with the day you complete it, such as `- [x] Pay rent ✓Sep 27, 2026`. Reopening the task removes the date. Completed tasks then show a **Done** label, the weekly review lists what you finished this week, and smart lists can filter and sort by **Completed date**. Dates written by the Tasks plugin, such as `✅ 2026-09-27`, are read too.
 
 ## Make it fit your workflow
 
-In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Adjust title wrapping, hover highlighting, and task counts.
+In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Adjust title wrapping, hover highlighting, and task counts, and choose **Comfortable** or **Compact** density to fit more tasks on screen.
 
 Choose your preferred date format and whether dates link to notes. These choices apply to new edits; use **Update dates** to apply them to existing tasks and recurring-task history.
 

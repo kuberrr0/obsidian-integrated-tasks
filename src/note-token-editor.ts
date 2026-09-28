@@ -92,6 +92,8 @@ export function noteTokenMarks(
       syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + 1));
       syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(to - 1, to));
     }
+    // The icon stands in for the `✓` (or `✅ `) prefix.
+    if (token.kind === "completedDate" && token.display) syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + token.display.from - token.from));
     if (token.kind === "defer") syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + 1));
   }
   return { pills: Decoration.set(pills, true), syntax: Decoration.set(syntax, true) };

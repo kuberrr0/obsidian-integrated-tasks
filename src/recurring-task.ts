@@ -1,5 +1,5 @@
 import { parseYaml, type App, TFile } from "obsidian";
-import { formatDate, formatLocalDate } from "./date";
+import { formatDate, formatLocalDate, todayIso } from "./date";
 import { findLiveLine } from "./markdown";
 import { parseTaskLine, type ParsedTokenRange } from "./parser";
 import type { Task } from "./types";
@@ -27,6 +27,35 @@ export function recurringFile(app: App, task: Task): TFile | undefined {
     }
     if (files.size > 1) throw new Error("A task must link to only one recurring-task note.");
     return [...files.values()][0];
+}
+
+/** A routine-note task or one with an inline `every …` rule. Never throws: an ambiguous routine link counts only with an inline rule. */
+export function isRepeatingTask(app: App, task: Task): boolean {
+    if (task.repeat) return true;
+    try { return Boolean(recurringFile(app, task)); } catch { return false; }
+}
+
+const addDays = (date: string, days: number): string => {
+    const [year, month, day] = date.split("-").map(Number);
+    return formatLocalDate(new Date(year, month - 1, day + days, 12));
+};
+const dayDistance = (from: string, to: string): number => {
+    const utc = (date: string): number => { const [year, month, day] = date.split("-").map(Number); return Date.UTC(year, month - 1, day); };
+    return Math.round((utc(to) - utc(from)) / 86400000);
+};
+
+/**
+ * The next instance of an inline repeat: the scheduled date (or today, when unscheduled) moves to the
+ * next occurrence and a deadline moves by the same number of days; times are kept. A task with only
+ * a deadline repeats from its deadline, so completing it never adds a scheduled date.
+ */
+export function advanceInlineRepeat(task: Pick<Task, "repeat" | "scheduledDate" | "deadline">, today = todayIso()): Pick<Task, "scheduledDate" | "deadline"> {
+    if (!task.repeat) throw new Error("Task has no repeat rule.");
+    const rules = [task.repeat];
+    if (!task.scheduledDate && task.deadline) return { scheduledDate: undefined, deadline: nextRepeatDate(rules, task.deadline) };
+    const from = task.scheduledDate ?? today;
+    const next = nextRepeatDate(rules, from);
+    return { scheduledDate: next, deadline: task.deadline ? addDays(task.deadline, dayDistance(from, next)) : undefined };
 }
 
 function frontmatter(content: string): unknown {

@@ -111,6 +111,15 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       },
       {
         section: "Task defaults",
+        name: "Record completion dates",
+        desc: "When you complete a task, add the date it was completed, such as ✓Sep 27, 2026. Reopening the task removes it.",
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.completionDates).onChange(async value => {
+          this.plugin.settings.completionDates = value;
+          await this.plugin.saveSettings();
+        })); }
+      },
+      {
+        section: "Task defaults",
         name: "Show undo notices",
         desc: "After you complete, move, edit, or delete tasks from the plugin's views, show a notice with an Undo button. The Undo last task change command and Cmd/Ctrl+Z in task views work either way.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showUndoNotices).onChange(async value => {
@@ -130,6 +139,20 @@ export class TaskManagerSettingTab extends PluginSettingTab {
             this.plugin.settings.taskHoverHighlight = value;
             await this.plugin.saveSettings();
             this.plugin.refreshViews();
+          })); }
+      },
+      {
+        section: "Appearance",
+        name: "Density",
+        desc: "Compact shows more tasks at once with tighter rows and spacing.",
+        render: (setting: Setting) => { setting.addDropdown(dropdown => dropdown
+          .addOption("comfortable", "Comfortable").addOption("compact", "Compact")
+          .setValue(this.plugin.settings.density)
+          .onChange(async value => {
+            this.plugin.settings.density = value === "compact" ? "compact" : "comfortable";
+            await this.plugin.saveSettings();
+            this.plugin.refreshViews();
+            this.plugin.refreshNavigation();
           })); }
       },
       ...([
