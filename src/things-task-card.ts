@@ -4,7 +4,7 @@ import { repeatLabel } from "./parser";
 import { deadlineIsOverdue, editable, taskTimeDurationLabel, taskTimeLabel } from "./task-row-details";
 import type { TaskEditorProperty } from "./task-editor";
 import { checkboxLabel, statusClass } from "./task-status";
-import { thingsDeadlineLabel } from "./things-row-details";
+import { renderThingsTaskDetails, thingsDeadlineLabel, type ThingsDetailsOptions } from "./things-row-details";
 import type { Task } from "./types";
 
 /** The card's unsaved title and notes, kept by the view so a re-render does not lose typing. */
@@ -15,6 +15,8 @@ export interface TaskCardDraft {
 
 export interface TaskCardOptions {
     task: Task;
+    /** How a subtask's properties render in the checklist, as on its own row. */
+    childDetails?: (child: Task) => ThingsDetailsOptions;
     /** Subtasks, shown as the card's checklist. */
     children: Task[];
     draft: TaskCardDraft;
@@ -85,11 +87,16 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     if (options.children.length) {
         const checklist = card.createDiv({ cls: "tm-things-card-checklist", attr: { role: "list", "aria-label": "Subtasks" } });
         for (const child of options.children) {
-            const item = checklist.createEl("label", { cls: `tm-things-card-check${child.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
+            // Not a label: clicking a property must open its editor, not tick the box.
+            const item = checklist.createDiv({ cls: `tm-things-card-check${child.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
             const box = item.createEl("input", { type: "checkbox", cls: "tm-things-card-check-box", attr: { "aria-label": checkboxLabel(child) } });
             box.checked = child.completed;
             box.addEventListener("change", () => options.toggle(child, box.checked));
-            item.createSpan({ text: child.title });
+            // Subtasks show their properties as task rows do: a star or date box, then tags and the deadline.
+            const lead = item.createSpan({ cls: "tm-things-lead" });
+            item.createSpan({ cls: "tm-things-card-check-title", text: child.title });
+            if (options.childDetails) renderThingsTaskDetails({ lead, inline: item, secondary: item }, child, options.childDetails(child));
+            if (!lead.childElementCount) lead.remove();
         }
     }
 

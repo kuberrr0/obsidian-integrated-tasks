@@ -35,13 +35,26 @@ describe("card notes", () => {
 });
 
 describe("Things task card", () => {
+  it("shows each subtask's properties as its row would", () => {
+    const edit = vi.fn();
+    const { element } = card("- [ ] Task 1\n  - [ ] Subtask 2026-09-19 {2026-09-30} #[[Errand]]", {
+      childDetails: () => ({ grouping: "none", dateFormat: "MMM D, YYYY", tags: ["Errand"], now, edit, openSource: vi.fn() })
+    });
+    const item = element.querySelector<HTMLElement>(".tm-things-card-check")!;
+    expect(Array.from(item.children).map(child => child.className)).toEqual(
+      ["tm-things-card-check-box", "tm-things-lead", "tm-things-card-check-title", "tm-things-tag", "tm-things-deadline"]);
+    expect(item.querySelector(".tm-things-lead .tm-things-today")).not.toBeNull();
+    item.querySelector<HTMLElement>(".tm-things-deadline")!.click();
+    expect(edit).toHaveBeenCalledWith("deadline");
+  });
+
   it("edits title and notes in place and lists subtasks as a checklist", () => {
     const { element, options } = card("- [ ] Task 1 2026-09-19 {2026-09-30} #[[Errand]] #[[Office]]\n  - Some notes\n  - [ ] Subtask\n  - [x] Another subtask");
     const title = element.querySelector<HTMLInputElement>(".tm-things-card-title")!;
     const notes = element.querySelector<HTMLTextAreaElement>(".tm-things-card-notes")!;
     expect(title.value).toBe("Task 1");
     expect(notes.value).toBe("Some notes");
-    expect(Array.from(element.querySelectorAll(".tm-things-card-check")).map(item => item.textContent)).toEqual(["Subtask", "Another subtask"]);
+    expect(Array.from(element.querySelectorAll(".tm-things-card-check-title")).map(item => item.textContent)).toEqual(["Subtask", "Another subtask"]);
     title.value = "Task one";
     title.dispatchEvent(new Event("input"));
     expect(options.change).toHaveBeenLastCalledWith({ title: "Task one", notes: "Some notes" });

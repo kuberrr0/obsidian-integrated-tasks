@@ -1350,6 +1350,10 @@ export class TaskMainView extends ItemView {
     const expanded = this.expanded!;
     renderThingsTaskCard(list, {
       task, depth, draft: expanded, tags: this.rowTags(task),
+      childDetails: child => ({
+        grouping: "none", dateFormat: this.plugin.dateFormat(), show: property => property !== "defer", tags: this.rowTags(child),
+        todayMarker: this.state.mode !== "today", edit: property => void this.editFromCard(child.id, property), openSource: () => {}
+      }),
       children: task.childIds.map(id => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child)),
       change: draft => { if (this.expanded?.id === task.id) this.expanded = { id: task.id, ...draft }; },
       toggle: (item, completed) => {
