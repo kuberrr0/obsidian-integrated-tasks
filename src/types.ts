@@ -140,6 +140,10 @@ export interface TaskManagerSettings {
   completionDates: boolean;
   /** Weekly review sections marked as reviewed, for the ISO week they were reviewed in. */
   weeklyReview: { week: string; reviewed: string[] };
+  /** Folders and notes whose tasks are left out of every view. */
+  ignoredPaths: string[];
+  /** Tags whose notes (frontmatter) and tasks are left out of every view. */
+  ignoredTags: string[];
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
@@ -159,7 +163,9 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   showUndoNotices: true,
   density: "comfortable",
   completionDates: false,
-  weeklyReview: { week: "", reviewed: [] }
+  weeklyReview: { week: "", reviewed: [] },
+  ignoredPaths: [],
+  ignoredTags: []
 };
 
 export type TaskEditorPreset = Partial<Omit<TaskDraft, "indent">>;

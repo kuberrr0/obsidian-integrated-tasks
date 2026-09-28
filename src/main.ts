@@ -1,3 +1,4 @@
+import { parseIgnoreList } from "./ignore";
 import { noteRecurringCompletion } from "./note-recurring-completion";
 import { isRepeatingTask, recurringFile, type RecurringOutcome } from "./recurring-task";
 import { shiftCalendar, type CalendarScope } from "./calendar";
@@ -278,6 +279,10 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings.showUndoNotices = this.settings.showUndoNotices !== false;
     this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
     this.settings.completionDates = this.settings.completionDates === true;
+    for (const key of ["ignoredPaths", "ignoredTags"] as const) {
+      const list: unknown = this.settings[key];
+      this.settings[key] = Array.isArray(list) ? parseIgnoreList(list.filter((item): item is string => typeof item === "string").join("\n"), key === "ignoredTags") : [];
+    }
   }
 
   async saveSettings(): Promise<void> {

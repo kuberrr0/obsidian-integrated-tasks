@@ -1,3 +1,4 @@
+import { frontmatterTags, isIgnoredPath, isIgnoredTag, visibleTasks } from "./ignore";
 import { parseProjectProperties, parseProjectParent } from "./project-properties";
 import { scanSections, splitDestination, type NoteHeading } from "./structure";
 import { getAllTags, type App, type EventRef, type Events, TFile } from "obsidian";
@@ -24,7 +25,10 @@ const SAVE_MAX_DELAY_MS = 10_000;
 type ProjectEntry = ProjectProperties & { parent?: string };
 
 export class TaskIndex {
+  // Every task parsed from each note; the ignore rules apply on top (see visible()).
   private readonly tasksByPath = new Map<string, Task[]>();
+  private readonly visibleByPath = new Map<string, Task[]>();
+  private readonly ignoredNotes = new Set<string>();
   private readonly headingsByPath = new Map<string, NoteHeading[]>();
   private readonly projectProperties = new Map<string, ProjectEntry>();
   private readonly archivedPaths = new Set<string>();
@@ -99,8 +103,10 @@ export class TaskIndex {
       }
     }));
     this.listen(metadataCache, metadataCache.on("changed", (file) => {
-      // Every save reaches here; only project membership and properties come from metadata.
-      if (file.extension === "md" && !this.isDeleted(file, file.path) && this.updateProjectStatus(file)) this.emit();
+      // Every save reaches here; only project membership, properties and ignored frontmatter tags come from metadata.
+      if (file.extension !== "md" || this.isDeleted(file, file.path)) return;
+      const ignoredChanged = this.updateIgnored(file);
+      if (this.updateProjectStatus(file) || ignoredChanged) this.emit();
     }));
     const cached = await loading;
     // All Tasks and project/tag discovery require every Markdown note.
@@ -151,8 +157,50 @@ export class TaskIndex {
   }
 
   private sortedAllTasks(): Task[] {
-    this.sortedTasks ??= sortTasks([...this.tasksByPath.values()].flat());
+    this.sortedTasks ??= sortTasks([...this.tasksByPath.keys()].flatMap(path => this.visible(path)));
     return this.sortedTasks;
+  }
+
+  /** A note's tasks minus those the ignore rules leave out. */
+  private visible(path: string): Task[] {
+    if (this.ignoredNotes.has(path)) return [];
+    let tasks = this.visibleByPath.get(path);
+    if (!tasks) {
+      tasks = visibleTasks(this.tasksByPath.get(path) ?? [], this.getSettings().ignoredTags ?? []);
+      this.visibleByPath.set(path, tasks);
+    }
+    return tasks;
+  }
+
+  /** Whether the whole note is ignored: by folder or note path, or by a tag in its frontmatter. */
+  private noteIgnored(file: TFile): boolean {
+    const { ignoredPaths = [], ignoredTags = [] } = this.getSettings();
+    if (isIgnoredPath(file.path, ignoredPaths)) return true;
+    if (!ignoredTags.length) return false;
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+    return frontmatterTags(frontmatter).some(tag => isIgnoredTag(tag, ignoredTags));
+  }
+
+  /** Returns whether the note's ignored state changed. */
+  private updateIgnored(file: TFile): boolean {
+    const ignored = this.noteIgnored(file);
+    if (ignored === this.ignoredNotes.has(file.path)) return false;
+    if (ignored) this.ignoredNotes.add(file.path); else this.ignoredNotes.delete(file.path);
+    this.invalidateTasks();
+    return true;
+  }
+
+  /** Re-apply changed ignore settings to every note, without reading any note again. */
+  applyIgnoreRules(): void {
+    this.visibleByPath.clear();
+    this.ignoredNotes.clear();
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (this.isDeleted(file, file.path)) continue;
+      if (this.noteIgnored(file)) this.ignoredNotes.add(file.path);
+      this.updateProjectStatus(file);
+    }
+    this.invalidateTasks();
+    this.emit();
   }
 
   private listen(emitter: Events, eventRef: EventRef): void {
@@ -174,6 +222,8 @@ export class TaskIndex {
 
   private forget(path: string): void {
     this.queueDelete([path]);
+    this.visibleByPath.delete(path);
+    this.ignoredNotes.delete(path);
     this.scanTokens.delete(path);
     this.indexedContent.delete(path);
     this.tasksByPath.delete(path);
@@ -189,7 +239,7 @@ export class TaskIndex {
   }
 
   tasksForPath(path: string): Task[] {
-    return this.tasksByPath.get(path) ?? [];
+    return this.visible(path);
   }
 
   taskById(id: string): Task | undefined {
@@ -336,8 +386,9 @@ export class TaskIndex {
       if (this.destroyed) return;
       const scanned = await this.scanFile(file, entry.force);
       if (this.destroyed || this.isDeleted(file, file.path)) return;
+      const ignoredChanged = this.updateIgnored(file);
       const statusChanged = this.updateProjectStatus(file);
-      if (scanned || statusChanged) this.emit();
+      if (scanned || statusChanged || ignoredChanged) this.emit();
     });
     this.pendingRefreshes.set(path, entry);
     return entry.promise;
@@ -359,7 +410,11 @@ export class TaskIndex {
     }
     if (this.destroyed) return false;
     // Update in place: notes created while scanning already have their status from the create event.
-    for (const file of files) if (!this.isDeleted(file, file.path)) this.updateProjectStatus(file);
+    for (const file of files) {
+      if (this.isDeleted(file, file.path)) continue;
+      this.updateIgnored(file);
+      this.updateProjectStatus(file);
+    }
     return true;
   }
 
@@ -374,6 +429,7 @@ export class TaskIndex {
     // No indexedContent is stored, so the next modify or rescan parses the note for real.
     this.headingsByPath.set(path, note.headings);
     this.tasksByPath.set(path, restoreTasks(note));
+    this.visibleByPath.delete(path);
     this.invalidateTasks();
     return true;
   }
@@ -404,6 +460,7 @@ export class TaskIndex {
     this.indexedContent.set(path, { content, day });
     this.headingsByPath.set(path, headings);
     this.tasksByPath.set(path, tasks);
+    this.visibleByPath.delete(path);
     this.invalidateTasks();
     if (this.cache && mtime !== undefined && size !== undefined) {
       this.unsavedDeletes.delete(path);
@@ -462,7 +519,8 @@ export class TaskIndex {
     if (archived) this.archivedPaths.add(path);
     else this.archivedPaths.delete(path);
     const previous = this.projectProperties.get(path);
-    if (tags?.some((tag) => tag === "#project" || tag.startsWith("#project/"))) {
+    // An ignored note is not a project either.
+    if (!this.ignoredNotes.has(path) && tags?.some((tag) => tag === "#project" || tag.startsWith("#project/"))) {
       const wasProject = this.projectPaths.has(path);
       const properties: ProjectEntry = { ...parseProjectProperties(cache?.frontmatter, this.getDateFormat()), parent: parseProjectParent(cache?.frontmatter) };
       this.projectPaths.add(path);

@@ -1,3 +1,4 @@
+import { parseIgnoreList } from "./ignore";
 import { Notice, PluginSettingTab, Setting, type App, type SettingDefinitionRender } from "obsidian";
 import type TaskManagerPlugin from "./main";
 
@@ -96,6 +97,18 @@ export class TaskManagerSettingTab extends PluginSettingTab {
             catch (error) { new Notice(String(error)); }
             finally { button.setDisabled(false); }
           })); }
+      },
+      {
+        section: "Task defaults",
+        name: "Ignored folders and notes",
+        desc: "Tasks in these folders and notes are left out of every task view, list, and count. One per line, such as Templates/ or Journal/Private.md.",
+        render: (setting: Setting) => this.renderIgnoreSetting(setting, "ignoredPaths", "Templates/\nArchive/")
+      },
+      {
+        section: "Task defaults",
+        name: "Ignored tags",
+        desc: "Leave out notes with these tags in their properties, and tasks tagged with them. Ignoring a tag also ignores its nested tags. One per line, such as template or someday.",
+        render: (setting: Setting) => this.renderIgnoreSetting(setting, "ignoredTags", "template\nsomeday")
       },
       {
         section: "Task defaults",
@@ -202,6 +215,19 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         definition.render(setting);
       }
     }
+  }
+
+  private renderIgnoreSetting(setting: Setting, key: "ignoredPaths" | "ignoredTags", placeholder: string): void {
+    setting.addTextArea(area => {
+      area.setPlaceholder(placeholder).setValue((this.plugin.settings[key] ?? []).join("\n")).onChange(value => {
+        this.plugin.settings[key] = parseIgnoreList(value, key === "ignoredTags");
+        this.applySoon(key, async () => {
+          await this.plugin.saveSettings();
+          this.plugin.index.applyIgnoreRules();
+        });
+      });
+      area.inputEl.rows = 3;
+    });
   }
 
   private renderInboxSetting(setting: Setting): void {

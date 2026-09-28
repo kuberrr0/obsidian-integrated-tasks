@@ -25,6 +25,7 @@ vi.mock("obsidian", () => ({
     addButton(callback: (control: unknown) => void) { callback(this.control()); return this; }
     addToggle(callback: (control: unknown) => void) { callback(this.control()); return this; }
     addText(callback: (control: unknown) => void) { callback(this.control()); return this; }
+    addTextArea(callback: (control: unknown) => void) { callback(this.control()); return this; }
     addDropdown(callback: (control: unknown) => void) { callback(this.control()); return this; }
     control() {
       const row = this.row;
@@ -53,7 +54,8 @@ function setup() {
     refreshViews: vi.fn(),
     setDateFormat: vi.fn().mockResolvedValue(undefined),
     updateTaskDates: vi.fn().mockResolvedValue(undefined),
-    setTaskMode: vi.fn().mockResolvedValue(undefined)
+    setTaskMode: vi.fn().mockResolvedValue(undefined),
+    index: { applyIgnoreRules: vi.fn() }
   };
   const tab = new TaskManagerSettingTab({} as App, plugin as unknown as TaskManagerPlugin);
   return { plugin, tab };
@@ -65,7 +67,7 @@ describe("settings compatibility", () => {
     const groups = tab.getSettingDefinitions();
     expect(groups.map(group => group.heading)).toEqual(["Task defaults", "Appearance", "List layout", "Kanban layout", "Calendar layout", "Dates"]);
     const definitions = groups.flatMap(group => group.items);
-    expect(definitions.map(({ name }) => name).sort()).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Import from the Tasks plugin", "Record completion dates", "Show undo notices", "Task highlight on hover", "Density", "Show task counts in group headings", "Show subtask counts", "Wrap task titles", "Wrap task titles", "Wrap task titles"].sort());
+    expect(definitions.map(({ name }) => name).sort()).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Ignored folders and notes", "Ignored tags", "Import from the Tasks plugin", "Record completion dates", "Show undo notices", "Task highlight on hover", "Density", "Show task counts in group headings", "Show subtask counts", "Wrap task titles", "Wrap task titles", "Wrap task titles"].sort());
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();
@@ -139,7 +141,24 @@ describe("settings compatibility", () => {
   });
 });
 
- it("changes the format once typing pauses and runs the date updater with a disabled button until completion", async () => {
+ it("saves ignored folders and tags once typing pauses, and re-applies them to the index", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => { vi.useRealTimers(); });
+    const { tab, plugin } = setup();
+    tab.display();
+    const folders = rows.find(row => row.name === "Ignored folders and notes")!;
+    const tags = rows.find(row => row.name === "Ignored tags")!;
+    expect(folders.value).toBe("");
+    await folders.change!("Templates/\n Archive ");
+    await tags.change!("#Template, someday");
+    expect(plugin.settings).toMatchObject({ ignoredPaths: ["Templates/", "Archive"], ignoredTags: ["template", "someday"] });
+    expect(plugin.index.applyIgnoreRules).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(plugin.saveSettings).toHaveBeenCalled();
+    expect(plugin.index.applyIgnoreRules).toHaveBeenCalled();
+  });
+
+  it("changes the format once typing pauses and runs the date updater with a disabled button until completion", async () => {
     vi.useFakeTimers();
     onTestFinished(() => { vi.useRealTimers(); });
     const { tab, plugin } = setup();
