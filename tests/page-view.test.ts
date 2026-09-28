@@ -184,7 +184,7 @@ it("writes a subtask typed in the card and, after Enter, opens the next one belo
   const internals = view as unknown as { expanded?: { id: string; title: string; notes: string; subtask?: unknown }; cardFocus?: string; addCardSubtask(id: string, title: string, after: unknown, next: boolean): Promise<void> };
   internals.expanded = { id: tasks[0].id, title: "A", notes: "" };
   await internals.addCardSubtask(tasks[0].id, "First step", undefined, true);
-  expect(addSubtask).toHaveBeenCalledExactlyOnceWith(tasks[0], "First step", undefined);
+  expect(addSubtask).toHaveBeenCalledExactlyOnceWith(tasks[0], expect.objectContaining({ title: "First step" }), undefined);
   expect(plugin.index.refreshPath).toHaveBeenCalledWith("Work.md");
   expect(internals.expanded.subtask).toEqual({ after: undefined, text: "" });
   expect(internals.cardFocus).toBe("new");
@@ -192,6 +192,18 @@ it("writes a subtask typed in the card and, after Enter, opens the next one belo
   internals.expanded = { id: tasks[0].id, title: "A", notes: "" };
   await internals.addCardSubtask(tasks[0].id, "Second step", undefined, false);
   expect(internals.expanded.subtask).toBeUndefined();
+  // Properties typed into a new subtask are parsed, dates included.
+  await internals.addCardSubtask(tasks[0].id, "Third step p2 #[[Errand]]", undefined, false);
+  expect(addSubtask).toHaveBeenLastCalledWith(tasks[0], expect.objectContaining({ title: "Third step", priority: 2, tags: ["Errand"] }), undefined);
+});
+
+it("applies properties typed into a card title when the card closes", async () => {
+  const { view, tasks, plugin, update } = selectionView();
+  plugin.settings.style = "things";
+  const internals = view as unknown as { expanded?: { id: string; title: string; notes: string }; collapseCard(): Promise<void> };
+  internals.expanded = { id: tasks[0].id, title: "A p1 #[[Errand]] 30m", notes: "" };
+  await internals.collapseCard();
+  expect(update).toHaveBeenCalledExactlyOnceWith(tasks[0], expect.objectContaining({ title: "A", priority: 1, tags: ["Errand"], durationMinutes: 30 }));
 });
 
 it("right-click on an already selected task opens task properties for the selection", () => {

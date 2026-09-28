@@ -19,7 +19,7 @@ import {
   updateTaskInContent
 } from "./markdown";
 import { STATUS_LABELS, draftStatus, isClosedStatus, statusFromLabel } from "./task-status";
-import type { Task, TaskDraft, TaskManagerSettings, TaskStatus } from "./types";
+import type { ParsedTaskMetadata, Task, TaskDraft, TaskManagerSettings, TaskStatus } from "./types";
 
 /** One user action's effect on notes, kept so the action can be undone as a unit. */
 export interface TaskChange {
@@ -169,14 +169,14 @@ export class TaskStore {
    * Adds a to-do subtask to `parent`: right after `after` (one of its subtasks, keeping that subtask's
    * indentation) or, with no `after`, at the end of the parent's block one level deeper.
    */
-  addSubtask(parent: Task, title: string, after?: Task): Promise<void> {
-    return this.run(`Added ${taskName(title)}`, async () => {
+  addSubtask(parent: Task, subtask: ParsedTaskMetadata, after?: Task): Promise<void> {
+    return this.run(`Added ${taskName(subtask.title)}`, async () => {
       const file = this.requireFile(parent.path);
       await this.process(file, content => {
         const anchor = liveTaskBlock(content, after ?? parent, this.getDateFormat(), this.getSectionHeadingLevel());
         const leading = /^[ \t]*/.exec(anchor.lines[0])![0];
         const indent = after ? leading : leading + " ".repeat(TASK_INDENT);
-        const line = indent + serializeTask({ title, completed: false, destination: parent.path, indent: 0 }, this.getDateFormat(), this.getLinkDates());
+        const line = indent + serializeTask({ ...subtask, status: "todo", completed: false, destination: parent.path, indent: 0 }, this.getDateFormat(), this.getLinkDates());
         const lines = content.split("\n");
         lines.splice(anchor.end, 0, line);
         return lines.join("\n");

@@ -11,7 +11,8 @@ import { renderDescriptionIndicator } from "./task-description-indicator";
 import { cloneTaskFilters } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
-import { draftFromTask } from "./task-draft";
+import { draftFromTask, draftFromTitle, draftMatchesTask } from "./task-draft";
+import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
 import { updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
@@ -1379,13 +1380,15 @@ export class TaskMainView extends ItemView {
     const card = this.expanded;
     const task = card && this.plugin.index.taskById(card.id);
     if (!card || !task) return;
-    const title = card.title.trim() || task.title;
+    // Tokens typed into the title (dates, times, p1, #[[tags]], ~[[Note]]…) set properties, as in the task editor.
+    const draft = draftFromTitle(task, card.title, new Date(), this.plugin.dateFormat());
     const notes = card.notes.trim() === cardNotes(task.description).trim() ? undefined : card.notes;
-    if (title === task.title && notes === undefined) return;
+    if (draftMatchesTask(task, draft) && notes === undefined) return;
     try {
-      await this.plugin.store.update(task, { ...draftFromTask(task), title, description: notes });
+      await this.plugin.store.update(task, { ...draft, description: notes });
       await this.plugin.index.refreshPath(task.path);
-      if (this.expanded?.id === card.id) this.expanded = { ...this.expanded, title, notes: notes ?? this.expanded.notes };
+      if (draft.destination !== draftFromTask(task).destination) await this.plugin.index.refreshPath(draft.destination.split("#")[0]);
+      if (this.expanded?.id === card.id) this.expanded = { ...this.expanded, title: draft.title, notes: notes ?? this.expanded.notes };
     } catch (cause) {
       new Notice(cause instanceof Error ? cause.message : "Could not save the task.");
     }
@@ -1430,7 +1433,10 @@ export class TaskMainView extends ItemView {
       edit: property => void this.editFromCard(task.id, property),
       collapse: () => void this.collapseCard(),
       renameChild: (child, title) => {
-        void this.plugin.store.update(child, { ...draftFromTask(child), title })
+        // A subtask stays under its parent: its title's tokens set properties but do not move it.
+        const draft = draftFromTitle(child, title, new Date(), this.plugin.dateFormat(), false);
+        if (draftMatchesTask(child, draft)) return;
+        void this.plugin.store.update(child, draft)
           .then(() => this.plugin.index.refreshPath(child.path))
           .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not rename the subtask."); });
       },
@@ -1443,7 +1449,9 @@ export class TaskMainView extends ItemView {
     const parent = this.plugin.index.taskById(parentId);
     if (!parent) return;
     try {
-      await this.plugin.store.addSubtask(parent, title, after);
+      // Everything in a new subtask was just typed, so its natural-language dates count too.
+      const parsed = parseTaskInput(title, new Date(), this.plugin.dateFormat());
+      await this.plugin.store.addSubtask(parent, parsed?.title.trim() ? parsed : { title }, after);
       await this.plugin.index.refreshPath(parent.path);
     } catch (cause) {
       new Notice(cause instanceof Error ? cause.message : "Could not add the subtask.");

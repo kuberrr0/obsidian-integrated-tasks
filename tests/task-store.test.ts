@@ -60,7 +60,7 @@ describe("adding subtasks", () => {
   it("adds the first subtask one level under the parent, after its notes", async () => {
     const content = "- [ ] Parent\n    - A note\n- [ ] Next\n";
     const { store, read } = setup(content);
-    await store.addSubtask(scanTasks("Project.md", content)[0], "First step");
+    await store.addSubtask(scanTasks("Project.md", content)[0], { title: "First step" });
     expect(read()).toBe("- [ ] Parent\n    - A note\n    - [ ] First step\n- [ ] Next\n");
   });
 
@@ -68,9 +68,17 @@ describe("adding subtasks", () => {
     const content = "- [ ] Parent\n\t- [ ] One\n\t\t- [ ] One child\n\t- [ ] Two\n";
     const { store, read } = setup(content);
     const [parent, one] = scanTasks("Project.md", content);
-    await store.addSubtask(parent, "One and a half", one);
+    await store.addSubtask(parent, { title: "One and a half" }, one);
     expect(read()).toBe("- [ ] Parent\n\t- [ ] One\n\t\t- [ ] One child\n\t- [ ] One and a half\n\t- [ ] Two\n");
   });
+});
+
+it("writes a subtask's typed properties with it", async () => {
+  const content = "- [ ] Parent\n";
+  const { store, read } = setup(content, "top", false);
+  await store.addSubtask(scanTasks("Project.md", content)[0], { title: "Buy milk", scheduledDate: "2026-09-20", priority: 1 });
+  const [, child] = scanTasks("Project.md", read());
+  expect(child).toMatchObject({ title: "Buy milk", scheduledDate: "2026-09-20", priority: 1, indent: 4, status: "todo" });
 });
 
 describe("task deletion", () => {
