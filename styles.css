@@ -2207,8 +2207,8 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 }
 .tm-kanban .tm-things-board-card .tm-things-card-properties { gap: 5px; margin: 0; }
 .tm-kanban .tm-things-board-card .tm-things-secondary { gap: 6px; }
-/* In a narrow column the "since …" and "N days left" notes sit under their label, not beside it. */
+/* Board cards keep property lines short: no "since …", "N days ago/left" or priority code beside the labels.
+   The icon stays beside the label's first line when a long label wraps. */
 .tm-kanban .tm-things-board-card .tm-things-card-property { display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 7px; align-items: start; }
 .tm-kanban .tm-things-board-card .tm-things-card-icon { margin-top: 2px; }
-.tm-kanban .tm-things-board-card .tm-things-card-extra { grid-column: 2; font-size: var(--font-ui-smaller); }
-.tm-kanban .tm-things-board-card .tm-things-card-property:is(.is-p1, .is-p2, .is-p3) .tm-things-card-extra { display: none; }
+.tm-kanban .tm-things-board-card .tm-things-card-extra { display: none; }
