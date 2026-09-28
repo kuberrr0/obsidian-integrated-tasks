@@ -1873,8 +1873,10 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   border-width: 1px;
 }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content { gap: 1px; }
-.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary { flex-wrap: wrap; gap: 3px 6px; }
-.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) button.tm-task-title { font-weight: var(--font-medium); }
+/* One line: the title gives way (wrapping or truncating per the title setting); everything else keeps its size. */
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary { flex-wrap: nowrap; align-items: center; gap: 6px; }
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > * { flex-shrink: 0; }
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > button.tm-task-title { flex: 0 1 auto; min-width: 0; font-weight: var(--font-medium); }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-description-indicator { margin-inline-start: -2px; }
 
 .tm-things-lead { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
