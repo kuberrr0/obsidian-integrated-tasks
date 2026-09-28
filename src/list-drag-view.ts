@@ -8,7 +8,7 @@ interface DropIntent {
   placement?: ListPlacement;
   indicator: string;
   /** Where the drop gap goes, and how deeply it is indented. */
-  gap?: { element: HTMLElement; where: "before" | "after" | "end"; depth: number };
+  gap?: { element: HTMLElement; where: "before" | "after" | "start" | "end"; depth: number };
 }
 
 /** How long each drag motion takes: lifting, a gap moving, rows sliding, and settling on drop. */
@@ -112,6 +112,7 @@ export class ListDragController {
       this.gap.style.setProperty("--tm-depth", String(place.depth));
       if (place.where === "before") place.element.before(this.gap);
       else if (place.where === "after") place.element.after(this.gap);
+      else if (place.where === "start") place.element.prepend(this.gap);
       else place.element.append(this.gap);
     };
     if (animate) this.slide(place.element.closest(".tm-main-view") ?? doc, move);
@@ -172,10 +173,32 @@ export class ListDragController {
     else gap.remove();
   }
 
+  /**
+   * Over a group's heading in a list, the drop belongs to what is above the heading: after the last
+   * top-level task of the list above (or at the start of this group when nothing is above it).
+   */
+  private aboveHeading(list: HTMLElement, group: ListDropGroup): DropIntent {
+    const lists = Array.from(list.closest(".tm-main-view")?.querySelectorAll<HTMLElement>(".tm-task-list") ?? []);
+    const previous = lists[lists.indexOf(list) - 1];
+    if (!previous) return { group, indicator: "group", gap: { element: list, where: "start", depth: 0 } };
+    const last = Array.from(previous.children).reverse().find((row): row is HTMLElement =>
+      row instanceof HTMLElement && row.classList.contains("tm-task-item") && !row.classList.contains("tm-drag-source")
+      && !row.classList.contains("tm-drag-preview") && depthOf(row) === 0 && this.targets.has(row));
+    if (!last) return this.targets.get(previous)?.({ clientX: 0, clientY: 0 }) ?? { group, indicator: "group", gap: { element: list, where: "start", depth: 0 } };
+    // Resolve as a point just below the row, level with its title: "after", neither nested nor outdented.
+    const title = last.querySelector(".tm-task-primary")?.getBoundingClientRect() ?? last.getBoundingClientRect();
+    return this.targets.get(last)!({ clientX: title.left, clientY: last.getBoundingClientRect().bottom - 1 });
+  }
+
   group(element: HTMLElement, group: ListDropGroup): void {
-    // Dropped on a group but not on a row: the gap waits at the end of the group's list.
+    // Dropped on a group but not on a row: the gap waits at the end of the group's list,
+    // except over the heading of a list group, which belongs to what is above it.
     const list = (): HTMLElement => element.matches(".tm-task-list") ? element : element.querySelector<HTMLElement>(".tm-task-list") ?? element;
-    this.targets.set(element, () => ({ group, indicator: "group", gap: { element: list(), where: "end", depth: 0 } }));
+    this.targets.set(element, point => {
+      const items = list();
+      const heading = items !== element && !element.closest(".tm-kanban") && point.clientY < items.getBoundingClientRect().top;
+      return heading ? this.aboveHeading(items, group) : { group, indicator: "group", gap: { element: items, where: "end", depth: 0 } };
+    });
     element.addEventListener("dragover", event => {
       if (!this.taskId || this.busy) return;
       event.preventDefault(); event.stopPropagation();

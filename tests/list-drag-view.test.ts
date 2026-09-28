@@ -136,6 +136,62 @@ it("waits at the end of a group's list when dropped on the group, not a row", as
   await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], group, undefined, undefined));
 });
 
+/** A task list above a titled section, as a project page lays them out. */
+function sections(kanban = false) {
+  const tasks = scanTasks("Work.md", "- [ ] A\n  - [ ] A child\n- [ ] B\n- [ ] C");
+  const drop = vi.fn().mockResolvedValue(undefined);
+  const controller = new ListDragController(id => tasks.find(task => task.id === id), drop, !kanban);
+  const view = document.body.createDiv({ cls: "tm-main-view" });
+  const root = kanban ? view.createDiv({ cls: "tm-kanban" }) : view;
+  const top = { destination: "Work.md" }, plan = { destination: "Work.md#Plan" };
+  const first = root.createDiv({ cls: "tm-task-list" });
+  const section = root.createEl("section", { cls: "tm-section" });
+  const heading = section.createEl("h2", { text: "Plan" });
+  const second = section.createDiv({ cls: "tm-task-list" });
+  // The heading sits above the section's list, which starts lower down.
+  second.style.top = "100px";
+  const row = (list: HTMLElement, task: Task, depth: number, group: typeof top) => {
+    const element = list.createDiv({ cls: "tm-task-row tm-task-item", attr: { "data-task-id": task.id } });
+    element.style.setProperty("--tm-depth", String(depth));
+    controller.row(element, element.createDiv({ cls: "tm-task-primary" }), task, group);
+    return element;
+  };
+  const rows = [row(first, tasks[0], 0, top), row(first, tasks[1], 1, top), row(second, tasks[2], 0, plan), row(second, tasks[3], 0, plan)];
+  controller.group(first, top);
+  controller.group(section, plan);
+  controller.group(second, plan);
+  let under: Element | null = heading;
+  document.elementFromPoint = () => under;
+  return { tasks, rows, drop, first, second, heading, point: (element: Element | null) => { under = element; } };
+}
+
+it("drops a task hovering a group's heading after the last task above the heading, not into the group", async () => {
+  const { tasks, rows, drop } = sections();
+  fire(rows[3], "pointerdown");
+  fire(rows[3], "pointermove", { clientY: 50 });
+  // After A's whole subtree, at the top level, in the list above the heading.
+  expect(gap()!.previousElementSibling).toBe(rows[1]);
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
+  fire(rows[3], "pointerup", { clientY: 50 });
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[3], { destination: "Work.md" }, tasks[0], "after"));
+});
+
+it("starts the group when nothing is above its heading, and leaves board columns as they are", () => {
+  const list = sections();
+  list.first.remove();
+  fire(list.rows[3], "pointerdown");
+  fire(list.rows[3], "pointermove", { clientY: 50 });
+  expect(list.second.firstElementChild).toBe(gap());
+  fire(list.rows[3], "pointercancel");
+  document.body.empty();
+
+  const board = sections(true);
+  fire(board.rows[3], "pointerdown");
+  fire(board.rows[3], "pointermove", { clientY: 50 });
+  expect(board.second.lastElementChild).toBe(gap());
+  fire(board.rows[3], "pointercancel");
+});
+
 it("cleans up after a drop that redraws nothing", async () => {
   const { rows, drop, point } = list("- [ ] A\n- [ ] B");
   fire(rows[0].row, "pointerdown");
