@@ -128,6 +128,8 @@ export interface TaskManagerSettings {
   sectionHeadingLevel: number;
   showGroupTaskCounts: boolean;
   showSubtaskCounts: boolean;
+  /** List subtasks as their own rows under their task; otherwise they live in the task's card. */
+  showSubtasks: boolean;
   taskHoverHighlight: "none" | "title" | "background" | "all";
   wrapTaskTitles: boolean;
   wrapCalendarTaskTitles: boolean;
@@ -160,6 +162,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   sectionHeadingLevel: 1,
   showGroupTaskCounts: false,
   showSubtaskCounts: false,
+  showSubtasks: false,
   taskHoverHighlight: "none",
   wrapTaskTitles: true,
   wrapCalendarTaskTitles: false,
@@ -170,7 +173,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   newTaskPosition: "top",
   showUndoNotices: true,
   density: "comfortable",
-  style: "griply",
+  style: "things",
   completionDates: false,
   weeklyReview: { week: "", reviewed: [] },
   ignoredPaths: [],

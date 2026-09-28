@@ -98,6 +98,8 @@ export class TaskMainView extends ItemView {
   private listsRendered = 0;
   /** Rows the user loaded per list, kept across re-renders so a list never shrinks under them. */
   private listRows = new Map<string, number>();
+  /** Folded groups ("group:…") and tasks ("task:…"); saved with the view, reset on another page. */
+  private folded = new Set<string>();
   private rowObservers: IntersectionObserver[] = [];
   private renderFrame?: number;
   private renderGeneration = 0;
@@ -138,7 +140,7 @@ export class TaskMainView extends ItemView {
     return TITLES[this.state.mode];
   }
   getIcon(): string { return this.state.mode === "projects" ? "target" : "circle-check-big"; }
-  getState(): Record<string, unknown> { return { ...this.state, layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
+  getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
 
   async setState(state: Record<string, unknown>): Promise<void> {
     const mode = state.mode;
@@ -160,7 +162,9 @@ export class TaskMainView extends ItemView {
       this.grouping = "default";
       this.filtersExpanded = false;
       this.listRows.clear();
+      this.folded.clear();
     }
+    if (Array.isArray(state.folded)) this.folded = new Set(state.folded.filter((key): key is string => typeof key === "string"));
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode as TaskViewMode;
     this.state.smartListId = typeof state.smartListId === "string" ? state.smartListId : undefined;
     this.state.tag = typeof state.tag === "string" && state.tag ? state.tag : undefined;
@@ -624,7 +628,7 @@ export class TaskMainView extends ItemView {
       this.renderGroupAddButton(title, heading.name, target);
       this.listDrag?.group(section, target);
       this.addMoveTarget(heading.name, target);
-      this.renderTaskList(section, group, target);
+      if (!this.renderGroupFold(section, title, `group:${path}#${heading.name}`, heading.name)) this.renderTaskList(section, group, target);
     }
     if (!tasks.length && !headings.length) this.renderEmpty(container);
   }
@@ -863,8 +867,31 @@ export class TaskMainView extends ItemView {
     if (this.plugin.settings.showGroupTaskCounts) heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
     this.renderGroupAddButton(heading, title, target);
     if (target) { this.listDrag?.group(section, target); this.addMoveTarget(title, target); }
-    this.renderTaskList(section, tasks, target);
+    if (!this.renderGroupFold(section, heading, `group:${title}`, title)) this.renderTaskList(section, tasks, target);
   }
+
+  /** Folds a group from a chevron before its heading; returns whether it is folded (its tasks then stay hidden). */
+  private renderGroupFold(section: HTMLElement, heading: HTMLElement, key: string, title: string): boolean {
+    if (this.layout === "kanban") return false;
+    const folded = this.folded.has(key);
+    section.toggleClass("is-folded", folded);
+    const button = heading.createEl("button", { cls: "clickable-icon tm-fold-toggle tm-group-fold", attr: {
+      type: "button", "aria-expanded": String(!folded), "aria-label": `${folded ? "Unfold" : "Fold"} ${title}`, title: folded ? "Unfold" : "Fold", "data-tm-focus-key": `fold:${key}`
+    } });
+    setIcon(button, "chevron-right");
+    button.addEventListener("click", event => { event.stopPropagation(); this.toggleFold(key); });
+    heading.prepend(button);
+    return folded;
+  }
+
+  private toggleFold(key: string): void {
+    if (!this.folded.delete(key)) this.folded.add(key);
+    // Saved with the view (getState), so folds survive a reload.
+    this.app.workspace.requestSaveLayout?.();
+    this.renderTaskResults();
+  }
+
+  private taskFoldKey(task: Task): string { return `task:${task.path}#${task.title}`; }
 
   private addMoveTarget(title: string, target: ListDropGroup): void {
     this.moveTargets.set(this.listKey(target), { title, target });
@@ -880,13 +907,22 @@ export class TaskMainView extends ItemView {
     const key = this.listKey(target);
     const floor = this.listsRendered++ < MIN_ROW_LISTS ? MIN_LIST_ROWS : 0;
     const visibleIds = new Set(tasks.map((task) => task.id));
-    // An open card lists its subtasks itself.
+    // An open card lists its subtasks itself; a folded task hides its subtasks (boards show every card).
     const inCard = this.expandedDescendants();
-    const ordered = orderTaskTree(tasks).filter(task => !inCard.has(task.id));
+    // With subtasks off, a subtask whose task is in the list lives in that task's card instead of a row.
+    const showSubtasks = this.plugin.settings.showSubtasks;
+    const foldable = this.layout !== "kanban" && showSubtasks;
+    const parents = new Set(foldable ? tasks.filter(task => task.childIds.some(id => visibleIds.has(id))).map(task => task.id) : []);
+    const hidden = new Set<string>();
+    const hide = (task: Task): void => {
+      for (const id of task.childIds) if (visibleIds.has(id) && !hidden.has(id)) { hidden.add(id); const child = this.plugin.index.taskById(id); if (child) hide(child); }
+    };
+    for (const task of tasks) if (parents.has(task.id) && this.folded.has(this.taskFoldKey(task))) hide(task);
+    const ordered = orderTaskTree(tasks).filter(task => !inCard.has(task.id) && !hidden.has(task.id) && (showSubtasks || !task.parentId || !visibleIds.has(task.parentId)));
     let rendered = 0;
     const renderRows = (count: number): HTMLElement | undefined => {
       const first = list.childElementCount;
-      for (const task of ordered.slice(rendered, rendered + count)) this.renderTaskRow(list, task, this.depthWithin(task, visibleIds), target);
+      for (const task of ordered.slice(rendered, rendered + count)) this.renderTaskRow(list, task, this.depthWithin(task, visibleIds), target, parents.has(task.id));
       rendered = Math.min(ordered.length, rendered + count);
       return list.children[first] as HTMLElement | undefined;
     };
@@ -1069,6 +1105,12 @@ export class TaskMainView extends ItemView {
       if (event.key === "Escape") { event.preventDefault(); this.clearSelection(); }
       if (event.key === " " || event.key === "Enter") {
         event.preventDefault(); event.stopPropagation();
+        // No separate "active" task: a task focused but not selected is selected first.
+        if (!this.selection.has(task)) {
+          this.selection.click(task, this.visibleTasks);
+          this.updateSelection();
+          return;
+        }
         // Things opens a lone task as a card; a multi-selection still edits its properties together.
         if (this.plugin.settings.style === "things" && this.getSelectedTasks().length <= 1) this.openTask(task);
         else this.editTask(task);
@@ -1106,7 +1148,7 @@ export class TaskMainView extends ItemView {
     return id ? this.visibleTasks.find(task => task.id === id) : undefined;
   }
 
-  private bindRowKeyboard(row: HTMLElement, task: Task, target?: ListDropGroup): void {
+  private bindRowKeyboard(row: HTMLElement, task: Task, target?: ListDropGroup, foldable = false): void {
     // Controls inside a row join the tab order only while focus is in that row.
     const controls = Array.from(row.querySelectorAll<HTMLElement>("input, button, a, [role=button]"));
     for (const control of controls) control.tabIndex = -1;
@@ -1139,19 +1181,29 @@ export class TaskMainView extends ItemView {
         this.moveWithKeyboard(task, row, key, target);
         return;
       }
+      // Left folds a task's subtasks away and Right shows them again.
+      if (foldable && !event.altKey && !event.shiftKey && (key === "ArrowLeft" || key === "ArrowRight")) {
+        const folded = this.folded.has(this.taskFoldKey(task));
+        if (folded === (key === "ArrowRight")) { event.preventDefault(); event.stopPropagation(); this.toggleFold(this.taskFoldKey(task)); }
+        return;
+      }
       if (event.altKey || !["ArrowUp", "ArrowDown", "Home", "End"].includes(key)) return;
       const rows = this.rowElements();
       const index = rows.indexOf(row);
-      const next = key === "ArrowUp" ? rows[index - 1] : key === "ArrowDown" ? rows[index + 1] : key === "Home" ? rows[0] : rows[rows.length - 1];
+      // The arrows move the selection itself; with nothing selected they start at the first (or last) task.
+      const selected = this.getSelectedTasks().length > 0;
+      const next = !selected && (key === "ArrowDown" || key === "Home") ? rows[0]
+        : !selected ? rows[rows.length - 1]
+        : key === "ArrowUp" ? rows[index - 1] : key === "ArrowDown" ? rows[index + 1] : key === "Home" ? rows[0] : rows[rows.length - 1];
       event.preventDefault(); event.stopPropagation();
-      if (!next || next === row) return;
-      const nextTask = this.taskForRow(next);
-      if (event.shiftKey && nextTask) {
-        // Extend from the anchor; start a new range when this row is not selected.
+      const nextTask = next && this.taskForRow(next);
+      if (!next || !nextTask || (next === row && selected)) return;
+      // Shift extends from the anchor; otherwise the next task alone is selected.
+      if (event.shiftKey && selected) {
         if (!this.selection.has(task)) this.selection.click(task, this.visibleTasks);
         this.selection.click(nextTask, this.visibleTasks, true);
-        this.updateSelection();
-      }
+      } else this.selection.click(nextTask, this.visibleTasks);
+      this.updateSelection();
       next.focus();
     });
   }
@@ -1236,7 +1288,7 @@ export class TaskMainView extends ItemView {
     return "none";
   }
 
-  private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup): void {
+  private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup, foldable = false): void {
     if (this.expanded?.id === task.id && this.plugin.settings.style === "things") { this.renderTaskCard(list, task, depth); return; }
     const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
@@ -1302,8 +1354,19 @@ export class TaskMainView extends ItemView {
       if (!lead.childElementCount) lead.remove();
     } else renderTaskDetails(primary, metadata, task, details);
     if (!metadata.childElementCount) metadata.remove();
+    if (foldable) {
+      // A chevron in the row's left gutter folds the subtasks away; it stays visible while folded.
+      const key = this.taskFoldKey(task);
+      const folded = this.folded.has(key);
+      row.toggleClass("is-folded", folded);
+      const fold = row.createEl("button", { cls: "clickable-icon tm-fold-toggle tm-row-fold", attr: {
+        type: "button", "aria-expanded": String(!folded), "aria-label": `${folded ? "Show" : "Hide"} subtasks of ${taskTitleLabel(task.title)}`, title: folded ? "Show subtasks" : "Hide subtasks", "data-tm-focus-key": "fold"
+      } });
+      setIcon(fold, "chevron-right");
+      fold.addEventListener("click", event => { event.stopPropagation(); this.toggleFold(key); });
+    }
     row.createSpan({ cls: "tm-sr-only tm-selected-marker" });
-    this.bindRowKeyboard(row, task, target);
+    this.bindRowKeyboard(row, task, target, foldable);
     this.bindSwipe(row, task, checkbox);
   }
 

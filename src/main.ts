@@ -270,6 +270,7 @@ export default class TaskManagerPlugin extends Plugin {
     if (!Number.isInteger(this.settings.sectionHeadingLevel) || this.settings.sectionHeadingLevel < 1 || this.settings.sectionHeadingLevel > 6) this.settings.sectionHeadingLevel = 1;
     this.settings.showGroupTaskCounts = this.settings.showGroupTaskCounts === true;
     this.settings.showSubtaskCounts = this.settings.showSubtaskCounts === true;
+    this.settings.showSubtasks = this.settings.showSubtasks === true;
     if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
     this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
     this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
@@ -280,7 +281,8 @@ export default class TaskManagerPlugin extends Plugin {
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
     this.settings.showUndoNotices = this.settings.showUndoNotices !== false;
     this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
-    this.settings.style = this.settings.style === "things" ? "things" : "griply";
+    // Things is the default; only an explicit Griply choice keeps Griply.
+    this.settings.style = this.settings.style === "griply" ? "griply" : "things";
     this.settings.completionDates = this.settings.completionDates === true;
     for (const key of ["ignoredPaths", "ignoredTags"] as const) {
       const list: unknown = this.settings[key];

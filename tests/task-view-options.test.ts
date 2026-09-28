@@ -18,6 +18,8 @@ class Element extends EventTarget {
   createSpan(options = {}) { return this.createEl("span", options); }
   setText(text: string) { this.text = text; }
   setAttribute(key: string, value: string) { this.attrs[key] = value; }
+  toggleClass() {}
+  prepend(child: Element) { this.children = [child, ...this.children.filter(el => el !== child)]; }
   empty() { this.children = []; }
   all(): Element[] { return this.children.flatMap(el => [el, ...el.all()]); }
 }

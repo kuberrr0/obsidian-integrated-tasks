@@ -215,21 +215,44 @@ describe("keyboard", () => {
     expect(rows(content())[1].hasAttribute("aria-label")).toBe(false);
   });
 
-  it("moves between rows with arrows and extends the selection with Shift", async () => {
+  it("moves the selection with arrows and extends it with Shift; with nothing selected, arrows start at an end", async () => {
     const { view, content } = await setup([note("A.md", 4)]);
     await view.setState({ mode: "all" });
-    rows(content())[0].focus();
+    const lines = () => view.getSelectedTasks().map(task => task.line);
+    rows(content())[2].focus();
+    // Nothing selected, so nothing is "active": Down starts at the first task.
+    key(rows(content())[2], "ArrowDown");
+    expect(lines()).toEqual([0]);
+    expect(document.activeElement).toBe(rows(content())[0]);
     key(rows(content())[0], "ArrowDown");
+    expect(lines()).toEqual([1]);
     expect(document.activeElement).toBe(rows(content())[1]);
     key(rows(content())[1], "ArrowDown", { shiftKey: true });
-    expect(view.getSelectedTasks().map(task => task.line)).toEqual([1, 2]);
+    expect(lines()).toEqual([1, 2]);
     expect(rows(content())[2].querySelector(".tm-selected-marker")!.textContent).toBe("Selected");
     key(rows(content())[2], "End");
+    expect(lines()).toEqual([3]);
     expect(document.activeElement).toBe(rows(content())[3]);
+    // Escape clears the selection; Up then starts at the last task.
+    key(rows(content())[3], "Escape");
+    expect(lines()).toEqual([]);
+    key(rows(content())[3], "ArrowUp");
+    expect(lines()).toEqual([3]);
+  });
+
+  it("selects a focused task on Enter instead of opening it while nothing is selected", async () => {
+    const { view, content, plugin } = await setup([note("A.md", 2)]);
+    await view.setState({ mode: "all" });
+    rows(content())[1].focus();
+    key(rows(content())[1], "Enter");
+    expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
+    expect(plugin.openEditor).not.toHaveBeenCalled();
+    expect(plugin.openBulkEditor).not.toHaveBeenCalled();
   });
 
   it("reorders, nests and outdents with Alt+arrows", async () => {
-    const { view, content, store, index } = await setup([["A.md", "- [ ] One\n- [ ] Two\n  - [ ] Child\n- [ ] Three"]]);
+    const { view, content, store, index, plugin } = await setup([["A.md", "- [ ] One\n- [ ] Two\n  - [ ] Child\n- [ ] Three"]]);
+    plugin.settings.showSubtasks = true;
     await view.setState({ mode: "all" });
     const byTitle = (title: string) => rows(content()).find(row => row.textContent!.includes(title))!;
     const task = (title: string) => index.allTasks().find(item => item.title === title)!;
@@ -264,7 +287,7 @@ describe("keyboard", () => {
     expect(statusItems.map(item => item.title)).toEqual(["Mark as to do", "Mark as waiting", "Mark as done", "Mark as cancelled"]);
     statusItems[1].click();
     expect(store.setStatus).toHaveBeenLastCalledWith([index.allTasks()[0]], "waiting");
-    rows(content())[1].focus();
+    rows(content())[1].click();
     key(rows(content())[1], "ArrowDown", { shiftKey: true });
     key(rows(content())[2], "m");
     menus[1].items.find(item => item.title === "Mark as cancelled")!.click();
@@ -478,6 +501,70 @@ it("lays board cards out like an open task card in the Things style", async () =
   expect(card.querySelector(".tm-things-lead, .tm-things-trailing")).toBeNull();
   const plain = Array.from(content().querySelectorAll<HTMLElement>(".tm-things-board-card")).find(row => row.textContent!.includes("Plain"))!;
   expect(Array.from(plain.querySelector(".tm-task-content")!.children).map(child => child.className)).toEqual(["tm-task-primary"]);
+});
+
+it("lists a subtask on its own row only with Show subtasks on, or when its task is not in the view", async () => {
+  const { view, content, plugin } = await setup([["A.md", `- [ ] Parent 2026-10-20\n  - [ ] Child ${todayIso()}\n- [ ] Other`]]);
+  const titles = () => Array.from(content().querySelectorAll<HTMLElement>(".tm-task-row .tm-task-title")).map(title => title.textContent);
+  await view.setState({ mode: "all" });
+  expect(titles()).toEqual(["Parent", "Other"]);
+  // Nothing to fold without subtask rows; the parent still marks that it has subtasks.
+  expect(content().querySelector(".tm-row-fold")).toBeNull();
+  expect(content().querySelector(".tm-things-checklist")).not.toBeNull();
+  // Today holds the child but not its task, so the child shows there.
+  await view.setState({ mode: "today" });
+  expect(titles()).toEqual(["Child"]);
+  plugin.settings.showSubtasks = true;
+  await view.setState({ mode: "all" });
+  expect(titles()).toEqual(["Parent", "Child", "Other"]);
+});
+
+describe("folding", () => {
+  const titles = (root: HTMLElement) => Array.from(root.querySelectorAll<HTMLElement>(".tm-task-row .tm-task-title")).map(title => title.textContent);
+
+  it("folds a task's subtasks away from its chevron or with Left and Right", async () => {
+    const { view, content, plugin } = await setup([["A.md", "- [ ] Parent\n  - [ ] Child\n    - [ ] Grandchild\n- [ ] Other"]]);
+    plugin.settings.showSubtasks = true;
+    await view.setState({ mode: "all" });
+    expect(titles(content())).toEqual(["Parent", "Child", "Grandchild", "Other"]);
+    // Only rows with subtasks get a chevron.
+    expect(content().querySelectorAll(".tm-row-fold")).toHaveLength(2);
+    const parent = () => rows(content()).find(row => row.textContent!.includes("Parent"))!;
+    parent().querySelector<HTMLElement>(".tm-row-fold")!.click();
+    expect(titles(content())).toEqual(["Parent", "Other"]);
+    expect(parent().classList.contains("is-folded")).toBe(true);
+    expect(parent().querySelector(".tm-row-fold")!.getAttribute("aria-expanded")).toBe("false");
+    key(parent(), "ArrowRight");
+    expect(titles(content())).toEqual(["Parent", "Child", "Grandchild", "Other"]);
+    key(parent(), "ArrowLeft");
+    expect(titles(content())).toEqual(["Parent", "Other"]);
+  });
+
+  it("folds a group's tasks away from its heading", async () => {
+    const { view, content } = await setup([note("A.md", 2), note("B.md", 1)]);
+    await view.setState({ mode: "all" });
+    const section = (name: string) => Array.from(content().querySelectorAll<HTMLElement>(".tm-section")).find(item => item.querySelector("h2")!.textContent!.includes(name))!;
+    section("A").querySelector<HTMLElement>(".tm-group-fold")!.click();
+    expect(section("A").classList.contains("is-folded")).toBe(true);
+    expect(section("A").querySelectorAll(".tm-task-row")).toHaveLength(0);
+    expect(section("B").querySelectorAll(".tm-task-row")).toHaveLength(1);
+    section("A").querySelector<HTMLElement>(".tm-group-fold")!.click();
+    expect(section("A").querySelectorAll(".tm-task-row")).toHaveLength(2);
+  });
+
+  it("keeps folds across a reload of the same page and drops them on another page", async () => {
+    const { view, content, plugin } = await setup([["A.md", "- [ ] Parent\n  - [ ] Child"]]);
+    plugin.settings.showSubtasks = true;
+    await view.setState({ mode: "all" });
+    content().querySelector<HTMLElement>(".tm-row-fold")!.click();
+    const saved = view.getState();
+    expect(saved.folded).toEqual(["task:A.md#Parent"]);
+    await view.setState({ mode: "today" });
+    await view.setState({ ...saved, folded: undefined, mode: "all" });
+    expect(titles(content())).toEqual(["Parent", "Child"]);
+    await view.setState(saved);
+    expect(titles(content())).toEqual(["Parent"]);
+  });
 });
 
 it("lays tag rows out on one line in the Things style", async () => {

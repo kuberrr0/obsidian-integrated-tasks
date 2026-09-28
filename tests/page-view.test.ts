@@ -252,6 +252,14 @@ it("offers Edit task properties only for an active view with selected tasks", ()
 });
 
 
+it.each([[null, "things"], [{ style: "unknown" }, "things"], [{ style: "things" }, "things"], [{ style: "griply" }, "griply"]] as const)(
+  "defaults to the Things style, keeping a saved Griply choice (%j)", async (saved, expected) => {
+    const plugin = new TaskManagerPlugin({} as App, {} as never);
+    plugin.loadData = vi.fn().mockResolvedValue(saved);
+    await plugin.loadSettings();
+    expect(plugin.settings.style).toBe(expected);
+  });
+
 it("loads independent wrapping preferences for all layouts", async () => {
   const plugin = new TaskManagerPlugin({} as App, {} as never);
   plugin.loadData = vi.fn().mockResolvedValue({ wrapTaskTitles: true, wrapCalendarTaskTitles: false, wrapKanbanTaskTitles: false });
@@ -371,13 +379,20 @@ it.each([
   const view = new TaskMainView({} as WorkspaceLeaf, { settings: { inboxPath: "Inbox.md" }, openEditor } as unknown as TaskManagerPlugin);
   let click: ((event: { stopPropagation: () => void }) => void) | undefined;
   let buttonOptions: { text?: string; attr?: Record<string, string> } | undefined;
+  const other = { addEventListener: () => {} };
+  const add = { addEventListener: (_name: string, callback: typeof click) => { click = callback; } };
   const element = {
-    createEl: (tag: string, options?: typeof buttonOptions) => {
-      if (tag === "button") buttonOptions = options;
-      return element;
+    createEl: (tag: string, options?: typeof buttonOptions): unknown => {
+      if (tag !== "button") return element;
+      // The group's fold chevron is a button too; this test is about the add button.
+      if (!options?.attr?.["aria-label"]?.startsWith("Add task")) return other;
+      buttonOptions = options;
+      return add;
     },
     createSpan: () => element,
-    addEventListener: (_name: string, callback: typeof click) => { click = callback; }
+    toggleClass: () => {},
+    prepend: () => {},
+    addEventListener: () => {}
   };
   const internals = view as unknown as {
     renderSection(parent: unknown, title: string, tasks: Task[], variant: undefined, target: unknown): void;

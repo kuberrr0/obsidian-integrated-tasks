@@ -956,16 +956,8 @@ button.tm-gantt-handle.is-finish:focus-visible,
   background: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 12%, var(--background-primary));
 }
 
-/* The row keyboard focus is on (arrow keys) gets a faint tint: half the selection's, deeper when also selected.
-   :focus-visible keeps it off rows focused by a mouse click. */
-.tm-main-view .tm-task-item:focus-visible {
-  outline: none;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--interactive-accent) 6%, var(--background-primary));
-}
-.tm-main-view .tm-task-item.is-selected:focus-visible {
-  background: color-mix(in srgb, var(--interactive-accent) 18%, var(--background-primary));
-}
+/* No separate "active" row: the arrow keys move the selection, so a focused row looks like any other. */
+.tm-main-view .tm-task-item:focus-visible { outline: none; }
 
 /* Per-layout wrapping keeps clipping confined to the title, not card controls. */
 .tm-main-view:not(.tm-wrap-task-titles) .tm-kanban button.tm-task-title {
@@ -1989,8 +1981,6 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item.is-selected:has(+ .tm-task-row.is-selected) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .tm-main-view.tm-style-things .tm-task-row.is-selected + .tm-task-row.tm-task-item.is-selected { border-top-left-radius: 0; border-top-right-radius: 0; }
-.tm-main-view.tm-style-things .tm-task-item:focus-visible { border-radius: 6px; background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-primary)); }
-.tm-main-view.tm-style-things .tm-task-item.is-selected:focus-visible { background: color-mix(in srgb, var(--interactive-accent) 26%, var(--background-primary)); }
 
 /* Things style: a task opened in place as a card. */
 .tm-things-card {
@@ -2212,3 +2202,32 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-kanban .tm-things-board-card .tm-things-card-property { display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 7px; align-items: start; }
 .tm-kanban .tm-things-board-card .tm-things-card-icon { margin-top: 2px; }
 .tm-kanban .tm-things-board-card .tm-things-card-extra { display: none; }
+/* Folding: a chevron in the left gutter folds a task's subtasks or a group's tasks away.
+   It shows on hover, and stays visible while folded so hidden rows are never a surprise. */
+.tm-task-row, .tm-section h2 { position: relative; }
+button.tm-fold-toggle {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--text-faint);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+button.tm-fold-toggle svg { width: 14px; height: 14px; transition: transform 150ms ease; }
+button.tm-fold-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+button.tm-fold-toggle:hover { color: var(--text-normal); }
+.tm-task-row:hover > button.tm-row-fold, .tm-task-row.is-folded > button.tm-row-fold,
+.tm-section h2:hover > button.tm-group-fold, .tm-section.is-folded > h2 > button.tm-group-fold,
+button.tm-fold-toggle:focus-visible { opacity: 1; }
+/* Rows: just left of the checkbox at the row's depth. */
+.tm-main-view button.tm-row-fold { left: calc(var(--tm-depth, 0) * 24px - 20px); }
+.tm-main-view.tm-style-things button.tm-row-fold { left: calc(var(--tm-depth, 0) * 24px - 12px); }
+/* Groups: just left of the heading text. */
+.tm-main-view button.tm-group-fold { left: -22px; }
+.tm-main-view.tm-style-things button.tm-group-fold { left: -14px; }
+.tm-section.is-folded { margin-bottom: var(--size-4-4); }
+@media (prefers-reduced-motion: reduce) { button.tm-fold-toggle, button.tm-fold-toggle svg { transition: none; } }
+

@@ -189,7 +189,8 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       },
       ...([
         ["showGroupTaskCounts", "Show task counts in group headings", "Show the number of tasks beside list group headings and Kanban column headings."],
-        ["showSubtaskCounts", "Show subtask counts", "Show completed and total subtask counts beside tasks that have subtasks."]
+        ["showSubtaskCounts", "Show subtask counts", "Show completed and total subtask counts beside tasks that have subtasks."],
+        ["showSubtasks", "Show subtasks in task views", "List subtasks as their own rows under their task. When off, they appear in the task's card, and a subtask shows on its own only in views its task is not in."]
       ] as const).map(([key, name, desc]) => ({
         section: "Appearance", name, desc,
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
