@@ -5,9 +5,11 @@ import { taskTimeLabel } from "./task-row-details";
 import type { Task } from "./types";
 
 export interface TodaySummary {
-  /** Tasks whose action date is today, open or completed. */
+  /** Tasks whose action date is today, open or done (not cancelled). */
   total: number;
   done: number;
+  /** Open tasks due today (or overdue) that are in progress. */
+  inProgress: number;
   overdue: number;
   /** Duration of today's open tasks. */
   plannedMinutes: number;
@@ -22,12 +24,12 @@ function minutesOf(time: string): number {
 export function todaySummary(tasks: Task[], now = new Date()): TodaySummary {
   const today = todayIso(now);
   const current = now.getHours() * 60 + now.getMinutes();
-  const summary: TodaySummary = { total: 0, done: 0, overdue: 0, plannedMinutes: 0 };
+  const summary: TodaySummary = { total: 0, done: 0, inProgress: 0, overdue: 0, plannedMinutes: 0 };
   for (const task of tasks) {
     const date = actionDate(task);
-    if (!date) continue;
+    if (!date || task.status === "cancelled" || date > today) continue;
+    if (task.status === "doing") summary.inProgress++;
     if (date < today) { if (!task.completed) summary.overdue++; continue; }
-    if (date !== today) continue;
     summary.total++;
     if (task.completed) { summary.done++; continue; }
     summary.plannedMinutes += task.durationMinutes ?? 0;
@@ -50,6 +52,7 @@ export function renderTodaySummary(parent: HTMLElement, summary: TodaySummary, l
   renderProjectProgress(root, { name: "Today", path: "", openTasks: summary.total - summary.done, completedTasks: summary.done, archived: false }, false);
   const stats = root.createDiv({ cls: "tm-today-stats" });
   stats.createSpan({ cls: "tm-today-stat", text: `${summary.done} of ${summary.total} done` });
+  if (summary.inProgress) stats.createSpan({ cls: "tm-today-stat is-doing", text: `${summary.inProgress} in progress` });
   if (summary.plannedMinutes) stats.createSpan({ cls: "tm-today-stat", text: `${formatDuration(summary.plannedMinutes)} planned` });
   if (summary.overdue) stats.createSpan({ cls: "tm-today-stat is-overdue", text: `${summary.overdue} overdue` });
   if (summary.next) {

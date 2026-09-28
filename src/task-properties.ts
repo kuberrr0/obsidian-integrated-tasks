@@ -1,5 +1,6 @@
 import { formatTags } from "./task-tags";
 import { formatDuration, repeatLabel } from "./parser";
+import { STATUS_LABELS, statusFromLabel } from "./task-status";
 import type { FilterOperator, Task, TaskFilter, TaskProperty } from "./types";
 
 export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" | "choice" | "date" | "time" | "number" }[] = [
@@ -21,7 +22,7 @@ export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" |
 
 export function propertyValue(task: Task, property: TaskProperty): string | number | undefined {
   if (property === "tags") return task.tags?.length ? formatTags([...task.tags].sort()) : undefined;
-  if (property === "status") return task.completed ? "Completed" : "Open";
+  if (property === "status") return STATUS_LABELS[task.status];
   if (property === "source") return task.path;
   if (property === "duration") return task.durationMinutes;
   if (property === "defer") return task.someday ? "Someday" : task.deferDate;
@@ -63,6 +64,12 @@ function matchesCondition(task: Task, filter: TaskFilter): boolean {
     if (filter.operator === "isNot") return tags.every(tag => !values.includes(tag));
     if (filter.operator === "contains") return tags.some(tag => tag.includes(values[0] ?? ""));
     return false;
+  }
+  if (filter.property === "status") {
+    if (filter.operator === "has" || filter.operator === "missing") return filter.operator === "has";
+    // "Open" (from older smart lists and queries) is any open status; "Completed" is done.
+    const matches = filter.values.some(value => value.toLowerCase() === "open" ? !task.completed : statusFromLabel(value) === task.status);
+    return filter.operator === "is" ? matches : filter.operator === "isNot" ? !matches : false;
   }
   const value = propertyValue(task, filter.property);
   const present = value !== undefined && value !== "";

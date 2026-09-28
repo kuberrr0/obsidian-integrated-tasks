@@ -29,7 +29,7 @@ export function taskTagSummaries(tasks: readonly import("./types").Task[]): Task
   const tags = new Map<string, TaskTagSummary>();
   for (const task of tasks) for (const name of new Set(task.tags ?? [])) {
     const tag = tags.get(name) ?? { name, openTasks: 0, completedTasks: 0 };
-    if (task.completed) tag.completedTasks++; else tag.openTasks++;
+    if (task.status === "done") tag.completedTasks++; else if (!task.completed) tag.openTasks++;
     tags.set(name, tag);
   }
   return [...tags.values()].sort((a, b) => a.name.localeCompare(b.name));

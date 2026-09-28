@@ -1,9 +1,11 @@
 import { formatTags, normalizeTags } from "./task-tags";
 import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
 import { findInputDate, findInputDeadline, formatDate, formatLocalDate, parseDateTimeExpression } from "./date";
-import type { ParsedTaskMetadata, Priority, Task, TaskDraft } from "./types";
+import { STATUS_CHARS, draftStatus, isClosedStatus, statusFromChar } from "./task-status";
+import type { ParsedTaskMetadata, Priority, Task, TaskDraft, TaskStatus } from "./types";
 
-const CHECKBOX = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
+// ` ` to do, `/` in progress, `?` waiting, `x`/`X` done, `-` cancelled; other characters are not tasks.
+const CHECKBOX = /^(\s*)-\s+\[([ xX/?-])\]\s+(.*)$/;
 const TAG = /(?:^|\s)#\[\[([^[\]\r\n|]+)\]\]\s*$/;
 const PRIORITY = /(?:^|\s)p([123])\s*$/i;
 const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
@@ -90,6 +92,7 @@ interface LineRange { kind: ParsedTokenRange["kind"] | "destination" | "blockId"
 
 export interface ParsedTaskLine extends ParsedTaskMetadata {
   indent: number;
+  status: TaskStatus;
   completed: boolean;
   destination?: string;
 }
@@ -151,7 +154,7 @@ function parseLine(
     if (internalRanges) tokenRanges?.push({ kind: "blockId", from: offset + blockId.index + 1, to: offset + remainder.length });
     remainder = remainder.slice(0, blockId.index).trimEnd();
   }
-  const metadata: Omit<ParsedTaskLine, "title" | "indent" | "completed"> = {};
+  const metadata: Omit<ParsedTaskLine, "title" | "indent" | "status" | "completed"> = {};
   const consumed = new Set<string>();
   const recordToken = (kind: LineRange["kind"], match: RegExpExecArray): void => {
     if (kind !== "destination" || internalRanges) tokenRanges?.push({ kind, from: offset + match.index + match[0].search(/\S/), to: offset + remainder.trimEnd().length });
@@ -259,10 +262,12 @@ function parseLine(
   }
 
   if (metadata.tags) metadata.tags = [...new Set(metadata.tags)];
+  const status = statusFromChar(checkbox[2])!;
   return {
     title: remainder.trim(),
     indent: indentWidth(checkbox[1]),
-    completed: checkbox[2].toLowerCase() === "x",
+    status,
+    completed: isClosedStatus(status),
     ...metadata
   };
 }
@@ -289,7 +294,7 @@ export function parseTaskInput(
   dateFormat?: string,
   naturalDates = true
 ): ParsedTaskLine | undefined {
-  const normalized = /^\s*-\s+\[[ xX]\]\s+/.test(input) ? input : `- [ ] ${input}`;
+  const normalized = CHECKBOX.test(input) ? input : `- [ ] ${input}`;
   return parseTaskLine(normalized, reference, dateFormat, naturalDates);
 }
 
@@ -308,7 +313,7 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
     draft.completedDate ? `✓${dateText(draft.completedDate)}` : ""
   ].filter(Boolean);
   const metadataGap = metadata.length ? " " : "";
-  return `${indent}- [${draft.completed ? "x" : " "}] ${title}${metadataGap}${metadata.join(" ")}`;
+  return `${indent}- [${STATUS_CHARS[draftStatus(draft)]}] ${title}${metadataGap}${metadata.join(" ")}`;
 }
 
 const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "repeat", "durationMinutes", "deadline", "defer", "priority", "tags", "completedDate", "destination"];
@@ -327,7 +332,8 @@ export function rewriteTaskLine(raw: string, draft: TaskDraft, dateFormat?: stri
   const leading = checkbox[1];
   const indent = indentWidth(leading) === draft.indent ? leading : " ".repeat(Math.max(0, draft.indent));
   let marker = raw.slice(leading.length, offset);
-  if (parsed.completed !== draft.completed) marker = marker.replace(/\[[ xX]\]/, `[${draft.completed ? "x" : " "}]`);
+  const status = draftStatus(draft);
+  if (parsed.status !== status) marker = marker.replace(/\[.\]/, `[${STATUS_CHARS[status]}]`);
 
   ranges.sort((a, b) => a.from - b.from);
   const blockId = ranges.find(range => range.kind === "blockId");

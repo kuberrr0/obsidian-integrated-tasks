@@ -1,10 +1,10 @@
 import { expect, it, vi } from "vitest";
 import { renderPropertyFilter } from "../src/filter-editor";
 class Element extends EventTarget {
-  children: Element[] = []; attrs: Record<string, string> = {}; value = ""; hidden = false;
+  children: Element[] = []; attrs: Record<string, string> = {}; value = ""; hidden = false; text?: string; tag = "";
   validity = { valid: true };
-  createEl(_tag: string, options: { attr?: Record<string, string> } = {}): Element {
-    const el = new Element(); el.attrs = options.attr ?? {}; this.children.push(el); return el;
+  createEl(tag: string, options: { attr?: Record<string, string>; text?: string } = {}): Element {
+    const el = new Element(); el.attrs = options.attr ?? {}; el.text = options.text; el.tag = tag; this.children.push(el); return el;
   }
   createDiv(options = {}): Element { return this.createEl("div", options); }
   createSpan(options = {}): Element { return this.createEl("span", options); }
@@ -35,4 +35,11 @@ it("offers inline connectors after a value and applies only completed conditions
   set("Title value", "write", "input");
   find("Remove Title condition 2").dispatchEvent(new Event("click"));
   expect(change).toHaveBeenLastCalledWith({ property: "title", operator: "contains", values: ["write"] });
+});
+
+it("offers the five statuses, keeping an older smart list's Open so it can be cleared", () => {
+  const root = new Element();
+  renderPropertyFilter(root as never, { key: "status", kind: "choice", label: "Status" }, { property: "status", operator: "is", values: ["Open"] }, [], vi.fn());
+  const choices = root.all().filter(el => el.tag === "span").map(el => el.text);
+  expect(choices).toEqual(["To do", "In progress", "Waiting", "Done", "Cancelled", "Open"]);
 });

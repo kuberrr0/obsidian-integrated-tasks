@@ -134,7 +134,7 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
         repeat.createSpan({ text: label });
         editable(repeat, `Edit repeat: ${label}`, "repeat", () => options.edit("repeat"));
     }
-    if (task.completed && task.completedDate && show("completed") && grouping !== "completed") {
+    if (task.status === "done" && task.completedDate && show("completed") && grouping !== "completed") {
         metadata.createSpan({ cls: "tm-task-done", text: `Done ${taskDoneDateLabel(task.completedDate, now)}`, attr: { title: `Completed ${formatDate(task.completedDate, options.dateFormat)}` } });
     }
     if (options.source && show("source") && grouping !== "source") {

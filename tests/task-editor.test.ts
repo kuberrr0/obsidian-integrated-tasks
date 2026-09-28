@@ -29,6 +29,7 @@ function editor() {
     readRaw(): TaskDraft;
     rawInput: { value: string; setSelectionRange: ReturnType<typeof vi.fn> };
     completedInput: { checked: boolean };
+    statusInput: { value: string };
     destinationInput: { value: string };
   };
 }
@@ -44,6 +45,7 @@ describe("implicit Inbox destination", () => {
     const modal = editor();
     modal.rawInput = { value: "- [ ] Write report", setSelectionRange: vi.fn() };
     modal.completedInput = { checked: false };
+    modal.statusInput = { value: "" };
     modal.destinationInput = { value: "Project.md" };
     expect(modal.readRaw().destination).toBe("Tasks/Inbox.md");
     modal.rawInput.value = "- [ ] Write report ~[[Project]]";
@@ -112,7 +114,7 @@ function openModal(edit = false, focusProperty?: TaskEditorProperty, raw?: strin
   const onSave = vi.fn(async (_draft: TaskDraft) => {});
   const modal = new TaskEditorModal({} as App, {
     mode: "inbox", projects: [], settings: DEFAULT_SETTINGS, dateFormat: "YYYY-MM-DD", onSave, focusProperty,
-    task: edit && raw ? scanTasks("Inbox.md", raw)[0] : edit ? { id: "Inbox.md:0", path: "Inbox.md", line: 0, endLine: 0, raw: "- [ ] Existing", title: "Existing", indent: 0, completed: false, childIds: [] } : undefined
+    task: edit && raw ? scanTasks("Inbox.md", raw)[0] : edit ? { id: "Inbox.md:0", path: "Inbox.md", line: 0, endLine: 0, raw: "- [ ] Existing", title: "Existing", indent: 0, status: "todo", completed: false, childIds: [] } : undefined
   });
   const fields = modal as unknown as {
     modalEl: EditorElement; contentEl: EditorElement; close: () => void; handleKeydown: (event: KeyboardEvent) => void;
@@ -237,6 +239,27 @@ it.each([false, true])("renders completion separately and saves checkbox changes
   key({ metaKey: true });
   await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   expect(onSave.mock.calls[0][0]).toMatchObject({ completed: true, title: edit ? "Existing" : "New task" });
+});
+
+it("keeps an in-progress, waiting or cancelled checkbox, and lets the checkbox or status menu change it", async () => {
+  const save = async (raw: string, change?: (fields: ReturnType<typeof openModal>["fields"]) => void) => {
+    const { fields, key, onSave } = openModal(true, undefined, raw);
+    change?.(fields);
+    key({ metaKey: true });
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    return onSave.mock.calls[0][0];
+  };
+  expect(await save("- [/] Draft p1")).toMatchObject({ status: "doing", completed: false, priority: 1 });
+  expect(await save("- [?] Draft", fields => { fields.rawInput.value = "Draft p2"; })).toMatchObject({ status: "waiting", completed: false, priority: 2 });
+  expect(await save("- [-] Draft")).toMatchObject({ status: "cancelled", completed: true });
+  expect(await save("- [/] Draft", fields => { fields.completedInput.checked = true; })).toMatchObject({ status: "done", completed: true });
+  expect(await save("- [-] Draft", fields => { fields.completedInput.checked = false; })).toMatchObject({ status: "todo", completed: false });
+  expect(await save("- [ ] Draft", fields => {
+    const status = (fields as unknown as { statusInput: EditorElement }).statusInput;
+    status.value = "cancelled";
+    status.dispatchEvent(new Event("change"));
+  })).toMatchObject({ status: "cancelled", completed: true });
+  expect(await save("- [ ] Draft", fields => { fields.rawInput.value = "- [?] Pasted"; })).toMatchObject({ title: "Pasted", status: "waiting" });
 });
 
 it("renders a pasted checklist prefix as the checkbox", async () => {

@@ -8,7 +8,7 @@ const width = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].r
 export function parseTaskTreeInput(input: string, destination: string, reference = new Date(), dateFormat?: string, linkDates = true): TaskDraft {
   const lines = input.replace(/\r\n?/g, "\n").split("\n");
   while (lines.length > 1 && !lines[lines.length - 1].trim()) lines.pop();
-  if (/^\s*[-+*]\s+\[[ xX]\]\s*$/.test(lines[0])) throw new Error("Enter a title for the main task.");
+  if (/^\s*[-+*]\s+\[[ xX/?-]\]\s*$/.test(lines[0])) throw new Error("Enter a title for the main task.");
   const first = parseTaskInput(lines[0], reference, dateFormat);
   if (!first?.title) throw new Error("Enter a title for the main task.");
   const rootIndent = width(lines[0]);
@@ -21,7 +21,7 @@ export function parseTaskTreeInput(input: string, destination: string, reference
     const indent = width(line) - rootIndent;
     if (indent < 0) throw new Error(`Line ${index + 1} must not be less indented than the main task.`);
     const text = line.trimStart();
-    const checkbox = /^[-+*]\s+\[[ xX]\](?:\s|$)/.test(text);
+    const checkbox = /^[-+*]\s+\[[ xX/?-]\](?:\s|$)/.test(text);
     const bullet = /^[-+*]\s+/.test(text);
     if (!checkbox && ((bullet && indent > 0) || (descriptionIndent !== undefined && indent > descriptionIndent))) {
       additionalLines.push(" ".repeat(indent) + text);
@@ -30,7 +30,7 @@ export function parseTaskTreeInput(input: string, destination: string, reference
     }
     if (/^(?:#{1,6}\s|`{3,}|~{3,})/.test(text)) throw new Error(`Line ${index + 1}: enter a task or an indented description bullet.`);
     const taskText = checkbox ? text.replace(/^[-+*]/, "-") : text.replace(/^[-+*]\s+/, "");
-    if (/^-\s+\[[ xX]\]\s*$/.test(taskText)) throw new Error(`Enter a task title on line ${index + 1}.`);
+    if (/^-\s+\[[ xX/?-]\]\s*$/.test(taskText)) throw new Error(`Enter a task title on line ${index + 1}.`);
     const parsed = parseTaskInput(taskText, reference, dateFormat);
     if (!parsed?.title) throw new Error(`Enter a task title on line ${index + 1}.`);
     if (parsed.destination && parsed.destination !== main.destination) throw new Error(`Line ${index + 1}: tasks in this batch must use the main task's destination.`);

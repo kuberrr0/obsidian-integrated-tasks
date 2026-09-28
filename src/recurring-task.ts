@@ -146,7 +146,8 @@ export function advanceRecurringTask(content: string, task: Task, next: string, 
     const label = formatDate(next, /^\d{4}-\d{2}-\d{2}$/.test(originalDate) ? "YYYY-MM-DD" : dateFormat);
     const dateLength = linked ? originalDate.length + 4 : originalDate.length;
     const replacement = (linked ? `[[${label}]]` : label) + token.slice(dateLength);
-    lines[line * 2] = raw.slice(0, range.from) + replacement + raw.slice(range.to);
+    // The next instance starts afresh, so an in-progress or waiting status resets to `[ ]`.
+    lines[line * 2] = (raw.slice(0, range.from) + replacement + raw.slice(range.to)).replace(/^(\s*-\s+\[)[/?](\])/, "$1 $2");
     return lines.join("");
 }
 

@@ -5,6 +5,7 @@ import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import { parseTaskQuery, QUERY_KEYS } from "./task-query";
 import { renderTaskDetails } from "./task-row-details";
 import { taskTitleLabel } from "./task-title";
+import { checkboxLabel, statusClass } from "./task-status";
 import type { Task } from "./types";
 
 type QueryHost = Pick<TaskManagerPlugin, "app" | "index" | "store" | "settings" | "dateFormat" | "openEditor" | "openTaskView">;
@@ -95,12 +96,12 @@ export class TaskQueryBlock extends MarkdownRenderChild {
   }
 
   private renderRow(list: HTMLElement, task: Task, depth: number, grouping: Parameters<typeof renderTaskDetails>[3]["grouping"]): void {
-    const row = list.createDiv({ cls: `tm-task-row tm-query-row${task.completed ? " is-completed" : ""}`, attr: { role: "listitem", "data-task-id": task.id } });
+    const row = list.createDiv({ cls: `tm-task-row tm-query-row${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem", "data-task-id": task.id } });
     row.style.setProperty("--tm-depth", String(depth));
     const color = this.plugin.index.projectColor(task.path);
     if (color) row.style.setProperty("--tm-project-color", color);
     const checkbox = row.createEl("label", { cls: "tm-checkbox-target" }).createEl("input", {
-      type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}`, attr: { "aria-label": `Complete ${task.title}` }
+      type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel({ ...task, priority: undefined }) }
     });
     checkbox.checked = task.completed;
     checkbox.addEventListener("change", () => {

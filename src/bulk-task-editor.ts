@@ -7,9 +7,10 @@ import { durationToMinutes, formatDuration, parseRepeatRule, parseTaskInput, ser
 import { destinationString } from "./structure";
 import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
 import type { BulkTaskPatch } from "./bulk-tasks";
+import { STATUS_LABELS, TASK_STATUSES, statusFromLabel } from "./task-status";
 import type { Project, Task } from "./types";
 
-type Field = "tags" | "scheduled" | "deadline" | "defer" | "repeat" | "duration" | "priority" | "destination" | "description";
+type Field = "tags" | "scheduled" | "deadline" | "defer" | "repeat" | "duration" | "priority" | "destination" | "description" | "status";
 interface BulkEditorOptions {
   focusProperty?: TaskEditorProperty;
   tasks: Task[];
@@ -30,7 +31,8 @@ export function bulkPropertyValues(task: Task, dateFormat: string): Record<Field
     tags: formatTags(task.tags),
     priority: task.priority ? String(task.priority) : "",
     description: task.description ?? "",
-    destination: destinationString(task.path, task.section)
+    destination: destinationString(task.path, task.section),
+    status: STATUS_LABELS[task.status]
   };
 }
 
@@ -72,12 +74,18 @@ export function bulkPropertyPatch(values: Partial<Record<Field, string>>, dateFo
     if (!values.destination?.trim()) throw new Error("Select a destination note.");
     patch.destination = values.destination;
   }
+  // An empty status leaves each task's status unchanged.
+  if (values.status?.trim()) {
+    const status = statusFromLabel(values.status);
+    if (!status) throw new Error("Use a status: to do, in progress, waiting, done, or cancelled.");
+    patch.status = status;
+  }
   if ("tags" in values) patch.tags = parseTags(values.tags ?? "");
   if ("description" in values) patch.description = values.description ?? "";
   return patch;
 }
 
-const labels: Record<Field, string> = { scheduled: "Scheduled date", deadline: "Deadline", defer: "Hidden until", repeat: "Repeat", duration: "Duration", priority: "Priority", tags: "Tags", destination: "Project", description: "Description" };
+const labels: Record<Field, string> = { scheduled: "Scheduled date", deadline: "Deadline", defer: "Hidden until", repeat: "Repeat", duration: "Duration", priority: "Priority", tags: "Tags", destination: "Project", description: "Description", status: "Status" };
 const propertyKeys = ["scheduledDate", "scheduledTime", "deadline", "deadlineTime", "deferDate", "someday", "repeat", "durationMinutes", "priority", "tags", "destination"] as const;
 
 export function commonBulkValues(tasks: Task[], dateFormat: string): Partial<Record<Field, string>> {
@@ -91,7 +99,8 @@ export function commonBulkValues(tasks: Task[], dateFormat: string): Partial<Rec
 }
 
 export function bulkInlineText(values: Partial<Record<Field, string>>, dateFormat: string): string {
-  const properties = bulkPropertyPatch(values, dateFormat);
+  // The status has its own menu, outside the inline text.
+  const properties = bulkPropertyPatch({ ...values, status: undefined }, dateFormat);
   const draft = { ...properties, title: "", completed: false, indent: 0, destination: properties.destination ?? "" };
   return (draft.destination ? serializeTaskInput(draft, dateFormat) : serializeTask(draft, dateFormat)).replace(/^- \[ \]\s*/, "");
 }
@@ -141,6 +150,9 @@ export class BulkTaskEditorModal extends Modal {
     this.editor = new TaskLineEditor(host, this.initialText, this.options.dateFormat, () => error.empty(), "Add a date, every week, duration, >hidden-until date, p1–p3, #[[tag]], or ~[[Project]]");
 
     this.actions = this.modalEl.createDiv({ cls: "tm-editor-actions" });
+    const statusInput = this.actions.createEl("select", { cls: "dropdown tm-editor-status", attr: { "aria-label": "Status" } });
+    statusInput.createEl("option", { value: "", text: "Status unchanged" });
+    for (const status of TASK_STATUSES) statusInput.createEl("option", { value: STATUS_LABELS[status], text: STATUS_LABELS[status] });
     const remove = this.actions.createEl("button", { cls: "tm-delete-task tm-editor-icon-action", attr: { "aria-label": "Delete task", title: "Delete selected tasks and their subtasks" } });
     const save = this.actions.createEl("button", { cls: "mod-cta tm-editor-icon-action", attr: { "aria-label": "Save task", title: "Save task properties" } });
     setIcon(remove, "trash-2");
@@ -148,7 +160,7 @@ export class BulkTaskEditorModal extends Modal {
     const run = async (deleting: boolean): Promise<void> => {
       if (save.disabled) return;
       try {
-        const patch = deleting ? {} : bulkInlinePatch(this.editor.value, this.initialText, this.options.dateFormat, this.options.inboxPath);
+        const patch = deleting ? {} : { ...bulkInlinePatch(this.editor.value, this.initialText, this.options.dateFormat, this.options.inboxPath), ...bulkPropertyPatch({ status: statusInput.value }, this.options.dateFormat) };
         save.disabled = remove.disabled = true;
         if (deleting) await this.options.onDelete();
         else await this.options.onSave(patch);

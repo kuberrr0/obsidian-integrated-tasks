@@ -9,6 +9,7 @@ const sourceTask: Task = {
   endLine: 2,
   raw: "- [ ] Original [[2026-09-04]] p2",
   indent: 0,
+  status: "todo",
   completed: false,
   title: "Original",
   scheduledDate: "2026-09-04",

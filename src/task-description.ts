@@ -13,7 +13,7 @@ export function descriptionLines(text: string, indent: number): string[] {
     const line = source.slice(Number.isFinite(margin) ? margin : 0);
     if (!line.trim()) return "";
     const bullet = /^\s*[-+*]\s+/.test(line);
-    const checkbox = /^\s*[-+*]\s+\[[ xX]\](?:\s|$)/.test(line);
+    const checkbox = /^\s*[-+*]\s+\[[ xX/?-]\](?:\s|$)/.test(line);
     const value = (bullet || /^\s+\S/.test(line)) && !checkbox ? line : `- ${line}`;
     return " ".repeat(indent + TASK_INDENT) + value;
   });

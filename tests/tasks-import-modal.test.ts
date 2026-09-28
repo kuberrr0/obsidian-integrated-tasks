@@ -54,22 +54,22 @@ describe("Tasks plugin import dialog", () => {
   it("previews the conversion, then converts all notes as one undoable change", async () => {
     const { contents, store, refreshPath, open } = setup({
       "A.md": "- [ ] #task Pay rent 📅 2026-10-01 ⏫\n- [ ] Plain\n",
-      "B.md": "- [/] Doing 📅 2026-10-01\n- [ ] Call ⏳ 2026-09-28\n",
+      "B.md": "- [/] Doing 📅 2026-10-01\n- [!] Flagged 📅 2026-10-01\n- [ ] Call ⏳ 2026-09-28\n",
       "C.md": "Nothing here\n"
     }, JSON.stringify({ globalFilter: "#task" }));
     const modal = open();
-    await vi.waitFor(() => expect(modal.contentEl.querySelector(".tm-import-count")?.textContent).toBe("2 tasks in 2 notes will be converted."));
+    await vi.waitFor(() => expect(modal.contentEl.querySelector(".tm-import-count")?.textContent).toBe("3 tasks in 2 notes will be converted."));
     expect(modal.contentEl.querySelector<HTMLInputElement>("input[type=text]")!.value).toBe("#task");
     expect(Array.from(modal.contentEl.querySelectorAll(".tm-import-examples li")).map(item => item.textContent)).toEqual([
-      "- [ ] #task Pay rent 📅 2026-10-01 ⏫ → - [ ] Pay rent {2026-10-01} p1", "- [ ] Call ⏳ 2026-09-28 → - [ ] Call 2026-09-28"]);
-    expect(modal.contentEl.querySelector(".tm-import-skip")!.textContent).toBe("1 task with a custom status, such as [/] or [-], left unchanged.");
+      "- [ ] #task Pay rent 📅 2026-10-01 ⏫ → - [ ] Pay rent {2026-10-01} p1", "- [/] Doing 📅 2026-10-01 → - [/] Doing {2026-10-01}", "- [ ] Call ⏳ 2026-09-28 → - [ ] Call 2026-09-28"]);
+    expect(modal.contentEl.querySelector(".tm-import-skip")!.textContent).toBe("1 task with an unsupported status, such as [!] or [>], left unchanged.");
     const convert = modal.contentEl.querySelector<HTMLButtonElement>("button.mod-cta")!;
-    expect(convert.textContent).toBe("Convert 2 tasks");
+    expect(convert.textContent).toBe("Convert 3 tasks");
     convert.click();
     await vi.waitFor(() => expect(refreshPath).toHaveBeenCalledTimes(2));
     expect(contents.get("A.md")).toBe("- [ ] Pay rent {2026-10-01} p1\n- [ ] Plain\n");
-    expect(contents.get("B.md")).toBe("- [/] Doing 📅 2026-10-01\n- [ ] Call 2026-09-28\n");
-    expect(store.lastChange()?.label).toBe("Imported 2 tasks from the Tasks plugin");
+    expect(contents.get("B.md")).toBe("- [/] Doing {2026-10-01}\n- [!] Flagged 📅 2026-10-01\n- [ ] Call 2026-09-28\n");
+    expect(store.lastChange()?.label).toBe("Imported 3 tasks from the Tasks plugin");
     await store.undo();
     expect(contents.get("A.md")).toBe("- [ ] #task Pay rent 📅 2026-10-01 ⏫\n- [ ] Plain\n");
   });

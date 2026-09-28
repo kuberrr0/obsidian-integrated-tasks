@@ -4,6 +4,7 @@ import { editorInfoField } from "obsidian";
 import { todayIso } from "./date";
 import { parseTaskLine, scanTasks, withCompletedDate } from "./parser";
 import { nonBodyLines } from "./structure";
+import { STATUS_CHARS } from "./task-status";
 import type { Task } from "./types";
 
 const recurringCompletion = StateEffect.define<Task[]>();
@@ -11,21 +12,23 @@ const recurringCompletion = StateEffect.define<Task[]>();
 /** Record completion dates on checkbox flips; off unless `enabled` says so. */
 export interface NoteCompletionDates { enabled: () => boolean; linkDates: () => boolean }
 
-/** Cheap line-level precheck: old task lines whose checkbox alone an edit flipped, and in which direction. */
+/** Cheap line-level precheck: old task lines whose checkbox alone an edit changed into done (checked) or out of it. */
 function flippedLines(transaction: Transaction): Array<{ line: Line; checked: boolean }> {
     const oldDoc = transaction.startState.doc;
     const lines: Array<{ line: Line; checked: boolean }> = [];
+    const box = /^(\s*-\s+\[)([ xX/?-])(\])/;
+    const unmarked = (text: string): string => text.replace(box, "$1 $3");
     transaction.changes.iterChangedRanges((fromA, toA) => {
         const last = oldDoc.lineAt(toA).number;
         for (let number = oldDoc.lineAt(fromA).number; number <= last; number++) {
             const oldLine = oldDoc.line(number);
-            const box = /^\s*-\s+\[([ xX])\]/.exec(oldLine.text);
-            if (!box || lines.some(entry => entry.line.number === number)) continue;
+            const before = box.exec(oldLine.text)?.[2];
+            if (before === undefined || lines.some(entry => entry.line.number === number)) continue;
             const newText = transaction.newDoc.lineAt(transaction.changes.mapPos(oldLine.from)).text;
-            const checked = box[1] === " ";
-            const unmarked = (text: string): string => text.replace(/^(\s*-\s+\[)[ xX](\])/, "$1 $2");
-            const flipped = checked ? /^\s*-\s+\[[xX]\]/.test(newText) : /^\s*-\s+\[ \]/.test(newText);
-            if (flipped && unmarked(newText) === unmarked(oldLine.text)) lines.push({ line: oldLine, checked });
+            const after = box.exec(newText)?.[2];
+            // Moves between open statuses (Obsidian's own click on `[/]` writes `[ ]`) neither complete nor reopen.
+            const checked = !/[xX]/.test(before);
+            if (after !== undefined && /[xX]/.test(after) === checked && unmarked(newText) === unmarked(oldLine.text)) lines.push({ line: oldLine, checked });
         }
     });
     return lines;
@@ -80,19 +83,21 @@ export function noteRecurringCompletion(
                 .filter(task => recurringLines.has(task.line)) : [];
             if (previous.length) {
                 const current = new Map(scanTasks(path, transaction.newDoc.toString(), reference, getDateFormat())
-                    .filter(candidate => candidate.completed).map(candidate => [candidate.line, candidate]));
+                    .filter(candidate => candidate.status === "done").map(candidate => [candidate.line, candidate]));
                 for (const task of previous) {
                     if (task.completed) continue;
                     const oldLine = transaction.startState.doc.line(task.line + 1);
                     const mapped = transaction.newDoc.lineAt(transaction.changes.mapPos(oldLine.from));
                     const checkedTask = current.get(mapped.number - 1);
                     if (!checkedTask) continue;
-                    const raw = checkedTask.raw.replace(/^(\s*-\s+\[)[xX](\])/, "$1 $2");
+                    // Put the open status back (`[/]` stays in progress if completing fails); advancing resets it to `[ ]`.
+                    const status = STATUS_CHARS[task.status];
+                    const raw = checkedTask.raw.replace(/^(\s*-\s+\[)[xX](\])/, `$1${status}$2`);
                     // Only checkbox transitions; pasted/replaced task content is not completion.
                     if (raw !== task.raw) continue;
                     const marker = /^\s*-\s+\[/.exec(checkedTask.raw)!;
-                    changes.push({ from: mapped.from + marker[0].length, to: mapped.from + marker[0].length + 1, insert: " " });
-                    tasks.push({ ...checkedTask, completed: false, raw });
+                    changes.push({ from: mapped.from + marker[0].length, to: mapped.from + marker[0].length + 1, insert: status });
+                    tasks.push({ ...checkedTask, status: task.status, completed: false, raw });
                     reverted.add(task.line);
                 }
             }

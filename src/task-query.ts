@@ -1,6 +1,7 @@
 import { parseDateExpression, todayIso } from "./date";
 import { durationToMinutes } from "./parser";
 import { TASK_PROPERTIES } from "./task-properties";
+import { STATUS_LABELS, statusFromLabel } from "./task-status";
 import type { FilterOperator, SmartList, TaskFilter, TaskGrouping, TaskProperty, TaskQuery, TaskSort } from "./types";
 
 /**
@@ -76,9 +77,11 @@ function condition(property: typeof TASK_PROPERTIES[number], text: string, conte
       if (!date) return `"${raw}" isn't a date I understand. Try a date such as ${todayIso(context.now)}, today, or next friday.`;
       converted.push(date);
     } else if (property.key === "status") {
-      if (/^(open|todo|to do|not done|incomplete)$/i.test(item)) converted.push("Open");
-      else if (/^(completed|complete|done|closed)$/i.test(item)) converted.push("Completed");
-      else return `Status is "open" or "completed", not "${raw}".`;
+      const status = statusFromLabel(item);
+      if (status) converted.push(STATUS_LABELS[status]);
+      else if (/^(open|not done|incomplete)$/i.test(item)) converted.push("Open");
+      else if (/^closed$/i.test(item)) converted.push(STATUS_LABELS.done, STATUS_LABELS.cancelled);
+      else return `Status is open, to do, in progress, waiting, done or cancelled, not "${raw}".`;
     } else if (property.key === "priority") {
       const priority = /^p?([123])$/i.exec(item)?.[1];
       if (!priority) return `Priority is 1, 2, or 3, not "${raw}".`;

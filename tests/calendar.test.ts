@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addDays, calendarDate, calendarDays, rescheduledDraft, resizedRange, selectionPreset, shiftCalendar } from "../src/calendar";
 import type { Task } from "../src/types";
-const task: Task = { id: "a", title: "Write", path: "Work.md", section: "Next", line: 0, endLine: 0, raw: "", indent: 2, completed: false, childIds: [], priority: 1, durationMinutes: 45, scheduledDate: "2026-09-01", scheduledTime: "09:00", deadline: "2026-09-10", deadlineTime: "17:00" };
+const task: Task = { id: "a", title: "Write", path: "Work.md", section: "Next", line: 0, endLine: 0, raw: "", indent: 2, status: "todo", completed: false, childIds: [], priority: 1, durationMinutes: 45, scheduledDate: "2026-09-01", scheduledTime: "09:00", deadline: "2026-09-10", deadlineTime: "17:00" };
 describe("calendar scheduling", () => {
   it("uses scheduled dates first and deadlines as a fallback", () => {
     expect(calendarDate(task)).toBe("2026-09-01");

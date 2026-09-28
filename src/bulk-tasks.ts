@@ -8,7 +8,7 @@ import { normalizePath } from "obsidian";
 import type { ListPlacement } from "./list-drag";
 import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
-export type BulkTaskPatch = Partial<Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "deferDate" | "someday" | "durationMinutes" | "priority" | "tags" | "repeat" | "destination" | "description" | "completed">>;
+export type BulkTaskPatch = Partial<Pick<TaskDraft, "scheduledDate" | "scheduledTime" | "deadline" | "deadlineTime" | "deferDate" | "someday" | "durationMinutes" | "priority" | "tags" | "repeat" | "destination" | "description" | "completed" | "status">>;
 export interface BulkTaskChange { task: Task; draft?: TaskDraft }
 export interface BulkTaskOptions {
   delete?: boolean;

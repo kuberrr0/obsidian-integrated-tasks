@@ -3,7 +3,7 @@ import type { NoteHeading } from "./structure";
 import type { Task } from "./types";
 
 /** Bump whenever the Task shape or note parsing changes, so older records are parsed again. */
-export const CACHE_SCHEMA = 1;
+export const CACHE_SCHEMA = 2;
 
 /** A task without its path-derived fields; parent and children are stored as line numbers. */
 export type CachedTask = Omit<Task, "id" | "path" | "parentId" | "childIds"> & { parentId?: number; childIds?: number[] };

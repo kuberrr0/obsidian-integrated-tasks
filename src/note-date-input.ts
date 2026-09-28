@@ -34,7 +34,7 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
   const blank = (value: string): string => " ".repeat(value.length);
   // Prose that must never be parsed, but still counts as prose (so a date before it is not trailing).
   const opaque = (value: string): string => "\u0001".repeat(value.length);
-  const checkbox = /^\s*-\s+\[[ xX]\]\s/.exec(text)?.[0] ?? "";
+  const checkbox = /^\s*-\s+\[[ xX/?-]\]\s/.exec(text)?.[0] ?? "";
   const ranges: ParsedTokenRange[] = [];
   parseTaskLine(text, reference, dateFormat, false, ranges);
   const deferRange = ranges.find(range => range.kind === "defer");
@@ -193,9 +193,9 @@ export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boo
     }
     const clear = [...left].filter(([, wasEdited]) => wasEdited).map(([number]) => number);
     if (!clear.length) return transaction;
-    // Only edited open tasks can change; check them before classifying the whole note.
+    // Only edited open tasks (to do, in progress, waiting) can change; check them before classifying the whole note.
     const tasks = clear.sort((a, b) => a - b).map(number => transaction.newDoc.line(number))
-      .filter(line => /^\s*-\s+\[ \]\s/.test(line.text));
+      .filter(line => /^\s*-\s+\[[ /?]\]\s/.test(line.text));
     const changes: ChangeSpec[] = [];
     if (tasks.length) {
       const nonBody = nonBodyLines(transaction.newDoc.iterLines());

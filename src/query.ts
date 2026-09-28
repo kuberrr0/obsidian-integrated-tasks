@@ -1,5 +1,6 @@
 import { matchesFilter, propertyValue, propertyLabel } from "./task-properties";
 import { actionDate, todayIso } from "./date";
+import { TASK_STATUSES } from "./task-status";
 import type { Task, TaskQuery, TaskSort, TaskGrouping } from "./types";
 
 /** Defers hide tasks until their date arrives; nothing is written when it does. */
@@ -55,6 +56,7 @@ function sortValue(task: Task, sort: TaskSort): string | number | undefined {
   if (sort === "scheduledDate" || sort === "scheduledTime") return scheduled;
   if (sort === "deadline" || sort === "deadlineTime") return deadline;
   if (sort === "date") return scheduled && deadline ? (scheduled < deadline ? scheduled : deadline) : scheduled ?? deadline ?? "9999-12-31";
+  if (sort === "status") return TASK_STATUSES.indexOf(task.status);
   return propertyValue(task, sort);
 }
 

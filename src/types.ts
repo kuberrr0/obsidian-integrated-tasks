@@ -1,4 +1,6 @@
 export type Priority = 1 | 2 | 3;
+/** Stored as the checkbox character: `[ ]`, `[/]`, `[?]`, `[x]`, `[-]`. */
+export type TaskStatus = "todo" | "doing" | "waiting" | "done" | "cancelled";
 
 export interface ParsedTaskMetadata {
   title: string;
@@ -29,6 +31,8 @@ export interface Task extends ParsedTaskMetadata {
   endLine: number;
   raw: string;
   indent: number;
+  status: TaskStatus;
+  /** Done or cancelled. */
   completed: boolean;
   section?: string;
   sectionLine?: number;
@@ -98,6 +102,8 @@ export interface TaskDraft extends ParsedTaskMetadata {
   description?: string;
   /** Additional canonical Markdown lines for a new task batch, relative to indent zero. */
   additionalLines?: string[];
+  /** Undefined derives the status from `completed`. */
+  status?: TaskStatus;
   completed: boolean;
   destination: string;
   indent: number;

@@ -132,6 +132,16 @@ describe("bulk inline editor", () => {
     expect(contentEl.all().filter(element => element.text)).toEqual([]);
     expect([...contentEl.all(), ...modalEl.all()].filter(element => element.tagName === "BUTTON").map(element => element.attrs.get("aria-label"))).toEqual(["Delete task", "Save task"]);
   });
+  it("sets a status for every selected task from its own menu, leaving it unchanged by default", async () => {
+    const { modalEl, button, onSave, editor } = open();
+    const status = modalEl.all().find(element => element.attrs.get("aria-label") === "Status")!;
+    expect(status.value).toBe("");
+    expect(status.children.map(option => option.text)).toEqual(["Status unchanged", "To do", "In progress", "Waiting", "Done", "Cancelled"]);
+    status.value = "Waiting";
+    editor.value += " p3";
+    button("Save task").click();
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({ priority: 3, status: "waiting" }));
+  });
   it.each(["scheduledDate", "deadline", "durationMinutes", "priority", "tags"] as const)("focuses %s without changing any properties", async property => {
     const { editor, button, onSave } = open(property);
     const callback = vi.mocked(window.setTimeout).mock.calls[0][0] as () => void;

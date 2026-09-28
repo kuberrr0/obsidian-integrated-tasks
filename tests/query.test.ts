@@ -12,6 +12,7 @@ function task(overrides: Partial<Task>): Task {
     endLine: 0,
     raw: "- [ ] Task",
     indent: 0,
+    status: overrides.completed ? "done" : "todo",
     completed: false,
     title: "Task",
     childIds: [],
@@ -98,7 +99,7 @@ describe("shared task view controls", () => {
     expect([...groupTasks(ordered, "date").keys()]).toEqual(["2026-09-06", "2026-09-05", "No date"]);
     expect([...groupTasks(ordered, "priority").keys()]).toEqual(["P1", "P3", "No priority"]);
     expect(groupTasks(ordered, "source").get("Project.md")).toEqual(ordered);
-    expect(groupTasks(ordered, "status").get("Completed")?.map((item) => item.id)).toEqual(["c"]);
+    expect(groupTasks(ordered, "status").get("Done")?.map((item) => item.id)).toEqual(["c"]);
   });
 
   it("keeps children after visible parents and promotes children whose parents are filtered out", () => {

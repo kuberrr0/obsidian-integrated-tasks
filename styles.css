@@ -1185,6 +1185,49 @@ button.tm-gantt-handle.is-finish:focus-visible,
   border-color: var(--tm-priority-color);
 }
 .tm-main-view input.tm-task-checkbox:is(.is-p1, .is-p2, .is-p3):checked { background: var(--tm-priority-color); }
+
+/* Task statuses: in progress is half filled, waiting has a dashed box with a dot, cancelled is muted with a cross.
+   In the task view and editor, in progress and waiting are unchecked and cancelled is checked. */
+input:is(.tm-task-checkbox, .tm-editor-checkbox).is-doing:not(:checked) {
+  border-color: var(--checkbox-color);
+  background-image: linear-gradient(90deg, var(--checkbox-color) 50%, transparent 50%);
+}
+input:is(.tm-task-checkbox, .tm-editor-checkbox).is-waiting:not(:checked) {
+  border-style: dashed;
+  background-image: radial-gradient(circle, var(--tm-priority-color, var(--text-muted)) 0 18%, transparent 24%);
+}
+input:is(.tm-task-checkbox, .tm-editor-checkbox).is-cancelled {
+  --checkbox-color: var(--text-faint);
+  --checkbox-color-hover: var(--text-muted);
+  /* Also mutes a priority colour. */
+  --tm-priority-color: var(--text-faint);
+}
+input:is(.tm-task-checkbox, .tm-editor-checkbox).is-cancelled:checked::after {
+  -webkit-mask-size: 55%;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 2l6 6M8 2l-6 6' stroke='black' stroke-width='1.8' stroke-linecap='round'/></svg>");
+}
+.tm-task-row.is-cancelled .tm-task-title { color: var(--text-faint); }
+
+/* The same statuses in notes, where Obsidian draws any character but a space as a checked box. Every rule has zero
+   specificity, so a theme that styles `[/]`, `[?]` or `[-]` itself wins. The unfilled parts are painted over the fill. */
+:where(input.task-list-item-checkbox:is([data-task="/"], [data-task="?"], [data-task="-"])) { --checkbox-marker-color: transparent; }
+:where(input.task-list-item-checkbox[data-task="/"]) {
+  background-image: linear-gradient(90deg, transparent 50%, var(--background-primary) 50%);
+}
+:where(input.task-list-item-checkbox[data-task="?"]) {
+  --checkbox-color: var(--text-muted);
+  --checkbox-color-hover: var(--text-normal);
+  background-image: radial-gradient(circle, transparent 0 20%, var(--background-primary) 25%);
+}
+:where(input.task-list-item-checkbox[data-task="-"]) {
+  --checkbox-color: var(--text-faint);
+  --checkbox-color-hover: var(--text-muted);
+  background-image: linear-gradient(to top right, var(--background-primary) calc(50% - 1px), transparent calc(50% - 1px) calc(50% + 1px), var(--background-primary) calc(50% + 1px));
+}
+:where(ul > li.task-list-item[data-task="-"], .markdown-source-view.mod-cm6 .HyperMD-task-line[data-task="-"]) {
+  text-decoration: var(--checklist-done-decoration);
+  color: var(--checklist-done-color);
+}
 @media (max-width: 700px) {
   .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { width: 22px; height: 44px; min-height: 44px; padding-top: 0; }
   .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary,
@@ -1432,6 +1475,8 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 }
 
 .tm-editor-task-line > [hidden] { display: none; }
+/* After the title, out of the way of typing. */
+.tm-editor-task-line .tm-editor-status { order: 1; flex: 0 0 auto; align-self: center; font-size: var(--font-ui-smaller); }
 .tm-editor-modal .tm-editor-error:empty { display: none; }
 
 /* One continuous editor keeps pointer positions and token source offsets aligned. */
@@ -1702,6 +1747,7 @@ body .modal-container .modal.tm-bottom-sheet > .tm-editor-actions { flex-shrink:
 .tm-dashboard .tm-today-summary { margin: 0 0 var(--size-4-2); }
 .tm-today-stats { display: flex; flex-wrap: wrap; align-items: center; gap: var(--size-2-2) var(--size-4-3); color: var(--text-muted); font-size: var(--font-ui-small); }
 .tm-today-stat.is-overdue { color: var(--text-error); }
+.tm-today-stat.is-doing { color: var(--text-accent); }
 .tm-today-next { color: var(--text-normal); }
 
 /* Rows scroll vertically on touch; horizontal drags become swipes. */

@@ -19,14 +19,14 @@ export interface TasksImportOptions {
 export type TasksImportSkip = "status" | "numbered" | "repeat" | "dependency" | "cancelled";
 
 const SKIP_LABELS: Record<TasksImportSkip, [string, string, string]> = {
-  status: ["task", "tasks", "with a custom status, such as [/] or [-], left unchanged"],
+  status: ["task", "tasks", "with an unsupported status, such as [!] or [>], left unchanged"],
   numbered: ["numbered-list task", "numbered-list tasks", "left unchanged"],
   repeat: ["repeat rule", "repeat rules", "this plugin doesn't support, kept as text"],
   dependency: ["task", "tasks", "with IDs, dependencies, or on-completion actions, kept as text"],
   cancelled: ["cancelled date", "cancelled dates", "kept as text"]
 };
 
-/** For example "2 tasks with a custom status, such as [/] or [-], left unchanged." */
+/** For example "2 tasks with an unsupported status, such as [!] or [>], left unchanged." */
 export function skipLabel(skip: TasksImportSkip, count: number): string {
   const [one, many, rest] = SKIP_LABELS[skip];
   return `${count} ${count === 1 ? one : many} ${rest}.`;
@@ -118,7 +118,8 @@ export function convertTasksLine(line: string, options: TasksImportOptions): Tas
   const listMarker = marker === "*" || marker === "+";
   if (!touched && !listMarker) return { line, changed: false, skips };
   if (/^\d/.test(marker)) return { line, changed: false, skips: [...skips, "numbered"] };
-  if (!/^[ xX]$/.test(status)) return { line, changed: false, skips: [...skips, "status"] };
+  // To do, in progress, waiting, done and cancelled convert; other statuses have no equivalent here.
+  if (!/^[ xX/?-]$/.test(status)) return { line, changed: false, skips: [...skips, "status"] };
 
   const cleaned = body.replace(/\s{2,}/g, " ").trim();
   const rest = `${indent}- [${status}] ${cleaned}`;

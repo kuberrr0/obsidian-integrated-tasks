@@ -77,7 +77,8 @@ Everything you can do by dragging also works from the keyboard. Long lists show 
 | Shift + ↑ / ↓ | Select a range |
 | Alt + ↑ / ↓ | Move the task up or down among its siblings |
 | Alt + → / ← | Make it a subtask of the task above, or move it out of its parent |
-| M | Move to another section, column, or note, reschedule it, or snooze it |
+| M | Move to another section, column, or note, reschedule it, snooze it, or change its status |
+| S | Switch between to do, in progress, and waiting (a done or cancelled task reopens) |
 | Cmd/Ctrl + Z | Undo the last task change |
 | Cmd/Ctrl + K | Jump to a view, project, tag, smart list, or task |
 
@@ -95,7 +96,7 @@ The calendar places a task on its scheduled date, or on its deadline if it has n
 
 ### Kanban: organize work into columns
 
-Use your note's sections as a board, or group tasks by properties such as priority or status. Drag between supported columns to update the task's section or property. Grouping by **Status** gives you Open and Completed columns.
+Use your note's sections as a board, or group tasks by properties such as priority or status. Drag between supported columns to update the task's section or property. Grouping by **Status** gives you To do, In progress, Waiting, Done, and Cancelled columns; drop a task on a column to give it that status.
 
 ![Kanban board with tasks organized into note sections](resources/images/All%20tasks%20kanban.png)
 
@@ -152,7 +153,7 @@ Write one option per line:
 | `smart list` | `Quick wins` (uses that list's filters, sort, and grouping) |
 | `project` | `[[Website Refresh]]`, or `this` for the note the block is in |
 | `note` | `this`, `[[Inbox]]` (tasks written in that note) |
-| Any property | `priority: 1, 2` · `tags: work or home` · `status: completed` · `repeat: has` · `hidden until: someday` · `task title: contains report` |
+| Any property | `priority: 1, 2` · `tags: work or home` · `status: in progress, waiting` · `repeat: has` · `hidden until: someday` · `task title: contains report` |
 | Dates | `deadline: before next friday` · `scheduled: between today and in 7 days` · `completed: after 7 days ago` · `deadline: missing` |
 | `search` | words in the title, description, or tags |
 | `sort`, `group` | `sort: priority desc` · `group: source` |
@@ -184,6 +185,7 @@ Open **Weekly Review** from the sidebar, the quick switcher, or the command pale
 
 - **Completed this week**, when completion dates are turned on
 - **Overdue** tasks to reschedule, finish, or let go of
+- **Waiting** tasks to follow up on
 - **Routines behind** their date
 - **Deadlines in the next 7 days**
 - **Untouched for a month**: undated tasks in notes nobody has edited for 30 days
@@ -203,6 +205,28 @@ On phones, the task editors open as a sheet from the bottom of the screen. Drag 
 After you complete, move, edit, snooze, or delete tasks from a task view, a notice shows what changed with an **Undo** button. You can also press **Cmd/Ctrl+Z** in a task view or run **Undo last task change** from the command palette. The last 20 changes can be undone.
 
 Undo puts your notes back exactly as they were, so it only runs if those notes haven't changed since; otherwise it tells you which note changed. You can turn the notices off in the plugin settings and still undo with the command or shortcut.
+
+## Track progress with statuses
+
+A task's status is the character in its checkbox:
+
+| Markdown | Status |
+| --- | --- |
+| `- [ ]` | To do |
+| `- [/]` | In progress |
+| `- [?]` | Waiting |
+| `- [x]` | Done |
+| `- [-]` | Cancelled |
+
+Change a status by pressing **M** on a task and choosing **Mark as…**, by pressing **S** to switch between to do, in progress, and waiting, by dragging it to another column of a board grouped by status, or with the status menu in the task editor or when editing several tasks. You can also type the character in a note. Other characters, such as `[!]`, are not treated as tasks.
+
+In task views, in-progress checkboxes are half filled, waiting ones are dashed with a dot, and cancelled tasks are muted and struck through. Notes show the same marks, unless your theme styles these checkboxes itself.
+
+Cancelled tasks are hidden with completed ones and count toward neither side of a project's progress. In task views, clicking the checkbox of an in-progress or waiting task completes it, and clicking a cancelled task's checkbox reopens it. Completing a repeating task from any status advances it to its next occurrence as to do; marking it as cancelled skips that occurrence.
+
+In a note, a click on an in-progress or waiting checkbox is usually handled by Obsidian itself, which resets it to `[ ]` instead of completing it (repeating tasks are completed as usual). To complete it, type `x` in the checkbox or use a task view.
+
+The Today summary shows how many of today's tasks are in progress, and smart lists and `task-query` blocks can filter, sort, and group by status. Older smart lists that filter on **Open** or **Completed** keep working: Open means to do, in progress, or waiting.
 
 ## Snooze tasks you can't act on yet
 
@@ -234,7 +258,7 @@ Repeat rules include every day, every week, every other week, every month, every
 
 ## Record when tasks were done
 
-Turn on **Record completion dates** in the settings to stamp each task with the day you complete it, such as `- [x] Pay rent ✓Sep 27, 2026`. Reopening the task removes the date. Completed tasks then show a **Done** label, the weekly review lists what you finished this week, and smart lists can filter and sort by **Completed date**. Dates written by the Tasks plugin, such as `✅ 2026-09-27`, are read too.
+Turn on **Record completion dates** in the settings to stamp each task with the day you complete it, such as `- [x] Pay rent ✓Sep 27, 2026`. Reopening or cancelling the task removes the date, and cancelling never adds one. Completed tasks then show a **Done** label, the weekly review lists what you finished this week, and smart lists can filter and sort by **Completed date**. Dates written by the Tasks plugin, such as `✅ 2026-09-27`, are read too.
 
 ## Make it fit your workflow
 
@@ -259,8 +283,9 @@ Run **Import tasks from the Tasks plugin** from the command palette, or choose *
 | 🔁 every week | `every week` |
 | 🔺 ⏫ / 🔼 / 🔽 ⏬ | `p1` / `p2` / `p3` |
 | `#tag` | `#[[tag]]`, if you choose to convert tags |
+| `[/]`, `[?]`, `[-]` | kept, as in progress, waiting, and cancelled |
 
-Dataview-style fields such as `[due:: 2026-10-01]` are converted too, `* [ ]` and `+ [ ]` checklists become `- [ ]`, and your Tasks global filter (such as `#task`) is removed. You see how many tasks will change, with examples, before anything is written. Custom statuses, dependencies, and repeat rules this plugin doesn't support are left as they are and listed in the preview. Tasks query blocks are not touched. The whole import is one change you can undo.
+Dataview-style fields such as `[due:: 2026-10-01]` are converted too, `* [ ]` and `+ [ ]` checklists become `- [ ]`, and your Tasks global filter (such as `#task`) is removed. You see how many tasks will change, with examples, before anything is written. Other custom statuses (such as `[!]` or `[>]`), dependencies, and repeat rules this plugin doesn't support are left as they are and listed in the preview; ❌ cancelled dates stay as text. Tasks query blocks are not touched. The whole import is one change you can undo.
 
 ## Manual installation
 

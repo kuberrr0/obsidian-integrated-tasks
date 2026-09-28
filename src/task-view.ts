@@ -20,11 +20,12 @@ import { draftForGroup, taskGroupTarget, type ListDropGroup, type ListPlacement 
 import { renderCalendar } from "./calendar-view";
 import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { TASK_PROPERTIES } from "./task-properties";
+import { OPEN_STATUSES, STATUS_LABELS, TASK_STATUSES, checkboxLabel, statusClass } from "./task-status";
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { groupTasks, isDeferred, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
-import type { TaskFilter, Project, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping } from "./types";
+import type { TaskFilter, Project, Task, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
@@ -40,6 +41,7 @@ const STALE_DAYS = 30;
 const SWIPE_START = 12;
 const SWIPE_COMMIT = 80;
 const SWIPE_MAX = 120;
+const STATUS_ICONS: Record<TaskStatus, string> = { todo: "circle", doing: "circle-dot", waiting: "clock", done: "circle-check", cancelled: "circle-slash" };
 
 /** What had focus before a re-render, so the same control can be focused afterwards. */
 interface FocusKey { taskId?: string; index?: number; part?: string; key?: string }
@@ -401,9 +403,11 @@ export class TaskMainView extends ItemView {
     const sections: Array<{ id: string; title: string; hint: string; empty: string; tasks?: Task[]; projects?: Project[] }> = [
       { id: "completed", title: "Completed this week", hint: "What you finished in the last 7 days.",
         empty: this.plugin.settings.completionDates ? "Nothing completed in the last 7 days." : "Turn on Record completion dates in settings to see what you finished.",
-        tasks: tasks.filter(task => task.completed && task.completedDate !== undefined && task.completedDate > addDays(today, -7) && task.completedDate <= today) },
+        tasks: tasks.filter(task => task.status === "done" && task.completedDate !== undefined && task.completedDate > addDays(today, -7) && task.completedDate <= today) },
       { id: "overdue", title: "Overdue", hint: "Reschedule, finish, or let go of these.", empty: "Nothing is overdue.",
         tasks: open.filter(task => !isDeferred(task, today) && (actionDate(task) ?? today) < today && !repeating(task)) },
+      { id: "waiting", title: "Waiting", hint: "Follow up on these.", empty: "Nothing is waiting on someone else.",
+        tasks: open.filter(task => task.status === "waiting") },
       { id: "routines", title: "Routines behind", hint: "Repeating tasks past their date.", empty: "All routines are up to date.",
         tasks: open.filter(task => repeating(task) && task.scheduledDate !== undefined && task.scheduledDate < today) },
       { id: "deadlines", title: "Deadlines in the next 7 days", hint: "Make time for these before they're due.", empty: "No deadlines this week.",
@@ -842,7 +846,7 @@ export class TaskMainView extends ItemView {
     setIcon(add, "plus");
     add.addEventListener("click", event => {
       event.stopPropagation();
-      const blank: Task = { id: "", path: this.taskSourcePath ?? this.plugin.settings.inboxPath, title: "", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
+      const blank: Task = { id: "", path: this.taskSourcePath ?? this.plugin.settings.inboxPath, title: "", status: "todo", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
       this.plugin.openEditor({ ...this.state, preset: draftForGroup(blank, target) });
     });
   }
@@ -1071,7 +1075,7 @@ export class TaskMainView extends ItemView {
     // Controls inside a row join the tab order only while focus is in that row.
     const controls = Array.from(row.querySelectorAll<HTMLElement>("input, button, a, [role=button]"));
     for (const control of controls) control.tabIndex = -1;
-    row.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown Shift+ArrowUp Shift+ArrowDown Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight M");
+    row.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown Shift+ArrowUp Shift+ArrowDown Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight M S");
     row.addEventListener("focusin", () => {
       this.setRovingRow(row);
       for (const control of controls) control.tabIndex = 0;
@@ -1086,6 +1090,13 @@ export class TaskMainView extends ItemView {
       if ((key === "m" || key === "M") && !event.altKey && !event.shiftKey) {
         event.preventDefault(); event.stopPropagation();
         this.openMoveMenu(task, row);
+        return;
+      }
+      if ((key === "s" || key === "S") && !event.altKey && !event.shiftKey) {
+        event.preventDefault(); event.stopPropagation();
+        // To do → in progress → waiting → to do; a closed task reopens as to do.
+        const next = OPEN_STATUSES[(OPEN_STATUSES.indexOf(task.status) + 1) % OPEN_STATUSES.length];
+        this.setStatus(task, next);
         return;
       }
       if (event.altKey && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)) {
@@ -1152,8 +1163,22 @@ export class TaskMainView extends ItemView {
       menu.addItem(item => item.setTitle(label).setIcon("alarm-clock-off").onClick(() => move({ property: "defer", value })));
     }
     if (task.deferDate || task.someday) menu.addItem(item => item.setTitle("Stop snoozing").setIcon("alarm-clock").onClick(() => move({ property: "defer", value: undefined })));
+    menu.addSeparator();
+    for (const status of TASK_STATUSES) {
+      if (status !== task.status) menu.addItem(item => item.setTitle(`Mark as ${STATUS_LABELS[status].toLowerCase()}`).setIcon(STATUS_ICONS[status]).onClick(() => this.setStatus(task, status)));
+    }
     const rect = row.getBoundingClientRect();
     menu.showAtPosition({ x: rect.left, y: rect.bottom });
+  }
+
+  /** Applies to the whole selection when the task is selected, like the move menu. */
+  private setStatus(task: Task, status: TaskStatus): void {
+    const tasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
+    this.pendingFocus = { path: task.path, title: task.title };
+    void this.plugin.store.setStatus(tasks, status).then(async paths => {
+      for (const path of paths) await this.plugin.index.refreshPath(path);
+      this.announce(`${tasks.length === 1 ? taskTitleLabel(task.title) : `${tasks.length} tasks`}: ${STATUS_LABELS[status].toLowerCase()}`);
+    }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); });
   }
 
   private depthWithin(task: Task, visibleIds: Set<string>): number {
@@ -1177,11 +1202,12 @@ export class TaskMainView extends ItemView {
   }
 
   private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup): void {
-    const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
+    const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
     this.bindSelection(row, task);
     const checkboxTarget = row.createEl("label", { cls: "tm-checkbox-target" });
-    const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}`, attr: { "aria-label": `Complete ${task.title}${task.priority ? ` (priority ${task.priority})` : ""}`, "data-tm-focus-key": "checkbox" } });
+    const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "checkbox" } });
+    // A cancelled task shows checked, so clicking it reopens it (to do).
     checkbox.checked = task.completed;
     // Not `disabled`: disabling the focused checkbox would drop keyboard focus before the re-render restores it.
     let pending = false;
@@ -1218,8 +1244,8 @@ export class TaskMainView extends ItemView {
     } catch { /* Ambiguous recurring links remain editable through the task editor. */ }
 
     if (this.plugin.settings.showSubtaskCounts && task.childIds.length) {
-      const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));
-      primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.completed).length}/${children.length}` });
+      const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child) && child!.status !== "cancelled");
+      primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.status === "done").length}/${children.length}` });
     }
     const metadata = content.createDiv({ cls: "tm-task-metadata" });
     const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);

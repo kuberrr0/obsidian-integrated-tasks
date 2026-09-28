@@ -2,6 +2,7 @@ import { parseTags } from "./task-tags";
 import { actionDate } from "./date";
 import { destinationString } from "./structure";
 import { propertyValue } from "./task-properties";
+import { isClosedStatus, statusFromLabel } from "./task-status";
 import type { Task, TaskDraft, TaskSort } from "./types";
 
 export type ListPlacement = "before" | "after" | "child";
@@ -51,7 +52,12 @@ export function draftForGroup(task: Task, group?: ListDropGroup): TaskDraft {
     case "tags": draft.tags = parseTags(String(value ?? "")); break;
     case "priority": draft.priority = value as Task["priority"]; break;
     case "duration": draft.durationMinutes = value as number | undefined; break;
-    case "status": draft.completed = value === "Completed"; break;
+    case "status": {
+      // "Open" (the board column before statuses) reopens closed tasks and leaves open ones as they are.
+      const status = value === "Open" ? draft.completed ? "todo" : draft.status : statusFromLabel(String(value ?? ""));
+      if (status) { draft.status = status; draft.completed = isClosedStatus(status); }
+      break;
+    }
     case "title": if (typeof value === "string") draft.title = value; break;
   }
   return draft;

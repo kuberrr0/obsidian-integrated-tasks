@@ -42,11 +42,12 @@ export function findLiveLine(lines: string[], task: Task, sectionHeadingLevel = 
   throw new Error("The task changed in its note. Refresh the view and try again.");
 }
 
+/** Completing marks any status done; reopening a done or cancelled task makes it to do. */
 export function toggleTaskInContent(content: string, task: Task, completed: boolean, sectionHeadingLevel = 1): string {
   const eol = lineEnding(content);
   const lines = content.split(/\r?\n/);
   const liveLine = findLiveLine(lines, task, sectionHeadingLevel);
-  lines[liveLine] = lines[liveLine].replace(/^(\s*-\s+\[)[ xX](\])/, `$1${completed ? "x" : " "}$2`);
+  lines[liveLine] = lines[liveLine].replace(/^(\s*-\s+\[)[ xX/?-](\])/, `$1${completed ? "x" : " "}$2`);
   return lines.join(eol);
 }
 
@@ -81,7 +82,7 @@ export function insertIntoDestination(content: string, block: string[], heading?
     insertion = end + 1;
   }
   const firstTask = bodyLines(content).find(({ text, line }) =>
-    line >= insertion && line < scopeEnd && /^[ \t]*-\s+\[[ xX]\]\s+/.test(text)
+    line >= insertion && line < scopeEnd && /^[ \t]*-\s+\[[ xX/?-]\]\s+/.test(text)
   );
   if (firstTask) {
     insertion = firstTask.line;

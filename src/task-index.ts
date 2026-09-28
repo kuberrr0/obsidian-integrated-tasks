@@ -255,8 +255,9 @@ export class TaskIndex {
           name: path.split("/").pop()?.replace(/\.md$/i, "") ?? path,
           headings: this.headingsForPath(path),
           archived: this.archivedPaths.has(path),
+          // Cancelled tasks count as neither.
           openTasks: tasks.filter((task) => !task.completed).length,
-          completedTasks: tasks.filter((task) => task.completed).length
+          completedTasks: tasks.filter((task) => task.status === "done").length
         };
       })
       .sort((left, right) => left.name.localeCompare(right.name));

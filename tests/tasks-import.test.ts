@@ -45,9 +45,15 @@ describe("Tasks plugin import", () => {
 
   it("keeps what it can't convert, and reports it", () => {
     expect(convert("- [ ] Stand-up 🔁 every weekday ⏳ 2026-09-28")).toEqual({ line: "- [ ] Stand-up 🔁 every weekday Sep 28, 2026", changed: true, skips: ["repeat"] });
-    expect(convert("- [/] In progress 📅 2026-10-01")).toEqual({ line: "- [/] In progress 📅 2026-10-01", changed: false, skips: ["status"] });
+    expect(convert("- [!] Important 📅 2026-10-01")).toEqual({ line: "- [!] Important 📅 2026-10-01", changed: false, skips: ["status"] });
     expect(convert("1. [ ] Numbered 📅 2026-10-01").changed).toBe(false);
     expect(convert("- [ ] Blocked ⛔ abc123 📅 2026-10-01").skips).toEqual(["dependency"]);
+  });
+
+  it("converts in-progress, waiting and cancelled tasks, keeping their status", () => {
+    expect(convert("- [/] In progress 📅 2026-10-01")).toEqual({ line: "- [/] In progress {Oct 1, 2026}", changed: true, skips: [] });
+    expect(convert("- [?] Waiting ⏳ 2026-09-28")).toEqual({ line: "- [?] Waiting Sep 28, 2026", changed: true, skips: [] });
+    expect(convert("- [-] Dropped 📅 2026-10-01 ❌ 2026-09-20")).toEqual({ line: "- [-] Dropped ❌2026-09-20 {Oct 1, 2026}", changed: true, skips: ["cancelled"] });
   });
 
   it("leaves lines without Tasks syntax, prose #tags off, and C# alone", () => {

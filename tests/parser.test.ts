@@ -10,6 +10,7 @@ describe("task parser", () => {
     expect(parseTaskLine("- [ ] Draft launch [[2026-09-05]] 1h30m {[[2026-09-07]]} p1", reference)).toEqual({
       title: "Draft launch",
       indent: 0,
+      status: "todo",
       completed: false,
       scheduledDate: "2026-09-05",
       durationMinutes: 90,
@@ -338,10 +339,18 @@ describe("task descriptions", () => {
   });
 
   it("does not capture unrelated bullets, headings, fenced examples, or custom checkboxes", () => {
-    const tasks = scanTasks("Note.md", "- [ ] Task\n  - Detail\n    -  [/] In progress\n- Outside\n  - Also outside\n## Heading\n  - Heading bullet\n```md\n- [ ] Example\n  - Example detail\n```\n- [ ] Last");
+    const tasks = scanTasks("Note.md", "- [ ] Task\n  - Detail\n    -  [!] Important\n- Outside\n  - Also outside\n## Heading\n  - Heading bullet\n```md\n- [ ] Example\n  - Example detail\n```\n- [ ] Last");
     expect(tasks).toHaveLength(2);
     expect(tasks[0].description).toBe("- Detail");
     expect(tasks[1].description).toBeUndefined();
+  });
+
+  it("reads in-progress, waiting and cancelled checklist items as subtasks, not description", () => {
+    const tasks = scanTasks("Note.md", "- [ ] Task\n  - Detail\n  - [/] Draft\n  - [?] Hear back\n  - [-] Dropped\n  - [!] Flagged");
+    expect(tasks.map(task => [task.title, task.status, task.parentId])).toEqual([
+      ["Task", "todo", undefined], ["Draft", "doing", "Note.md:0"], ["Hear back", "waiting", "Note.md:0"], ["Dropped", "cancelled", "Note.md:0"]]);
+    expect(tasks[0].description).toBe("- Detail");
+    expect(tasks[0].childIds).toHaveLength(3);
   });
 });
 

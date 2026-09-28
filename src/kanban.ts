@@ -1,5 +1,6 @@
 import { groupTasks } from "./query";
 import { taskGroupTarget, type ListDropGroup } from "./list-drag";
+import { STATUS_LABELS, TASK_STATUSES } from "./task-status";
 import type { Task, TaskGrouping } from "./types";
 
 const deferRank = (title: string): number => title === "Not hidden" ? 2 : title === "Someday" ? 1 : 0;
@@ -9,7 +10,8 @@ export function kanbanColumns(tasks: Task[], grouping: TaskGrouping): KanbanColu
   if (grouping === "none") return [{ title: "Tasks", tasks }];
   const property = grouping === "default" ? "section" : grouping;
   const groups = groupTasks(tasks, property);
-  if (property === "status") return ["Open", "Completed"].map(title => ({ title, tasks: groups.get(title) ?? [], target: { property, value: title } }));
+  if (property === "status") return TASK_STATUSES.map(status => STATUS_LABELS[status])
+    .map(title => ({ title, tasks: groups.get(title) ?? [], target: { property, value: title } }));
   if (property === "priority") return [1, 2, 3, undefined].map(value => {
     const title = value ? `P${value}` : "No priority";
     return { title, tasks: groups.get(title) ?? [], target: { property, value } };

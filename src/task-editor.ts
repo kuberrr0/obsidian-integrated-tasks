@@ -6,7 +6,8 @@ import { destinationString } from "./structure";
 import { Modal, Notice, setIcon, type App } from "obsidian";
 import { todayIso, tomorrowIso } from "./date";
 import { parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput } from "./parser";
-import type { Project, Task, TaskDraft, TaskManagerSettings, TaskViewMode } from "./types";
+import { STATUS_CHARS, STATUS_LABELS, TASK_STATUSES, draftStatus, isClosedStatus, statusClass, statusFromChar } from "./task-status";
+import type { Project, Task, TaskDraft, TaskManagerSettings, TaskStatus, TaskViewMode } from "./types";
 
 export type TaskEditorProperty = "scheduledDate" | "deadline" | "defer" | "durationMinutes" | "priority" | "tags" | "repeat";
 
@@ -38,6 +39,7 @@ function initialDraft(options: TaskEditorOptions): TaskDraft {
       durationMinutes: options.task.durationMinutes,
       priority: options.task.priority,
       tags: options.task.tags,
+      status: options.task.status,
       completed: options.task.completed,
       destination: destinationString(options.task.path, options.task.section),
       indent: options.task.indent
@@ -61,6 +63,9 @@ export class TaskEditorModal extends Modal {
   private focusTimer?: number;
   private handleKeydown?: (event: KeyboardEvent) => void;
   private completedInput!: HTMLInputElement;
+  private statusInput!: HTMLSelectElement;
+  /** The chosen status; the checkbox overrides it when checked or unchecked since (see `status`). */
+  private chosenStatus: TaskStatus = "todo";
   private taskIndent = "";
   private rawInput!: TaskLineEditor;
 
@@ -79,12 +84,16 @@ export class TaskEditorModal extends Modal {
     const rawField = contentEl.createDiv({ cls: "tm-editor-raw-field" });
     const taskLine = rawField.createDiv({ cls: "tm-editor-task-line tm-note-task-line" });
     this.completedInput = taskLine.createEl("input", { type: "checkbox", cls: "tm-editor-checkbox", attr: { "aria-label": "Completed" } });
-    this.completedInput.checked = this.draft.completed;
+    this.statusInput = taskLine.createEl("select", { cls: "dropdown tm-editor-status", attr: { "aria-label": "Status" } });
+    for (const status of TASK_STATUSES) this.statusInput.createEl("option", { value: status, text: STATUS_LABELS[status] });
+    this.setStatus(draftStatus(this.draft));
+    this.completedInput.addEventListener("change", () => this.setStatus(this.status()));
+    this.statusInput.addEventListener("change", () => this.setStatus(this.statusInput.value as TaskStatus));
     this.taskIndent = " ".repeat(this.draft.indent);
     const initial = this.options.task
       ? this.options.task.raw + this.serializeDraft(this.draft).slice(serializeTask(this.draft, this.options.dateFormat, this.options.settings.linkDates).length)
       : this.serializeDraft(this.draft);
-    const source = initial.replace(/^([ \t]*)[-+*]\s+\[([ xX])\][ \t]*/, "");
+    const source = initial.replace(/^([ \t]*)[-+*]\s+\[([ xX/?-])\][ \t]*/, "");
     const editorHost = taskLine.createDiv({ cls: "tm-editor-inline" });
     const error = contentEl.createDiv({ cls: "tm-editor-error", attr: { role: "alert", "aria-live": "assertive" } });
     const updatePriority = (): void => {
@@ -181,12 +190,24 @@ export class TaskEditorModal extends Modal {
       : serializeTaskInput(draft, this.options.dateFormat, this.options.settings.linkDates);
   }
 
+  /** The checkbox wins over the chosen status when they disagree, e.g. checking an in-progress task marks it done. */
+  private status(): TaskStatus {
+    return draftStatus({ status: this.chosenStatus, completed: this.completedInput.checked });
+  }
+
+  private setStatus(status: TaskStatus): void {
+    this.chosenStatus = status;
+    this.completedInput.checked = isClosedStatus(status);
+    this.completedInput.className = `tm-editor-checkbox${statusClass(status)}`;
+    this.statusInput.value = status;
+  }
+
   /** Accept pasted Markdown while keeping its checkbox out of the text field. */
   private normalizeChecklist(): void {
-    const prefix = /^([ \t]*)[-+*]\s+\[([ xX])\][ \t]*/.exec(this.rawInput.value);
+    const prefix = /^([ \t]*)[-+*]\s+\[([ xX/?-])\][ \t]*/.exec(this.rawInput.value);
     if (!prefix) return;
     this.taskIndent = prefix[1];
-    this.completedInput.checked = prefix[2].toLowerCase() === "x";
+    this.setStatus(statusFromChar(prefix[2])!);
     const start = this.rawInput.selectionStart;
     const end = this.rawInput.selectionEnd;
     this.rawInput.value = this.rawInput.value.slice(prefix[0].length);
@@ -195,17 +216,19 @@ export class TaskEditorModal extends Modal {
 
   private readRaw(): TaskDraft {
     this.normalizeChecklist();
-    const markdown = `${this.taskIndent}- [${this.completedInput.checked ? "x" : " "}] ${this.rawInput.value}`;
+    const status = this.status();
+    const checkbox = `${this.taskIndent}- [${STATUS_CHARS[status]}] `;
+    const markdown = checkbox + this.rawInput.value;
     if (!this.options.task) return parseTaskTreeInput(markdown, this.options.settings.inboxPath, new Date(), this.options.dateFormat, this.options.settings.linkDates);
     if (/\n[^\n]*\S/.test(this.rawInput.value)) {
       throw new Error("Edit one task at a time; use New task to add multiple tasks.");
     }
     const value = markdown.trimEnd();
-    if (/^\s*[-+*]\s+\[[ xX]\]\s*$/.test(value)) throw new Error("Enter a task title.");
+    if (/^\s*[-+*]\s+\[[ xX/?-]\]\s*$/.test(value)) throw new Error("Enter a task title.");
     // Saving an untouched note line must not reinterpret prose as natural dates.
-    if (this.rawInput.value === this.rawInput.defaultValue) return { ...this.draft, completed: this.completedInput.checked };
+    if (this.rawInput.value === this.rawInput.defaultValue) return { ...this.draft, status, completed: isClosedStatus(status) };
     // Only newly typed text may be read as a natural-language date; the rest parses strictly.
-    const parsed = parseEditedTaskInput(this.rawInput.value, this.rawInput.defaultValue, new Date(), this.options.dateFormat, `${this.taskIndent}- [${this.completedInput.checked ? "x" : " "}] `);
+    const parsed = parseEditedTaskInput(this.rawInput.value, this.rawInput.defaultValue, new Date(), this.options.dateFormat, checkbox);
     if (!parsed?.title) throw new Error("Enter a task title.");
     return { ...parsed, destination: parsed.destination ?? this.options.settings.inboxPath };
   }

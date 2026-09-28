@@ -76,7 +76,7 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
   } as unknown as App;
   const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
   await index.initialize();
-  const store = { toggle: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]), bulkChange: vi.fn().mockResolvedValue([]) };
+  const store = { toggle: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]), bulkChange: vi.fn().mockResolvedValue([]), setStatus: vi.fn().mockResolvedValue([]) };
   const plugin = {
     settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
     openEditor: vi.fn(), openBulkEditor: vi.fn(), openTaskView: vi.fn(), openProjectEditor: vi.fn(), undoTaskChange: vi.fn(), openQuickSwitcher: vi.fn(), saveSettings: vi.fn()
@@ -244,10 +244,54 @@ describe("keyboard", () => {
     key(rows(content())[0], "m");
     const titles = menus[0].items.map(item => item.title);
     expect(titles).toEqual(["Move to A", "Move to B", "Schedule for today", "Schedule for tomorrow", "Schedule for next week", "Remove dates",
-      "Snooze until tomorrow", "Snooze until next week", "Snooze to someday"]);
+      "Snooze until tomorrow", "Snooze until next week", "Snooze to someday", "Mark as in progress", "Mark as waiting", "Mark as done", "Mark as cancelled"]);
     menus[0].items[1].click();
     await Promise.resolve();
     expect(store.bulkDrop).toHaveBeenLastCalledWith([index.allTasks()[0]], { destination: "B.md" }, undefined, undefined);
+  });
+
+  it("changes status from the M menu, leaving out the current one, for the whole selection", async () => {
+    const { view, content, store, index } = await setup([["A.md", "- [/] Draft\n- [ ] Review\n- [ ] Send"]]);
+    await view.setState({ mode: "all" });
+    key(rows(content())[0], "m");
+    const statusItems = menus[0].items.filter(item => item.title.startsWith("Mark as"));
+    expect(statusItems.map(item => item.title)).toEqual(["Mark as to do", "Mark as waiting", "Mark as done", "Mark as cancelled"]);
+    statusItems[1].click();
+    expect(store.setStatus).toHaveBeenLastCalledWith([index.allTasks()[0]], "waiting");
+    rows(content())[1].focus();
+    key(rows(content())[1], "ArrowDown", { shiftKey: true });
+    key(rows(content())[2], "m");
+    menus[1].items.find(item => item.title === "Mark as cancelled")!.click();
+    expect(store.setStatus).toHaveBeenLastCalledWith(index.allTasks().slice(1), "cancelled");
+  });
+
+  it("cycles to do, in progress and waiting with S, and reopens closed tasks", async () => {
+    const { view, content, store, index } = await setup([["A.md", "- [ ] One\n- [/] Two\n- [?] Three\n- [x] Four\n- [-] Five"]]);
+    view["showCompleted"] = true;
+    await view.setState({ mode: "all" });
+    expect(rows(content())[0].getAttribute("aria-keyshortcuts")).toMatch(/ M S$/);
+    const next = rows(content()).map((row, position) => { key(row, position % 2 ? "S" : "s"); return store.setStatus.mock.lastCall; });
+    expect(next).toEqual(index.allTasks().map((task, position) => [[task], ["doing", "waiting", "todo", "todo", "todo"][position]]));
+    key(rows(content())[0], "s", { altKey: true });
+    key(rows(content())[0], "S", { shiftKey: true });
+    expect(store.setStatus).toHaveBeenCalledTimes(5);
+  });
+
+  it("marks each status on the row and in the checkbox's name, and reopens a cancelled task from its checkbox", async () => {
+    const { view, content, store, index } = await setup([["A.md", "- [ ] One p1\n- [/] Two p2\n- [?] Three\n- [x] Four\n- [-] Five"]]);
+    view["showCompleted"] = true;
+    await view.setState({ mode: "all" });
+    const boxes = rows(content()).map(row => row.querySelector<HTMLInputElement>("input.tm-task-checkbox")!);
+    expect(boxes.map(box => box.getAttribute("aria-label"))).toEqual([
+      "Complete One (priority 1)", "Complete Two (in progress, priority 2)", "Complete Three (waiting)", "Complete Four", "Complete Five (cancelled)"]);
+    expect(boxes.map(box => ["is-doing", "is-waiting", "is-cancelled"].filter(name => box.classList.contains(name)))).toEqual([[], ["is-doing"], ["is-waiting"], [], ["is-cancelled"]]);
+    expect(boxes.map(box => box.checked)).toEqual([false, false, false, true, true]);
+    expect(rows(content()).map(row => row.classList.contains("is-cancelled"))).toEqual([false, false, false, false, true]);
+    expect(rows(content()).map(row => row.classList.contains("is-completed"))).toEqual([false, false, false, true, true]);
+    boxes[4].click();
+    expect(store.toggle).toHaveBeenLastCalledWith(index.allTasks()[4], false);
+    boxes[1].click();
+    expect(store.toggle).toHaveBeenLastCalledWith(index.allTasks()[1], true);
   });
 });
 
@@ -359,7 +403,8 @@ describe("weekly review", () => {
 
   async function review() {
     const setupResult = await setup([
-      ["Work.md", [`- [ ] Late ${plus(-3)}`, `- [ ] Due soon {${plus(3)}}`, `- [ ] Due later {${plus(30)}}`, "- [ ] Maybe >someday", `- [ ] Hidden late ${plus(-3)} >someday`].join("\n")],
+      ["Work.md", [`- [ ] Late ${plus(-3)}`, `- [ ] Due soon {${plus(3)}}`, `- [ ] Due later {${plus(30)}}`, "- [ ] Maybe >someday", `- [ ] Hidden late ${plus(-3)} >someday`,
+        "- [?] Hear back from Sam", `- [-] Dropped late ${plus(-3)}`].join("\n")],
       ["Old.md", "- [ ] Forgotten idea"],
       ["Done project.md", "- [x] Shipped"]
     ], { "Done project.md": { tags: ["project"] }, "Work.md": { tags: ["project"] } });
@@ -372,9 +417,11 @@ describe("weekly review", () => {
   it("lists what needs attention, section by section", async () => {
     const { content } = await review();
     expect(reviewSections(content()).map(item => item.querySelector("h2 span")!.textContent)).toEqual([
-      "Completed this week", "Overdue", "Routines behind", "Deadlines in the next 7 days", "Untouched for a month", "Projects without a next action", "Someday"]);
+      "Completed this week", "Overdue", "Waiting", "Routines behind", "Deadlines in the next 7 days", "Untouched for a month", "Projects without a next action", "Someday"]);
     const titles = (title: string) => rows(content(), section(content(), title)).map(row => row.querySelector(".tm-task-title")!.textContent);
     expect(titles("Overdue")).toEqual(["Late"]);
+    expect(titles("Waiting")).toEqual(["Hear back from Sam"]);
+    expect(section(content(), "Waiting").textContent).toContain("Follow up on these.");
     expect(titles("Deadlines in the next 7 days")).toEqual(["Due soon"]);
     expect(titles("Untouched for a month")).toEqual(["Forgotten idea"]);
     expect(titles("Someday").sort()).toEqual(["Hidden late", "Maybe"]);
@@ -384,7 +431,7 @@ describe("weekly review", () => {
   });
 
   it("lists tasks completed in the last 7 days, and inline repeats that fell behind", async () => {
-    const { view, content, plugin } = await setup([["A.md", [`- [x] Shipped ✓${plus(-2)}`, `- [x] Long ago ✓${plus(-20)}`, `- [ ] Water plants ${plus(-4)} every week`].join("\n")]]);
+    const { view, content, plugin } = await setup([["A.md", [`- [x] Shipped ✓${plus(-2)}`, `- [x] Long ago ✓${plus(-20)}`, `- [ ] Water plants ${plus(-4)} every week`, `- [-] Dropped ✓${plus(-1)}`].join("\n")]]);
     plugin.settings.completionDates = true;
     await view.setState({ mode: "review" });
     const titles = (title: string) => rows(content(), section(content(), title)).map(row => row.querySelector(".tm-task-title")!.textContent);
@@ -402,7 +449,7 @@ describe("weekly review", () => {
     expect(new Date(`${week.week}T12:00`).getDay()).toBe(1);
     await vi.waitFor(() => expect(section(content(), "Overdue").classList.contains("is-reviewed")).toBe(true));
     expect(rows(content(), section(content(), "Overdue"))).toHaveLength(0);
-    expect(content().querySelector(".tm-review-progress")!.textContent).toContain("1 of 7 reviewed");
+    expect(content().querySelector(".tm-review-progress")!.textContent).toContain("1 of 8 reviewed");
     plugin.settings.weeklyReview = { week: "2020-01-06", reviewed: ["overdue"] };
     await view.setState({ mode: "review" });
     view.render();

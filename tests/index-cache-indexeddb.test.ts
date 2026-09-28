@@ -9,7 +9,7 @@ import { FakeEvents, flush } from "./core-events";
 const app = (appId?: string) => ({ appId, vault: { getName: () => "My Vault" } }) as unknown as App;
 const record = (path: string): CachedNote => ({
   path, mtime: 1, size: 2, schema: CACHE_SCHEMA, dateFormat: "YYYY-MM-DD", sectionHeadingLevel: 1,
-  tasks: [{ line: 0, endLine: 0, raw: "- [ ] A", title: "A", indent: 0, completed: false }], headings: []
+  tasks: [{ line: 0, endLine: 0, raw: "- [ ] A", title: "A", indent: 0, status: "todo", completed: false }], headings: []
 });
 
 describe("IndexedDB index cache", () => {

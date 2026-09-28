@@ -16,7 +16,8 @@ import {
   toggleTaskInContent,
   updateTaskInContent
 } from "./markdown";
-import type { Task, TaskDraft, TaskManagerSettings } from "./types";
+import { STATUS_LABELS, draftStatus, isClosedStatus, statusFromLabel } from "./task-status";
+import type { Task, TaskDraft, TaskManagerSettings, TaskStatus } from "./types";
 
 /** One user action's effect on notes, kept so the action can be undone as a unit. */
 export interface TaskChange {
@@ -102,7 +103,7 @@ export class TaskStore {
       if (task.completed) throw new Error("Select an open repeating task.");
       // An inline repeat has no routine note: advance its dates in place, with no log or anchor.
       const file = this.requireFile(task.path);
-      const draft: TaskDraft = { ...draftForGroup(task), ...advanceInlineRepeat(task), completed: false };
+      const draft: TaskDraft = { ...draftForGroup(task), ...advanceInlineRepeat(task), status: "todo", completed: false };
       await this.process(file, content => updateTaskInContent(content, task, draft, this.getDateFormat(), this.getLinkDates(), this.getSectionHeadingLevel()));
       return [file.path];
     }
@@ -128,7 +129,7 @@ export class TaskStore {
     const advanced = advanceRecurringTask(source, task, next, this.getDateFormat(), this.getSectionHeadingLevel());
     contents.set(task.path, advanced);
     contents.set(recurring.path, appendRecurringLog(contents.get(recurring.path)!, outcome, task.scheduledDate, this.getDateFormat(), this.getLinkDates()));
-    return { task: { ...task, line, raw: advanced.split(/\r?\n/)[line], scheduledDate: next }, anchor };
+    return { task: { ...task, line, raw: advanced.split(/\r?\n/)[line], scheduledDate: next, status: "todo" }, anchor };
   }
 
   /** Persist month/year anchors after the task writes commit; a lost anchor only resets to the next scheduled date. */
@@ -176,7 +177,14 @@ export class TaskStore {
 
   async bulkUpdate(tasks: Task[], patch: BulkTaskPatch): Promise<string[]> {
     if (!Object.keys(patch).length) return [];
-    return this.bulkChange(tasks, task => ({ ...draftForGroup(task), ...patch }), {}, `Edited ${tasksName(tasks)}`);
+    const closed = patch.status && { completed: isClosedStatus(patch.status) };
+    return this.bulkChange(tasks, task => ({ ...draftForGroup(task), ...patch, ...closed }), {}, `Edited ${tasksName(tasks)}`);
+  }
+
+  /** Done completes a repeating task (advancing it) and cancelled skips its occurrence, as Complete and Skip do. */
+  setStatus(tasks: Task[], status: TaskStatus): Promise<string[]> {
+    return this.bulkChange(tasks, task => ({ ...draftForGroup(task), status, completed: isClosedStatus(status) }), {},
+      `Marked ${tasksName(tasks)} as ${STATUS_LABELS[status].toLowerCase()}`);
   }
 
   bulkDelete(tasks: Task[]): Promise<string[]> {
@@ -284,21 +292,22 @@ export class TaskStore {
     return this.app.vault.process(file, change);
   }
 
-  /** The routine note a completing draft resolves through, `true` for an inline repeat; a routine note wins. */
+  /** The routine note a closing draft (done or cancelled) resolves through, `true` for an inline repeat; a routine note wins. */
   private completesRecurring(task: Task, draft?: TaskDraft): TFile | true | undefined {
     if (task.completed || !draft?.completed) return undefined;
     return recurringFile(this.app, task) ?? (draft.repeat ? true : undefined);
   }
 
-  /** With completion dates on, a draft that completes a task records today and one that reopens it drops the date, unless the draft sets its own. */
+  /** With completion dates on, a draft that makes a task done records today and one that makes it anything else drops the date, unless the draft sets its own. */
   private stampCompletion(task: Task, draft: TaskDraft): TaskDraft {
-    if (!this.getCompletionDates() || task.completed === draft.completed || draft.completedDate !== task.completedDate) return draft;
-    return { ...draft, completedDate: draft.completed ? todayIso() : undefined };
+    const done = draftStatus(draft) === "done";
+    if (!this.getCompletionDates() || (task.status === "done") === done || draft.completedDate !== task.completedDate) return draft;
+    return { ...draft, completedDate: done ? todayIso() : undefined };
   }
 
   /**
-   * Plan and commit every change together. A recurring task whose draft completes it is
-   * advanced and logged (as resolveRecurring does) instead of being checked; its other
+   * Plan and commit every change together. A recurring task whose draft completes (or cancels) it is
+   * advanced and logged (as resolveRecurring does, cancelling as a skip) instead of being checked; its other
    * property changes still apply, and an explicitly changed scheduled date wins over the next instance.
    */
   bulkChange(tasks: Task[], draft: (task: Task) => TaskDraft | undefined, options: BulkTaskOptions = {}, label = `Updated ${tasksName(tasks)}`): Promise<string[]> {
@@ -327,15 +336,15 @@ export class TaskStore {
       const draft = change.draft!;
       if (file === true) {
         const next = advanceInlineRepeat({ ...original, repeat: draft.repeat });
-        change.draft = { ...draft, completed: false,
+        change.draft = { ...draft, status: "todo", completed: false,
           scheduledDate: draft.scheduledDate === original.scheduledDate ? next.scheduledDate : draft.scheduledDate,
           deadline: draft.deadline === original.deadline ? next.deadline : draft.deadline };
         continue;
       }
-      const advanced = this.advanceRecurring(contents, original, file, "COMPLETED");
+      const advanced = this.advanceRecurring(contents, original, file, draftStatus(draft) === "cancelled" ? "SKIPPED" : "COMPLETED");
       anchors.set(file, advanced.anchor);
       change.task = advanced.task;
-      change.draft = { ...change.draft!, completed: false,
+      change.draft = { ...change.draft!, status: "todo", completed: false,
         scheduledDate: change.draft!.scheduledDate === original.scheduledDate ? advanced.task.scheduledDate : change.draft!.scheduledDate };
     }
     for (const change of changes) if (change.draft) change.draft = this.stampCompletion(change.task, change.draft);
@@ -409,7 +418,12 @@ function dropLabel(tasks: Task[], group?: ListDropGroup, anchor?: Task): string 
   switch (group?.property) {
     case "defer": return group.value === "Someday" ? `Snoozed ${name} to someday` : group.value ? `Snoozed ${name}` : `Stopped snoozing ${name}`;
     case "date": case "scheduledDate": case "deadline": case "scheduledTime": case "deadlineTime": return `Rescheduled ${name}`;
-    case "status": return `${group.value === "Completed" ? "Completed" : "Reopened"} ${name}`;
+    case "status": {
+      if (group.value === "Open") return `Reopened ${name}`;
+      const status = statusFromLabel(String(group.value ?? ""));
+      if (status) return `Marked ${name} as ${STATUS_LABELS[status].toLowerCase()}`;
+      break;
+    }
     case "priority": return `Changed priority of ${name}`;
     case "tags": return `Changed tags of ${name}`;
   }
