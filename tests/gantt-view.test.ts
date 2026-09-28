@@ -117,3 +117,18 @@ it("groups active and archived projects and shows only deadlines in their labels
     expect(metadata.children[0].cls).toContain("tm-task-due");
   }
 });
+
+it("shows label deadlines as a Things row does in the Things style", () => {
+  vi.useFakeTimers({ now: new Date(2026, 8, 19, 12), toFake: ["Date"] });
+  const root = new Element(), edit = vi.fn();
+  const base = { openTasks: 1, completedTasks: 0, archived: false, scheduledDate: "2026-09-10" };
+  renderGantt(root as never, { projects: [
+    { ...base, name: "Soon", path: "Soon.md", deadline: "2026-10-01" },
+    { ...base, name: "Late", path: "Late.md", deadline: "2026-09-16" }
+  ], anchor: "2026-09-18", zoom: "month", dateFormat: "YYYY-MM-DD", navigate: vi.fn(), open: vi.fn(), edit, update: vi.fn(), things: true });
+  const deadlines = root.all().filter(el => el.cls.startsWith("tm-things-deadline"));
+  expect(deadlines.map(el => [el.cls, el.children[1].text])).toEqual([["tm-things-deadline is-urgent", "3 days ago"], ["tm-things-deadline", "12 days left"]]);
+  deadlines[1].dispatchEvent(Object.assign(new Event("click"), { preventDefault() {}, stopPropagation() {} }));
+  expect(edit).toHaveBeenCalledWith(expect.objectContaining({ name: "Soon" }), "deadline");
+  vi.useRealTimers();
+});

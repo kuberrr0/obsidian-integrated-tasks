@@ -794,7 +794,7 @@ export class TaskMainView extends ItemView {
     if (this.projectLayout === "gantt") {
       renderGantt(container, {
         projects,
-        anchor: this.ganttAnchor, zoom: this.ganttZoom, dateFormat: this.plugin.dateFormat(),
+        anchor: this.ganttAnchor, zoom: this.ganttZoom, dateFormat: this.plugin.dateFormat(), things: this.plugin.settings.style === "things",
         navigate: (anchor, zoom) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.render(); },
         viewportChanged: anchor => { this.ganttAnchor = anchor; },
         open: project => { void this.plugin.openProject(project.path).catch(error => new Notice(String(error))); },

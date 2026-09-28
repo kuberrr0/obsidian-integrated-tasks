@@ -7,6 +7,7 @@ import type { Project } from "./types";
 import type { ProjectDraft } from "./project-creator";
 import { renderProjectProgress } from "./project-progress";
 import { renderProjectDeadline } from "./project-header-details";
+import { renderThingsProjectDeadline } from "./things-row-details";
 
 interface GanttOptions {
   projects: Project[];
@@ -18,6 +19,8 @@ interface GanttOptions {
   open: (project: Project) => void;
   edit?: (project: Project, field: keyof ProjectDraft) => void;
   update: (project: Project, changes: Partial<Record<ProjectDateField, string>>) => Promise<void>;
+  /** Draw deadlines as the Things style does ("N days left"), rather than as a pill. */
+  things?: boolean;
 }
 
 // Arrow keys preview date changes live and save once they pause, so focus is not lost per key.
@@ -127,7 +130,9 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
     const metadata = content.createDiv({ cls: "tm-project-header-metadata" });
     const paintDetails = (): void => {
       metadata.empty();
-      renderProjectDeadline(metadata, project, field => options.edit ? options.edit(project, field) : options.open(project), options.dateFormat);
+      const edit = (field: keyof ProjectDraft): void => options.edit ? options.edit(project, field) : options.open(project);
+      if (options.things) renderThingsProjectDeadline(metadata, project, { dateFormat: options.dateFormat, edit });
+      else renderProjectDeadline(metadata, project, edit, options.dateFormat);
       metadata.hidden = !metadata.childElementCount;
     };
     detailPainters.set(project, paintDetails);

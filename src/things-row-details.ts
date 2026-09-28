@@ -135,18 +135,23 @@ export function renderThingsProjectDetails(parts: ThingsRowParts, project: Proje
         const end = box(trailing, "tm-things-when", `Until ${label(project.endDate)}`, `Ends ${formatDate(project.endDate, options.dateFormat)}`);
         editable(end, `Edit project end date: ${end.textContent ?? ""}`, "project-end", () => options.edit("endDate"));
     }
-    if (project.deadline) {
-        const urgent = deadlineIsOverdue(project.deadline, project.deadlineTime, now) || project.deadline === today;
-        const time = project.deadlineTime ? taskTimeLabel(project.deadlineTime) : "";
-        const deadline = trailing.createSpan({ cls: `tm-things-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${[formatDate(project.deadline, options.dateFormat), time].filter(Boolean).join(", ")}` } });
-        setIcon(deadline.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
-        deadline.createSpan({ text: [thingsDeadlineLabel(project.deadline, now), time].filter(Boolean).join(", ") });
-        editable(deadline, `Edit project deadline: ${formatDate(project.deadline, options.dateFormat)}`, "project-deadline", () => options.edit("deadline"));
-    }
+    renderThingsProjectDeadline(trailing, project, options);
     if (!trailing.childElementCount) trailing.remove();
     if (project.parent) {
         const name = project.parent.replace(/\.md$/i, "");
         const parent = parts.secondary.createSpan({ cls: "tm-things-source", text: name.split("/").pop(), attr: { title: name } });
         editable(parent, `Edit parent project: ${name}`, "project-parent", () => options.edit("parent"));
     }
+}
+
+/** A project's deadline as a Things row shows it: a flag and "N days left", red once due; opens the deadline editor. */
+export function renderThingsProjectDeadline(parent: HTMLElement, project: Project, options: ThingsProjectOptions): void {
+    if (!project.deadline) return;
+    const now = options.now ?? new Date();
+    const urgent = deadlineIsOverdue(project.deadline, project.deadlineTime, now) || project.deadline === todayIso(now);
+    const time = project.deadlineTime ? taskTimeLabel(project.deadlineTime) : "";
+    const deadline = parent.createSpan({ cls: `tm-things-deadline${urgent ? " is-urgent" : ""}`, attr: { title: `Deadline: ${[formatDate(project.deadline, options.dateFormat), time].filter(Boolean).join(", ")}` } });
+    setIcon(deadline.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
+    deadline.createSpan({ text: [thingsDeadlineLabel(project.deadline, now), time].filter(Boolean).join(", ") });
+    editable(deadline, `Edit project deadline: ${formatDate(project.deadline, options.dateFormat)}`, "project-deadline", () => options.edit("deadline"));
 }
