@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { convertTagFormat } from "../src/tag-links";
 import { formatTags, parseTags, setTagFormat } from "../src/task-tags";
 import { parseTaskLine, scanTasks, serializeTask } from "../src/parser";
-import { taskTokens } from "../src/task-tokens";
 
 afterEach(() => setTagFormat("wikilink"));
 
@@ -29,13 +28,6 @@ describe("the Tag format", () => {
     expect(() => parseTags("#[[work]]")).toThrow("#work");
     setTagFormat("wikilink");
     expect(formatTags(["open house"])).toBe("#[[open house]]");
-  });
-
-  it("labels a #tag token by its name, with no note link", () => {
-    setTagFormat("hash");
-    const [token] = taskTokens("- [ ] Call mom #family");
-    expect(token).toMatchObject({ kind: "tags", label: "family" });
-    expect(token.linkText).toBeUndefined();
   });
 
   it("reads the same tasks again after switching", () => {

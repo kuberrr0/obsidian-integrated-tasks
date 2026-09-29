@@ -437,50 +437,6 @@ button.tm-task-title {
   }
 }
 
-/* Note pills are presentation only; the stored checklist syntax is unchanged. */
-/* A non-wrapping inline box keeps the entire pill outline and rounded edges. */
-.tm-note-token {
-  display: inline-block;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-interface);
-  font-size: 0.85em;
-  line-height: inherit;
-  white-space: nowrap;
-}
-
-.cm-editor .tm-note-token { cursor: text; }
-.tm-note-token a.internal-link { color: inherit; text-decoration: none; }
-.tm-note-token a.internal-link:hover { color: var(--text-accent-hover); }
-.tm-note-token-priority { text-transform: uppercase; }
-/* Native Live Preview link spans and Reading view anchors use the pill color. */
-:is(.markdown-source-view.mod-cm6 .cm-editor, .markdown-reading-view) .tm-note-token:is(.tm-note-token-scheduledDate, .tm-note-token-deadline, .tm-note-token-tags) * {
-  color: inherit;
-  text-decoration: none;
-}
-.tm-note-token.is-danger { color: var(--text-error); }
-.tm-note-token.is-p1 { color: var(--text-error); }
-.tm-note-token.is-p2 { color: var(--color-orange); }
-.tm-note-token.is-p3 { color: var(--color-blue); }
-
-/* Live Preview exposes the original date syntax when the caret enters a pill. */
-/* Reuse Obsidian's SVGs as masks so glyphs inherit each pill's color. */
-.tm-note-token::before {
-  content: "";
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  margin-inline-end: 4px;
-  vertical-align: -0.15em;
-  background-color: currentColor;
-  -webkit-mask: var(--tm-note-token-icon) center / contain no-repeat;
-  mask: var(--tm-note-token-icon) center / contain no-repeat;
-  pointer-events: none;
-}
-.tm-note-token-editor .tm-note-token-brace,
-.tm-note-token-editor .tm-note-token-tag-prefix { display: none; }
 
 
 .tm-checkbox-target { display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -894,13 +850,6 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-gantt-selection[hidden] { display: none; }
 .tm-gantt-undated[hidden] { display: none; }
 
-/* Hollow metadata pills in task views, Reading view, and Live Preview. */
-
-.tm-note-token {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent);
-}
-
 /* Distinguish progress badges from light card surfaces without changing their size. */
 
 /* Native buttons center flex content; block text keeps truncation at the end. */
@@ -1022,11 +971,6 @@ button.tm-gantt-handle.is-finish:focus-visible,
   .tm-settings-row { flex-wrap: wrap; gap: 12px; }
   .tm-settings-row .setting-item-control { max-width: 100%; }
 }
-
-/* Recurring-instance outcomes share the task-property pill shape. */
-.tm-note-token-completed { color: var(--color-green); }
-.tm-note-token-skipped { color: var(--color-orange); }
-.tm-note-token-failed { color: var(--text-error); }
 
 /* Reference task rows: a title line and a quiet, left-aligned detail line. */
 .tm-main-view .tm-task-row.tm-task-item {
@@ -1195,20 +1139,6 @@ input.tm-task-checkbox.is-cancelled:checked::after {
 
 .tm-task-due.is-overdue { color: var(--text-error); }
 
-/* Native Markdown task properties flow inline after the title. */
-.tm-note-task-details { font-family: var(--font-interface); font-size: var(--font-ui-smaller); color: var(--text-muted); }
-.tm-note-task-details > span + span { margin-inline-start: 8px; }
-.tm-note-task-details a.internal-link { color: inherit; text-decoration: none; }
-.tm-note-task-details a.internal-link:hover { color: var(--text-accent-hover); }
-.tm-note-task-scheduledDate.is-overdue, .tm-note-task-deadline.is-overdue { color: var(--text-error); }
-.tm-note-task-deadline { display: inline-block; margin-inline-start: 4px; padding: 2px 5px;   color: var(--color-orange); font-weight: normal; white-space: nowrap; }
-.tm-note-task-tags { display: inline-block; }
-.tm-note-task-tags::before, .tm-note-task-deadline::before {
-  content: ""; display: inline-block; width: 0.95em; height: 0.95em; margin-inline-end: 4px; vertical-align: -0.12em;
-  background: currentColor;
-  -webkit-mask: var(--tm-note-token-icon) center / contain no-repeat;
-  mask: var(--tm-note-token-icon) center / contain no-repeat;
-}
 :is(.tm-note-task-item, .tm-note-task-line)[data-tm-priority="1"] { --tm-note-priority: var(--text-error); }
 :is(.tm-note-task-item, .tm-note-task-line)[data-tm-priority="2"] { --tm-note-priority: var(--color-orange); }
 :is(.tm-note-task-item, .tm-note-task-line)[data-tm-priority="3"] { --tm-note-priority: var(--color-blue); }
@@ -1356,32 +1286,20 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
   .tm-gantt-toolbar .tm-gantt-first { grid-column: 2; }
 }
 
-/* Deadline appearance is shared by task views, Reading view and Live Preview. */
-:is(.tm-task-due, .tm-note-task-deadline, .tm-note-token-deadline) {
+/* A task view's deadline pill. */
+.tm-task-due {
   /* The border follows the deadline's text colour: upcoming, overdue, or distant. */
   border: 0.5px solid currentColor;
   border-radius: 999px;
   background: transparent;
 }
-.tm-note-task-details > .tm-note-task-scheduledDate + .tm-note-task-durationMinutes { margin-inline-start: 0; }
-
-
-:is(.tm-task-due, .tm-note-task-deadline, .tm-note-token-deadline).is-distant { color: var(--text-muted); }
+.tm-task-due.is-distant { color: var(--text-muted); }
 
 /* Defers stay quiet; a defer that is hiding the task reads slightly stronger. */
 .tm-task-defer { display: inline-flex; align-items: center; gap: 4px; color: var(--text-faint); cursor: pointer; white-space: nowrap; }
 .tm-main-view .tm-task-item .tm-task-defer, .tm-main-view .tm-task-item .tm-task-defer > span { font-size: inherit; }
 .tm-task-defer:hover { color: var(--text-normal); }
-:is(.tm-task-defer, .tm-note-task-defer, .tm-note-token-defer).is-active { color: var(--text-muted); font-style: italic; }
-.tm-note-task-defer { display: inline-block; color: var(--text-faint); white-space: nowrap; }
-.tm-note-task-defer::before {
-  content: ""; display: inline-block; width: 0.95em; height: 0.95em; margin-inline-end: 4px; vertical-align: -0.12em;
-  background: currentColor;
-  -webkit-mask: var(--tm-note-token-icon) center / contain no-repeat;
-  mask: var(--tm-note-token-icon) center / contain no-repeat;
-}
-.tm-note-token-defer { color: var(--text-faint); }
-:is(.markdown-source-view.mod-cm6 .cm-editor, .markdown-reading-view) .tm-note-token-defer * { color: inherit; text-decoration: none; }
+.tm-task-defer.is-active { color: var(--text-muted); font-style: italic; }
 
 .tm-editor-task-line {
   display: flex;
@@ -1699,15 +1617,6 @@ body .modal-container .modal.tm-bottom-sheet.is-top::before { top: auto; bottom:
 .tm-task-repeat:hover { color: var(--text-normal); }
 .tm-task-done { color: var(--text-faint); white-space: nowrap; }
 .tm-main-view .tm-task-item :is(.tm-task-repeat, .tm-task-done), .tm-main-view .tm-task-item .tm-task-repeat > span { font-size: inherit; }
-.tm-note-task-repeat { display: inline-block; white-space: nowrap; }
-.tm-note-task-repeat::before {
-  content: ""; display: inline-block; width: 0.95em; height: 0.95em; margin-inline-end: 4px; vertical-align: -0.12em;
-  background: currentColor;
-  -webkit-mask: var(--tm-note-token-icon) center / contain no-repeat;
-  mask: var(--tm-note-token-icon) center / contain no-repeat;
-}
-.tm-note-task-completedDate, .tm-note-token-completedDate { color: var(--text-faint); white-space: nowrap; }
-:is(.markdown-source-view.mod-cm6 .cm-editor, .markdown-reading-view) .tm-note-token-completedDate * { color: inherit; text-decoration: none; }
 
 /* Weekly review */
 .tm-review-progress { display: flex; flex-wrap: wrap; gap: var(--size-4-3); }

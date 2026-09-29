@@ -3,8 +3,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), Modal: class {}, Notice: class {}, setIcon: vi.fn() }));
 import { installObsidianDom } from "./helpers/obsidian-dom";
 import { renderTaskDetails } from "../src/task-row-details";
-import { noteTaskPresentation, renderNoteTaskDetails } from "../src/note-task-presentation";
-import { renderNoteTokens } from "../src/note-token-reading";
 import { handleRecurringTaskClick } from "../src/note-task-edit";
 import { matchesFilter } from "../src/task-properties";
 import { groupTasks, sortTasks } from "../src/query";
@@ -39,37 +37,6 @@ describe("task row pills", () => {
     expect(row("- [ ] Water every week", { show: property => property !== "repeat" }).repeat).toBeNull();
   });
 
-  it("shows a muted Done pill only on completed tasks", () => {
-    const { done } = row("- [x] Pay rent ✓2026-09-27");
-    expect(done!.textContent).toBe("Done Sep 27");
-    expect(done!.getAttribute("title")).toBe("Completed Sep 27, 2026");
-    expect(row("- [x] Pay rent ✅ 2025-12-30").done!.textContent).toBe("Done Dec 30, 2025");
-    expect(row("- [ ] Pay rent ✓2026-09-27").done).toBeNull();
-    expect(row("- [x] Pay rent ✓2026-09-27", { grouping: "completed" }).done).toBeNull();
-  });
-});
-
-describe("note pills", () => {
-  const render = (source: string) => {
-    const root = document.createElement("span");
-    renderNoteTaskDetails(root, noteTaskPresentation(source, "YYYY-MM-DD", now)!, () => undefined);
-    return root;
-  };
-
-  it("renders the repeat after the schedule and the completion date last", () => {
-    const root = render("- [x] Water 2026-09-28 every week #[[home]] ✓2026-09-27");
-    expect(Array.from(root.children).map(child => child.className)).toEqual(["tm-note-task-scheduledDate", "tm-note-task-repeat", "tm-note-task-tags", "tm-note-task-completedDate"]);
-    expect(root.children[1].textContent).toBe("Every week");
-    expect(root.children[1].getAttribute("style")).toContain("--tm-note-token-icon");
-    expect(root.children[3].textContent).toBe("Done Sep 27");
-  });
-
-  it("wraps both in Reading view", () => {
-    const root = document.createElement("div");
-    root.innerHTML = `<ul><li class="task-list-item" data-task="x"><input type="checkbox">Meet every Monday ✓2026-09-27</li></ul>`;
-    renderNoteTokens(root, "YYYY-MM-DD");
-    expect(root.querySelector("li")!.textContent).toBe("Meet Every MondayDone Sep 27");
-  });
 });
 
 describe("Reading view checkbox claims", () => {

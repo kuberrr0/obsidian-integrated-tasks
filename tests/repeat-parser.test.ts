@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseRepeatRule, parseTaskInput, parseTaskLine, repeatLabel, rewriteTaskLine, serializeTask, type ParsedTokenRange } from "../src/parser";
+import { parseRepeatRule, parseTaskInput, parseTaskLine, rewriteTaskLine, serializeTask, type ParsedTokenRange } from "../src/parser";
 import { noteDateChanges } from "../src/note-date-input";
-import { taskTokens } from "../src/task-tokens";
 import type { TaskDraft } from "../src/types";
 
 const reference = new Date(2026, 8, 27, 12);
@@ -53,11 +52,6 @@ describe("inline repeat parsing", () => {
     expect(noteDateChanges("- [ ] Water tomorrow every week", "YYYY-MM-DD", reference, false)).toEqual([{ from: 12, to: 20, insert: "2026-09-28" }]);
   });
 
-  it("labels and styles the rule in notes", () => {
-    expect(repeatLabel("every monday")).toBe("Every Monday");
-    expect(repeatLabel("every 2 weeks")).toBe("Every 2 weeks");
-    expect(taskTokens("- [ ] Meet every Monday", "YYYY-MM-DD")).toEqual([expect.objectContaining({ kind: "repeat", label: "Every Monday", description: "Repeats every monday" })]);
-  });
 });
 
 describe("inline repeat writing", () => {

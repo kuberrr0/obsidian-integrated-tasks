@@ -4,54 +4,11 @@ vi.mock("obsidian", async importOriginal => ({
 }));
 import { EditorState } from "@codemirror/state";
 import { noteDateChanges, noteDateInput } from "../src/note-date-input";
-import { taskTokens, tokenClass } from "../src/task-tokens";
-import { noteTaskPresentation } from "../src/note-task-presentation";
-import { noteTokenMarks } from "../src/note-token-editor";
-import { TASK_PROPERTY_ICONS } from "../src/task-property-icons";
 
 const US = "MMM D, YYYY";
 const reference = new Date(2026, 8, 8, 12);
 afterEach(() => vi.useRealTimers());
 
-describe("note tokens", () => {
-  it("labels a linked defer and displays its formatted date", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(reference);
-    const line = "- [ ] Renew >[[2026-10-01]] p1";
-    const token = taskTokens(line, US).find(item => item.kind === "defer")!;
-    expect(line.slice(token.from, token.to)).toBe(">[[2026-10-01]]");
-    expect(token).toMatchObject({ label: "Hidden until Oct 1, 2026", description: "Hidden until: Oct 1, 2026", dateLabel: "Oct 1, 2026", linkText: "2026-10-01", active: true });
-    expect(line.slice(token.display!.from, token.display!.to)).toBe("[[2026-10-01]]");
-    expect(token.display).toMatchObject({ label: "Oct 1, 2026", linkText: "2026-10-01" });
-    expect(tokenClass(token)).toBe("tm-note-token tm-note-token-defer is-active");
-  });
-  it("labels someday and plain dates, displaying only changed text", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(reference);
-    expect(taskTokens("- [ ] Learn >someday", US)[0]).toMatchObject({ kind: "defer", label: "Someday", active: true });
-    const plain = taskTokens("- [ ] Past >Sep 1, 2026", US)[0];
-    expect(plain).toMatchObject({ label: "Hidden until Sep 1, 2026", active: false, display: undefined });
-    const natural = "- [ ] Later >tomorrow";
-    const token = taskTokens(natural, US)[0];
-    expect(natural.slice(token.display!.from, token.display!.to)).toBe("tomorrow");
-    expect(token.display!.label).toBe("Sep 9, 2026");
-  });
-  it("presents a relative label after the deadline", () => {
-    const presentation = noteTaskPresentation("- [ ] Renew {2026-09-20} >[[2026-09-09]] p2", "YYYY-MM-DD", reference)!;
-    expect(presentation.tokens.map(token => token.kind)).toEqual(["deadline", "defer", "priority"]);
-    expect(presentation.tokens[1]).toMatchObject({ dateLabel: "Tomorrow", label: "Hidden until Tomorrow", active: true });
-    expect(noteTaskPresentation("- [ ] Renew >2026-09-08", "YYYY-MM-DD", reference)!.tokens[0]).toMatchObject({ dateLabel: "Today", active: false });
-    expect(noteTaskPresentation("- [ ] Renew >Someday", "YYYY-MM-DD", reference)!.tokens[0]).toMatchObject({ label: "Someday", active: true });
-  });
-  it("hides the > prefix in Live Preview pills", () => {
-    const [token] = taskTokens("- [ ] Learn >someday", US);
-    const { syntax } = noteTokenMarks([{ from: 12, to: 20, token }], { from: 0, to: 100 }, []);
-    const marks: Array<{ from: number; to: number; cls: string }> = [];
-    syntax.between(0, 100, (from, to, value) => { marks.push({ from, to, cls: value.spec.class }); });
-    expect(marks).toEqual([{ from: 12, to: 13, cls: "tm-note-token-brace" }]);
-    expect(TASK_PROPERTY_ICONS.defer).toBe("eye-off");
-  });
-});
 
 /** The caret ends on the last line, which the user has just typed (only edited lines are resolved). */
 function typed(line: string, linkDates = true, format = "YYYY-MM-DD") {

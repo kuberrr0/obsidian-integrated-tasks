@@ -2,7 +2,6 @@ import { expect, it, vi } from "vitest";
 import { parseTaskInput, parseTaskLine, scanTasks, serializeTask } from "../src/parser";
 import { parseTaskTreeInput } from "../src/task-input";
 import { formatTags, parseTags } from "../src/task-tags";
-import { taskTokens } from "../src/task-tokens";
 import { matchesFilter } from "../src/task-properties";
 import { groupTasks, taskMatchesQuery } from "../src/query";
 import { draftForGroup, taskGroupTarget } from "../src/list-drag";
@@ -34,14 +33,6 @@ it("keeps independent tags in multiline task input", () => {
   const result = parseTaskTreeInput("Main #[[work]]\n  - [ ] Child #[[home]]", "Inbox.md");
   expect(result.tags).toEqual(["work"]);
   expect(result.additionalLines).toEqual(["  - [ ] Child #[[home]]"]);
-});
-
-it("returns a separate linked token for each tag", () => {
-  const line = "- [ ] Task #[[work]] #[[client notes]]";
-  const tokens = taskTokens(line);
-  expect(tokens.map(token => [line.slice(token.from, token.to), token.kind, token.label, token.linkText])).toEqual([
-    ["#[[work]]", "tags", "work", "work"], ["#[[client notes]]", "tags", "client notes", "client notes"]
-  ]);
 });
 
 it("validates structured tags without losing names containing spaces or commas", () => {

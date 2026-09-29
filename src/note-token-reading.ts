@@ -1,18 +1,36 @@
-import { noteTaskPresentation, renderNoteTaskDetails } from "./note-task-presentation";
-import { notePropertyIconStyle } from "./task-property-icons";
-import { taskTokens, recurringLogTokens, tokenClass } from "./task-tokens";
+import { logHighlights, noteLineHighlights, type NoteHighlight } from "./note-highlights";
 
 interface Segment { node: Node; from: number; to: number; atomic: boolean }
 
-/** Wrap only recognized trailing metadata and retain Obsidian's existing link elements. */
+/**
+ * Wraps each highlighted range of the rendered text in a span with its class, keeping what is inside (Obsidian's
+ * links included). `segments` map the rendered nodes to the source; a range that no segment covers is left alone.
+ */
+function wrapHighlights(document: Document, segments: Segment[], highlights: NoteHighlight[]): void {
+  for (const highlight of [...highlights].reverse()) {
+    const first = segments.find(segment => segment.from <= highlight.from && segment.to > highlight.from);
+    const last = segments.find(segment => segment.from < highlight.to && segment.to >= highlight.to);
+    if (!first || !last) continue;
+    const range = document.createRange();
+    if (first.atomic) range.setStartBefore(first.node); else range.setStart(first.node, highlight.from - first.from);
+    if (last.atomic) range.setEndAfter(last.node); else range.setEnd(last.node, highlight.to - last.from);
+    const span = document.createElement("span");
+    span.className = highlight.cls;
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
+  }
+}
+
+/** Reading view: a task's tokens are highlighted in place, as in a task card's title; its checkbox takes its priority's colour. */
 export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
   renderRecurringLogTokens(root, dateFormat);
   const items = Array.from(root.querySelectorAll<HTMLElement>("li.task-list-item"));
   if (root.matches("li.task-list-item")) items.unshift(root);
   for (const item of items) {
-    const content = Array.from(item.children).find((child) => child.tagName === "P") ?? item;
-    if (Array.from(content.querySelectorAll(".tm-note-token, .tm-note-task-details")).some((pill) => pill.closest("li") === item)) continue;
+    const content = Array.from(item.children).find(child => child.tagName === "P") ?? item;
+    if (Array.from(content.querySelectorAll(".tm-nlp-token")).some(token => token.closest("li") === item)) continue;
     const status = item.getAttribute("data-task") ?? "";
+    // The rendered item, read back as the task line it came from.
     let source = /^[ xX/?-]$/.test(status) ? `- [${status}] ` : item.classList.contains("is-checked") ? "- [x] " : "- [ ] ";
     const segments: Segment[] = [];
     const walk = (node: Node): void => {
@@ -34,100 +52,49 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
       }
     };
     for (const child of Array.from(content.childNodes)) walk(child);
-    const presentation = noteTaskPresentation(source, dateFormat);
-    if (presentation) {
-      const first = segments.find(segment => segment.from <= presentation.from && segment.to > presentation.from);
-      const last = segments.find(segment => segment.from < presentation.to && segment.to >= presentation.to);
-      if (first && last) {
-        const document = item.ownerDocument;
-        const range = document.createRange();
-        if (first.atomic) range.setStartBefore(first.node); else range.setStart(first.node, presentation.from - first.from);
-        if (last.atomic) range.setEndAfter(last.node); else range.setEnd(last.node, presentation.to - last.from);
-        const original = range.extractContents();
-        const details = document.createDocumentFragment().createSpan();
-        renderNoteTaskDetails(details, presentation, (token, label) => {
-          const anchor = Array.from(original.querySelectorAll<HTMLAnchorElement>("a.internal-link")).find(anchor =>
-            (anchor.getAttribute("data-href") ?? anchor.getAttribute("href")) === token.linkText);
-          if (anchor) anchor.textContent = label;
-          return anchor;
-        });
-        item.classList.add("tm-note-task-item");
-        item.setAttribute("data-tm-priority", String(presentation.priority ?? ""));
-        range.insertNode(details);
-        continue;
-      }
+    const found = noteLineHighlights(source, dateFormat);
+    if (!found) continue;
+    if (found.priority) {
+      item.classList.add("tm-note-task-item");
+      item.setAttribute("data-tm-priority", String(found.priority));
     }
-    for (const token of taskTokens(source, dateFormat).reverse()) {
-      const first = segments.find((segment) => segment.from <= token.from && segment.to > token.from);
-      const last = segments.find((segment) => segment.from < token.to && segment.to >= token.to);
-      if (!first || !last) continue;
-      const document = item.ownerDocument;
-      const range = document.createRange();
-      if (first.atomic) range.setStartBefore(first.node);
-      else range.setStart(first.node, token.from - first.from);
-      if (last.atomic) range.setEndAfter(last.node);
-      else range.setEnd(last.node, token.to - last.from);
-      const fragment = range.extractContents();
-      // A detached parent keeps the pill in this window's document until insertion.
-      const win = document.win as Window & { createFragment: typeof createFragment };
-      const pill = win.createFragment().createSpan({
-        cls: tokenClass(token),
-        title: token.description,
-        attr: { "aria-label": token.description, style: notePropertyIconStyle(token.kind) }
-      });
-      const link = fragment.querySelector("a.internal-link");
-      if (link) {
-        link.textContent = token.dateLabel ?? link.textContent;
-        pill.appendChild(link);
-        if (token.time) pill.appendChild(document.createTextNode(` ${token.time}`));
-      } else pill.textContent = token.kind === "deadline" ? token.label.replace(/^Due /, "") : token.kind === "defer" ? token.dateLabel ?? token.label : token.label;
-      range.insertNode(pill);
-    }
+    wrapHighlights(item.ownerDocument, segments, found.highlights);
   }
 }
 
-/** Generated logs are plain text lines, which Markdown may combine in one paragraph. */
+/** A recurring task's log entries: plain text lines, which Markdown may combine in one paragraph. */
 export function renderRecurringLogTokens(root: HTMLElement, dateFormat?: string): void {
   const document = root.ownerDocument;
   const paragraphs = Array.from(root.querySelectorAll<HTMLElement>("p"));
   if (root.matches("p")) paragraphs.unshift(root);
   for (const paragraph of paragraphs) {
-    if (paragraph.closest("pre, li") || paragraph.querySelector("code, strong, em, .tm-note-token")) continue;
-    const walker = document.createTreeWalker(paragraph, 4 /* SHOW_TEXT */);
-    const segments: Array<{ node: Text; from: number; to: number }> = [];
+    if (paragraph.closest("pre, li") || paragraph.querySelector("code, strong, em, .tm-nlp-token")) continue;
+    // Linked dates count as their [[link]] text, as the source has them.
+    const segments: Segment[] = [];
     let source = "";
-    while (walker.nextNode()) {
-      const node = walker.currentNode as Text;
-      const value = node.textContent ?? "";
-      segments.push({ node, from: source.length, to: source.length + value.length });
-      source += value;
-    }
+    const walk = (node: Node): void => {
+      const element = node.nodeType === 1 ? node as HTMLElement : undefined;
+      if (node.nodeType === 3) {
+        const text = node.textContent ?? "";
+        segments.push({ node, from: source.length, to: source.length + text.length, atomic: false });
+        source += text;
+      } else if (element?.matches("a.internal-link")) {
+        const text = `[[${element.getAttribute("data-href") ?? element.getAttribute("href") ?? element.textContent}]]`;
+        segments.push({ node, from: source.length, to: source.length + text.length, atomic: true });
+        source += text;
+      } else if (element?.tagName === "BR") {
+        source += "\n";
+      } else {
+        for (const child of Array.from(node.childNodes)) walk(child);
+      }
+    };
+    for (const child of Array.from(paragraph.childNodes)) walk(child);
+    const highlights: NoteHighlight[] = [];
     let offset = 0;
-    const tokens = [];
     for (const part of source.split(/(\r?\n)/)) {
-      for (const token of recurringLogTokens(part, dateFormat)) tokens.push({ ...token, from: token.from + offset, to: token.to + offset });
+      for (const highlight of logHighlights(part, dateFormat)) highlights.push({ ...highlight, from: highlight.from + offset, to: highlight.to + offset });
       offset += part.length;
     }
-    for (const token of tokens.reverse()) {
-      const first = segments.find(segment => segment.from <= token.from && segment.to > token.from);
-      const last = segments.find(segment => segment.from < token.to && segment.to >= token.to);
-      if (!first || !last) continue;
-      const range = document.createRange();
-      range.setStart(first.node, token.from - first.from);
-      // Include the anchor itself to retain its native link behavior.
-      const anchor = last.node.parentElement?.closest("a.internal-link");
-      if (anchor && token.to === last.to) range.setEndAfter(anchor);
-      else range.setEnd(last.node, token.to - last.from);
-      const content = range.extractContents();
-      const pill = document.createDocumentFragment().createSpan();
-      pill.className = tokenClass(token);
-      pill.setAttribute("title", token.description);
-      pill.setAttribute("aria-label", token.description);
-      pill.setAttribute("style", notePropertyIconStyle(token.kind));
-      const link = content.querySelector("a.internal-link");
-      if (link) { link.textContent = token.dateLabel!; pill.appendChild(content); }
-      else pill.textContent = token.label;
-      range.insertNode(pill);
-    }
+    wrapHighlights(document, segments, highlights);
   }
 }

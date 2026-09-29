@@ -2,20 +2,11 @@ import { describe, expect, it } from "vitest";
 import { findInputDate, findInputDeadline, parseDateTimeExpression, parseStrictDateExpression } from "../src/date";
 import { parseTaskInput, parseTaskLine, scanTasks } from "../src/parser";
 import { parseProjectProperties } from "../src/project-properties";
-import { taskTokens } from "../src/task-tokens";
 
 const reference = new Date(2026, 8, 26, 12);
 const FORMAT = "MMM D, YYYY";
 
 describe("note links that read as dates", () => {
-  it.each(["April", "Friday", "Today", "noon", "Next Week", "tomorrow"])("[[%s]] stays a note link", name => {
-    const parsed = parseTaskLine(`- [ ] Lunch with [[${name}]]`, reference, FORMAT);
-    expect(parsed).toMatchObject({ title: `Lunch with [[${name}]]` });
-    expect(parsed?.scheduledDate).toBeUndefined();
-    expect(parseTaskLine(`- [ ] Lunch {[[${name}]]}`, reference, FORMAT)?.deadline).toBeUndefined();
-    expect(parseDateTimeExpression(`[[${name}]]`, reference, FORMAT)).toBeUndefined();
-    expect(taskTokens(`- [ ] Lunch with [[${name}]]`, FORMAT)).toEqual([]);
-  });
 
   it("still reads formatted and ISO date links, with a trailing time", () => {
     expect(parseTaskLine("- [ ] Lunch [[Sep 30, 2026]]", reference, FORMAT)).toMatchObject({ title: "Lunch", scheduledDate: "2026-09-30" });

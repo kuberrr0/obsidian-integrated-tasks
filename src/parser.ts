@@ -314,10 +314,14 @@ function deferText(draft: Pick<ParsedTaskMetadata, "deferDate" | "someday">, dat
 /** Where each metadata token sits in a task's text (without its "- [ ] "), the destination included. */
 export function taskTextRanges(text: string, reference = new Date(), dateFormat?: string): Array<{ kind: ParsedTokenRange["kind"] | "destination"; from: number; to: number }> {
   const prefix = "- [ ] ";
+  return taskLineRanges(prefix + text, reference, dateFormat).map(range => ({ ...range, from: range.from - prefix.length, to: range.to - prefix.length }));
+}
+
+/** Where a whole task line (checkbox and indent included) sets properties, its destination too; empty for other lines. */
+export function taskLineRanges(line: string, reference = new Date(), dateFormat?: string): Array<{ kind: ParsedTokenRange["kind"] | "destination"; from: number; to: number }> {
   const ranges: LineRange[] = [];
-  parseLine(prefix + text, reference, dateFormat, false, ranges, [], true);
-  return ranges.filter((range): range is LineRange & { kind: ParsedTokenRange["kind"] | "destination" } => range.kind !== "blockId")
-    .map(range => ({ kind: range.kind, from: range.from - prefix.length, to: range.to - prefix.length }));
+  parseLine(line, reference, dateFormat, false, ranges, [], true);
+  return ranges.filter((range): range is LineRange & { kind: ParsedTokenRange["kind"] | "destination" } => range.kind !== "blockId");
 }
 
 export function parseTaskInput(

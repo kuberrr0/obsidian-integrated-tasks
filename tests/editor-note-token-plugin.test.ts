@@ -1,24 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import type { DecorationSet } from "@codemirror/view";
-vi.mock("../src/note-task-presentation", async importOriginal => {
-  const original = await importOriginal<typeof import("../src/note-task-presentation")>();
-  return { ...original, noteTaskPresentation: vi.fn(original.noteTaskPresentation) };
+vi.mock("../src/note-highlights", async importOriginal => {
+  const original = await importOriginal<typeof import("../src/note-highlights")>();
+  return { ...original, noteLineHighlights: vi.fn(original.noteLineHighlights) };
 });
-import { noteTaskPresentation, type NoteTaskPresentation } from "../src/note-task-presentation";
+import { noteLineHighlights } from "../src/note-highlights";
 import { noteTokenEditor } from "../src/note-token-editor";
 
-interface Plugin { syntax: DecorationSet; pills: DecorationSet; update(update: unknown): void }
+interface Plugin { marks: DecorationSet; lines: DecorationSet; update(update: unknown): void }
 
-beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date(2026, 8, 26, 12, 29));
-  vi.mocked(noteTaskPresentation).mockClear();
-});
-afterEach(() => vi.useRealTimers());
+beforeEach(() => { vi.mocked(noteLineHighlights).mockClear(); });
 
 function fakeView(doc: string, ranges?: (state: EditorState) => { from: number; to: number }[]) {
-  // The caret rests on the last line, which each test keeps free of tasks.
   const state = EditorState.create({ doc, selection: { anchor: doc.length } });
   const visibleRanges = ranges?.(state) ?? [{ from: 0, to: state.doc.length }];
   return {
@@ -38,34 +32,29 @@ function decorations(set: DecorationSet) {
   for (const cursor = set.iter(); cursor.value; cursor.next()) result.push({ from: cursor.from, to: cursor.to, spec: cursor.value.spec });
   return result;
 }
-const lineDecorations = (plugin: Plugin) => decorations(plugin.syntax).filter(range => (range.spec.attributes as Record<string, string> | undefined)?.class === "tm-note-task-line");
-function presentations(plugin: Plugin): NoteTaskPresentation[] {
-  return decorations(plugin.syntax).flatMap(range => {
-    const widget = range.spec.widget as { presentation?: NoteTaskPresentation } | undefined;
-    return widget?.presentation ? [widget.presentation] : [];
-  });
-}
-const parsedLines = () => vi.mocked(noteTaskPresentation).mock.calls.map(call => call[0]);
+const markedLines = (plugin: Plugin, view: ReturnType<typeof fakeView>) => [...new Set(decorations(plugin.marks).map(range => view.state.doc.lineAt(range.from).number))];
+const parsedLines = () => vi.mocked(noteLineHighlights).mock.calls.map(call => call[0]);
 
 describe("noteTokenEditor view plugin", () => {
-  it("parses and decorates only the visible ranges", () => {
+  it("parses and highlights only the visible ranges, colouring a priority's checkbox", () => {
     const doc = Array.from({ length: 200 }, (_, index) => `- [ ] Task ${index} 2026-09-${String(1 + index % 28).padStart(2, "0")} p2`).join("\n");
     const view = fakeView(doc, state => [{ from: state.doc.line(50).from, to: state.doc.line(52).to }]);
     const plugin = create(view);
     expect(parsedLines()).toEqual([50, 51, 52].map(number => view.state.doc.line(number).text));
-    const lines = lineDecorations(plugin).map(range => view.state.doc.lineAt(range.from).number);
-    expect(lines).toEqual([50, 51, 52]);
+    expect(markedLines(plugin, view)).toEqual([50, 51, 52]);
+    expect(decorations(plugin.lines).map(range => view.state.doc.lineAt(range.from).number)).toEqual([50, 51, 52]);
   });
 
-  it("decorates a line shared by two fold-split ranges once", () => {
+  it("highlights a line shared by two fold-split ranges once, and reuses parsed lines", () => {
     const doc = Array.from({ length: 10 }, (_, index) => `- [ ] Task ${index} 2026-09-2${index % 10}`).join("\n") + "\nend";
     const view = fakeView(doc, state => [
       { from: state.doc.line(3).from, to: state.doc.line(5).from + 4 },
       { from: state.doc.line(5).from + 8, to: state.doc.line(7).to }
     ]);
     const plugin = create(view);
-    expect(lineDecorations(plugin).map(range => view.state.doc.lineAt(range.from).number)).toEqual([3, 4, 5, 6, 7]);
-    expect(presentations(plugin)).toHaveLength(5);
+    expect(decorations(plugin.marks)).toHaveLength(5);
+    plugin.update(idle(view));
+    expect(parsedLines()).toHaveLength(5);
   });
 
   it("skips frontmatter and fenced code lines", () => {
@@ -73,28 +62,13 @@ describe("noteTokenEditor view plugin", () => {
     const view = fakeView(doc);
     const plugin = create(view);
     expect(parsedLines()).not.toContain("- [ ] Example 2026-09-27");
-    expect(lineDecorations(plugin).map(range => view.state.doc.lineAt(range.from).number)).toEqual([7]);
+    expect(markedLines(plugin, view)).toEqual([7]);
   });
 
-  it("drops cached date labels when the day changes", () => {
-    const view = fakeView("- [ ] Pay 2026-09-27\n- [ ] Call 2026-09-25\nend");
+  it("keeps highlighting the line the caret is on, since nothing is hidden", () => {
+    const doc = "- [ ] Pay 2026-09-27";
+    const view = fakeView(doc);
     const plugin = create(view);
-    expect(presentations(plugin).map(presentation => presentation.tokens[0].dateLabel)).toEqual(["Tomorrow", "1d ago"]);
-    plugin.update(idle(view));
-    expect(parsedLines()).toHaveLength(3);
-    vi.setSystemTime(new Date(2026, 8, 27, 0, 1));
-    plugin.update(idle(view));
-    expect(presentations(plugin).map(presentation => presentation.tokens[0].dateLabel)).toEqual(["Today", "2d ago"]);
-  });
-
-  it("re-derives deadline-time overdue flags on a new minute, reusing untimed lines", () => {
-    const view = fakeView("- [ ] Report {2026-09-26 12:30}\n- [ ] Pay 2026-09-27\nend");
-    const plugin = create(view);
-    expect(presentations(plugin)[0].tokens[0].overdue).toBe(false);
-    vi.mocked(noteTaskPresentation).mockClear();
-    vi.setSystemTime(new Date(2026, 8, 26, 12, 31));
-    plugin.update({ ...idle(view), transactions: [{}] });
-    expect(presentations(plugin)[0].tokens[0].overdue).toBe(true);
-    expect(parsedLines()).toEqual(["- [ ] Report {2026-09-26 12:30}"]);
+    expect(decorations(plugin.marks).map(range => doc.slice(range.from, range.to))).toEqual(["2026-09-27"]);
   });
 });

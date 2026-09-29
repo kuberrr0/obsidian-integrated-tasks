@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseTaskLine, rewriteTaskLine, serializeTask, withCompletedDate, type ParsedTokenRange } from "../src/parser";
 import { updateTaskDateTokens } from "../src/task-date-update";
-import { taskTokens } from "../src/task-tokens";
-import { noteTaskPresentation } from "../src/note-task-presentation";
 
 const reference = new Date(2026, 8, 27, 12);
 const parse = (line: string, format = "YYYY-MM-DD") => parseTaskLine(line, reference, format)!;
@@ -57,9 +55,4 @@ describe("completion date writing", () => {
       .toBe("- [x] A ✓[[Sep 27, 2026]]\n- [x] B ✅ 2026-09-27\n");
   });
 
-  it("presents a muted Done pill in notes", () => {
-    expect(taskTokens("- [x] Pay ✓[[2026-09-27]]", "YYYY-MM-DD")).toEqual([expect.objectContaining({ kind: "completedDate", label: "Done 2026-09-27", linkText: "2026-09-27" })]);
-    const presentation = noteTaskPresentation("- [x] Pay p1 ✅ 2026-09-27", "YYYY-MM-DD", reference)!;
-    expect(presentation.tokens.find(token => token.kind === "completedDate")).toMatchObject({ label: "Done Sep 27", dateLabel: "Sep 27" });
-  });
 });

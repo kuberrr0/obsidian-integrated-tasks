@@ -149,7 +149,7 @@ Drag a bar's edges to adjust a project's start and end dates. For a project with
 
 ## Keep working in your notes
 
-You can continue writing and checking off tasks directly in your notes. In Live Preview and Reading view, the plugin presents task dates, deadlines, and tags alongside the task, with checkbox colors indicating priority.
+You can continue writing and checking off tasks directly in your notes. In Live Preview and Reading view, a task's dates, deadline, priority and other properties stay as you wrote them, highlighted in the colour of what they set (as in a task card's title); tags keep Obsidian's own look, and the checkbox takes the priority's colour.
 
 **Cmd/Ctrl-click a checkbox** to open the task editor. On mobile, **press and hold the checkbox**.
 

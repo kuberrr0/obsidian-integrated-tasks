@@ -1,118 +1,29 @@
-import { noteTaskPresentation, renderNoteTaskDetails, type NoteTaskPresentation } from "./note-task-presentation";
-import { notePropertyIconStyle } from "./task-property-icons";
-import { editorLivePreviewField, editorInfoField, Platform } from "obsidian";
+import { editorLivePreviewField } from "obsidian";
 import { type Range } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
+import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { nonBodyLines } from "./structure";
-import { todayIso } from "./date";
-import { taskTokens, recurringLogTokens, tokenClass, type TaskToken } from "./task-tokens";
+import { noteLineHighlights, type NoteLineHighlights } from "./note-highlights";
 
-export interface NoteTokenSpan { from: number; to: number; token: TaskToken }
-
-/** Display-only date label; opening a link still uses its original note target. */
-export class DateLabelWidget extends WidgetType {
-  constructor(private readonly label: string, private readonly linkText?: string) { super(); }
-  eq(other: DateLabelWidget): boolean { return this.label === other.label && this.linkText === other.linkText; }
-  toDOM(view: EditorView): HTMLElement {
-    const element: HTMLElement = view.dom.ownerDocument.createDocumentFragment().createEl(this.linkText ? "a" : "span");
-    element.textContent = this.label;
-    if (this.linkText) {
-      element.className = "internal-link";
-      element.setAttribute("data-href", this.linkText);
-      element.setAttribute("href", this.linkText);
-      const open = (event: MouseEvent): void => {
-        if (event.button !== 0 && event.button !== 1) return;
-        const info = view.state.field(editorInfoField, false);
-        if (!info) return;
-        event.preventDefault();
-        event.stopPropagation();
-        void info.app.workspace.openLinkText(this.linkText!, info.file?.path ?? "", event.button === 1 || (Platform.isMacOS ? event.metaKey : event.ctrlKey));
-      };
-      element.addEventListener("click", open);
-      element.addEventListener("auxclick", open);
-    }
-    return element;
-  }
+/** A line's highlights, placed in the document: its tokens, and its start for the priority colouring its checkbox. */
+export function noteLineDecorations(lineFrom: number, line: NoteLineHighlights): { marks: Range<Decoration>[]; lines: Range<Decoration>[] } {
+  return {
+    marks: line.highlights.map(highlight => Decoration.mark({ class: highlight.cls }).range(lineFrom + highlight.from, lineFrom + highlight.to)),
+    lines: line.priority ? [Decoration.line({ attributes: { class: "tm-note-task-line", "data-tm-priority": String(line.priority) } }).range(lineFrom)] : []
+  };
 }
 
-export class NoteTaskDetailsWidget extends WidgetType {
-  constructor(private readonly presentation: NoteTaskPresentation, private readonly from: number) { super(); }
-  eq(other: NoteTaskDetailsWidget): boolean { return this.from === other.from && JSON.stringify(this.presentation) === JSON.stringify(other.presentation); }
-  toDOM(view: EditorView): HTMLElement {
-    const root = view.dom.ownerDocument.createDocumentFragment().createSpan();
-    renderNoteTaskDetails(root, this.presentation, (token, label) => new DateLabelWidget(label, token.linkText).toDOM(view));
-    root.addEventListener("click", event => {
-      if ((event.target as HTMLElement).closest("a")) return;
-      event.preventDefault();
-      const property = (event.target as HTMLElement).closest<HTMLElement>("[data-tm-property-offset]");
-      const offset = Number(property?.getAttribute("data-tm-property-offset") ?? 0);
-      view.dispatch({ selection: { anchor: this.from + offset }, scrollIntoView: true });
-      view.focus();
-    });
-    return root;
-  }
-}
-
-export interface NoteTaskSpan { from: number; to: number; lineFrom: number; lineTo: number; presentation: NoteTaskPresentation }
-
-export function noteTaskDecorations(tasks: NoteTaskSpan[], selections: readonly { from: number; to: number }[]): Range<Decoration>[] {
-  const decorations: Range<Decoration>[] = [];
-  for (const task of tasks) {
-    decorations.push(Decoration.line({ attributes: { class: "tm-note-task-line", "data-tm-priority": String(task.presentation.priority ?? "") } }).range(task.lineFrom));
-    if (selections.some(selection => selection.from <= task.lineTo && selection.to >= task.lineFrom)) continue;
-    decorations.push(Decoration.replace({ widget: new NoteTaskDetailsWidget(task.presentation, task.from) }).range(task.from, task.to));
-  }
-  return decorations;
-}
-
-/** Retain native text when already formatted; reveal source text while editing. */
-export function noteTokenMarks(
-  tokens: NoteTokenSpan[],
-  viewport: { from: number; to: number },
-  selections: readonly { from: number; to: number }[]
-): { pills: DecorationSet; syntax: DecorationSet } {
-  const pills: Range<Decoration>[] = [];
-  const syntax: Range<Decoration>[] = [];
-  for (const { from, to, token } of tokens) {
-    if (from >= viewport.to || to <= viewport.from) continue;
-    if (selections.some((range) => range.from <= to && range.to >= from)) continue;
-    pills.push(Decoration.mark({
-      class: `${tokenClass(token)} tm-note-token-editor`,
-      attributes: { title: token.description, style: notePropertyIconStyle(token.kind) }
-    }).range(from, to));
-    if (token.display) {
-      syntax.push(Decoration.replace({ widget: new DateLabelWidget(token.display.label, token.display.linkText) })
-        .range(from + token.display.from - token.from, from + token.display.to - token.from));
-    }
-    if (token.kind === "tags") {
-      syntax.push(Decoration.mark({ class: "tm-note-token-tag-prefix" }).range(from, from + 1));
-    }
-    if (token.kind === "deadline") {
-      // Keep the deadline prefix outside the date label.
-      syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + 1));
-      syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(to - 1, to));
-    }
-    // The icon stands in for the `✓` (or `✅ `) prefix.
-    if (token.kind === "completedDate" && token.display) syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + token.display.from - token.from));
-    if (token.kind === "defer") syntax.push(Decoration.mark({ class: "tm-note-token-brace" }).range(from, from + 1));
-  }
-  return { pills: Decoration.set(pills, true), syntax: Decoration.set(syntax, true) };
-}
-
-/** `minute` is set only for lines whose labels depend on the time of day (a deadline with a time). */
-interface NoteLineTokens { presentation: NoteTaskPresentation | undefined; tokens: TaskToken[]; minute?: number }
-
-export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills: DecorationSet; syntax: DecorationSet }> {
+/**
+ * Live Preview: a task line's tokens are highlighted in place, as in a task card's title, and its checkbox takes its
+ * priority's colour. Nothing is replaced or hidden, so the line reads as written.
+ */
+export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ marks: DecorationSet; lines: DecorationSet }> {
   return ViewPlugin.fromClass(class {
-    pills: DecorationSet = Decoration.none;
-    syntax: DecorationSet = Decoration.none;
-    // Only visible lines are parsed; results are reused while the line text, date format and day are unchanged.
-    // Labels ("Today", "3d ago") and overdue flags depend on the date, so the cache is dropped when the day
-    // changes; lines with a deadline time (overdue from that minute on) are also re-derived each new minute.
-    private readonly lines = new Map<string, NoteLineTokens>();
+    marks: DecorationSet = Decoration.none;
+    lines: DecorationSet = Decoration.none;
+    // Only visible lines are parsed; results are reused while the line text and date format are unchanged.
+    private readonly cache = new Map<string, NoteLineHighlights | undefined>();
     private nonBody: Set<number>;
     private format = getDateFormat();
-    private day = todayIso();
 
     constructor(view: EditorView) {
       this.nonBody = nonBodyLines(view.state.doc.iterLines());
@@ -121,42 +32,26 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
 
     update(update: ViewUpdate): void {
       const formatChanged = this.format !== getDateFormat();
-      if (formatChanged) { this.format = getDateFormat(); this.lines.clear(); }
-      const dayChanged = this.checkDay();
+      if (formatChanged) { this.format = getDateFormat(); this.cache.clear(); }
       if (update.docChanged) this.nonBody = nonBodyLines(update.state.doc.iterLines());
-      if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged || formatChanged || dayChanged || update.transactions.length) this.decorate(update.view);
+      if (update.docChanged || update.viewportChanged || formatChanged || update.transactions.length) this.decorate(update.view);
     }
 
-    /** Drop date-relative labels cached on an earlier day. */
-    private checkDay(): boolean {
-      const day = todayIso();
-      if (day === this.day) return false;
-      this.day = day;
-      this.lines.clear();
-      return true;
-    }
-
-    private lineTokens(text: string, minute: number): NoteLineTokens {
-      let entry = this.lines.get(text);
-      if (!entry || (entry.minute !== undefined && entry.minute !== minute)) {
-        if (this.lines.size > 5000) this.lines.clear();
-        const presentation = noteTaskPresentation(text, this.format);
-        const timed = presentation?.tokens.some(token => token.kind === "deadline" && token.time);
-        entry = { presentation, tokens: [...(presentation ? [] : taskTokens(text, this.format)), ...recurringLogTokens(text, this.format)], ...(timed ? { minute } : {}) };
-        this.lines.set(text, entry);
-      }
-      return entry;
+    private highlights(text: string): NoteLineHighlights | undefined {
+      if (this.cache.has(text)) return this.cache.get(text);
+      if (this.cache.size > 5000) this.cache.clear();
+      const found = noteLineHighlights(text, this.format);
+      this.cache.set(text, found);
+      return found;
     }
 
     private decorate(view: EditorView): void {
       if (!view.state.field(editorLivePreviewField, false)) {
-        this.pills = this.syntax = Decoration.none;
+        this.marks = this.lines = Decoration.none;
         return;
       }
-      this.checkDay();
-      const minute = Math.floor(Date.now() / 60_000);
-      const tokens: NoteTokenSpan[] = [];
-      const tasks: NoteTaskSpan[] = [];
+      const marks: Range<Decoration>[] = [];
+      const lines: Range<Decoration>[] = [];
       const doc = view.state.doc;
       let done = 0;
       for (const range of view.visibleRanges) {
@@ -166,18 +61,19 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ pills
           done = number;
           if (this.nonBody.has(number - 1)) continue;
           const line = doc.line(number);
-          const { presentation, tokens: lineTokens } = this.lineTokens(line.text, minute);
-          if (presentation) tasks.push({ from: line.from + presentation.from, to: line.from + presentation.to, lineFrom: line.from, lineTo: line.to, presentation });
-          for (const token of lineTokens) tokens.push({ from: line.from + token.from, to: line.from + token.to, token });
+          const found = this.highlights(line.text);
+          if (!found) continue;
+          const placed = noteLineDecorations(line.from, found);
+          marks.push(...placed.marks);
+          lines.push(...placed.lines);
         }
       }
-      const marks = noteTokenMarks(tokens, view.viewport, view.state.selection.ranges);
-      this.pills = marks.pills;
-      this.syntax = marks.syntax.update({ add: noteTaskDecorations(tasks, view.state.selection.ranges), sort: true });
+      this.marks = Decoration.set(marks, true);
+      this.lines = Decoration.set(lines, true);
     }
   }, {
-    decorations: (plugin) => plugin.syntax,
-    // Keep one pill wrapper outside Obsidian's link and syntax decorations.
-    provide: (plugin) => EditorView.outerDecorations.of((view) => view.plugin(plugin)?.pills ?? Decoration.none)
+    decorations: plugin => plugin.lines,
+    // The highlight wraps Obsidian's own link and syntax decorations, so a linked date is coloured whole.
+    provide: plugin => EditorView.outerDecorations.of(view => view.plugin(plugin)?.marks ?? Decoration.none)
   });
 }

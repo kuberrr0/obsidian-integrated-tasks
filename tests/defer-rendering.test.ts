@@ -3,8 +3,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
 import { installObsidianDom } from "./helpers/obsidian-dom";
 import { renderTaskDetails } from "../src/task-row-details";
-import { noteTaskPresentation, renderNoteTaskDetails } from "../src/note-task-presentation";
-import { renderNoteTokens } from "../src/note-token-reading";
 import { scanTasks } from "../src/parser";
 import type { TaskGrouping, TaskProperty } from "../src/types";
 
@@ -50,32 +48,3 @@ describe("task row defer pill", () => {
   });
 });
 
-describe("note defer presentation", () => {
-  it("renders a relative defer after the deadline with its icon and link target", () => {
-    const source = "- [ ] Renew {2026-09-23} >[[2026-09-20]] p2";
-    const presentation = noteTaskPresentation(source, "YYYY-MM-DD", now)!;
-    const root = document.createElement("span");
-    renderNoteTaskDetails(root, presentation, (token, label) => {
-      const anchor = document.createElement("a");
-      anchor.setAttribute("data-href", token.linkText!);
-      anchor.textContent = label;
-      return anchor;
-    });
-    expect(Array.from(root.children).map(child => child.className)).toEqual(["tm-note-task-deadline", "tm-note-task-defer is-active"]);
-    const defer = root.children[1] as HTMLElement;
-    expect(defer.textContent).toBe("Tomorrow");
-    expect(defer.querySelector("a")!.getAttribute("data-href")).toBe("2026-09-20");
-    expect(defer.getAttribute("title")).toBe("Hidden until: 2026-09-20");
-    expect(defer.getAttribute("style")).toContain("--tm-note-token-icon");
-    expect(source.slice(presentation.from + Number(defer.getAttribute("data-tm-property-offset")))).toMatch(/^>\[\[2026-09-20\]\]/);
-  });
-
-  it("replaces the > prefix in Reading view", () => {
-    const root = document.createElement("div");
-    root.innerHTML = `<ul><li class="task-list-item" data-task=" "><input type="checkbox">Learn Rust &gt;someday</li></ul>`;
-    renderNoteTokens(root, "YYYY-MM-DD");
-    const item = root.querySelector("li")!;
-    expect(item.textContent).toBe("Learn Rust Someday");
-    expect(item.querySelector(".tm-note-task-defer")!.className).toBe("tm-note-task-defer is-active");
-  });
-});
