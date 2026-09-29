@@ -2,6 +2,13 @@ import { parseIgnoreList } from "./ignore";
 import { Notice, PluginSettingTab, Setting, type App, type SettingDefinitionRender } from "obsidian";
 import type TaskManagerPlugin from "./main";
 
+/**
+ * The settings page's groups, in order: where tasks go, how they are written in notes, which are left out, how views
+ * look, the calendar's colors, and the Tasks plugin import.
+ */
+export const SETTING_GROUPS = ["General", "How tasks are written", "Ignored tasks", "Appearance", "Calendar", "Import"] as const;
+type SettingGroup = typeof SETTING_GROUPS[number];
+
 /** Text settings apply once typing pauses, so each keystroke does not save and re-index the vault. */
 export const TEXT_SETTING_DELAY_MS = 500;
 
@@ -34,7 +41,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
 
   getSettingDefinitions() {
     const rows = this.getSettingRows();
-    return ["Task defaults", "Appearance", "List layout", "Kanban layout", "Calendar layout", "Dates"].map(heading => ({
+    return SETTING_GROUPS.map(heading => ({
       type: "group" as const,
       heading,
       cls: "tm-settings-section",
@@ -52,13 +59,19 @@ export class TaskManagerSettingTab extends PluginSettingTab {
   private getSettingRows() {
     return [
       {
-        section: "Task defaults",
-        name: "Task mode",
-        desc: "Open project notes in task view across all tabs. Turning this off restores their Markdown views.",
-        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.taskMode).onChange(value => this.plugin.setTaskMode(value))); }
+        section: "General",
+        name: "Inbox note",
+        desc: "The note where quick-created tasks are saved.",
+        render: (setting: Setting) => this.renderInboxSetting(setting)
       },
       {
-        section: "Task defaults",
+        section: "General",
+        name: "New task position",
+        desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
+        render: (setting: Setting) => this.renderPositionSetting(setting)
+      },
+      {
+        section: "General",
         name: "Section heading level",
         desc: "Headings at this level become sections and task destinations. Default: Heading 1.",
         render: (setting: Setting) => { setting.addDropdown(dropdown => {
@@ -68,7 +81,22 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         }); }
       },
       {
-        section: "Dates",
+        section: "General",
+        name: "Task mode",
+        desc: "Open project notes in task view across all tabs. Turning this off restores their Markdown views.",
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.taskMode).onChange(value => this.plugin.setTaskMode(value))); }
+      },
+      {
+        section: "General",
+        name: "Show undo notices",
+        desc: "After you complete, move, edit, or delete tasks from the plugin's views, show a notice with an Undo button. The Undo last task change command and Cmd/Ctrl+Z in task views work either way.",
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showUndoNotices).onChange(async value => {
+          this.plugin.settings.showUndoNotices = value;
+          await this.plugin.saveSettings();
+        })); }
+      },
+      {
+        section: "How tasks are written",
         name: "Date format",
         desc: "Moment date format for task dates, for example DD/MM/YYYY. Leave empty to use the Daily Notes format (YYYY-MM-DD if unset).",
         render: (setting: Setting) => { setting.addText(text => text
@@ -77,7 +105,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           .onChange(value => this.applySoon("dateFormat", () => this.plugin.setDateFormat(value)))); }
       },
       {
-        section: "Dates",
+        section: "How tasks are written",
         name: "Link dates",
         desc: "Write scheduled and deadline dates as [[date]] links. When off, write plain dates. Applies when creating or editing tasks; existing notes are not rewritten automatically.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.linkDates).onChange(async value => {
@@ -86,7 +114,20 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         })); }
       },
       {
-        section: "Task defaults",
+        section: "How tasks are written",
+        name: "Update dates",
+        desc: "Rewrite task dates, and the completed, skipped and failed dates in recurring-task notes, to follow Date format and Link dates.",
+        render: (setting: Setting) => { setting.addButton(button => button
+          .setButtonText("Update dates")
+          .onClick(async () => {
+            button.setDisabled(true);
+            try { await this.plugin.updateTaskDates(); }
+            catch (error) { new Notice(String(error)); }
+            finally { button.setDisabled(false); }
+          })); }
+      },
+      {
+        section: "How tasks are written",
         name: "Tag format",
         desc: "How task tags are written, and the only form read as a tag: Obsidian's #tag (no spaces; they become hyphens), or #[[tag]], a link to a note named after the tag. Notes keep the tags they have until you convert them.",
         render: (setting: Setting) => {
@@ -98,44 +139,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         }
       },
       {
-        section: "Dates",
-        name: "Update dates",
-        desc: "Update task dates and completed, skipped, and failed history dates in recurring-task notes to follow Date format and Link dates.",
-        render: (setting: Setting) => { setting.addButton(button => button
-          .setButtonText("Update dates")
-          .onClick(async () => {
-            button.setDisabled(true);
-            try { await this.plugin.updateTaskDates(); }
-            catch (error) { new Notice(String(error)); }
-            finally { button.setDisabled(false); }
-          })); }
-      },
-      {
-        section: "Task defaults",
-        name: "Ignored folders and notes",
-        desc: "Tasks in these folders and notes are left out of every task view, list, and count. One per line, such as Templates/ or Journal/Private.md.",
-        render: (setting: Setting) => this.renderIgnoreSetting(setting, "ignoredPaths", "Templates/\nArchive/")
-      },
-      {
-        section: "Task defaults",
-        name: "Ignored tags",
-        desc: "Leave out notes with these tags in their properties, and tasks tagged with them. Ignoring a tag also ignores its nested tags. One per line, such as template or someday.",
-        render: (setting: Setting) => this.renderIgnoreSetting(setting, "ignoredTags", "template\nsomeday")
-      },
-      {
-        section: "Task defaults",
-        name: "Inbox note",
-        desc: "The note where quick-created tasks are saved.",
-        render: (setting: Setting) => this.renderInboxSetting(setting)
-      },
-      {
-        section: "Task defaults",
-        name: "New task position",
-        desc: "Insert added or moved tasks at the top or bottom of the first checklist in the destination file or heading. If there is no checklist, insert at the start of the scope.",
-        render: (setting: Setting) => this.renderPositionSetting(setting)
-      },
-      {
-        section: "Task defaults",
+        section: "How tasks are written",
         name: "Record completion dates",
         desc: "When you complete a task, add the date it was completed, such as ✓Sep 27, 2026. Reopening the task removes it.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.completionDates).onChange(async value => {
@@ -144,33 +148,16 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         })); }
       },
       {
-        section: "Task defaults",
-        name: "Import from the Tasks plugin",
-        desc: "Convert tasks written for the Tasks plugin into this plugin's format. You'll see a preview first, and you can undo the import.",
-        render: (setting: Setting) => { setting.addButton(button => button.setButtonText("Import…").onClick(() => this.plugin.openTasksImport())); }
+        section: "Ignored tasks",
+        name: "Ignored folders and notes",
+        desc: "Tasks in these folders and notes are left out of every task view, list, and count. One per line, such as Templates/ or Journal/Private.md.",
+        render: (setting: Setting) => this.renderIgnoreSetting(setting, "ignoredPaths", "Templates/\nArchive/")
       },
       {
-        section: "Task defaults",
-        name: "Show undo notices",
-        desc: "After you complete, move, edit, or delete tasks from the plugin's views, show a notice with an Undo button. The Undo last task change command and Cmd/Ctrl+Z in task views work either way.",
-        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showUndoNotices).onChange(async value => {
-          this.plugin.settings.showUndoNotices = value;
-          await this.plugin.saveSettings();
-        })); }
-      },
-      {
-        section: "Appearance",
-        name: "Task highlight on hover",
-        desc: "Choose how tasks and projects in the Projects list respond when you hover over them.",
-        render: (setting: Setting) => { setting.addDropdown(dropdown => dropdown
-          .addOption("none", "None").addOption("title", "Title").addOption("background", "Background").addOption("all", "All")
-          .setValue(this.plugin.settings.taskHoverHighlight)
-          .onChange(async value => {
-            if (value !== "none" && value !== "title" && value !== "background" && value !== "all") return;
-            this.plugin.settings.taskHoverHighlight = value;
-            await this.plugin.saveSettings();
-            this.plugin.refreshViews();
-          })); }
+        section: "Ignored tasks",
+        name: "Ignored tags",
+        desc: "Leave out notes with these tags in their properties, and tasks tagged with them. Ignoring a tag also ignores its nested tags. One per line, such as template or someday.",
+        render: (setting: Setting) => this.renderIgnoreSetting(setting, "ignoredTags", "template\nsomeday")
       },
       {
         section: "Appearance",
@@ -199,44 +186,35 @@ export class TaskManagerSettingTab extends PluginSettingTab {
             this.plugin.refreshNavigation();
           })); }
       },
+      {
+        section: "Appearance" as SettingGroup,
+        name: "Show subtasks in task views",
+        desc: "List subtasks as their own rows under their task. When off, they appear in the task's card, and a subtask shows on its own only in views its task is not in.",
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showSubtasks).onChange(async value => {
+          this.plugin.settings.showSubtasks = value;
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+        })); }
+      },
+      // The calendar can color its tasks.
       ...([
-        ["showGroupTaskCounts", "Show task counts in group headings", "Show the number of tasks beside list group headings and Kanban column headings."],
-        ["showSubtaskCounts", "Show subtask counts", "Show completed and total subtask counts beside tasks that have subtasks."],
-        ["showSubtasks", "Show subtasks in task views", "List subtasks as their own rows under their task. When off, they appear in the task's card, and a subtask shows on its own only in views its task is not in."]
+        ["calendarProjectColors", "Color calendar tasks by project", "Tint each task in the calendar with its project's color."],
+        ["calendarPriorityColors", "Color calendar checkboxes by priority", "Color each calendar task's checkbox by its priority, as in lists."]
       ] as const).map(([key, name, desc]) => ({
-        section: "Appearance", name, desc,
+        section: "Calendar" as SettingGroup, name, desc,
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
           this.plugin.settings[key] = value;
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
         })); }
       })),
-      ...([
-        ["wrapTaskTitles", "List"],
-        ["wrapCalendarTaskTitles", "Calendar"],
-        ["wrapKanbanTaskTitles", "Kanban"]
-      ] as const).map(([key, layout]) => ({
-        section: `${layout} layout`,
-        name: "Wrap task titles",
-        desc: `Let long titles wrap onto multiple lines. Turn off to shorten them with an ellipsis.`,
-        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
-          this.plugin.settings[key] = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshViews();
-        })); }
-      })),
-      ...([
-        ["calendarProjectColors", "Color tasks by project", "Tint each task with its project's color."],
-        ["calendarPriorityColors", "Color checkboxes by priority", "Color each task's checkbox by its priority, as in the list layout."]
-      ] as const).map(([key, name, desc]) => ({
-        section: "Calendar layout", name, desc,
-        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
-          this.plugin.settings[key] = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshViews();
-        })); }
-      }))
-    ] satisfies (SettingDefinitionRender & { section: string })[];
+      {
+        section: "Import",
+        name: "Import from the Tasks plugin",
+        desc: "Convert tasks written for the Tasks plugin into this plugin's format. You'll see a preview first, and you can undo the import.",
+        render: (setting: Setting) => { setting.addButton(button => button.setButtonText("Import…").onClick(() => this.plugin.openTasksImport())); }
+      },
+    ] satisfies (SettingDefinitionRender & { section: SettingGroup })[];
   }
 
   // Obsidian versions before 1.13 use this imperative settings page.

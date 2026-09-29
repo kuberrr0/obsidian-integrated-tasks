@@ -15,6 +15,8 @@ export interface ThingsRowParts {
 export interface ThingsDetailsOptions extends TaskDetailsOptions {
     /** Mark tasks scheduled for today with a star; off in the Today list itself. */
     todayMarker?: boolean;
+    /** Mark tasks that have subtasks; off where the subtasks are listed as rows themselves. */
+    subtaskMark?: boolean;
 }
 
 /** "Tomorrow", a weekday within the coming week, then "Oct 8" (with the year outside the current one). */
@@ -58,12 +60,11 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
         editScheduled(star);
     }
 
-    // After the title: a checklist mark for subtasks (next to the notes mark), repeat and tags.
-    if (task.childIds.length) {
+    // After the title: a checklist mark for subtasks (right beside it), repeat and tags.
+    if (task.childIds.length && options.subtaskMark !== false) {
         const checklist = parts.inline.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": "Has subtasks", title: `${task.childIds.length} subtask${task.childIds.length === 1 ? "" : "s"}` } });
         setIcon(checklist, "list-checks");
-        const notes = Array.from(parts.inline.children).find(child => child.classList.contains("tm-description-indicator"));
-        notes?.after(checklist);
+        Array.from(parts.inline.children).find(child => child.classList.contains("tm-task-title"))?.after(checklist);
     }
     if (task.repeat && show("repeat")) {
         const label = repeatLabel(task.repeat);
@@ -72,7 +73,8 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
         editable(repeat, `Edit repeat: ${label}`, "repeat", () => options.edit("repeat"));
     }
     if (show("tags") && !byTag) for (const tag of options.tags) {
-        const label = parts.inline.createSpan({ cls: "tm-things-tag", text: tag });
+        // A long tag may shrink to a few letters when the line is full; a short one is already that small.
+        const label = parts.inline.createSpan({ cls: `tm-things-tag${tag.length > 5 ? " is-long" : ""}`, text: tag });
         if (options.openTag) editable(label, `Open tag: ${tag}`, `tag:${tag}`, () => options.openTag!(tag));
         else editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
     }

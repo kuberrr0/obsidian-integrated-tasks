@@ -102,6 +102,10 @@ With tasks selected, these keys change all of them; the lists open just below th
 | S | Status (press S again to move through the statuses, Enter to set one) |
 | Shift + S | Snooze |
 | C | Complete (or reopen, when all are complete) |
+| Cmd/Ctrl + C | Copy them as Markdown, with their notes and subtasks |
+| Cmd/Ctrl + V | Paste copied tasks after the last selected task (or, with none selected, where a new task in this view goes) |
+| Cmd/Ctrl + D | Duplicate them |
+| Delete or Backspace | Delete them, with their subtasks (Cmd/Ctrl + Z brings them back) |
 
 ### Calendar: make time for your work
 
@@ -227,15 +231,15 @@ Work on tasks right in the review, with the same checkboxes, keys, and swipes as
 
 ## Use it on your phone
 
-Swipe a task to the right to complete it, or to the left to snooze it until tomorrow. Both show an Undo notice, like other changes.
+Swipe a task to the right to complete it, or to the left to snooze it until tomorrow. Both can be undone, like other changes.
 
 On phones, the task editors open as a sheet from the bottom of the screen. Drag the sheet's handle down to close it.
 
 ## Undo a change
 
-After you complete, move, edit, snooze, or delete tasks from a task view, a notice shows what changed with an **Undo** button. You can also press **Cmd/Ctrl+Z** in a task view or run **Undo last task change** from the command palette. The last 20 changes can be undone.
+Press **Cmd/Ctrl+Z** in a task view or run **Undo last task change** from the command palette to undo a change you made from a task view (completing, moving, editing, snoozing or deleting tasks). Turn on **Show undo notices** in settings for a notice after each change, with an **Undo** button. The last 20 changes can be undone.
 
-Undo puts your notes back exactly as they were, so it only runs if those notes haven't changed since; otherwise it tells you which note changed. You can turn the notices off in the plugin settings and still undo with the command or shortcut.
+Undo puts your notes back exactly as they were, so it only runs if those notes haven't changed since; otherwise it tells you which note changed.
 
 ## Track progress with statuses
 
@@ -293,7 +297,7 @@ Turn on **Record completion dates** in the settings to stamp each task with the 
 
 ## Make it fit your workflow
 
-In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Adjust title wrapping, hover highlighting, and task counts, and choose **Comfortable** or **Compact** density to fit more tasks on screen.
+In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Show subtasks as their own rows, and choose **Comfortable** or **Compact** density to fit more tasks on screen.
 
 To keep some checklists out of the plugin, list them under **Ignored folders and notes**, such as `Templates/` or `Journal/Private.md`: a folder covers everything inside it. Under **Ignored tags**, list tags such as `template` or `someday`: notes with one of them in their properties are left out entirely, and single tasks tagged with one (as `#someday` or `#[[someday]]`) are hidden along with their subtasks. Ignoring a tag also ignores its nested tags, such as `archive/2025`. Ignored tasks stay in your notes; they just don't appear in task views, query blocks, counts, or the weekly review, and an ignored note isn't treated as a project. Changes apply straight away.
 

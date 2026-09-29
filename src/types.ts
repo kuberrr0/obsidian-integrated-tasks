@@ -128,18 +128,12 @@ export interface TaskManagerSettings {
   /** Format used before a pending date-token migration. */
   previousDateFormat?: string;
   sectionHeadingLevel: number;
-  showGroupTaskCounts: boolean;
-  showSubtaskCounts: boolean;
   /** List subtasks as their own rows under their task; otherwise they live in the task's card. */
   showSubtasks: boolean;
-  taskHoverHighlight: "none" | "title" | "background" | "all";
-  wrapTaskTitles: boolean;
-  wrapCalendarTaskTitles: boolean;
   /** Tint calendar task cards with their project's colour. */
   calendarProjectColors: boolean;
   /** Colour calendar task checkboxes by priority. */
   calendarPriorityColors: boolean;
-  wrapKanbanTaskTitles: boolean;
   inboxPath: string;
   newTaskPosition: "top" | "bottom";
   showUndoNotices: boolean;
@@ -163,18 +157,12 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   tagFormat: "hash",
   dateFormat: "",
   sectionHeadingLevel: 1,
-  showGroupTaskCounts: false,
-  showSubtaskCounts: false,
   showSubtasks: false,
-  taskHoverHighlight: "none",
-  wrapTaskTitles: true,
-  wrapCalendarTaskTitles: false,
   calendarProjectColors: true,
   calendarPriorityColors: true,
-  wrapKanbanTaskTitles: true,
   inboxPath: "Inbox.md",
   newTaskPosition: "top",
-  showUndoNotices: true,
+  showUndoNotices: false,
   density: "comfortable",
   style: "things",
   completionDates: false,

@@ -48,7 +48,7 @@ describe("page task view", () => {
     { mode: "inbox" }, { mode: "today" }, { mode: "upcoming" }, { mode: "all" },
     { mode: "projects", projectPath: "Project.md" }, { mode: "all", pagePath: "Notes.md" }
   ])("renders shared controls for $mode $pagePath $projectPath", async (state) => {
-    const view = new TaskMainView({} as WorkspaceLeaf, { settings: { wrapTaskTitles: false } } as TaskManagerPlugin);
+    const view = new TaskMainView({} as WorkspaceLeaf, { settings: {} } as TaskManagerPlugin);
     const internals = view as unknown as {
       containerEl: { children: unknown[] };
       renderHeader: () => void;
@@ -66,15 +66,11 @@ describe("page task view", () => {
 });
 
 
-it("defaults wrapping on while preserving a saved choice to turn it off", async () => {
-  for (const [saved, expected] of [[null, true], [{ wrapTaskTitles: false }, false], [{ wrapTaskTitles: true }, true]] as const) {
-    const plugin = new TaskManagerPlugin({} as App, {} as never);
-    plugin.loadData = vi.fn().mockResolvedValue(saved);
-    await plugin.loadSettings();
-    expect(plugin.settings.wrapTaskTitles).toBe(expected);
-    expect(plugin.settings.wrapCalendarTaskTitles).toBe(false);
-    expect(plugin.settings.wrapKanbanTaskTitles).toBe(true);
-  }
+it("drops the old title wrapping and hover settings when loading, since titles never wrap", async () => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  plugin.loadData = vi.fn().mockResolvedValue({ wrapTaskTitles: true, wrapCalendarTaskTitles: true, wrapKanbanTaskTitles: false, taskHoverHighlight: "all" });
+  await plugin.loadSettings();
+  for (const key of ["wrapTaskTitles", "wrapCalendarTaskTitles", "wrapKanbanTaskTitles", "taskHoverHighlight"]) expect(key in plugin.settings).toBe(false);
 });
 
 function selectionView() {
@@ -330,12 +326,6 @@ it.each([[null, "things"], [{ style: "unknown" }, "things"], [{ style: "things" 
     expect(plugin.settings.style).toBe(expected);
   });
 
-it("loads independent wrapping preferences for all layouts", async () => {
-  const plugin = new TaskManagerPlugin({} as App, {} as never);
-  plugin.loadData = vi.fn().mockResolvedValue({ wrapTaskTitles: true, wrapCalendarTaskTitles: false, wrapKanbanTaskTitles: false });
-  await plugin.loadSettings();
-  expect(plugin.settings).toMatchObject({ wrapTaskTitles: true, wrapCalendarTaskTitles: false, wrapKanbanTaskTitles: false });
-});
 
 
 it("right-click selects titles and other controls, retaining an existing multi-selection", () => {

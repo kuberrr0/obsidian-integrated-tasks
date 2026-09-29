@@ -88,3 +88,28 @@ describe("tags in the #tag format", () => {
     expect(replaceTaskTokens("Call mom #family p1", ["priority"], "p2", "", now, "YYYY-MM-DD")).toBe("Call mom #family p2");
   });
 });
+
+import { copiedTaskText, insertAfterTask, pastedTaskLines } from "../src/task-block";
+import { scanTasks } from "../src/parser";
+describe("copying and pasting tasks as Markdown", () => {
+  const note = "# Plan\n- [ ] A ^a1\n  - Notes\n  - [ ] A child\n- [x] B\n\t- [ ] Deep";
+  const tasks = scanTasks("Work.md", note);
+
+  it("copies each task's block once, in the order given, at the left margin", () => {
+    const [a, child, b, deep] = tasks;
+    expect(copiedTaskText(new Map([["Work.md", note]]), [b, a, child])).toBe("- [x] B\n\t- [ ] Deep\n- [ ] A ^a1\n  - Notes\n  - [ ] A child");
+    expect(copiedTaskText(new Map([["Work.md", note]]), [deep])).toBe("- [ ] Deep");
+  });
+
+  it("reads copied text from its first task on, dropping block ids and trailing blank lines", () => {
+    expect(pastedTaskLines("Some words\n  - [ ] A ^a1\n    - Notes\n  - [ ] B\n\n")).toEqual(["- [ ] A", "  - Notes", "- [ ] B"]);
+    expect(pastedTaskLines("Just text")).toBeUndefined();
+  });
+
+  it("inserts pasted lines right after a task, as its next siblings", () => {
+    const child = tasks[1];
+    expect(insertAfterTask(note, child, ["- [ ] New", "  - [ ] Its step"])).toEqual({
+      content: "# Plan\n- [ ] A ^a1\n  - Notes\n  - [ ] A child\n  - [ ] New\n    - [ ] Its step\n- [x] B\n\t- [ ] Deep", line: 4
+    });
+  });
+});

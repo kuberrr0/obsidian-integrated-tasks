@@ -49,7 +49,7 @@ import { TaskManagerSettingTab } from "../src/settings";
 function setup() {
   rows.length = 0;
   const plugin = {
-    settings: { dateFormat: "", taskMode: false, linkDates: true, wrapTaskTitles: false, wrapCalendarTaskTitles: true, wrapKanbanTaskTitles: true, inboxPath: "Tasks.md", newTaskPosition: "top" },
+    settings: { dateFormat: "", taskMode: false, linkDates: true, inboxPath: "Tasks.md", newTaskPosition: "top" },
     saveSettings: vi.fn().mockResolvedValue(undefined),
     refreshViews: vi.fn(),
     setDateFormat: vi.fn().mockResolvedValue(undefined),
@@ -65,9 +65,15 @@ describe("settings compatibility", () => {
   it("provides searchable names and descriptions without rendering or saving during indexing", () => {
     const { tab, plugin } = setup();
     const groups = tab.getSettingDefinitions();
-    expect(groups.map(group => group.heading)).toEqual(["Task defaults", "Appearance", "List layout", "Kanban layout", "Calendar layout", "Dates"]);
+    expect(groups.map(group => [group.heading, group.items.map(item => item.name)])).toEqual([
+      ["General", ["Inbox note", "New task position", "Section heading level", "Task mode", "Show undo notices"]],
+      ["How tasks are written", ["Date format", "Link dates", "Update dates", "Tag format", "Record completion dates"]],
+      ["Ignored tasks", ["Ignored folders and notes", "Ignored tags"]],
+      ["Appearance", ["Style", "Density", "Show subtasks in task views"]],
+      ["Calendar", ["Color calendar tasks by project", "Color calendar checkboxes by priority"]],
+      ["Import", ["Import from the Tasks plugin"]]
+    ]);
     const definitions = groups.flatMap(group => group.items);
-    expect(definitions.map(({ name }) => name).sort()).toEqual(["Task mode", "Section heading level", "Date format", "Link dates", "Update dates", "Inbox note", "New task position", "Ignored folders and notes", "Ignored tags", "Import from the Tasks plugin", "Record completion dates", "Show undo notices", "Task highlight on hover", "Density", "Show task counts in group headings", "Show subtask counts", "Wrap task titles", "Wrap task titles", "Wrap task titles", "Color tasks by project", "Color checkboxes by priority", "Style", "Tag format", "Show subtasks in task views"].sort());
     expect(definitions.every(({ desc }) => desc.length > 0)).toBe(true);
     expect(rows).toHaveLength(0);
     expect(plugin.saveSettings).not.toHaveBeenCalled();
@@ -79,7 +85,7 @@ describe("settings compatibility", () => {
     const { tab, plugin } = setup();
     if (mode === "legacy") {
       tab.display();
-      expect(rows[0]).toMatchObject({ name: "Task defaults", heading: true });
+      expect(rows[0]).toMatchObject({ name: "General", heading: true });
     } else {
       for (const definition of tab.getSettingDefinitions().flatMap(group => group.items)) {
         definition.render(new Setting({} as HTMLElement).setName(definition.name).setDesc(definition.desc));
@@ -114,30 +120,12 @@ describe("settings compatibility", () => {
     await position.change!("invalid");
     expect(plugin.settings.newTaskPosition).toBe("top");
     expect(plugin.saveSettings).toHaveBeenCalledTimes(4);
-    const wrap = rows.filter(({ name }) => name === "Wrap task titles")[0]!;
-    expect(wrap.value).toBe(false);
-    await wrap.change!(true);
-    expect(plugin.settings.wrapTaskTitles).toBe(true);
-    expect(plugin.saveSettings).toHaveBeenCalledTimes(5);
-    expect(plugin.refreshViews).toHaveBeenCalledTimes(3);
-    const calendar = rows.filter(({ name }) => name === "Wrap task titles")[2]!;
-    const kanban = rows.filter(({ name }) => name === "Wrap task titles")[1]!;
-    expect(calendar.value).toBe(true);
-    expect(kanban.value).toBe(true);
-    await calendar.change!(false);
-    expect(plugin.settings.wrapCalendarTaskTitles).toBe(false);
-    expect(plugin.settings.wrapTaskTitles).toBe(true);
-    expect(plugin.settings.wrapKanbanTaskTitles).toBe(true);
-    await kanban.change!(false);
-    expect(plugin.settings.wrapKanbanTaskTitles).toBe(false);
-    expect(plugin.settings.wrapTaskTitles).toBe(true);
-    expect(plugin.saveSettings).toHaveBeenCalledTimes(7);
     const links = rows.find(({ name }) => name === "Link dates")!;
     expect(links.value).toBe(true);
     await links.change!(false);
     expect(plugin.settings.linkDates).toBe(false);
-    expect(plugin.saveSettings).toHaveBeenCalledTimes(8);
-    expect(plugin.refreshViews).toHaveBeenCalledTimes(5);
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(5);
+    expect(plugin.refreshViews).toHaveBeenCalledTimes(2);
   });
 });
 

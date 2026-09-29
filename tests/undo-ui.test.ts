@@ -40,7 +40,8 @@ beforeEach(() => { notices.length = 0; });
 
 describe("undo notices", () => {
   it("shows the action with an Undo button that reverts it and refreshes the notes", async () => {
-    const { offerUndo, undo, refreshPath, changes } = plugin();
+    const { instance, offerUndo, undo, refreshPath, changes } = plugin();
+    instance.settings.showUndoNotices = true;
     offerUndo(changes[0]);
     expect(text(notices[0].message)).toBe("Completed “Pay rent”. Undo");
     (notices[0].message as DocumentFragment).querySelector("button")!.click();
@@ -50,9 +51,9 @@ describe("undo notices", () => {
     expect(text(notices[1].message)).toBe("Undone: Completed “Pay rent”");
   });
 
-  it("can be turned off, while the command still undoes the last change", async () => {
+  it("is off by default, while the command still undoes the last change", async () => {
     const { instance, offerUndo, undo, changes } = plugin();
-    instance.settings.showUndoNotices = false;
+    expect(instance.settings.showUndoNotices).toBe(false);
     offerUndo(changes[0]);
     expect(notices).toHaveLength(0);
     await instance.undoTaskChange();

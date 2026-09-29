@@ -550,7 +550,8 @@ it("lays board cards out like an open task card in the Things style", async () =
   const card = Array.from(content().querySelectorAll<HTMLElement>(".tm-things-board-card")).find(row => row.textContent!.includes("Plan the day"))!;
   const parts = Array.from(card.querySelector(".tm-task-content")!.children).map(child => child.className);
   expect(parts).toEqual(["tm-task-primary", "tm-things-board-notes", "tm-things-card-properties"]);
-  expect(card.querySelector(".tm-task-primary .tm-things-checklist")).not.toBeNull();
+  // The notes show as text, and a board card has no subtask mark.
+  expect(card.querySelector(".tm-things-checklist")).toBeNull();
   expect(card.querySelector(".tm-things-board-notes")!.textContent).toBe("Pack a map");
   expect(Array.from(card.querySelectorAll(".tm-things-card-tag")).map(tag => tag.textContent)).toEqual(["Errand"]);
   expect(card.querySelectorAll(".tm-things-card-property").length).toBe(3);
@@ -780,5 +781,78 @@ describe("Insert task in the Things style", () => {
     await view.setState({ mode: "today" });
     view.newTask();
     expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ mode: "today" }));
+  });
+});
+
+describe("row marks", () => {
+  it("marks a task's subtasks only while they are not listed as rows, and never on a board", async () => {
+    const { view, content, plugin } = await setup([["A.md", "- [ ] Plan\n  - [ ] Step\n  - Notes"]]);
+    plugin.settings.style = "things";
+    const marks = async (showSubtasks: boolean, layout: string) => {
+      plugin.settings.showSubtasks = showSubtasks;
+      await view.setState({ mode: "all", layout } as never);
+      const row = rows(content()).find(item => item.textContent!.includes("Plan"))!;
+      return row.querySelector(".tm-things-checklist") !== null;
+    };
+    expect(await marks(false, "list")).toBe(true);
+    expect(await marks(true, "list")).toBe(false);
+    expect(await marks(false, "kanban")).toBe(false);
+    // Notes never get a mark, anywhere.
+    expect(content().querySelector(".tm-description-indicator")).toBeNull();
+  });
+});
+
+describe("copy, paste, delete and duplicate on selected tasks", () => {
+  async function selected() {
+    const ctx = await setup([["A.md", "- [ ] One\n- [ ] Two\n- [ ] Three"]]);
+    const extra = ctx.store as unknown as Record<string, ReturnType<typeof vi.fn>>;
+    extra.copyTasks = vi.fn().mockResolvedValue("- [ ] Two");
+    extra.pasteTasks = vi.fn().mockResolvedValue({ path: "A.md", from: 2, to: 3 });
+    extra.bulkDelete = vi.fn().mockResolvedValue([]);
+    extra.duplicate = vi.fn().mockResolvedValue([]);
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined), readText: vi.fn().mockResolvedValue("- [ ] Two") };
+    Object.defineProperty(navigator, "clipboard", { value: clipboard, configurable: true });
+    (ctx.plugin as unknown as { newTaskDraft: () => object }).newTaskDraft = () => ({ destination: "Inbox.md" });
+    await ctx.view.onOpen();
+    await ctx.view.setState({ mode: "all" });
+    rows(ctx.content())[1].click();
+    return { ...ctx, extra, clipboard, row: rows(ctx.content())[1], two: ctx.index.allTasks()[1] };
+  }
+
+  it("copies the selection to the clipboard on Cmd+C", async () => {
+    const { row, extra, clipboard, two } = await selected();
+    key(row, "c", { metaKey: true });
+    await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith("- [ ] Two"));
+    expect(extra.copyTasks).toHaveBeenCalledWith([two]);
+  });
+
+  it("pastes after the last selected task on Cmd+V, or where a new task goes with none selected", async () => {
+    const { view, row, extra, two } = await selected();
+    key(row, "v", { metaKey: true });
+    await vi.waitFor(() => expect(extra.pasteTasks).toHaveBeenCalledWith("- [ ] Two", { after: two }));
+    view.clearSelection();
+    key(row, "v", { metaKey: true });
+    await vi.waitFor(() => expect(extra.pasteTasks).toHaveBeenLastCalledWith("- [ ] Two", { destination: "Inbox.md" }));
+  });
+
+  it("deletes the selection on Delete or Backspace, and duplicates it on Cmd+D", async () => {
+    const { view, row, extra, two } = await selected();
+    key(row, "d", { metaKey: true });
+    expect(extra.duplicate).toHaveBeenCalledWith([two]);
+    key(row, "Backspace");
+    await vi.waitFor(() => expect(extra.bulkDelete).toHaveBeenCalledWith([two]));
+    expect(view.getSelectedTasks()).toEqual([]);
+    extra.bulkDelete.mockClear();
+    key(row, "Delete");
+    expect(extra.bulkDelete).not.toHaveBeenCalled();
+  });
+
+  it("leaves the keys to a field being typed in", async () => {
+    const { content, extra } = await selected();
+    const field = content().appendChild(document.createElement("textarea"));
+    key(field, "Backspace");
+    key(field, "c", { metaKey: true });
+    expect(extra.bulkDelete).not.toHaveBeenCalled();
+    expect(extra.copyTasks).not.toHaveBeenCalled();
   });
 });

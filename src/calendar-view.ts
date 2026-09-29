@@ -1,6 +1,5 @@
 import { taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
 import { taskTitleLabel } from "./task-title";
-import { renderDescriptionIndicator } from "./task-description-indicator";
 import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
@@ -154,7 +153,6 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     if (task.deadline && calendarDate(task) === task.deadline && (time ?? "") === (task.deadlineTime ?? "")) {
       setIcon(card.createSpan({ cls: "tm-calendar-task-flag", attr: { "aria-label": "Deadline" } }), "flag");
     }
-    renderDescriptionIndicator(title, task.description);
     card.draggable = true;
     // Without selection, a click anywhere on the card opens the editor, as the title does.
     if (!options.bind) card.addEventListener("click", event => { event.stopPropagation(); options.edit(task); });

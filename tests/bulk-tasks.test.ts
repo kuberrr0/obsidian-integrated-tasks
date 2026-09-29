@@ -158,3 +158,18 @@ it("preserves concurrent description edits instead of overwriting them", async (
   await expect(setup(files).bulkUpdate([originalTasks()[0]], { description: "Replacement" })).rejects.toThrow(/description changed/);
   expect(files["Work.md"]).toContain("Changed elsewhere");
 });
+
+describe("copying and pasting tasks", () => {
+  it("copies tasks with their notes and subtasks, and pastes them after a task or into a note", async () => {
+    const files: Record<string, string> = { "Work.md": content, "Inbox.md": "- [ ] Existing" };
+    const store = setup(files);
+    const tasks = originalTasks();
+    const copied = await store.copyTasks([tasks[1], tasks[3]]);
+    expect(copied).toBe("- [ ] Child 30m p2\n  - Child notes\n- [ ] Other 15m");
+    expect(await store.pasteTasks(copied, { after: tasks[3] })).toEqual({ path: "Work.md", from: 7, to: 10 });
+    expect(files["Work.md"].split("\n").slice(6, 11)).toEqual(["- [ ] Other 15m", "- [ ] Child 30m p2", "  - Child notes", "- [ ] Other 15m", "- [ ] Last"]);
+    expect(await store.pasteTasks(copied, { destination: "Inbox.md" })).toEqual({ path: "Inbox.md", from: 0, to: 3 });
+    expect(files["Inbox.md"]).toBe("- [ ] Child 30m p2\n  - Child notes\n- [ ] Other 15m\n- [ ] Existing");
+    expect(await store.pasteTasks("No tasks here", { destination: "Inbox.md" })).toBeUndefined();
+  });
+});

@@ -45,21 +45,35 @@ describe("Things task row", () => {
   it("puts repeat and tags after the title, then date, time and deadline together at the end", () => {
     const { lead, inline } = row("- [ ] Plan 2026-10-08 10:00 30m {2026-09-30} every week #[[Errand]] #[[Office]]");
     expect(lead.childElementCount).toBe(0);
-    expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag", "tm-things-tag", "tm-things-trailing"]);
+    expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag is-long", "tm-things-tag is-long", "tm-things-trailing"]);
     const trailing = inline.querySelector<HTMLElement>(".tm-things-trailing")!;
     expect(Array.from(trailing.children).map(child => [child.className, child.textContent])).toEqual([
       ["tm-things-box tm-things-when", "Oct 8"], ["tm-things-box tm-things-time", "10:00-10:30 AM"], ["tm-things-deadline", "11 days left"]
     ]);
   });
 
-  it("marks a task with subtasks with a checklist icon right after its notes icon", () => {
+  it("marks a task with subtasks unless its subtasks are listed as rows", () => {
+    const [task] = scanTasks("Note.md", "- [ ] Plan\n  - [ ] Step", now);
+    const render = (subtaskMark?: boolean) => {
+      const lead = document.createElement("span"), inline = document.createElement("div"), secondary = document.createElement("div");
+      renderThingsTaskDetails({ lead, inline, secondary }, task, { now, grouping: "none", dateFormat: "MMM D, YYYY", tags: [], edit: vi.fn(), openSource: vi.fn(), subtaskMark });
+      return inline.querySelector(".tm-things-checklist") !== null;
+    };
+    expect([render(), render(true), render(false)]).toEqual([true, true, false]);
+  });
+
+  it("lets only a tag longer than a few letters shrink when the line is full", () => {
+    const { inline } = row("- [ ] Plan #[[call]] #[[errands]]");
+    expect(Array.from(inline.querySelectorAll(".tm-things-tag")).map(tag => [tag.textContent, tag.className])).toEqual([["call", "tm-things-tag"], ["errands", "tm-things-tag is-long"]]);
+  });
+
+  it("marks a task with subtasks with a checklist icon right after its title", () => {
     const lead = document.createElement("span"), inline = document.createElement("div"), secondary = document.createElement("div");
     inline.createSpan({ cls: "tm-task-title" });
-    inline.createSpan({ cls: "tm-description-indicator" });
     inline.createSpan({ cls: "tm-task-recurring" });
     const [task] = scanTasks("Note.md", "- [ ] Plan #[[Errand]]\n  - [ ] Step", now);
     renderThingsTaskDetails({ lead, inline, secondary }, task, { now, grouping: "none", dateFormat: "MMM D, YYYY", tags: ["Errand"], edit: vi.fn(), openSource: vi.fn() });
-    expect(classes(inline)).toEqual(["tm-task-title", "tm-description-indicator", "tm-things-checklist", "tm-task-recurring", "tm-things-tag"]);
+    expect(classes(inline)).toEqual(["tm-task-title", "tm-things-checklist", "tm-task-recurring", "tm-things-tag is-long"]);
     expect(classes(row("- [ ] Plan").inline)).toEqual([]);
   });
 
@@ -91,7 +105,7 @@ describe("Things task row", () => {
     const line = "- [ ] Plan 2026-10-08 10:00 {2026-09-30} every week #[[Errand]]";
     for (const grouping of ["date", "scheduledDate", "deadline", "scheduledTime", "repeat", "priority"] as const) {
       const { inline } = row(line, { grouping, source: "Work.md" });
-      expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag", "tm-things-trailing"]);
+      expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag is-long", "tm-things-trailing"]);
       expect(inline.querySelectorAll(".tm-things-trailing > *")).toHaveLength(3);
     }
     expect(row(line, { grouping: "tags" }).inline.querySelector(".tm-things-tag")).toBeNull();

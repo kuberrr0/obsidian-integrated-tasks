@@ -43,10 +43,61 @@ export function duplicateTaskBlocks(content: string, tasks: Task[], dateFormat?:
     .sort((a, b) => b.start - a.start);
   const lines = content.split("\n");
   for (const block of blocks) {
-    const copy = lines.slice(block.start, block.end).map(line => line.replace(/\s+\^[A-Za-z0-9-]+(\r?)$/, "$1"));
+    const copy = lines.slice(block.start, block.end).map(line => line.replace(BLOCK_ID, "$1"));
     lines.splice(block.end, 0, ...copy);
   }
   return lines.join("\n");
+}
+
+const BLOCK_ID = /\s+\^[A-Za-z0-9-]+(\r?)$/;
+const CHECKLIST = /^[ \t]*[-+*]\s+\[[^\]]\]/;
+
+/** Lines moved to the left margin by the first one's indentation (the tabs or spaces it starts with). */
+function outdent(lines: string[]): string[] {
+  const lead = /^[ \t]*/.exec(lines[0] ?? "")![0];
+  return lines.map(line => line.startsWith(lead) ? line.slice(lead.length) : line.trimStart());
+}
+
+/**
+ * The Markdown of tasks' blocks (each task's line, notes and subtasks) for the clipboard, in the order given, each moved
+ * to the left margin. A task inside another's block comes with it, once. `contents` holds each task's note.
+ */
+export function copiedTaskText(contents: Map<string, string>, tasks: Task[], dateFormat?: string, sectionHeadingLevel = 1): string {
+  const notes = new Map<string, NoteSnapshot>();
+  const blocks: Array<{ path: string; block: TaskBlock }> = [];
+  for (const task of tasks) {
+    const content = contents.get(task.path);
+    if (content === undefined) continue;
+    const note = notes.get(task.path) ?? noteSnapshot(task.path, content, dateFormat, sectionHeadingLevel);
+    notes.set(task.path, note);
+    blocks.push({ path: task.path, block: liveTaskBlock(note, task, dateFormat, sectionHeadingLevel) });
+  }
+  const inside = (item: typeof blocks[number]): boolean => blocks.some(other => other !== item && other.path === item.path
+    && other.block.start <= item.block.start && item.block.end <= other.block.end && other.block.start !== item.block.start);
+  return blocks.filter((item, index) => !inside(item) && blocks.findIndex(other => other.path === item.path && other.block.start === item.block.start) === index)
+    .map(({ block }) => outdent(block.lines).join("\n")).join("\n");
+}
+
+/**
+ * Copied text as lines to insert as tasks: from its first checklist item on, moved to the left margin, without trailing
+ * blank lines or block ids (`^id`, which must stay unique). Undefined when it holds no task.
+ */
+export function pastedTaskLines(text: string): string[] | undefined {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const first = lines.findIndex(line => CHECKLIST.test(line));
+  if (first < 0) return undefined;
+  const kept = lines.slice(first);
+  while (kept.length > 1 && !kept[kept.length - 1].trim()) kept.pop();
+  return outdent(kept).map(line => line.replace(BLOCK_ID, "$1"));
+}
+
+/** Inserts lines right after a task's block, at the task's indentation, as its next siblings; returns where they start. */
+export function insertAfterTask(content: string, task: Task, lines: string[], dateFormat?: string, sectionHeadingLevel = 1): { content: string; line: number } {
+  const block = liveTaskBlock(content, task, dateFormat, sectionHeadingLevel);
+  const lead = /^[ \t]*/.exec(block.lines[0])![0];
+  const all = content.split("\n");
+  all.splice(block.end, 0, ...lines.map(line => line.trim() ? lead + line : line));
+  return { content: all.join("\n"), line: block.end };
 }
 
 /** Rewrite the task line in place and shift the rest of the block; unchanged indentation (tabs included) is kept. */

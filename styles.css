@@ -134,8 +134,7 @@
   color: var(--text-error);
 }
 
-.tm-section-count,
-.tm-progress {
+.tm-section-count {
   padding: 1px 6px;
   border-radius: var(--radius-s);
   background: var(--background-modifier-hover);
@@ -203,11 +202,6 @@ button.tm-task-title {
   white-space: nowrap;
 }
 
-.tm-hover-title .tm-task-row:hover button.tm-task-title,
-.tm-hover-title .tm-calendar-task:hover .tm-calendar-task-title {
-  color: var(--text-accent-hover);
-}
-
 .tm-task-metadata {
   justify-content: flex-end;
   flex-wrap: nowrap;
@@ -223,16 +217,6 @@ button.tm-task-title {
   display: none;
 }
 
-.tm-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  min-height: 22px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--background-secondary-alt);
-  white-space: nowrap;
-}
 
 .tm-task-row.is-completed .tm-task-title {
   color: var(--text-muted);
@@ -524,7 +508,6 @@ button.tm-task-title {
   .tm-task-content { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 0 2px; }
   .tm-task-primary { align-items: flex-start; gap: 4px; }
   button.tm-task-title { height: auto; min-height: 44px; white-space: normal; overflow-wrap: anywhere; line-height: 1.45; padding-block: 10px; }
-  .tm-task-primary > .tm-progress { flex-shrink: 0; margin-top: 10px; }
   .tm-task-metadata { justify-content: flex-start; flex-wrap: wrap; max-width: 100%; overflow: visible; gap: 4px; }
 
   .tm-project-row > .tm-project-icon { margin: 13px; }
@@ -868,8 +851,6 @@ button.tm-list-drag-handle { touch-action: none; }
 .tm-main-view .tm-gantt-project button.tm-task-title { height: auto; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
 .tm-main-view .tm-gantt-project .tm-project-header-metadata { display: flex; margin: 0; gap: 4px 8px; }
 .tm-gantt-project .tm-project-header-metadata[hidden] { display: none; }
-.tm-main-view.tm-hover-title .tm-gantt-project:hover button.tm-task-title { color: var(--text-accent-hover); }
-.tm-main-view.tm-hover-background .tm-gantt-project:hover { background: var(--background-primary); box-shadow: inset 0 0 0 999px var(--background-modifier-hover); }
 .tm-gantt-header { position: sticky; top: 0; z-index: 4; background: var(--background-secondary); }
 .tm-gantt-header .tm-gantt-label, .tm-gantt-group .tm-gantt-label { background: var(--background-secondary); font-weight: 600; }
 .tm-gantt-group { background: var(--background-secondary); min-height: 32px; }
@@ -918,10 +899,6 @@ button.tm-gantt-handle.is-finish:focus-visible,
 }
 
 /* Distinguish progress badges from light card surfaces without changing their size. */
-.theme-light .tm-progress {
-  background: color-mix(in srgb, var(--text-normal) 10%, var(--background-primary));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 12%, transparent);
-}
 
 /* Native buttons center flex content; block text keeps truncation at the end. */
 .tm-main-view button.tm-task-title {
@@ -935,14 +912,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tm-main-view.tm-wrap-task-titles:not(.is-kanban-view):not(.is-calendar-view) .tm-task-row:not(.tm-project-row) button.tm-task-title {
-  white-space: normal;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  text-overflow: clip;
-}
-
-/* Keep wrapped Kanban titles rectangular, independent of theme button rounding. */
+/* Keep Kanban titles rectangular, independent of theme button rounding. */
 .tm-main-view .tm-kanban button.tm-task-title {
   border-radius: 6px;
   border: 0;
@@ -966,14 +936,14 @@ button.tm-gantt-handle.is-finish:focus-visible,
 /* No separate "active" row: the arrow keys move the selection, so a focused row looks like any other. */
 .tm-main-view .tm-task-item:focus-visible { outline: none; }
 
-/* Per-layout wrapping keeps clipping confined to the title, not card controls. */
-.tm-main-view:not(.tm-wrap-task-titles) .tm-kanban button.tm-task-title {
+/* Titles never wrap, in any layout: a long one ends with an ellipsis, clipped within the title only. */
+.tm-main-view .tm-kanban button.tm-task-title {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .tm-main-view .tm-calendar .tm-calendar-task { max-width: 100%; }
-.tm-main-view:not(.tm-wrap-task-titles) .tm-calendar .tm-calendar-task-title {
+.tm-main-view .tm-calendar .tm-calendar-task-title {
   display: block;
   max-width: 100%;
   white-space: nowrap;
@@ -988,26 +958,11 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .modal.tm-smart-list-modal { width: min(900px, 95vw); }
 .tm-smart-list-filters { margin-bottom: 16px; }
 
-/* Task appearance preferences; selection and drag feedback remain independent. */
-.tm-main-view.tm-hover-background .tm-task-row:not(.is-selected):not([data-drop-position]):hover,
-.tm-main-view.tm-hover-background .tm-calendar .tm-calendar-task:not(.is-selected):hover {
-  background: var(--background-modifier-hover);
-}
 .tm-main-view:not(.is-kanban-view):not(.is-calendar-view) .tm-task-row:not(.tm-project-row) {
   min-height: var(--font-text-size, 16px);
 }
 
-.tm-description-indicator {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  color: var(--text-faint);
-  vertical-align: middle;
-}
-.tm-description-indicator svg { width: 1em; height: 1em; }
-.tm-calendar-task-title .tm-description-indicator { margin-inline-start: 0.35em; }
 /* Breathing room between a task title and the first icon that follows it. */
-.tm-task-primary > button.tm-task-title + .tm-description-indicator,
 .tm-task-primary > button.tm-task-title + .tm-task-recurring { margin-inline-start: 3px; }
 
 .tm-project-header-metadata .tm-project-progress { flex-shrink: 0; align-self: center; min-height: 0; }
@@ -1045,8 +1000,6 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-dashboard-calendar .tm-calendar-weekday { padding: 2px; }
 .tm-dashboard-calendar .is-month-scope .tm-calendar-cell { min-height: 0; padding: 1px; }
 .tm-dashboard-calendar .is-month-scope .tm-calendar-date { min-height: 0; height: 20px; padding: 0 4px; font-size: var(--font-ui-small); }
-.tm-main-view .tm-dashboard-calendar-wrap .tm-calendar .tm-calendar-task-title { white-space: normal; overflow-wrap: anywhere; }
-.tm-main-view .tm-dashboard-card:not(.tm-dashboard-calendar-wrap) .tm-calendar .tm-calendar-task-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 @media (max-width: 900px) {
   .tm-dashboard-tasks, .tm-dashboard-planning { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); }
 }
@@ -1885,15 +1838,15 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   border-width: 1px;
 }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content { gap: 1px; }
-/* One line: the title gives way (wrapping or truncating per the title setting); everything else keeps its size. */
+/* One line: tags give way first, then the title; everything else keeps its size. */
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary { flex-wrap: nowrap; align-items: center; gap: 6px; }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > * { flex-shrink: 0; }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > button.tm-task-title { flex: 0 1 auto; min-width: 0; font-weight: var(--font-medium); }
-/* Wrapping titles never give up their width to the tags: the line wraps instead, the title first, and the tags,
-   marks and dates after it move to the next line when they no longer fit. */
-.tm-main-view.tm-style-things.tm-wrap-task-titles .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary { flex-wrap: wrap; row-gap: 3px; }
-/* One-line titles keep some room before the tags, ending in an ellipsis. */
-.tm-main-view.tm-style-things:not(.tm-wrap-task-titles) .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > button.tm-task-title { min-width: min(45%, 10em); }
+/* Short of room, the tags shrink first (to a few letters each, with an ellipsis), and only then the title, so a
+   long list of tags never squeezes the title away and a short title keeps no empty space after it. */
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > .tm-things-tag.is-long {
+  display: block; flex: 0 1000 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis;
+}
 
 .tm-things-lead { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
 .tm-things-box {
@@ -1930,8 +1883,12 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 /* Dates, times and the deadline sit together at the end of the line. */
 /* On phones and tablets, and in narrow windows, list rows leave tags out for room; an open card (and its checklist)
    still shows them. 700px is where the rest of the layout switches to its narrow form too. */
-body.is-mobile .tm-main-view.tm-style-things .tm-task-row .tm-things-tag { display: none; }
-@media (max-width: 700px) { .tm-main-view.tm-style-things .tm-task-row .tm-things-tag { display: none; } }
+body.is-mobile .tm-main-view.tm-style-things .tm-task-row .tm-things-tag,
+body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > .tm-things-tag.is-long { display: none; }
+@media (max-width: 700px) {
+  .tm-main-view.tm-style-things .tm-task-row .tm-things-tag,
+  .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > .tm-things-tag.is-long { display: none; }
+}
 .tm-things-trailing { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; margin-inline-start: auto; padding-inline-start: 12px; }
 .tm-things-checklist { display: inline-flex; align-items: center; color: var(--text-faint); }
 .tm-things-checklist svg { width: 12px; height: 12px; }

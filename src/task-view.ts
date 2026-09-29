@@ -7,7 +7,6 @@ import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardPropertie
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
-import { renderDescriptionIndicator } from "./task-description-indicator";
 import { cloneTaskFilters } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
@@ -191,11 +190,23 @@ export class TaskMainView extends ItemView {
     // Obsidian's own undo only covers the editor; in task views Cmd/Ctrl+Z undoes the last task change.
     this.registerDomEvent(this.containerEl, "keydown", event => {
       const key = event.key.toLowerCase();
-      if (!(Platform.isMacOS ? event.metaKey : event.ctrlKey) || event.shiftKey || event.altKey || (key !== "z" && key !== "k")) return;
+      if (event.shiftKey || event.altKey || event.defaultPrevented) return;
+      // Typing in a field (a card's title or notes, a search) keeps its own keys.
       if ((event.target as HTMLElement | null)?.closest?.("input:not([type=checkbox]), textarea, select, [contenteditable=true]")) return;
-      event.preventDefault();
-      if (key === "k") this.plugin.openQuickSwitcher();
-      else void this.plugin.undoTaskChange();
+      const mod = Platform.isMacOS ? event.metaKey : event.ctrlKey;
+      const selected = this.getSelectedTasks();
+      // Delete or Backspace deletes the selected tasks (with their subtasks); Cmd/Ctrl+Z brings them back.
+      if ((key === "delete" || key === "backspace") && selected.length && (mod || (!event.metaKey && !event.ctrlKey))) {
+        event.preventDefault();
+        void this.commit(async () => { const paths = await this.plugin.store.bulkDelete(selected); this.clearSelection(); return paths; }, "Could not delete the tasks.", false);
+        return;
+      }
+      if (!mod) return;
+      if (key === "k") { event.preventDefault(); this.plugin.openQuickSwitcher(); }
+      else if (key === "z") { event.preventDefault(); void this.plugin.undoTaskChange(); }
+      else if (key === "c" && selected.length) { event.preventDefault(); void this.copyTasks(selected); }
+      else if (key === "v") { event.preventDefault(); void this.pasteTasks(); }
+      else if (key === "d" && selected.length) { event.preventDefault(); void this.commit(() => this.plugin.store.duplicate(selected), "Could not duplicate the tasks."); }
     });
     this.unsubscribe = this.plugin.index.subscribe(() => this.scheduleRender());
     this.render();
@@ -308,12 +319,6 @@ export class TaskMainView extends ItemView {
     this.liveRegion = container.createDiv({ cls: "tm-sr-only", attr: { "aria-live": "polite" } });
     container.addClass("tm-main-view");
     container.classList.toggle("is-dashboard-view", this.state.mode === "dashboard");
-    const hover = this.plugin.settings.taskHoverHighlight ?? "none";
-    container.classList.toggle("tm-hover-title", hover === "title" || hover === "all");
-    container.classList.toggle("tm-hover-background", hover === "background" || hover === "all");
-    const wrapTitles = this.state.mode === "dashboard" ? this.plugin.settings.wrapTaskTitles : this.layout === "calendar" ? this.plugin.settings.wrapCalendarTaskTitles
-      : this.layout === "kanban" ? this.plugin.settings.wrapKanbanTaskTitles : this.plugin.settings.wrapTaskTitles;
-    container.classList.toggle("tm-wrap-task-titles", wrapTitles);
     container.classList.toggle("tm-density-compact", this.plugin.settings.density === "compact");
     container.classList.toggle("tm-style-things", this.plugin.settings.style === "things");
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
@@ -375,7 +380,6 @@ export class TaskMainView extends ItemView {
         else card.createDiv({ cls: "tm-empty", text: "No projects yet" });
       },
       calendar: card => {
-        card.classList.toggle("tm-dashboard-calendar-wrap", this.plugin.settings.wrapCalendarTaskTitles);
         renderCalendar(card, {
           anchor: this.calendarAnchor, scope: this.calendarScope, tasks: tasks("all"), dateFormat: this.plugin.dateFormat(),
           color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
@@ -610,7 +614,6 @@ export class TaskMainView extends ItemView {
       const title = column.target?.property && ["date", "scheduledDate", "deadline", "defer"].includes(column.target.property) && typeof column.target.value === "string"
         ? formatDate(column.target.value, this.plugin.dateFormat()) : column.target?.property === "source" ? column.title.replace(/\.md$/i, "") : column.title;
       header.createEl("h2", { text: title });
-      if (this.plugin.settings.showGroupTaskCounts) header.createSpan({ cls: "tm-section-count", text: String(column.tasks.length) });
       this.renderGroupAddButton(header, title, column.target);
       if (column.target) { this.listDrag?.group(section, column.target); this.addMoveTarget(title, column.target); }
       this.renderTaskList(section, column.tasks, column.target);
@@ -635,7 +638,6 @@ export class TaskMainView extends ItemView {
       const group = bySection.get(heading.line) ?? [];
       const section = container.createEl("section", { cls: "tm-section" });
       const title = section.createEl("h2", { text: heading.name });
-      if (this.plugin.settings.showGroupTaskCounts) title.createSpan({ cls: "tm-section-count", text: String(group.length) });
       const target = { destination: `${path}#${heading.name}` };
       this.renderGroupAddButton(title, heading.name, target);
       this.listDrag?.group(section, target);
@@ -1075,7 +1077,6 @@ export class TaskMainView extends ItemView {
     const section = container.createEl("section", { cls: `tm-section${variant ? ` is-${variant}` : ""}` });
     const heading = section.createEl("h2");
     heading.createSpan({ text: title });
-    if (this.plugin.settings.showGroupTaskCounts) heading.createSpan({ cls: "tm-section-count", text: String(tasks.length) });
     this.renderGroupAddButton(heading, title, target);
     if (target) { this.listDrag?.group(section, target); this.addMoveTarget(title, target); }
     if (!this.renderGroupFold(section, heading, `group:${title}`, title)) this.renderTaskList(section, tasks, target);
@@ -1288,6 +1289,36 @@ export class TaskMainView extends ItemView {
         return paths;
       }, "Could not delete the task.", false)
     });
+  }
+
+  /** Copies tasks as Markdown, each with its notes and subtasks, for pasting here or into any note. */
+  private async copyTasks(tasks: Task[]): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(await this.plugin.store.copyTasks(tasks));
+      this.announce(`Copied ${tasks.length === 1 ? taskTitleLabel(tasks[0].title) : `${tasks.length} tasks`}`);
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not copy the tasks.");
+    }
+  }
+
+  /**
+   * Pastes copied tasks right after the last selected task, or, with none selected, where a new task in this view
+   * would go; the pasted tasks are selected.
+   */
+  private async pasteTasks(): Promise<void> {
+    try {
+      const text = await navigator.clipboard.readText();
+      const after = this.getSelectedTasks().at(-1);
+      const pasted = await this.plugin.store.pasteTasks(text, after ? { after } : { destination: this.plugin.newTaskDraft(this.state).destination });
+      if (!pasted) { new Notice("There are no tasks on the clipboard to paste."); return; }
+      await this.plugin.index.refreshPath(pasted.path);
+      const tasks = this.plugin.index.tasksForPath(pasted.path).filter(task => task.line >= pasted.from && task.line < pasted.to);
+      const top = Math.min(...tasks.map(task => task.indent));
+      this.selection.select(tasks.filter(task => task.indent === top));
+      this.updateSelection();
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not paste the tasks.");
+    }
   }
 
   /**
@@ -1743,7 +1774,6 @@ export class TaskMainView extends ItemView {
     const lead = things && !board ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
     const title = primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title), "data-tm-focus-key": "title" } });
     title.addEventListener("click", () => this.editTask(task));
-    renderDescriptionIndicator(primary, task.description);
     try {
       // Routine-note repeats get an icon; inline `every …` repeats show a Repeat pill in the details instead.
       if (recurringFile(this.app, task)) {
@@ -1752,10 +1782,6 @@ export class TaskMainView extends ItemView {
       }
     } catch { /* Ambiguous recurring links remain editable through the task editor. */ }
 
-    if (this.plugin.settings.showSubtaskCounts && task.childIds.length) {
-      const children = task.childIds.map((id) => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child) && child!.status !== "cancelled");
-      primary.createSpan({ cls: "tm-progress", text: `${children.filter((child) => child.status === "done").length}/${children.length}` });
-    }
     const metadata = content.createDiv({ cls: things ? "tm-things-secondary" : "tm-task-metadata" });
     const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
     const tags = this.rowTags(task);
@@ -1767,7 +1793,8 @@ export class TaskMainView extends ItemView {
     };
     if (board) this.renderBoardCard(primary, metadata, task, details);
     else if (lead) {
-      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today" });
+      // With subtasks listed as rows, the mark saying a task has them would only repeat what is in view.
+      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today", subtaskMark: !this.plugin.settings.showSubtasks });
       if (!lead.childElementCount) lead.remove();
     } else renderTaskDetails(primary, metadata, task, details);
     if (!metadata.childElementCount) metadata.remove();
@@ -1788,14 +1815,10 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * A Things board card, laid out like an open task card: the title (with its notes and subtask marks),
-   * a few lines of its notes, its property lines, and below them the note it lives in.
+   * A Things board card, laid out like an open task card: the title, a few lines of its notes, its property lines,
+   * and below them the note it lives in.
    */
   private renderBoardCard(primary: HTMLElement, below: HTMLElement, task: Task, details: { grouping: TaskGrouping; tags: string[]; source?: string; edit: (property: TaskEditorProperty) => void }): void {
-    if (task.childIds.length) {
-      const checklist = primary.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": "Has subtasks", title: `${task.childIds.length} subtask${task.childIds.length === 1 ? "" : "s"}` } });
-      setIcon(checklist, "list-checks");
-    }
     const notes = cardNotes(task.description).trim();
     if (notes) below.before(below.parentElement!.createDiv({ cls: "tm-things-board-notes", text: notes }));
     // Grouped by tag, the column names it; grouped by anything else, the card keeps every property.

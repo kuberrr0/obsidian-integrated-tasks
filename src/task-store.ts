@@ -5,7 +5,7 @@ import { updateTaskDateTokens } from "./task-date-update";
 import { newTaskLines } from "./task-description";
 import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
-import { duplicateTaskBlocks, liveTaskBlock } from "./task-block";
+import { copiedTaskText, duplicateTaskBlocks, insertAfterTask, liveTaskBlock, pastedTaskLines } from "./task-block";
 import { serializeTask } from "./parser";
 import { TASK_INDENT } from "./task-indentation";
 import type { ListPlacement } from "./list-drag";
@@ -219,6 +219,45 @@ export class TaskStore {
       const closed = change.status && { completed: isClosedStatus(change.status) };
       return { ...draftForGroup(task), ...change, ...closed };
     }, {}, `Edited ${tasksName(tasks)}`);
+  }
+
+  /** The Markdown of tasks (each with its notes and subtasks) for the clipboard, as their notes now read. */
+  async copyTasks(tasks: Task[]): Promise<string> {
+    const contents = new Map<string, string>();
+    for (const path of new Set(tasks.map(task => task.path))) contents.set(path, await this.app.vault.read(this.requireFile(path)));
+    return copiedTaskText(contents, tasks, this.getDateFormat(), this.getSectionHeadingLevel());
+  }
+
+  /**
+   * Adds copied tasks (Markdown with checklist lines, and their notes and subtasks): right after `after`, as its next
+   * siblings, or into `destination` where new tasks go. Resolves to the note and the lines they took, or undefined
+   * when the text holds no task.
+   */
+  pasteTasks(text: string, where: { after: Task } | { destination: string }): Promise<{ path: string; from: number; to: number } | undefined> {
+    const lines = pastedTaskLines(text);
+    if (!lines) return Promise.resolve(undefined);
+    const count = lines.filter(line => /^[-+*]\s+\[[^\]]\]/.test(line)).length;
+    return this.run(`Pasted ${count === 1 ? "a task" : `${count} tasks`}`, async () => {
+      if ("after" in where) {
+        const file = this.requireFile(where.after.path);
+        let line = -1;
+        await this.process(file, content => {
+          const result = insertAfterTask(content, where.after, lines, this.getDateFormat(), this.getSectionHeadingLevel());
+          line = result.line;
+          return result.content;
+        });
+        return { path: file.path, from: line, to: line + lines.length };
+      }
+      const { path, heading } = splitDestination(where.destination);
+      const file = heading ? this.requireFile(path) : await this.ensureFile(path);
+      let line = -1;
+      await this.process(file, content => {
+        const next = insertIntoDestination(content, lines, heading, this.getNewTaskPosition(), this.getSectionHeadingLevel());
+        line = insertedTaskLine(content, next);
+        return next;
+      });
+      return { path: file.path, from: line, to: line + lines.length };
+    });
   }
 
   /** Copies each task, with its notes and subtasks, right below it. */

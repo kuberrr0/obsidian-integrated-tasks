@@ -31,7 +31,7 @@ import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
 import { TaskQuickSwitcher } from "./quick-switcher";
 
-const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay", "linkTags"];
+const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay", "linkTags", "taskHoverHighlight", "wrapTaskTitles", "wrapCalendarTaskTitles", "wrapKanbanTaskTitles", "showSubtaskCounts", "showGroupTaskCounts"];
 
 interface OpenEditorState extends TaskViewState {
   focusProperty?: TaskEditorOptions["focusProperty"];
@@ -273,18 +273,12 @@ export default class TaskManagerPlugin extends Plugin {
     useTagFormat(this.settings.tagFormat);
     if (typeof this.settings.dateFormat !== "string") this.settings.dateFormat = DEFAULT_SETTINGS.dateFormat;
     if (!Number.isInteger(this.settings.sectionHeadingLevel) || this.settings.sectionHeadingLevel < 1 || this.settings.sectionHeadingLevel > 6) this.settings.sectionHeadingLevel = 1;
-    this.settings.showGroupTaskCounts = this.settings.showGroupTaskCounts === true;
-    this.settings.showSubtaskCounts = this.settings.showSubtaskCounts === true;
     this.settings.showSubtasks = this.settings.showSubtasks === true;
-    if (!["none", "title", "background", "all"].includes(this.settings.taskHoverHighlight)) this.settings.taskHoverHighlight = DEFAULT_SETTINGS.taskHoverHighlight;
-    this.settings.wrapTaskTitles = this.settings.wrapTaskTitles !== false;
-    this.settings.wrapCalendarTaskTitles = this.settings.wrapCalendarTaskTitles === true;
     this.settings.calendarProjectColors = this.settings.calendarProjectColors !== false;
     this.settings.calendarPriorityColors = this.settings.calendarPriorityColors !== false;
-    this.settings.wrapKanbanTaskTitles = this.settings.wrapKanbanTaskTitles !== false;
     if (typeof this.settings.inboxPath !== "string" || !this.settings.inboxPath.trim()) this.settings.inboxPath = DEFAULT_SETTINGS.inboxPath;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
-    this.settings.showUndoNotices = this.settings.showUndoNotices !== false;
+    this.settings.showUndoNotices = this.settings.showUndoNotices === true;
     this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
     // Things is the default; only an explicit Griply choice keeps Griply.
     this.settings.style = this.settings.style === "griply" ? "griply" : "things";
