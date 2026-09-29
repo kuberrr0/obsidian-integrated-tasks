@@ -2051,7 +2051,7 @@ export class TaskMainView extends ItemView {
     const anchor = this.popoverAnchor();
     await this.saveCard();
     const task = this.plugin.index.taskById(id);
-    if (task && !this.openDateEditor([task], property, anchor)) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
+    if (task && !this.openPropertyEditor([task], property, anchor)) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
   }
 
   /** Priority edits in a small list beside the property: P1–P3 or none, for every task given. */
