@@ -30,6 +30,15 @@ export interface TaskChange {
 
 const UNDO_HISTORY = 20;
 
+/** The first checklist line of what an insertion added: from the first line that differs, the first task line. */
+export function insertedTaskLine(before: string, after: string): number {
+  const old = before.split("\n"), next = after.split("\n");
+  let line = 0;
+  while (line < old.length && line < next.length && old[line] === next[line]) line++;
+  while (line < next.length && !/^\s*[-*+]\s+\[.\]/.test(next[line])) line++;
+  return line < next.length ? line : -1;
+}
+
 function taskName(title: string): string {
   const trimmed = title.trim();
   return `“${trimmed.length > 40 ? `${trimmed.slice(0, 39)}…` : trimmed}”`;
@@ -155,13 +164,18 @@ export class TaskStore {
     });
   }
 
-  create(draft: TaskDraft): Promise<void> {
+  /** Writes a new task; resolves to the line it landed on in its note. */
+  create(draft: TaskDraft): Promise<number> {
     return this.run(`Added ${taskName(draft.title)}`, async () => {
       const { path, heading } = splitDestination(draft.destination);
       const file = heading ? this.requireFile(path) : await this.ensureFile(path);
-      await this.process(file, (content) =>
-        insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel())
-      );
+      let line = -1;
+      await this.process(file, (content) => {
+        const next = insertIntoDestination(content, newTaskLines(draft, this.getDateFormat(), this.getLinkDates()), heading, this.getNewTaskPosition(), this.getSectionHeadingLevel());
+        line = insertedTaskLine(content, next);
+        return next;
+      });
+      return line;
     });
   }
 

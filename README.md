@@ -57,6 +57,12 @@ A task can include:
 - A **priority**, **tags**, and a **description**.
 - A **destination** note or heading, so it lands in the right place.
 
+Tags go at the end of a task. **Tag format** in settings chooses how they're written, and only that form counts as a task tag: Obsidian's own `#tag` (the default; a space in a tag name becomes a hyphen, as in `#open-house`), or `#[[tag]]`, which links to a note named after the tag. Switching doesn't change your notes; **Convert notes** beside the setting, or the **Convert task tags to the tag format** command, rewrites the tags on your tasks into the chosen form after asking, as one change you can undo.
+
+Run **Insert task** to add a task where you are: in a tag's view the editor starts with that tag, in Today with today's date, in Upcoming with tomorrow's, and in a project with the project, all after a space with the cursor at the start, so you only type the title. It works the same from a project's or tag's note; elsewhere the task goes to your Inbox. In the Things style, Insert task (and a list's **+** button) adds a blank card right in the list instead, as Things does; close it without typing anything and the task is removed again.
+
+Below the text, buttons for **When**, **Deadline**, **Priority**, **Project**, **Tags** and **Repeat** show what the text sets and open a picker for each; a choice rewrites that part of the text. Editing a task works like a task card: the field holds just its title, its properties sit on the buttons, and a property typed into the title (such as `p1` or "tomorrow 3pm") sets it. The text stays plain text: whatever it will set is highlighted as you type, here and in a task card's title—dates, times and durations in blue, the deadline in red, a priority in its colour, tags in grey and the project in green. In the Things style, an open card's properties follow what you type into its title straight away.
+
 Break larger tasks into subtasks. You can also paste several tasks into the editor at once, one per line, with indented subtasks underneath. Press **Enter** for another line and **Cmd/Ctrl+Enter** to save.
 
 ## Choose a layout
@@ -77,10 +83,25 @@ Everything you can do by dragging also works from the keyboard. Long lists show 
 | Shift + ↑ / ↓ | Select a range |
 | Alt + ↑ / ↓ | Move the task up or down among its siblings |
 | Alt + → / ← | Make it a subtask of the task above, or move it out of its parent |
-| M | Move to another section, column, or note, reschedule it, snooze it, or change its status |
-| S | Switch between to do, in progress, and waiting (a done or cancelled task reopens) |
+| M | Move to another section, column, or note |
 | Cmd/Ctrl + Z | Undo the last task change |
 | Cmd/Ctrl + K | Jump to a view, project, tag, smart list, or task |
+
+With tasks selected, these keys change all of them; the lists open just below the task:
+
+| Key | Action |
+| --- | --- |
+| E | Open the task's actions (the right-click menu) |
+| Shift + T | Schedule for today |
+| D | Date, time and duration |
+| Shift + D | Deadline |
+| P | Priority (press P again to move through the priorities, Enter to set one) |
+| T | Tags |
+| G | Project |
+| R | Repeat |
+| S | Status (press S again to move through the statuses, Enter to set one) |
+| Shift + S | Snooze |
+| C | Complete (or reopen, when all are complete) |
 
 ### Calendar: make time for your work
 
@@ -185,7 +206,7 @@ Right-click a task, or run **Open task menu**, for its menu; with several tasks 
 - **Project**, **Deadline**, **Tags**, **Repeat**, **Snooze** and **Status**, each in a list beside the menu
 - **Duplicate**, which copies each task with its notes and subtasks right below it, and **Delete**
 
-While the menu is open, each row's letter opens it: **D** for a date, **P** for priority, **G** for the project, **Shift+D** for the deadline, **T** for tags, **R** for repeat, **H** to snooze and **S** for the status. A task's tags list checks the tags every selected task has and marks those only some have with a dash. Clicking a tag toggles it on every task, and typing adds new ones (separate several with commas).
+While the menu is open, each row's letter opens it: **D** for a date, **P** for priority, **G** for the project, **Shift+D** for the deadline, **T** for tags, **R** for repeat, **Shift+S** to snooze, **S** for the status and **C** to complete. A task's tags list checks the tags every selected task has and marks those only some have with a dash. Clicking a tag toggles it on every task, and typing adds new ones (separate several with commas).
 
 You can also drag a selection to move tasks together, drop it onto the calendar to reschedule it, or delete selected tasks along with their subtasks.
 
@@ -228,7 +249,7 @@ A task's status is the character in its checkbox:
 | `- [x]` | Done |
 | `- [-]` | Cancelled |
 
-Change a status by pressing **M** on a task and choosing **Mark as…**, by pressing **S** to switch between to do, in progress, and waiting, by dragging it to another column of a board grouped by status, or with the status menu in the task editor or when editing several tasks. You can also type the character in a note. Other characters, such as `[!]`, are not treated as tasks.
+Change a status by pressing **S** on selected tasks (or **C** to complete them), from a task's right-click menu, by dragging it to another column of a board grouped by status, or with the status menu in the task editor or when editing several tasks. You can also type the character in a note. Other characters, such as `[!]`, are not treated as tasks.
 
 In task views, in-progress checkboxes are half filled, waiting ones are dashed with a dot, and cancelled tasks are muted and struck through. Notes show the same marks, unless your theme styles these checkboxes itself.
 
@@ -242,7 +263,7 @@ The Today summary shows how many of today's tasks are in progress, and smart lis
 
 End a task with `>` and a date to hide it from Inbox, Today, and Upcoming until that day, such as `- [ ] Renew passport >Oct 1, 2026`. Use `>someday` to set a task aside with no date. Snoozed tasks still appear in All Tasks, projects, and tags, labelled **Hidden until**, and come back on their own when the date arrives.
 
-In a task view, press **M** on a task and choose a **Snooze** option, or right-click several selected tasks and choose **Snooze**. In a note, you can type a natural date such as `>tomorrow`; it becomes a date when you move off the line.
+In a task view, press **Shift+S** on selected tasks, or right-click them and choose **Snooze**. In a note, you can type a natural date such as `>tomorrow`; it becomes a date when you move off the line.
 
 ## Build recurring routines
 
@@ -274,7 +295,7 @@ Turn on **Record completion dates** in the settings to stamp each task with the 
 
 In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Adjust title wrapping, hover highlighting, and task counts, and choose **Comfortable** or **Compact** density to fit more tasks on screen.
 
-To keep some checklists out of the plugin, list them under **Ignored folders and notes**, such as `Templates/` or `Journal/Private.md`: a folder covers everything inside it. Under **Ignored tags**, list tags such as `template` or `someday`: notes with one of them in their properties are left out entirely, and single tasks tagged with one (as `#[[someday]]` or `#someday`) are hidden along with their subtasks. Ignoring a tag also ignores its nested tags, such as `archive/2025`. Ignored tasks stay in your notes; they just don't appear in task views, query blocks, counts, or the weekly review, and an ignored note isn't treated as a project. Changes apply straight away.
+To keep some checklists out of the plugin, list them under **Ignored folders and notes**, such as `Templates/` or `Journal/Private.md`: a folder covers everything inside it. Under **Ignored tags**, list tags such as `template` or `someday`: notes with one of them in their properties are left out entirely, and single tasks tagged with one (as `#someday` or `#[[someday]]`) are hidden along with their subtasks. Ignoring a tag also ignores its nested tags, such as `archive/2025`. Ignored tasks stay in your notes; they just don't appear in task views, query blocks, counts, or the weekly review, and an ignored note isn't treated as a project. Changes apply straight away.
 
 Choose your preferred date format and whether dates link to notes. These choices apply to new edits; use **Update dates** to apply them to existing tasks and recurring-task history.
 
@@ -294,7 +315,7 @@ Run **Import tasks from the Tasks plugin** from the command palette, or choose *
 | ✅ done date | `✓` completion date |
 | 🔁 every week | `every week` |
 | 🔺 ⏫ / 🔼 / 🔽 ⏬ | `p1` / `p2` / `p3` |
-| `#tag` | `#[[tag]]`, if you choose to convert tags |
+| `#tag` | a task tag at the end of the task, in your Tag format, if you choose to convert tags |
 | `[/]`, `[?]`, `[-]` | kept, as in progress, waiting, and cancelled |
 
 Dataview-style fields such as `[due:: 2026-10-01]` are converted too, `* [ ]` and `+ [ ]` checklists become `- [ ]`, and your Tasks global filter (such as `#task`) is removed. You see how many tasks will change, with examples, before anything is written. Other custom statuses (such as `[!]` or `[>]`), dependencies, and repeat rules this plugin doesn't support are left as they are and listed in the preview; ❌ cancelled dates stay as text. Tasks query blocks are not touched. The whole import is one change you can undo.

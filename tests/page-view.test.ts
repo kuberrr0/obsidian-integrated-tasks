@@ -23,6 +23,7 @@ import { openChoicePopover, type ChoicePopoverOptions } from "../src/choice-popo
 import TaskManagerPlugin from "../src/main";
 import { TaskMainView } from "../src/task-view";
 import { scanTasks } from "../src/parser";
+import { setTagFormat } from "../src/task-tags";
 import type { Task, TaskViewState } from "../src/types";
 
 describe("page task view", () => {
@@ -204,10 +205,10 @@ it("writes a subtask typed in the card and, after Enter, opens the next one belo
   expect(addSubtask).toHaveBeenLastCalledWith(tasks[0], expect.objectContaining({ title: "Third step", priority: 2, tags: ["Errand"] }), undefined);
 });
 
-it("turns a plain #tag typed into a card title into a task tag when Link tags is on", async () => {
+it("reads a #tag typed at the end of a card title as a task tag in the #tag format", async () => {
+  setTagFormat("hash");
   const { view, tasks, plugin, update } = selectionView();
   plugin.settings.style = "things";
-  plugin.settings.linkTags = true;
   const internals = view as unknown as { expanded?: { id: string; title: string; notes: string }; collapseCard(): Promise<void> };
   internals.expanded = { id: tasks[0].id, title: "A #errand", notes: "" };
   await internals.collapseCard();
@@ -693,4 +694,23 @@ it("creates a project note from a name alone, refusing an existing note", async 
   expect(refreshPath).toHaveBeenCalledWith("Garden.md");
   existing = {};
   await expect(plugin.createProjectNote({ name: "Garden" })).rejects.toThrow("already exists");
+});
+
+it("inserts a task in the open view's context: a task view, a project or tag note, else the Inbox", () => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  let taskView: { newTask: ReturnType<typeof vi.fn> } | null = { newTask: vi.fn() };
+  let note: { file: { path: string } } | null = null;
+  plugin.app = { workspace: { getActiveViewOfType: (type: unknown) => type === TaskMainView ? taskView : note } } as unknown as App;
+  (plugin as unknown as { index: unknown }).index = { isProject: (path: string) => path === "Work.md", tagForPath: (path: string) => path === "Tags/Errand.md" ? "Errand" : undefined };
+  const open = vi.spyOn(plugin, "openEditor").mockImplementation(() => {});
+  plugin.insertTask();
+  expect(taskView.newTask).toHaveBeenCalledOnce();
+  expect(open).not.toHaveBeenCalled();
+  taskView = null;
+  for (const path of ["Work.md", "Tags/Errand.md", "Loose.md"]) { note = { file: { path } }; plugin.insertTask(); }
+  note = null;
+  plugin.insertTask();
+  expect(open.mock.calls.map(([state]) => state)).toEqual([
+    { mode: "all", projectPath: "Work.md" }, { mode: "tags", tag: "Errand", pagePath: "Tags/Errand.md" }, { mode: "inbox" }, { mode: "inbox" }
+  ]);
 });

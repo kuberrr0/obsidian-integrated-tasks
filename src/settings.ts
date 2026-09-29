@@ -87,12 +87,15 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       },
       {
         section: "Task defaults",
-        name: "Link tags",
-        desc: "Turn a plain #tag in a task into a task tag: it moves to the end of the task as #[[tag]]. Applies when you edit a task in a note (as you leave the line), in the task editor, and in task cards; existing notes are not rewritten.",
-        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.linkTags).onChange(async value => {
-          this.plugin.settings.linkTags = value;
-          await this.plugin.saveSettings();
-        })); }
+        name: "Tag format",
+        desc: "How task tags are written, and the only form read as a tag: Obsidian's #tag (no spaces; they become hyphens), or #[[tag]], a link to a note named after the tag. Notes keep the tags they have until you convert them.",
+        render: (setting: Setting) => {
+          setting.addDropdown(dropdown => dropdown.addOption("hash", "#tag").addOption("wikilink", "#[[tag]]")
+            .setValue(this.plugin.settings.tagFormat)
+            .onChange(async value => { await this.plugin.setTagFormat(value as "hash" | "wikilink"); }));
+          setting.addButton(button => button.setButtonText("Convert notes")
+            .onClick(() => void this.plugin.convertTaskTags()));
+        }
       },
       {
         section: "Dates",

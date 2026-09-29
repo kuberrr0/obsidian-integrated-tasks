@@ -7,27 +7,25 @@ export const PLAIN_TAG = /(^|\s)#([\p{L}\p{N}_\-/]*[\p{L}_\-/][\p{L}\p{N}_\-/]*)
 const OPAQUE = /(`+)[\s\S]*?\1|\[\[[^\]]*\]\]|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+/g;
 const CHECKBOX = /^\s*[-+*]\s+\[[^\]]\]\s*/;
 
+/** Code, Markdown links and URLs, whose `#` stays as written even around a `#[[tag]]`. */
+const OPAQUE_BUT_WIKILINKS = /(`+)[\s\S]*?\1|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+/g;
+const WIKILINK_TAG = /(^|\s)#\[\[([^[\]\r\n|]+)\]\](?=$|[\s.,;:!?)])/g;
+
 /**
- * Turns plain `#tag`s in a task into task tags: each is taken out of the text and added at the end
- * as `#[[tag]]`, where the task reads its tags. "Call #mom about dinner" becomes
- * "Call about dinner #[[mom]]". A task that would be left with no title keeps its text as it is.
+ * Rewrites the tags on a note's task lines into `to`, the Tag format: `#[[open house]]` becomes `#open-house`, or
+ * `#tag` becomes `#[[tag]]`. Only checklist lines change; code, links and URLs keep what they hold.
  */
-export function linkPlainTags(text: string): string {
-    const masked = text.replace(OPAQUE, match => "\u0001".repeat(match.length));
-    const tags: string[] = [];
-    let rest = "";
-    let last = 0;
-    for (const match of masked.matchAll(PLAIN_TAG)) {
-        const start = match.index + match[1].length;
-        const end = match.index + match[0].length;
-        rest += text.slice(last, start);
-        last = end;
-        tags.push(text.slice(start + 1, end));
-    }
-    if (!tags.length) return text;
-    rest += text.slice(last);
-    // Close the gaps the tags leave, but never touch the line's indentation.
-    const body = rest.replace(/(\S)[ \t]{2,}(?=\S)/g, "$1 ").replace(/(\S)[ \t]+([.,;:!?)])/g, "$1$2").trimEnd();
-    if (!body.replace(CHECKBOX, "").trim()) return text;
-    return `${body} ${[...new Set(tags)].map(tag => `#[[${tag}]]`).join(" ")}`;
+export function convertTagFormat(content: string, to: "hash" | "wikilink"): string {
+    return content.split("\n").map(line => {
+        if (!CHECKBOX.test(line)) return line;
+        const masked = line.replace(to === "hash" ? OPAQUE_BUT_WIKILINKS : OPAQUE, match => "\u0001".repeat(match.length));
+        let result = "";
+        let last = 0;
+        for (const match of masked.matchAll(to === "hash" ? WIKILINK_TAG : PLAIN_TAG)) {
+            const start = match.index + match[1].length;
+            result += line.slice(last, start) + (to === "hash" ? `#${match[2].trim().replace(/\s+/g, "-")}` : `#[[${match[2]}]]`);
+            last = match.index + match[0].length;
+        }
+        return result + line.slice(last);
+    }).join("\n");
 }

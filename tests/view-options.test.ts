@@ -144,3 +144,41 @@ it("summarises filters in a few words", () => {
   expect(filterSummary(property("deadline"), { property: "deadline", operator: "after", values: ["today+3"] })).toBe("After in 3 days");
   expect(filterSummary(property("tags"), { property: "tags", operator: "is", values: ["a"], conditions: [{ join: "or", operator: "is", values: ["b"] }] })).toBe("2 conditions");
 });
+
+describe("the view's own defaults in the options panel", () => {
+  const text = (button: HTMLElement) => button.querySelector(".tm-options-select-text")!.textContent;
+  const checked = (options: HTMLElement[]) => options.filter(item => item.getAttribute("aria-selected") === "true").map(item => item.textContent);
+
+  it("shows the open statuses a view hiding completed tasks shows, checked, with View default selected", () => {
+    const { select, options, option, state } = setup({ openOnly: true });
+    expect(text(select("status"))).toBe("To do, In progress, Waiting");
+    select("status").click();
+    expect(options()[0].textContent).toBe("View default");
+    expect(checked(options())).toEqual(["View default", "To do", "In progress", "Waiting"]);
+    // Adding Done keeps the open statuses and makes the filter explicit.
+    option("Done").click();
+    expect(state.filters).toEqual([{ property: "status", operator: "is", values: ["To do", "In progress", "Waiting", "Done"] }]);
+    expect(checked(options())).toEqual(["To do", "In progress", "Waiting", "Done"]);
+    // Back at the view's own choice, the filter goes.
+    option("Done").click();
+    expect(state.filters).toEqual([]);
+    option("Waiting").click();
+    expect(state.filters).toEqual([{ property: "status", operator: "is", values: ["To do", "In progress"] }]);
+    option("View default").click();
+    expect(state.filters).toEqual([]);
+  });
+
+  it("keeps Any when the view shows completed tasks too", () => {
+    const { select, options } = setup({ openOnly: false });
+    expect(text(select("status"))).toBe("Any");
+    select("status").click();
+    expect(checked(options())).toEqual(["Any"]);
+  });
+
+  it("names what View default groups by, with View default selected in the list", () => {
+    const { select, options } = setup({ defaultGroup: "Note" });
+    expect(text(select("group"))).toBe("Note");
+    select("group").click();
+    expect(checked(options())).toEqual(["View default (Note)"]);
+  });
+});

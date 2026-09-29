@@ -65,7 +65,11 @@ export function taskTokens(line: string, dateFormat?: string): TaskToken[] {
     }
     switch (range.kind) {
       case "repeat": return { ...range, label: repeatLabel(parsed.repeat!), description: `Repeats ${parsed.repeat}` };
-      case "tags": return { ...range, label: link![1].trim(), description: `Tag: ${link![1].trim()}`, linkText: link![1] };
+      // A #[[tag]] links to its note; a #tag is Obsidian's own tag.
+      case "tags": {
+        const name = link ? link[1].trim() : source.trim().replace(/^#/, "");
+        return { ...range, label: name, description: `Tag: ${name}`, ...(link ? { linkText: link[1] } : {}) };
+      }
       case "durationMinutes": return { ...range, label: formatDuration(parsed.durationMinutes!), description: `Duration: ${formatDuration(parsed.durationMinutes!)}` };
       case "priority": return { ...range, label: `P${parsed.priority}`, description: `Priority ${parsed.priority}`, priority: parsed.priority };
     }

@@ -36,6 +36,7 @@ class Element {
     return child;
   }
   createDiv(options = {}): Element { return this.createEl("div", options); }
+  createSpan(options = {}): Element { return this.createEl("span", options); }
   addEventListener(): void {}
   removeEventListener(): void {}
   addClass(): void {}
@@ -59,8 +60,9 @@ describe("editing an existing task in the modal", () => {
   it("keeps existing prose when only the priority changes", () => {
     for (const [raw, title] of [["- [ ] Buy sun cream p2", "Buy sun cream"], ["- [ ] Done last Friday p2", "Done last Friday"]]) {
       const modal = openExisting(raw);
-      expect(modal.rawInput.value).toBe(raw.slice(6));
-      modal.rawInput.value = modal.rawInput.value.replace("p2", "p1");
+      // The field holds the title alone; a priority typed into it replaces the task's.
+      expect(modal.rawInput.value).toBe(title);
+      modal.rawInput.value = `${title} p1`;
       const draft = modal.readRaw();
       expect(draft).toMatchObject({ title, priority: 1 });
       expect(draft.scheduledDate).toBeUndefined();

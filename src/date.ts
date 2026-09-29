@@ -93,14 +93,59 @@ function boundedMatch(value: string, index: number, length: number, outside: Reg
   return !outside.test(value[start - 1] ?? "") && !outside.test(value[end] ?? "");
 }
 
-/** Find a date in editor prose without interpreting links or inline code as dates. */
-export function findInputDate(value: string, reference = new Date(), within?: InputRange): { index: number; text: string; date: string; time?: string } | undefined {
-  const prose = onlyWithin(value.replace(/\{[^}]*\}?|\[\[[\s\S]*?\]\]|`[^`]*`|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\b(?:\d+h(?:\d+m)?|\d+m)\b/g, (match) => " ".repeat(match.length)), within);
-  const result = chrono.parse(prose, reference, { forwardDate: true }).find((match) =>
-    !match.end && (match.start.isCertain("day") || match.start.isCertain("weekday") || match.start.isCertain("hour")) &&
-    (!within || boundedMatch(value, match.index, match.text.length, /[\p{L}\p{N}]/u))
-  );
-  return result ? { index: result.index, text: result.text, date: formatLocalDate(result.start.date()), ...(resultTime(result) ? { time: resultTime(result) } : {}) } : undefined;
+/** A date (and time) typed in prose, possibly in two places: "tomorrow p1 3pm" reads as tomorrow at 3pm. */
+export interface InputDate { date: string; time?: string; parts: Array<{ index: number; text: string }> }
+
+/**
+ * Editor prose for Chrono: deadlines, links, code, URLs and durations are covered with a mark it neither reads
+ * nor joins a date and a time across (spaces would let "3pm {friday} tomorrow" read as one date).
+ */
+function inputProse(value: string, within?: InputRange): string {
+  return onlyWithin(value.replace(/\{[^}]*\}?|\[\[[\s\S]*?\]\]|`[^`]*`|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\b(?:\d+h(?:\d+m)?|\d+m)\b/g, match => "\u00a6".repeat(match.length)), within);
+}
+
+/** Chrono's readings of editor prose that may set a schedule: whole words, inside `within`, and not a repeat's ("every Friday"). */
+function inputResults(value: string, reference: Date, within?: InputRange): chrono.ParsedResult[] {
+  const prose = inputProse(value, within);
+  return chrono.parse(prose, reference, { forwardDate: true }).filter(match =>
+    !match.end && (!within || boundedMatch(value, match.index, match.text.length, /[\p{L}\p{N}]/u))
+    && !/(?:^|\s)(?:every|each)\s*$/i.test(prose.slice(0, match.index)));
+}
+
+const certainDay = (result: chrono.ParsedResult): boolean => result.start.isCertain("day") || result.start.isCertain("weekday");
+
+/**
+ * Find a date in editor prose without interpreting links or inline code as dates. A date and a time written apart
+ * ("tomorrow p1 3pm") make one schedule; a time alone counts too, for its next occurrence.
+ */
+export function findInputDate(value: string, reference = new Date(), within?: InputRange): InputDate | undefined {
+  const results = inputResults(value, reference, within);
+  const dated = results.find(certainDay);
+  const timed = results.find(result => result !== dated && result.start.isCertain("hour") && !certainDay(result));
+  const first = dated ?? timed;
+  if (!first) return undefined;
+  const extra = dated && !resultTime(dated) ? timed : undefined;
+  const time = resultTime(first) ?? (extra && resultTime(extra));
+  const parts = [first, extra].filter((result): result is chrono.ParsedResult => Boolean(result)).map(result => ({ index: result.index, text: result.text })).sort((a, b) => a.index - b.index);
+  return { date: formatLocalDate(first.start.date()), ...(time ? { time } : {}), parts };
+}
+
+/** A time alone in editor prose ("3pm", "at 9"), for a date given by a token. */
+export function findInputTime(value: string, reference = new Date(), within?: InputRange): { index: number; text: string; time: string } | undefined {
+  const result = inputResults(value, reference, within).find(item => item.start.isCertain("hour") && !certainDay(item));
+  const time = result && resultTime(result);
+  return result && time ? { index: result.index, text: result.text, time } : undefined;
+}
+
+/** Takes the given spans out of text, closing up the spaces around each. */
+export function removeSpans(text: string, spans: Array<{ index: number; text: string }>): string {
+  let result = text;
+  for (const span of [...spans].sort((a, b) => b.index - a.index)) {
+    const before = result.slice(0, span.index).trimEnd();
+    const after = result.slice(span.index + span.text.length).trimStart();
+    result = before && after ? `${before} ${after}` : before + after;
+  }
+  return result;
 }
 
 

@@ -1174,21 +1174,21 @@ button.tm-gantt-handle.is-finish:focus-visible,
 
 /* Task statuses: in progress is half filled, waiting has a dashed box with a dot, cancelled is muted with a cross.
    In the task view and editor, in progress and waiting are unchecked and cancelled is checked. */
-input:is(.tm-task-checkbox, .tm-editor-checkbox).is-doing:not(:checked) {
+input.tm-task-checkbox.is-doing:not(:checked) {
   border-color: var(--checkbox-color);
   background-image: linear-gradient(90deg, var(--checkbox-color) 50%, transparent 50%);
 }
-input:is(.tm-task-checkbox, .tm-editor-checkbox).is-waiting:not(:checked) {
+input.tm-task-checkbox.is-waiting:not(:checked) {
   border-style: dashed;
   background-image: radial-gradient(circle, var(--tm-priority-color, var(--text-muted)) 0 18%, transparent 24%);
 }
-input:is(.tm-task-checkbox, .tm-editor-checkbox).is-cancelled {
+input.tm-task-checkbox.is-cancelled {
   --checkbox-color: var(--text-faint);
   --checkbox-color-hover: var(--text-muted);
   /* Also mutes a priority colour. */
   --tm-priority-color: var(--text-faint);
 }
-input:is(.tm-task-checkbox, .tm-editor-checkbox).is-cancelled:checked::after {
+input.tm-task-checkbox.is-cancelled:checked::after {
   -webkit-mask-size: 55%;
   -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 2l6 6M8 2l-6 6' stroke='black' stroke-width='1.8' stroke-linecap='round'/></svg>");
 }
@@ -1432,11 +1432,6 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
   gap: 10px;
 }
 
-.tm-editor-task-line .tm-editor-checkbox {
-  flex: 0 0 auto;
-  margin: 0;
-}
-
 .tm-editor-task-line .tm-editor-raw {
   flex: 1;
   min-width: 0;
@@ -1460,11 +1455,9 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 }
 
 .tm-editor-task-line > [hidden] { display: none; }
-/* After the title, out of the way of typing. */
-.tm-editor-task-line .tm-editor-status { order: 1; flex: 0 0 auto; align-self: center; font-size: var(--font-ui-smaller); }
 .tm-editor-modal .tm-editor-error:empty { display: none; }
 
-/* One continuous editor keeps pointer positions and token source offsets aligned. */
+/* One plain text field: what it sets is highlighted, never replaced. */
 .tm-editor-inline { flex: 1; min-width: 0; }
 .tm-editor-inline .cm-editor { background: transparent; font-family: var(--font-text); font-size: var(--font-text-size); }
 .tm-editor-inline .cm-editor.cm-focused { outline: none; }
@@ -1479,43 +1472,15 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-editor-inline .cm-dropCursor {
   border-left-color: var(--caret-color, var(--text-normal));
 }
-.tm-editor-token { cursor: text; }
 
-.tm-editor-inline .tm-editor-project {
-  color: var(--text-muted);
-  font-family: var(--font-interface);
-  font-size: var(--font-ui-smaller);
-  text-decoration: none;
-}
-
-/* Match the title/deadline row and quiet metadata row used in task mode. */
+/* The editor's one text field, beside its checkbox. */
 .tm-editor-modal { width: min(640px, calc(100vw - 32px)); }
 .tm-editor-modal .modal-content { padding-top: 10px; }
 .tm-editor-task-line { gap: 12px; }
 .tm-editor-inline .cm-content { line-height: 1.65; padding-block: 4px; }
-/* Follow the first text baseline rather than a fixed offset from the modal top.
-   The small optical correction centers the box against the title's letterforms. */
-.tm-editor-task-line .tm-editor-checkbox { margin: 0; transform: translateY(0.12em); }
-.tm-editor-inline .tm-editor-secondary {
-  color: var(--text-muted);
-  font-family: var(--font-interface);
-  font-size: var(--font-ui-medium);
-}
-.tm-editor-inline .tm-editor-secondary .tm-note-task-details,
-.tm-editor-inline .tm-editor-secondary .tm-editor-project { font-size: var(--font-ui-medium); }
-.tm-editor-inline .tm-note-task-deadline { margin-inline-start: 4px; vertical-align: 1px; }
-.tm-editor-inline .tm-editor-project { margin-inline: 4px; }
 .tm-editor-modal .tm-editor-raw-field { margin-bottom: 12px; }
 .tm-editor-modal > .tm-editor-actions { margin-top: 12px; }
 
-.tm-editor-inline .tm-note-task-details,
-.tm-editor-inline .tm-editor-project { font-size: var(--font-ui-medium); }
-.tm-editor-inline .tm-editor-schedule-date.is-overdue { color: var(--text-error); }
-
-.tm-editor-inline .tm-editor-priority { font-weight: var(--font-semibold); }
-.tm-editor-inline .tm-editor-priority.is-p1 { color: var(--text-error); }
-.tm-editor-inline .tm-editor-priority.is-p2 { color: var(--color-orange); }
-.tm-editor-inline .tm-editor-priority.is-p3 { color: var(--color-blue); }
 
 .tm-editor-modal .tm-editor-actions button.tm-editor-icon-action {
   display: inline-flex;
@@ -1809,6 +1774,8 @@ body .modal-container .modal.tm-bottom-sheet > .tm-editor-actions { flex-shrink:
 /* View options panel: a popover of sort, group and filter rows under the header's filter button. */
 .tm-view-header { position: relative; }
 button.tm-filter-toggle { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+/* View options sits at the right, beside Add task, also when a narrow header spreads its buttons across the width. */
+.tm-header-actions > button.tm-filter-toggle { margin-inline-start: auto; }
 button.tm-filter-toggle.is-active { background: var(--background-modifier-hover); color: var(--text-normal); }
 .tm-options-toggle-icon { display: inline-flex; }
 .tm-options-badge {
@@ -1895,6 +1862,8 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
    Headings are accent-coloured with a rule, and a selection reads as one rounded block. */
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) {
   grid-template-columns: 16px minmax(0, 1fr);
+  /* The title lines up with the checkbox, including a narrow window's taller touch target around it. */
+  align-items: center;
   column-gap: 10px;
   min-height: 0;
   padding: 5px 8px 5px calc(8px + var(--tm-depth) * 24px);
@@ -1903,6 +1872,11 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-main-view.tm-style-things.tm-density-compact .tm-task-row.tm-task-item:not(.tm-project-row) { padding-top: 3px; padding-bottom: 3px; }
 /* The checkbox sits in the middle of the whole row, however many lines the title and project take. */
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: center; padding-top: 0; }
+/* Rows keep their desktop spacing in narrow windows and on touch screens: the checkbox's taller touch target from
+   those layouts would otherwise make every row 32–44px or more. */
+@media (max-width: 700px), (pointer: coarse) {
+  .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { width: auto; height: auto; min-height: 0; }
+}
 .tm-main-view.tm-style-things input.tm-task-checkbox {
   --checkbox-size: 14px;
   --checkbox-radius: 3px;
@@ -1915,6 +1889,11 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary { flex-wrap: nowrap; align-items: center; gap: 6px; }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > * { flex-shrink: 0; }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > button.tm-task-title { flex: 0 1 auto; min-width: 0; font-weight: var(--font-medium); }
+/* Wrapping titles never give up their width to the tags: the line wraps instead, the title first, and the tags,
+   marks and dates after it move to the next line when they no longer fit. */
+.tm-main-view.tm-style-things.tm-wrap-task-titles .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary { flex-wrap: wrap; row-gap: 3px; }
+/* One-line titles keep some room before the tags, ending in an ellipsis. */
+.tm-main-view.tm-style-things:not(.tm-wrap-task-titles) .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > button.tm-task-title { min-width: min(45%, 10em); }
 
 .tm-things-lead { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
 .tm-things-box {
@@ -1949,6 +1928,10 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   cursor: pointer;
 }
 /* Dates, times and the deadline sit together at the end of the line. */
+/* On phones and tablets, and in narrow windows, list rows leave tags out for room; an open card (and its checklist)
+   still shows them. 700px is where the rest of the layout switches to its narrow form too. */
+body.is-mobile .tm-main-view.tm-style-things .tm-task-row .tm-things-tag { display: none; }
+@media (max-width: 700px) { .tm-main-view.tm-style-things .tm-task-row .tm-things-tag { display: none; } }
 .tm-things-trailing { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; margin-inline-start: auto; padding-inline-start: 12px; }
 .tm-things-checklist { display: inline-flex; align-items: center; color: var(--text-faint); }
 .tm-things-checklist svg { width: 12px; height: 12px; }
@@ -2014,6 +1997,49 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   font-family: inherit;
 }
 .tm-main-view textarea.tm-things-card-title { display: block; min-height: 0; overflow: hidden; resize: none; font-size: var(--font-ui-medium); font-weight: var(--font-medium); line-height: 1.4; }
+/* The title's highlight layer sits behind the text area and matches its text exactly; the text area shows only its caret. */
+.tm-things-card-title-box { position: relative; min-width: 0; }
+.tm-things-card-title-backdrop {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  color: var(--text-normal); font-family: inherit; font-size: var(--font-ui-medium); font-weight: var(--font-medium); line-height: 1.4;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+}
+.tm-main-view textarea.tm-things-card-title { position: relative; color: transparent; caret-color: var(--text-normal); }
+.tm-main-view textarea.tm-things-card-title::selection { color: var(--text-normal); }
+
+/* The task editor's property buttons, below its text: each shows the value the text sets, or its name. */
+.tm-editor-properties { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+button.tm-editor-property {
+  display: inline-flex; align-items: center; gap: 5px; height: auto; min-height: 26px; padding: 3px 9px;
+  border: 1px solid var(--background-modifier-border); border-radius: 999px; box-shadow: none; background: transparent;
+  color: var(--text-muted); font-size: var(--font-ui-smaller); font-weight: var(--font-medium); cursor: pointer;
+}
+button.tm-editor-property:hover, button.tm-editor-property:focus-visible { background: var(--background-modifier-hover); color: var(--text-normal); }
+button.tm-editor-property.is-set { border-color: transparent; background: var(--background-modifier-hover); color: var(--text-normal); }
+.tm-editor-property-icon { display: inline-flex; }
+.tm-editor-property-icon svg { width: 13px; height: 13px; }
+.tm-editor-property-label { max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.tm-editor-property.is-p1 .tm-editor-property-icon { color: var(--text-error); }
+button.tm-editor-property.is-p2 .tm-editor-property-icon { color: var(--color-orange); }
+button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-blue); }
+@media (pointer: coarse) { button.tm-editor-property { min-height: 36px; } }
+
+/* What typed text sets, highlighted in its property's colour like a marker: dates, times and durations blue, the
+   deadline red, a priority its own colour, tags grey, the project green, anything else the accent. */
+.tm-nlp-token {
+  --tm-nlp-color: var(--interactive-accent);
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--tm-nlp-color) 22%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tm-nlp-color) 22%, transparent);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.tm-nlp-token.is-date { --tm-nlp-color: var(--color-blue); }
+.tm-nlp-token.is-deadline, .tm-nlp-token.is-p1 { --tm-nlp-color: var(--color-red); }
+.tm-nlp-token.is-p2 { --tm-nlp-color: var(--color-orange); }
+.tm-nlp-token.is-p3 { --tm-nlp-color: var(--color-blue); }
+.tm-nlp-token.is-tag { --tm-nlp-color: var(--text-muted); }
+.tm-nlp-token.is-project { --tm-nlp-color: var(--color-green); }
 .tm-main-view textarea.tm-things-card-notes {
   display: block;
   min-height: 0;
@@ -2243,7 +2269,8 @@ button.tm-fold-toggle:focus-visible { opacity: 1; }
 /* Date popover: natural-language input, quick picks, a month calendar, and time/duration rows. */
 .tm-date-popover {
   position: fixed;
-  z-index: var(--layer-popover, 30);
+  /* Above modals too: the task editor opens these beside its property buttons. */
+  z-index: var(--layer-menu, 65);
   box-sizing: border-box;
   width: 264px;
   padding: 4px 0 6px;
@@ -2380,7 +2407,7 @@ button.tm-things-tag-remove:hover { color: var(--text-error); border-color: var(
 @media (prefers-reduced-motion: reduce) { button.tm-things-tag-remove { transition: none; } }
 
 /* Choice popover (priority): the view options dropdown, opened beside a property. */
-.tm-options-dropdown.tm-choice-popover { position: fixed; z-index: var(--layer-popover, 30); min-width: 180px; }
+.tm-options-dropdown.tm-choice-popover { position: fixed; z-index: var(--layer-menu, 65); min-width: 180px; }
 .tm-choice-label { display: inline-flex; align-items: center; gap: 8px; }
 .tm-choice-icon { display: inline-flex; color: var(--text-muted); }
 .tm-choice-icon svg { width: 15px; height: 15px; }
@@ -2399,7 +2426,7 @@ button.tm-things-tag-remove:hover { color: var(--text-error); border-color: var(
 /* Task menu: right-click on a task. Rows of date and priority icons, then rows that open a popover beside it. */
 .tm-task-menu {
   position: fixed;
-  z-index: var(--layer-popover, 30);
+  z-index: var(--layer-menu, 65);
   box-sizing: border-box;
   width: 264px;
   padding: 6px 0;

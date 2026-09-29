@@ -1,4 +1,6 @@
 import { setIcon } from "obsidian";
+import { parseRepeatInput, repeatLabel } from "./parser";
+import type { Project } from "./types";
 
 export interface Choice {
   value: string;
@@ -24,6 +26,8 @@ export interface ChoicePopoverOptions {
   beside?: boolean;
   /** A text field above the choices, focused on opening. */
   input?: ChoiceInput;
+  /** A letter that moves to the next choice, round again after the last (S in the status list, P in priority). */
+  cycleKey?: string;
 }
 
 export interface ChoiceInput {
@@ -49,7 +53,7 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
   open?.close();
   const doc = options.anchor.ownerDocument;
   const typed = options.input;
-  const element = doc.body.createDiv({ cls: "tm-options-dropdown tm-choice-popover", attr: { role: typed ? "dialog" : "listbox", "aria-label": options.label } });
+  const element = popoverHost(options.anchor).createDiv({ cls: "tm-options-dropdown tm-choice-popover", attr: { role: typed ? "dialog" : "listbox", "aria-label": options.label } });
   const input = typed && element.createEl("input", { type: "text", cls: "tm-options-input", attr: { placeholder: typed.placeholder, "aria-label": typed.placeholder, spellcheck: "false" } });
   const hint = typed?.parse && element.createDiv({ cls: "tm-choice-hint" });
   const list = typed ? element.createDiv({ attr: { role: "listbox", "aria-label": options.label } }) : element;
@@ -135,6 +139,7 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
       else pick(shown[index].getAttribute("data-value")!);
     }
     else if (event.key === "Escape") close();
+    else if (options.cycleKey && !fromInput && !event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === options.cycleKey) move(index + 1);
     else return;
     event.preventDefault(); event.stopPropagation();
   });
@@ -157,6 +162,14 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
   if (input) input.focus();
   else (items.find(item => item.getAttribute("aria-selected") === "true") ?? items[0])?.focus();
   return handle;
+}
+
+/**
+ * Where a popover opened beside `anchor` goes: inside the anchor's modal when it is in one (Obsidian takes focus
+ * back into an open modal from anywhere else, so a popover's field could not keep the cursor), else the body.
+ */
+export function popoverHost(anchor: HTMLElement): HTMLElement {
+  return anchor.closest<HTMLElement>(".modal-container") ?? anchor.ownerDocument.body;
 }
 
 /**
@@ -187,3 +200,29 @@ export const PRIORITY_CHOICES: Choice[] = [
   { value: "3", label: "P3", detail: "Low", icon: "signal", cls: "is-p3" },
   { value: "", label: "No priority", separated: true }
 ];
+
+/** Inbox, the given note when it is not a project, then the active projects by name (with their parent). */
+export function projectChoices(projects: Project[], inboxPath: string, current?: string): Choice[] {
+  const active = projects.filter(project => !project.archived).sort((a, b) => a.name.localeCompare(b.name));
+  const name = (path: string): string => path.replace(/\.md$/i, "").split("/").pop() ?? path;
+  const choices: Choice[] = [{ value: inboxPath, label: "Inbox", icon: "inbox" }];
+  if (current && current !== inboxPath && !active.some(project => project.path === current)) choices.push({ value: current, label: name(current), icon: "file-text" });
+  active.forEach((project, index) => choices.push({
+    value: project.path, label: project.name, icon: "circle", color: project.color, separated: index === 0,
+    detail: project.parentPath ? name(project.parentPath) : undefined
+  }));
+  return choices;
+}
+
+/** Common repeats (and the current one when it is not among them), then Doesn't repeat. */
+export function repeatChoices(current?: string): Choice[] {
+  const rules = ["every day", "every week", "every 2 weeks", "every month", "every year"];
+  if (current && !rules.includes(current)) rules.push(current);
+  return [...rules.map(rule => ({ value: rule, label: repeatLabel(rule), icon: "repeat" })), { value: "", label: "Doesn't repeat", separated: true }];
+}
+
+/** The repeat popover's field: a rule typed loosely ("every 3 days", "weekly", "monday"). */
+export const REPEAT_INPUT: ChoiceInput = {
+  placeholder: "Type a repeat, e.g. every 3 days", invalid: "Try every day, every 2 weeks or every monday",
+  parse: text => { const rule = parseRepeatInput(text); return rule ? { value: rule, label: repeatLabel(rule), icon: "repeat" } : undefined; }
+};

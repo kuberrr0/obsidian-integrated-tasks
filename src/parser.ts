@@ -1,12 +1,11 @@
-import { formatTags, normalizeTags } from "./task-tags";
+import { formatTags, normalizeTags, tagFormat, trailingTag } from "./task-tags";
 import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
-import { findInputDate, findInputDeadline, formatDate, formatLocalDate, parseDateTimeExpression } from "./date";
+import { findInputDate, findInputDeadline, findInputTime, formatDate, formatLocalDate, parseDateTimeExpression, removeSpans } from "./date";
 import { STATUS_CHARS, draftStatus, isClosedStatus, statusFromChar } from "./task-status";
 import type { ParsedTaskMetadata, Priority, Task, TaskDraft, TaskStatus } from "./types";
 
 // ` ` to do, `/` in progress, `?` waiting, `x`/`X` done, `-` cancelled; other characters are not tasks.
 const CHECKBOX = /^(\s*)-\s+\[([ xX/?-])\]\s+(.*)$/;
-const TAG = /(?:^|\s)#\[\[([^[\]\r\n|]+)\]\]\s*$/;
 const PRIORITY = /(?:^|\s)p([123])\s*$/i;
 const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 // `>` directly followed by a date, a date link or `someday`; `a > b` stays prose.
@@ -179,7 +178,7 @@ function parseLine(
     let text: string | undefined;
     let changed = false;
 
-    if ((match = TAG.exec(remainder)) && match[1].trim()) {
+    if ((match = trailingTag().exec(remainder)) && match[1].trim()) {
       metadata.tags = [match[1].trim(), ...(metadata.tags ?? [])];
       recordToken("tags", match);
       remainder = remainder.slice(0, match.index).trimEnd();
@@ -261,13 +260,24 @@ function parseLine(
     }
 
     if (!changed && naturalDates && !consumed.has("scheduled")) {
+      // A date and a time may be written apart ("tomorrow p1 3pm"); both parts come out of the title.
       const date = findInputDate(remainder, reference);
-      // "every Friday" describes a repeat, not a schedule.
-      if (date && !/(?:^|\s)(?:every|each)\s*$/i.test(remainder.slice(0, date.index))) {
+      if (date) {
         metadata.scheduledDate = date.date;
         if (date.time) metadata.scheduledTime = date.time;
-        remainder = `${remainder.slice(0, date.index)}${remainder.slice(date.index + date.text.length)}`.replace(/ {2,}/g, " ").trim();
+        remainder = removeSpans(remainder, date.parts).replace(/ {2,}/g, " ").trim();
         consumed.add("scheduled");
+        changed = true;
+      }
+    }
+
+    // A time typed apart from a date token gives that date its time.
+    if (!changed && naturalDates && metadata.scheduledDate && !metadata.scheduledTime && !consumed.has("time")) {
+      const time = findInputTime(remainder, reference);
+      if (time) {
+        metadata.scheduledTime = time.time;
+        remainder = removeSpans(remainder, [time]).replace(/ {2,}/g, " ").trim();
+        consumed.add("time");
         changed = true;
       }
     }
@@ -299,6 +309,15 @@ function parseCompletedDate(value: string, reference: Date, dateFormats: string[
 
 function deferText(draft: Pick<ParsedTaskMetadata, "deferDate" | "someday">, dateText: (date: string) => string): string {
   return draft.someday ? ">someday" : draft.deferDate ? `>${dateText(draft.deferDate)}` : "";
+}
+
+/** Where each metadata token sits in a task's text (without its "- [ ] "), the destination included. */
+export function taskTextRanges(text: string, reference = new Date(), dateFormat?: string): Array<{ kind: ParsedTokenRange["kind"] | "destination"; from: number; to: number }> {
+  const prefix = "- [ ] ";
+  const ranges: LineRange[] = [];
+  parseLine(prefix + text, reference, dateFormat, false, ranges, [], true);
+  return ranges.filter((range): range is LineRange & { kind: ParsedTokenRange["kind"] | "destination" } => range.kind !== "blockId")
+    .map(range => ({ kind: range.kind, from: range.from - prefix.length, to: range.to - prefix.length }));
 }
 
 export function parseTaskInput(
@@ -419,7 +438,8 @@ const parseCache = new Map<string, ParsedTaskLine | null>();
 
 function cachedParseTaskLine(line: string, reference: Date, dateFormat?: string): ParsedTaskLine | undefined {
   if (!CHECKBOX.test(line)) return undefined;
-  const context = `${dateFormat ?? ""}\u0000${formatLocalDate(reference)}`;
+  // The Tag format decides what counts as a tag, so a switch reads every line again.
+  const context = `${dateFormat ?? ""}\u0000${formatLocalDate(reference)}\u0000${tagFormat()}`;
   if (context !== parseCacheContext) { parseCache.clear(); parseCacheContext = context; }
   let parsed = parseCache.get(line);
   if (parsed === undefined) {

@@ -1,7 +1,7 @@
 import { setIcon } from "obsidian";
 import { addDays } from "./calendar";
 import { nextWeek } from "./date-popover";
-import { placePopover } from "./choice-popover";
+import { placePopover, popoverHost } from "./choice-popover";
 
 type Priority = 1 | 2 | 3;
 
@@ -29,7 +29,7 @@ export interface ActionIcon {
 }
 
 export type ActionMenuEntry =
-  | { kind: "item"; label: string; icon: string; run: () => void; danger?: boolean }
+  | { kind: "item"; label: string; icon: string; run: () => void; danger?: boolean; key?: string }
   | ({ kind: "submenu" } & TaskMenuSubmenu)
   | { kind: "icons"; label: string; key: string; buttons: ActionIcon[] }
   | { kind: "separator" };
@@ -102,7 +102,7 @@ export function openTaskMenu(options: TaskMenuOptions): TaskMenu {
   return openActionMenu({
     doc: options.doc, at: options.at, label: "Task actions", returnFocus: options.returnFocus,
     entries: [
-      { kind: "item", icon: options.completed ? "rotate-ccw" : "circle-check", label: options.completed ? "Reopen" : "Complete", run: options.complete },
+      { kind: "item", icon: options.completed ? "rotate-ccw" : "circle-check", label: options.completed ? "Reopen" : "Complete", run: options.complete, key: "c" },
       { kind: "separator" },
       { kind: "icons", label: "Date", key: "d", buttons: [
         ...quick.map(([label, icon, cls, date]): ActionIcon => ({ label, icon, cls, active: options.scheduled === date, run: () => options.schedule(date) })),
@@ -141,7 +141,10 @@ export function openActionMenu(options: ActionMenuOptions): TaskMenu {
 
   for (const entry of options.entries) {
     if (entry.kind === "separator") element.createDiv({ cls: "tm-task-menu-separator", attr: { role: "separator" } });
-    else if (entry.kind === "item") item(entry.icon, entry.label, () => act(entry.run), entry.danger ? "is-danger" : "");
+    else if (entry.kind === "item") {
+      const button = item(entry.icon, entry.label, () => act(entry.run), entry.danger ? "is-danger" : "");
+      if (entry.key) { shortcut(button, entry.key); shortcuts.set(entry.key, () => button.click()); }
+    }
     else if (entry.kind === "submenu") {
       const button = item(entry.icon, entry.label, () => entry.open(button), "has-submenu");
       button.setAttribute("aria-haspopup", "true");
@@ -242,7 +245,7 @@ export interface TagsPopoverOptions {
  */
 export function openTagsPopover(options: TagsPopoverOptions): { element: HTMLElement; close(): void } {
   const doc = options.anchor.ownerDocument;
-  const element = doc.body.createDiv({ cls: "tm-options-dropdown tm-choice-popover tm-tags-popover", attr: { role: "dialog", "aria-label": "Tags" } });
+  const element = popoverHost(options.anchor).createDiv({ cls: "tm-options-dropdown tm-choice-popover tm-tags-popover", attr: { role: "dialog", "aria-label": "Tags" } });
   const input = element.createEl("input", { type: "text", cls: "tm-options-input", attr: { placeholder: "Add or find a tag", "aria-label": "Tag", spellcheck: "false" } });
   input.value = options.query ?? "";
   const list = element.createDiv({ attr: { role: "listbox", "aria-multiselectable": "true", "aria-label": "Tags" } });

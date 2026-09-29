@@ -1,5 +1,5 @@
 import { setIcon } from "obsidian";
-import { placePopover } from "./choice-popover";
+import { placePopover, popoverHost } from "./choice-popover";
 import { addDays } from "./calendar";
 import { formatDate, parseDateExpression, parseDateTimeExpression, parseTimeExpression, todayIso } from "./date";
 import { durationToMinutes, formatDuration } from "./parser";
@@ -133,7 +133,7 @@ export function openDatePopover(options: DatePopoverOptions): DatePopover {
   const pending: DatePopoverValue = { ...options.value };
   let month = monthStart(pending.date ?? today);
 
-  const element = doc.body.createDiv({ cls: "tm-date-popover", attr: { role: "dialog", "aria-label": options.label ?? (options.kind === "deadline" ? "Deadline" : "When") } });
+  const element = popoverHost(options.anchor).createDiv({ cls: "tm-date-popover", attr: { role: "dialog", "aria-label": options.label ?? (options.kind === "deadline" ? "Deadline" : "When") } });
 
   // One input on top; underneath, what it reads as (or, while empty, the current value).
   const top = element.createDiv({ cls: "tm-date-popover-row tm-date-popover-input" });

@@ -6,6 +6,7 @@ export const OPEN_STATUSES: readonly TaskStatus[] = ["todo", "doing", "waiting"]
 
 export const STATUS_CHARS: Record<TaskStatus, string> = { todo: " ", doing: "/", waiting: "?", done: "x", cancelled: "-" };
 export const STATUS_LABELS: Record<TaskStatus, string> = { todo: "To do", doing: "In progress", waiting: "Waiting", done: "Done", cancelled: "Cancelled" };
+export const STATUS_ICONS: Record<TaskStatus, string> = { todo: "circle", doing: "circle-dot", waiting: "clock", done: "circle-check", cancelled: "circle-slash" };
 
 export function statusFromChar(char: string): TaskStatus | undefined {
   return char === "X" ? "done" : TASK_STATUSES.find(status => STATUS_CHARS[status] === char);

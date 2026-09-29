@@ -7,6 +7,9 @@ import { applyProjectDraft, projectEditDraft } from "./project-editor";
 import { cloneTaskFilters } from "./task-filters";
 import { SmartListEditorModal, type SmartListDraft } from "./smart-list-editor";
 import { ProjectCreatorModal, projectNotePath, projectNoteContent, type ProjectDraft } from "./project-creator";
+import { setTagFormat as useTagFormat, type TagFormat } from "./task-tags";
+import { convertTagFormat } from "./tag-links";
+import { openConfirm } from "./confirm-modal";
 import { TaskModeController } from "./task-mode";
 import type { TaskEditorPreset } from "./types";
 import { noteDateInput } from "./note-date-input";
@@ -14,7 +17,7 @@ import { noteTokenEditor } from "./note-token-editor";
 import { noteTaskEditEditor, registerNoteTaskEdit } from "./note-task-edit";
 import { renderNoteTokens } from "./note-token-reading";
 import { MarkdownView, Notice, Plugin, TFile, TFolder, type Editor, type TAbstractFile, type WorkspaceLeaf } from "obsidian";
-import { TaskEditorModal, type TaskEditorOptions } from "./task-editor";
+import { TaskEditorModal, initialDraft, type TaskEditorOptions } from "./task-editor";
 import { TaskIndex, type RefreshOptions } from "./task-index";
 import { IndexedDbCache } from "./index-cache";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
@@ -22,13 +25,13 @@ import { TaskStore, type TaskChange } from "./task-store";
 import { TasksImportModal } from "./tasks-import-modal";
 import { TASK_QUERY_LANGUAGE, TASK_QUERY_TEMPLATE, TaskQueryBlock } from "./task-query-block";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
-import { DEFAULT_SETTINGS, type Project, type SmartList, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
+import { DEFAULT_SETTINGS, type Project, type SmartList, type Task, type TaskDraft, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
 import { TaskQuickSwitcher } from "./quick-switcher";
 
-const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay"];
+const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay", "linkTags"];
 
 interface OpenEditorState extends TaskViewState {
   focusProperty?: TaskEditorOptions["focusProperty"];
@@ -52,7 +55,7 @@ export default class TaskManagerPlugin extends Plugin {
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
-    this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates, () => this.settings.linkTags));
+    this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
     this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => !this.settings.taskMode && isRepeatingTask(this.app, task),
       task => { this.completeRecurringTaskFromNote(task); }, undefined,
       { enabled: () => this.settings.completionDates, linkDates: () => this.settings.linkDates }));
@@ -150,6 +153,8 @@ export default class TaskManagerPlugin extends Plugin {
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Open task menu", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
+    this.addCommand({ id: "insert-task", name: "Insert task", callback: () => this.insertTask() });
+    this.addCommand({ id: "convert-task-tags", name: "Convert task tags to the tag format", callback: () => void this.convertTaskTags() });
     this.addCommand({ id: "insert-task-query", name: "Insert task query", editorCallback: editor => editor.replaceSelection(TASK_QUERY_TEMPLATE) });
     this.addCommand({ id: "import-tasks-plugin", name: "Import tasks from the Tasks plugin", callback: () => this.openTasksImport() });
     this.addCommand({ id: "quick-switch", name: "Quick switch to view, project, tag, or task", callback: () => this.openQuickSwitcher() });
@@ -264,7 +269,8 @@ export default class TaskManagerPlugin extends Plugin {
     for (const key of LEGACY_SETTINGS) delete (this.settings as unknown as Record<string, unknown>)[key];
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
-    this.settings.linkTags = this.settings.linkTags === true;
+    if (this.settings.tagFormat !== "hash" && this.settings.tagFormat !== "wikilink") this.settings.tagFormat = DEFAULT_SETTINGS.tagFormat;
+    useTagFormat(this.settings.tagFormat);
     if (typeof this.settings.dateFormat !== "string") this.settings.dateFormat = DEFAULT_SETTINGS.dateFormat;
     if (!Number.isInteger(this.settings.sectionHeadingLevel) || this.settings.sectionHeadingLevel < 1 || this.settings.sectionHeadingLevel > 6) this.settings.sectionHeadingLevel = 1;
     this.settings.showGroupTaskCounts = this.settings.showGroupTaskCounts === true;
@@ -571,14 +577,41 @@ export default class TaskManagerPlugin extends Plugin {
     }
   }
 
-  openEditor(state: OpenEditorState): void {
-    const options: TaskEditorOptions = {
+  /**
+   * The new task editor in the open view's context: a task view's tag, project or date (as its Add task
+   * button), or the open note when it is a project or a tag's note; otherwise the Inbox.
+   */
+  insertTask(): void {
+    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+    if (view) { view.newTask(); return; }
+    const path = this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path;
+    const tag = path ? this.index.tagForPath(path) : undefined;
+    if (path && this.index.isProject(path)) this.openEditor({ mode: "all", projectPath: path });
+    else if (path && tag) this.openEditor({ mode: "tags", tag, pagePath: path });
+    else this.openEditor({ mode: "inbox" });
+  }
+
+  /** A new task as a view would start it: its tag, its project, or today's (or tomorrow's) date. */
+  newTaskDraft(state: TaskViewState): TaskDraft {
+    return initialDraft(this.editorContext(state));
+  }
+
+  private editorContext(state: OpenEditorState): Omit<TaskEditorOptions, "onSave"> {
+    return {
       ...state,
       preset: state.tag ? { ...state.preset, tags: [...new Set([...(state.preset?.tags ?? []), state.mode === "tags" && state.pagePath ? state.pagePath.replace(/\.md$/i, "") : state.tag])] } : state.preset,
       projectPath: state.mode === "tags" ? undefined : state.pagePath ?? state.projectPath,
       projects: this.index.projects(),
       settings: this.settings,
-      dateFormat: this.dateFormat(),
+      dateFormat: this.dateFormat()
+    };
+  }
+
+  openEditor(state: OpenEditorState): void {
+    const options: TaskEditorOptions = {
+      ...this.editorContext(state),
+      tagSuggestions: this.index.tagSummaries().map(tag => tag.name),
+      createProject: name => this.createProjectNote({ name }),
       onDelete: state.task ? async () => {
         await this.store.delete(state.task!);
         await this.index.refreshPath(state.task!.path);
@@ -649,6 +682,38 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings.sectionHeadingLevel = level;
     await this.saveSettings();
     await this.refreshDateParsing();
+  }
+
+  /** Tags are read (and written) in the new format from now on; notes keep what they have until converted. */
+  async setTagFormat(value: TagFormat): Promise<void> {
+    this.settings.tagFormat = value;
+    useTagFormat(value);
+    await this.saveSettings();
+    await this.refreshDateParsing();
+  }
+
+  /**
+   * Rewrites the tags on every note's task lines into the Tag format (`#[[open house]]` → `#open-house`, or `#tag` →
+   * `#[[tag]]`), after asking; one undoable change.
+   */
+  async convertTaskTags(): Promise<void> {
+    const to = this.settings.tagFormat;
+    const files = this.app.vault.getMarkdownFiles();
+    const changed: TFile[] = [];
+    for (const file of files) {
+      const content = await this.app.vault.cachedRead(file);
+      if (convertTagFormat(content, to) !== content) changed.push(file);
+    }
+    const written = to === "hash" ? "#tag" : "#[[tag]]";
+    if (!changed.length) { new Notice(`Every task tag is already written as ${written}.`); return; }
+    openConfirm(this.app, {
+      title: `Write task tags as ${written}?`,
+      message: `Tags on tasks in ${changed.length} note${changed.length === 1 ? "" : "s"} will be rewritten as ${written}${to === "hash" ? "; spaces in a tag become hyphens" : ""}. You can undo it.`,
+      confirm: "Convert tags",
+      run: () => void this.store.rewriteNotes(changed, content => convertTagFormat(content, to), `Converted task tags to ${written}`)
+        .then(async paths => { for (const path of paths) await this.index.refreshPath(path); new Notice(`Converted task tags in ${paths.length} note${paths.length === 1 ? "" : "s"}.`); })
+        .catch((error: unknown) => { new Notice(error instanceof Error ? error.message : "Could not convert the tags."); })
+    });
   }
 
   async setDateFormat(value: string): Promise<void> {

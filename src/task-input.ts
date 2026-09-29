@@ -1,5 +1,5 @@
-import { findInputDate, findInputDeadline } from "./date";
-import { parseTaskInput, parseTaskLine, serializeTask, type ParsedTaskLine, type ParsedTokenRange } from "./parser";
+import { findInputDate, findInputDeadline, findInputTime, removeSpans } from "./date";
+import { parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput, taskTextRanges, type ParsedTaskLine, type ParsedTokenRange } from "./parser";
 import type { TaskDraft } from "./types";
 
 const width = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((total, char) => total + (char === "\t" ? 4 : 1), 0);
@@ -41,6 +41,88 @@ export function parseTaskTreeInput(input: string, destination: string, reference
   return main;
 }
 
+/** The span of `text` newly typed over `original`: between their shared start and shared end. */
+function typedSpan(text: string, original: string): { from: number; to: number } {
+  let from = 0;
+  const shortest = Math.min(text.length, original.length);
+  while (from < shortest && text[from] === original[from]) from++;
+  let to = text.length;
+  for (let originalTo = original.length; to > from && originalTo > from && text[to - 1] === original[originalTo - 1]; originalTo--) to--;
+  return { from, to };
+}
+
+export type InputTokenKind = ParsedTokenRange["kind"] | "destination";
+export interface InputTokenRange { kind: InputTokenKind; from: number; to: number }
+
+/**
+ * Where one line of task text sets properties, as saving reads it: the tokens at its end, and dates written in words
+ * ("tomorrow 3pm", "{next friday}") in what was newly typed over `original` (a new task's text is all new).
+ */
+export function taskInputRanges(text: string, original = "", reference = new Date(), dateFormat?: string): InputTokenRange[] {
+  const strict: InputTokenRange[] = taskTextRanges(text, reference, dateFormat).sort((a, b) => a.from - b.from);
+  const within = typedSpan(text, original);
+  if (!text.slice(within.from, within.to).trim()) return strict;
+  // A `>tomorrow` defer is already read; its words are not a schedule.
+  const defer = strict.find(range => range.kind === "defer");
+  const prose = defer ? text.slice(0, defer.from) + " ".repeat(defer.to - defer.from) + text.slice(defer.to) : text;
+  const natural: InputTokenRange[] = [];
+  const add = (kind: InputTokenKind, match: { index: number; text: string } | undefined): void => {
+    if (!match) return;
+    const from = match.index + match.text.length - match.text.trimStart().length;
+    natural.push({ kind, from, to: match.index + match.text.trimEnd().length });
+  };
+  if (!strict.some(range => range.kind === "deadline")) add("deadline", findInputDeadline(prose, reference, dateFormat, within));
+  // A date and its time may sit apart; each part is marked on its own.
+  if (!strict.some(range => range.kind === "scheduledDate")) for (const part of findInputDate(prose, reference, within)?.parts ?? []) add("scheduledDate", part);
+  else if (!parseTaskLine(`- [ ] ${text}`, reference, dateFormat)?.scheduledTime) add("scheduledDate", findInputTime(prose, reference, within));
+  if (!natural.length) return strict;
+  // With the words read as dates taken out (blanked, so places stay put), tokens they stood in front of end the
+  // line too, as saving reads them: "tomorrow p1 3pm" sets the priority as well.
+  let blanked = text;
+  for (const range of natural) blanked = blanked.slice(0, range.from) + " ".repeat(range.to - range.from) + blanked.slice(range.to);
+  return [...taskTextRanges(blanked, reference, dateFormat), ...natural].sort((a, b) => a.from - b.from);
+}
+
+/**
+ * The highlight a token gets as it is typed, by what it sets: dates, times and durations blue, the deadline red,
+ * a priority its own colour, tags grey, the project green, anything else (a repeat, a defer) the accent.
+ */
+export function tokenHighlightClass(kind: InputTokenKind, text: string): string {
+  const look = kind === "scheduledDate" || kind === "durationMinutes" ? "is-date"
+    : kind === "deadline" ? "is-deadline"
+    : kind === "priority" ? `is-priority is-p${/[123]/.exec(text)?.[0] ?? ""}`
+    : kind === "tags" ? "is-tag"
+    : kind === "destination" ? "is-project"
+    : "is-other";
+  return `tm-nlp-token ${look}`;
+}
+
+/** A property's token as a task line writes it: `[[2026-10-01]] 09:00 30m`, `{…}`, `p1`, `#[[tag]]`, `every week`, `~[[Project]]`. */
+export function taskTokenText(values: Partial<TaskDraft>, dateFormat?: string, linkDates = true): string {
+  const draft: TaskDraft = { title: "", completed: false, indent: 0, destination: "", ...values };
+  const line = values.destination ? serializeTaskInput(draft, dateFormat, linkDates) : serializeTask(draft, dateFormat, linkDates);
+  return line.replace(/^\s*-\s+\[.\]\s*/, "").trim();
+}
+
+/**
+ * Takes the tokens of `kinds` out of the first line of task text (words read as a date too) and adds `replacement`
+ * at its end. A line with no title yet keeps a leading space, so a title typed at the start stays apart.
+ */
+export function replaceTaskTokens(text: string, kinds: InputTokenKind[], replacement: string, original = "", reference = new Date(), dateFormat?: string): string {
+  const newline = text.indexOf("\n");
+  let line = newline < 0 ? text : text.slice(0, newline);
+  const rest = newline < 0 ? "" : text.slice(newline);
+  const originalLine = original.split("\n")[0];
+  const removed = taskInputRanges(line, originalLine, reference, dateFormat).filter(range => kinds.includes(range.kind)).sort((a, b) => b.from - a.from);
+  for (const range of removed) {
+    const before = line.slice(0, range.from).trimEnd();
+    const after = line.slice(range.to).trimStart();
+    line = before && after ? `${before} ${after}` : before || (after ? ` ${after}` : "");
+  }
+  if (replacement) line = `${line.trimEnd()} ${replacement}`;
+  return line + rest;
+}
+
 /**
  * Re-parse an edited task line strictly; natural-language dates are read only from text the user
  * newly typed (the span between the unchanged prefix and suffix), so existing prose such as
@@ -49,28 +131,21 @@ export function parseTaskTreeInput(input: string, destination: string, reference
 export function parseEditedTaskInput(text: string, original: string, reference = new Date(), dateFormat?: string, checkbox = "- [ ] "): ParsedTaskLine | undefined {
   const ranges: ParsedTokenRange[] = [];
   const strict = parseTaskLine(checkbox + text, reference, dateFormat, false, ranges);
-  let from = 0;
-  const shortest = Math.min(text.length, original.length);
-  while (from < shortest && text[from] === original[from]) from++;
-  let to = text.length;
-  for (let originalTo = original.length; to > from && originalTo > from && text[to - 1] === original[originalTo - 1]; originalTo--) to--;
-  if (!strict || !text.slice(from, to).trim()) return strict;
-  const within = { from, to };
+  const within = typedSpan(text, original);
+  if (!strict || !text.slice(within.from, within.to).trim()) return strict;
   // A `>tomorrow` defer is already parsed; its words are not a schedule.
   const defer = ranges.find(range => range.kind === "defer");
   const prose = defer ? text.slice(0, defer.from - checkbox.length) + " ".repeat(defer.to - defer.from) + text.slice(defer.to - checkbox.length) : text;
   const deadline = strict.deadline ? undefined : findInputDeadline(prose, reference, dateFormat, within);
   const scheduled = strict.scheduledDate ? undefined : findInputDate(prose, reference, within);
-  if (!deadline && !scheduled) return strict;
-  let cleaned = text;
-  for (const match of [deadline, scheduled].filter(match => match !== undefined).sort((a, b) => b.index - a.index)) {
-    const before = cleaned.slice(0, match.index).trimEnd();
-    const after = cleaned.slice(match.index + match.text.length).trimStart();
-    cleaned = before && after ? `${before} ${after}` : before + after;
-  }
+  // A time typed apart from a date token gives that date its time.
+  const time = strict.scheduledDate && !strict.scheduledTime ? findInputTime(prose, reference, within) : undefined;
+  if (!deadline && !scheduled && !time) return strict;
+  const cleaned = removeSpans(text, [...(deadline ? [deadline] : []), ...(scheduled?.parts ?? []), ...(time ? [time] : [])]);
   const parsed = parseTaskInput(checkbox + cleaned, reference, dateFormat, false);
   if (!parsed) return parsed;
   if (deadline && !parsed.deadline) Object.assign(parsed, { deadline: deadline.date }, deadline.time ? { deadlineTime: deadline.time } : {});
   if (scheduled && !parsed.scheduledDate) Object.assign(parsed, { scheduledDate: scheduled.date }, scheduled.time ? { scheduledTime: scheduled.time } : {});
+  if (time && parsed.scheduledDate && !parsed.scheduledTime) parsed.scheduledTime = time.time;
   return parsed;
 }

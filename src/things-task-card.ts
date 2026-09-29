@@ -6,6 +6,8 @@ import type { TaskEditorProperty } from "./task-editor";
 import { checkboxLabel, statusClass } from "./task-status";
 import { renderThingsTaskDetails, thingsDeadlineLabel, type ThingsDetailsOptions } from "./things-row-details";
 import { openTagsPopover } from "./task-menu";
+import { taskInputRanges, tokenHighlightClass, type InputTokenRange } from "./task-input";
+import { draftFromTask, draftFromTitle } from "./task-draft";
 import type { Task } from "./types";
 
 /** The card's unsaved title, notes and new subtask, kept by the view so a re-render does not lose typing. */
@@ -26,6 +28,8 @@ export interface TaskCardOptions {
     tags: string[];
     /** Nesting level, matching the rows around the card. */
     depth: number;
+    /** The date format typed dates are read in, for marking them in the title. */
+    dateFormat?: string;
     now?: Date;
     change: (draft: TaskCardDraft) => void;
     toggle: (task: Task, completed: boolean) => void;
@@ -84,16 +88,21 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     const checkbox = head.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "card-checkbox" } });
     checkbox.checked = task.completed;
     checkbox.addEventListener("change", () => options.toggle(task, checkbox.checked));
-    // A text area so long titles wrap, as in Things; it stays one logical line.
-    const title = head.createEl("textarea", { cls: "tm-things-card-title", attr: { "aria-label": "Title", placeholder: "New To-Do", rows: "1", "data-tm-focus-key": "card-title" } });
+    // A text area so long titles wrap, as in Things; it stays one logical line. Behind it, the same text marks
+    // what saving reads as a property (dates, p1, #[[tags]]…); the text area's own text is transparent.
+    const titleBox = head.createDiv({ cls: "tm-things-card-title-box" });
+    const backdrop = titleBox.createDiv({ cls: "tm-things-card-title-backdrop", attr: { "aria-hidden": "true" } });
+    const title = titleBox.createEl("textarea", { cls: "tm-things-card-title", attr: { "aria-label": "Title", placeholder: "New To-Do", rows: "1", "data-tm-focus-key": "card-title" } });
     title.value = draft.title;
+    const paintTitle = (): void => paintTokens(backdrop, title.value, taskInputRanges(title.value, task.title, now, options.dateFormat));
+    paintTitle();
     const notes = card.createEl("textarea", { cls: "tm-things-card-notes", attr: { "aria-label": "Notes", placeholder: "Notes", rows: "1", "data-tm-focus-key": "card-notes" } });
     notes.value = draft.notes;
     let subtask = draft.subtask;
     const change = (): void => options.change({ title: title.value, notes: notes.value, subtask });
     title.addEventListener("input", () => {
         if (/[\r\n]/.test(title.value)) title.value = title.value.replace(/[\r\n]+/g, " ");
-        autosize(title); change();
+        autosize(title); paintTitle(); preview(); change();
     });
     notes.addEventListener("input", () => { autosize(notes); change(); });
     // Enter in the title moves on to the notes, as in Things.
@@ -188,42 +197,59 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     // A subtask still being typed survives a redraw.
     const typing = draft.subtask ? startSubtask(options.children.find(child => child.id === draft.subtask!.after), draft.subtask.text) : undefined;
 
-    renderThingsCardProperties(card, task, options.tags, options.edit, now, { open: options.openTag, remove: options.removeTag, add: options.addTags, suggestions: options.tagSuggestions });
+    // The property lines and the toolbar below them show the task as its title now reads: typing "p1", a date or
+    // #[[tag]] into the title shows that property at once, before it is saved.
+    let footer: HTMLElement[] = [];
+    const renderFooter = (shown: Task, tags: string[], projectLabel = options.project?.label ?? ""): void => {
+        for (const element of footer) element.remove();
+        const before = new Set(Array.from(card.children));
+        renderThingsCardProperties(card, shown, tags, options.edit, now, { open: options.openTag, remove: options.removeTag, add: options.addTags, suggestions: options.tagSuggestions });
 
-    // Things keeps buttons for the properties not set yet at the card's bottom right;
-    // the note the task lives in sits at the left, and moves it to another project.
-    const toolbar = card.createDiv({ cls: "tm-things-card-toolbar" });
-    if (options.project) {
-        const project = options.project;
-        const button = toolbar.createEl("button", { cls: "tm-things-card-project", attr: { type: "button", "aria-label": `Project: ${project.label}. Move to another project`, title: "Move to another project", "aria-haspopup": "listbox", "data-tm-focus-key": "card-project" } });
-        setIcon(button.createSpan({ cls: "tm-things-card-project-icon", attr: { "aria-hidden": "true" } }), "folder");
-        button.createSpan({ cls: "tm-things-card-project-label", text: project.label });
-        setIcon(button.createSpan({ cls: "tm-things-card-project-chevron", attr: { "aria-hidden": "true" } }), "chevron-down");
-        button.addEventListener("click", event => { event.stopPropagation(); project.choose(button); });
-    }
-    const add = (icon: string, label: string, key: string, action: () => void): void => {
-        const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { type: "button", "aria-label": label, title: label, "data-tm-focus-key": `card-add-${key}` } });
-        setIcon(button, icon);
-        button.addEventListener("click", event => { event.stopPropagation(); action(); });
+        // Things keeps buttons for the properties not set yet at the card's bottom right;
+        // the note the task lives in sits at the left, and moves it to another project.
+        const toolbar = card.createDiv({ cls: "tm-things-card-toolbar" });
+        if (options.project) {
+            const project = options.project;
+            const button = toolbar.createEl("button", { cls: "tm-things-card-project", attr: { type: "button", "aria-label": `Project: ${projectLabel}. Move to another project`, title: "Move to another project", "aria-haspopup": "listbox", "data-tm-focus-key": "card-project" } });
+            setIcon(button.createSpan({ cls: "tm-things-card-project-icon", attr: { "aria-hidden": "true" } }), "folder");
+            button.createSpan({ cls: "tm-things-card-project-label", text: projectLabel });
+            setIcon(button.createSpan({ cls: "tm-things-card-project-chevron", attr: { "aria-hidden": "true" } }), "chevron-down");
+            button.addEventListener("click", event => { event.stopPropagation(); project.choose(button); });
+        }
+        const add = (icon: string, label: string, key: string, action: () => void): void => {
+            const button = toolbar.createEl("button", { cls: "clickable-icon", attr: { type: "button", "aria-label": label, title: label, "data-tm-focus-key": `card-add-${key}` } });
+            setIcon(button, icon);
+            button.addEventListener("click", event => { event.stopPropagation(); action(); });
+        };
+        if (!shown.scheduledDate) add("calendar", "When", "scheduledDate", () => options.edit("scheduledDate"));
+        // Without tags, the Tags button opens the same inline "+" as the pills row, at the top of the properties.
+        if (!tags.length) add("tag", "Tags", "tags", () => {
+            const addTags = options.addTags;
+            if (!addTags) { options.edit("tags"); return; }
+            if (card.querySelector(".tm-things-add-tag")) return;
+            const properties = card.querySelector<HTMLElement>(".tm-things-card-properties") ?? card.createDiv({ cls: "tm-things-card-properties" });
+            if (!properties.parentElement || properties.nextElementSibling !== toolbar) toolbar.before(properties);
+            const pills = properties.createDiv({ cls: "tm-things-card-tags" });
+            properties.prepend(pills);
+            renderAddTag(pills, { add: addTags, suggestions: options.tagSuggestions ?? [], tags, remove: options.removeTag }, true);
+        });
+        // The first subtask starts here; later ones follow with Enter.
+        if (!options.children.length) add("list-todo", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
+        if (!shown.priority) add("signal", "Priority", "priority", () => options.edit("priority"));
+        if (!shown.repeat) add("repeat", "Repeat", "repeat", () => options.edit("repeat"));
+        if (!shown.deadline) add("flag", "Deadline", "deadline", () => options.edit("deadline"));
+        if (!toolbar.childElementCount) toolbar.remove();
+        footer = Array.from(card.children).filter(child => !before.has(child)) as HTMLElement[];
     };
-    if (!task.scheduledDate) add("calendar", "When", "scheduledDate", () => options.edit("scheduledDate"));
-    // Without tags, the Tags button opens the same inline "+" as the pills row, at the top of the properties.
-    if (!options.tags.length) add("tag", "Tags", "tags", () => {
-        const addTags = options.addTags;
-        if (!addTags) { options.edit("tags"); return; }
-        if (card.querySelector(".tm-things-add-tag")) return;
-        const properties = card.querySelector<HTMLElement>(".tm-things-card-properties") ?? card.createDiv({ cls: "tm-things-card-properties" });
-        if (!properties.parentElement || properties.nextElementSibling !== toolbar) toolbar.before(properties);
-        const pills = properties.createDiv({ cls: "tm-things-card-tags" });
-        properties.prepend(pills);
-        renderAddTag(pills, { add: addTags, suggestions: options.tagSuggestions ?? [], tags: options.tags, remove: options.removeTag }, true);
-    });
-    // The first subtask starts here; later ones follow with Enter.
-    if (!options.children.length) add("list-todo", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
-    if (!task.priority) add("signal", "Priority", "priority", () => options.edit("priority"));
-    if (!task.repeat) add("repeat", "Repeat", "repeat", () => options.edit("repeat"));
-    if (!task.deadline) add("flag", "Deadline", "deadline", () => options.edit("deadline"));
-    if (!toolbar.childElementCount) toolbar.remove();
+    renderFooter(task, options.tags);
+    const preview = (): void => {
+        const next = draftFromTitle(task, title.value, now, options.dateFormat);
+        const typedTags = (next.tags ?? []).filter(tag => !(task.tags ?? []).includes(tag));
+        const moved = next.destination !== draftFromTask(task).destination;
+        checkbox.className = `tm-task-checkbox${next.priority ? ` is-p${next.priority}` : ""}${statusClass(task.status)}`;
+        renderFooter({ ...task, ...next, path: task.path }, [...options.tags, ...typedTags],
+            moved ? next.destination.replace(/\.md(?=#|$)/i, "").split("/").pop()!.replace("#", " › ") : undefined);
+    };
 
     const focus = options.focus === "new" ? typing : options.focus ? card.querySelector<HTMLInputElement>(`[data-tm-focus-key="card-subtask:${CSS.escape(options.focus)}"]`) : undefined;
     if (focus?.isConnected) { focus.focus(); focus.setSelectionRange(focus.value.length, focus.value.length); }
@@ -358,6 +384,20 @@ function createInput(parent: HTMLElement): { wrapper: HTMLElement; field: HTMLIn
     setIcon(menu, "chevron-down");
     wrapper.remove();
     return { wrapper, field, menu };
+}
+
+/** Text with its token ranges marked, for a highlight layer behind a text field. */
+export function paintTokens(target: HTMLElement, text: string, ranges: InputTokenRange[]): void {
+    target.empty();
+    let at = 0;
+    for (const range of ranges) {
+        if (range.from < at || range.to <= range.from) continue;
+        target.appendText(text.slice(at, range.from));
+        target.createSpan({ cls: tokenHighlightClass(range.kind, text.slice(range.from, range.to)), text: text.slice(range.from, range.to) });
+        at = range.to;
+    }
+    // A trailing space keeps a final line break's height, as the text area has it.
+    target.appendText(`${text.slice(at)} `);
 }
 
 /** How long a card takes to open or close. */

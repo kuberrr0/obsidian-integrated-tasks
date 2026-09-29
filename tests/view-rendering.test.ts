@@ -271,47 +271,100 @@ describe("keyboard", () => {
     expect(store.bulkDrop).toHaveBeenLastCalledWith([task("Child")], { destination: "A.md" }, task("Two"), "after");
   });
 
-  it("offers groups and dates in a Move to menu on M", async () => {
+  it("offers only the places to move to in the M menu", async () => {
     const { view, content, store, index } = await setup([note("A.md", 2), note("B.md", 2)]);
     await view.setState({ mode: "all" });
     act(rows(content())[0], "m");
-    const titles = menus[0].items.map(item => item.title);
-    expect(titles).toEqual(["Move to A", "Move to B", "Schedule for today", "Schedule for tomorrow", "Schedule for next week", "Remove dates",
-      "Snooze until tomorrow", "Snooze until next week", "Snooze to someday", "Mark as in progress", "Mark as waiting", "Mark as done", "Mark as cancelled"]);
+    expect(menus[0].items.map(item => item.title)).toEqual(["Move to A", "Move to B"]);
     menus[0].items[1].click();
     await Promise.resolve();
     expect(store.bulkDrop).toHaveBeenLastCalledWith([index.allTasks()[0]], { destination: "B.md" }, undefined, undefined);
   });
 
-  it("changes status from the M menu, leaving out the current one, for the whole selection", async () => {
+  it("opens the status list on S, for the whole selection", async () => {
     const { view, content, store, index } = await setup([["A.md", "- [/] Draft\n- [ ] Review\n- [ ] Send"]]);
     await view.setState({ mode: "all" });
-    act(rows(content())[0], "m");
-    const statusItems = menus[0].items.filter(item => item.title.startsWith("Mark as"));
-    expect(statusItems.map(item => item.title)).toEqual(["Mark as to do", "Mark as waiting", "Mark as done", "Mark as cancelled"]);
-    statusItems[1].click();
+    act(rows(content())[0], "s");
+    const popover = document.querySelector<HTMLElement>(".tm-choice-popover")!;
+    expect(popover.getAttribute("aria-label")).toBe("Status");
+    expect(popover.querySelector("[aria-selected=true]")!.getAttribute("data-value")).toBe("doing");
+    // S again moves on through the statuses, round to the first after the last; Enter sets the one reached.
+    key(document.activeElement as HTMLElement, "s");
+    expect(document.activeElement!.getAttribute("data-value")).toBe("waiting");
+    for (const next of ["done", "cancelled", "todo"]) {
+      key(document.activeElement as HTMLElement, "S", { shiftKey: true });
+      expect(document.activeElement!.getAttribute("data-value")).toBe(next);
+    }
+    key(document.activeElement as HTMLElement, "s");
+    key(document.activeElement as HTMLElement, "s");
+    expect(store.setStatus).not.toHaveBeenCalled();
+    key(document.activeElement as HTMLElement, "Enter");
     expect(store.setStatus).toHaveBeenLastCalledWith([index.allTasks()[0]], "waiting");
     rows(content())[1].click();
     key(rows(content())[1], "ArrowDown", { shiftKey: true });
-    key(rows(content())[2], "m");
-    menus[1].items.find(item => item.title === "Mark as cancelled")!.click();
+    key(rows(content())[2], "s");
+    document.querySelector<HTMLElement>(".tm-choice-popover [data-value='cancelled']")!.click();
     expect(store.setStatus).toHaveBeenLastCalledWith(index.allTasks().slice(1), "cancelled");
   });
 
-  it("cycles to do, in progress and waiting with S, and reopens closed tasks", async () => {
-    const { view, content, store, index } = await setup([["A.md", "- [ ] One\n- [/] Two\n- [?] Three\n- [x] Four\n- [-] Five"]]);
+  it("completes the selection on C, or reopens it when all of it is complete, and does nothing once deselected", async () => {
+    const { view, content, store, index } = await setup([["A.md", "- [ ] One\n- [x] Two"]]);
     view["showCompleted"] = true;
     await view.setState({ mode: "all" });
-    expect(rows(content())[0].getAttribute("aria-keyshortcuts")).toMatch(/ M S$/);
-    const next = rows(content()).map((row, position) => { act(row, position % 2 ? "S" : "s"); return store.setStatus.mock.lastCall; });
-    expect(next).toEqual(index.allTasks().map((task, position) => [[task], ["doing", "waiting", "todo", "todo", "todo"][position]]));
-    key(rows(content())[0], "s", { altKey: true });
-    key(rows(content())[0], "S", { shiftKey: true });
-    expect(store.setStatus).toHaveBeenCalledTimes(5);
-    // After Escape the row keeps focus but is no longer selected, so S does nothing.
+    expect(rows(content())[0].getAttribute("aria-keyshortcuts")).toMatch(/ M Shift\+T D Shift\+D P T G R S Shift\+S C$/);
+    act(rows(content())[0], "c");
+    expect(store.setStatus).toHaveBeenLastCalledWith([index.allTasks()[0]], "done");
+    act(rows(content())[1], "c");
+    expect(store.setStatus).toHaveBeenLastCalledWith([index.allTasks()[1]], "todo");
+    // After Escape the row keeps focus but is no longer selected, so the letters do nothing.
     key(rows(content())[0], "Escape");
+    key(rows(content())[0], "c");
     key(rows(content())[0], "s");
-    expect(store.setStatus).toHaveBeenCalledTimes(5);
+    expect(store.setStatus).toHaveBeenCalledTimes(2);
+    expect(document.querySelector(".tm-choice-popover")).toBeNull();
+  });
+
+  it("moves through the priorities on P in the priority list, setting one with Enter", async () => {
+    const { view, content, store, index } = await setup([["A.md", "- [ ] Report p2"]]);
+    const bulkUpdate = vi.fn().mockResolvedValue([]);
+    (store as unknown as { bulkUpdate: typeof bulkUpdate }).bulkUpdate = bulkUpdate;
+    await view.setState({ mode: "all" });
+    act(rows(content())[0], "p");
+    expect(document.activeElement!.getAttribute("data-value")).toBe("2");
+    const values = ["3", "", "1", "2"].map(() => { key(document.activeElement as HTMLElement, "p"); return document.activeElement!.getAttribute("data-value"); });
+    expect(values).toEqual(["3", "", "1", "2"]);
+    key(document.activeElement as HTMLElement, "p");
+    expect(bulkUpdate).not.toHaveBeenCalled();
+    key(document.activeElement as HTMLElement, "Enter");
+    expect(bulkUpdate).toHaveBeenLastCalledWith([index.allTasks()[0]], { priority: 3 });
+  });
+
+  it("opens the task's actions on E, for the selection", async () => {
+    const { view, content } = await setup([note("A.md", 2)]);
+    await view.setState({ mode: "all" });
+    key(rows(content())[0], "e");
+    expect(document.querySelector(".tm-task-menu")).toBeNull();
+    act(rows(content())[0], "e");
+    const menu = document.querySelector<HTMLElement>(".tm-task-menu")!;
+    expect(menu.getAttribute("aria-label")).toBe("Task actions");
+    expect(document.activeElement?.querySelector(".tm-task-menu-label")?.textContent).toBe("Complete");
+    menu.remove();
+  });
+
+  it("schedules for today on Shift+T and opens each property's popover from its letter", async () => {
+    const { view, content, store, index } = await setup([note("A.md", 2)]);
+    const bulkUpdate = vi.fn().mockResolvedValue([]);
+    (store as unknown as { bulkUpdate: typeof bulkUpdate }).bulkUpdate = bulkUpdate;
+    await view.setState({ mode: "all" });
+    act(rows(content())[0], "T", { shiftKey: true });
+    expect(bulkUpdate).toHaveBeenLastCalledWith([index.allTasks()[0]], { scheduledDate: todayIso() });
+    const opened = (letter: string, shiftKey = false) => {
+      document.querySelectorAll(".tm-date-popover, .tm-choice-popover, .tm-tags-popover").forEach(element => element.remove());
+      key(rows(content())[0], letter, { shiftKey });
+      return document.querySelector<HTMLElement>(".tm-date-popover, .tm-choice-popover, .tm-tags-popover")?.getAttribute("aria-label");
+    };
+    expect([opened("d"), opened("D", true), opened("p"), opened("t"), opened("g"), opened("r"), opened("S", true)])
+      .toEqual(["When", "Deadline", "Priority", "Tags", "Move to project", "Repeat", "Snooze"]);
   });
 
   it("marks each status on the row and in the checkbox's name, and reopens a cancelled task from its checkbox", async () => {
@@ -345,24 +398,20 @@ describe("undo and snooze", () => {
     expect(plugin.undoTaskChange).toHaveBeenCalledOnce();
   });
 
-  it("snoozes from the Move to menu", async () => {
-    const { view, content, store, index } = await setup([note("A.md", 1)]);
+  it("snoozes from the Shift+S list, offering Stop snoozing only for a snoozed task, which stays visible in All Tasks", async () => {
+    const { view, content, store, index } = await setup([["A.md", "- [ ] Later >someday\n- [ ] Now"]]);
+    const bulkUpdate = vi.fn().mockResolvedValue([]);
+    (store as unknown as { bulkUpdate: typeof bulkUpdate }).bulkUpdate = bulkUpdate;
     await view.setState({ mode: "all" });
-    act(rows(content())[0], "m");
-    menus[0].items.find(item => item.title === "Snooze to someday")!.click();
-    await Promise.resolve();
-    expect(store.bulkDrop).toHaveBeenLastCalledWith([index.allTasks()[0]], { property: "defer", value: "Someday" }, undefined, undefined);
-  });
-
-  it("offers Stop snoozing only for a snoozed task, which stays visible in All Tasks", async () => {
-    const { view, content } = await setup([["A.md", "- [ ] Later >someday\n- [ ] Now"]]);
-    await view.setState({ mode: "all" });
-    const later = rows(content()).find(row => row.textContent!.includes("Later"))!;
-    expect(later.querySelector(".tm-task-defer")).toBeNull();
-    act(later, "m");
-    act(rows(content()).find(row => row.textContent!.includes("Now"))!, "m");
-    expect(menus[0].items.map(item => item.title)).toContain("Stop snoozing");
-    expect(menus[1].items.map(item => item.title)).not.toContain("Stop snoozing");
+    const row = (title: string) => rows(content()).find(item => item.textContent!.includes(title))!;
+    expect(row("Later").querySelector(".tm-task-defer")).toBeNull();
+    const values = () => Array.from(document.querySelectorAll(".tm-choice-popover [role=option]")).map(option => option.getAttribute("data-value"));
+    act(row("Later"), "S", { shiftKey: true });
+    expect(values()).toContain("");
+    act(row("Now"), "S", { shiftKey: true });
+    expect(values()).not.toContain("");
+    document.querySelector<HTMLElement>(".tm-choice-popover [data-value='someday']")!.click();
+    expect(bulkUpdate).toHaveBeenLastCalledWith([index.allTasks().find(task => task.title === "Now")], { deferDate: undefined, someday: true });
   });
 });
 
@@ -679,5 +728,57 @@ describe("Things card subtasks", () => {
     };
     expect(open(false)).toEqual({ checks: 1, childRow: false });
     expect(open(true)).toEqual({ checks: 0, childRow: true });
+  });
+});
+
+describe("Insert task in the Things style", () => {
+  async function inserted() {
+    const inbox = DEFAULT_SETTINGS.inboxPath;
+    const ctx = await setup([[inbox, "- [ ] Existing"]]);
+    const { view, plugin, store, edit } = ctx;
+    plugin.settings.style = "things";
+    const extra = store as unknown as Record<string, ReturnType<typeof vi.fn>>;
+    extra.create = vi.fn(async (draft: { title: string }) => { await edit(inbox, `- [ ] ${draft.title}\n- [ ] Existing`); return 0; });
+    extra.delete = vi.fn().mockResolvedValue(undefined);
+    extra.update = vi.fn().mockResolvedValue(undefined);
+    (plugin as unknown as { newTaskDraft: () => object }).newTaskDraft = () => ({ title: "", completed: false, indent: 0, destination: inbox });
+    await view.setState({ mode: "inbox" });
+    view.newTask();
+    await vi.waitFor(() => expect(ctx.content().querySelector(".tm-things-card")).not.toBeNull());
+    return { ...ctx, extra, card: () => ctx.content().querySelector<HTMLElement>(".tm-things-card")! };
+  }
+
+  it("adds the task and opens its card with the title empty, instead of the editor", async () => {
+    const { extra, card, plugin } = await inserted();
+    expect(extra.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "New To-Do" }));
+    const title = card().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    expect(title.value).toBe("");
+    expect(title.placeholder).toBe("New To-Do");
+    expect(plugin.openEditor).not.toHaveBeenCalled();
+  });
+
+  it("removes the task when its card closes with nothing typed", async () => {
+    const { extra, view, index } = await inserted();
+    await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
+    expect(extra.delete).toHaveBeenCalledExactlyOnceWith(index.allTasks().find(task => task.title === "New To-Do"));
+    expect(extra.update).not.toHaveBeenCalled();
+  });
+
+  it("saves the typed title when its card closes", async () => {
+    const { extra, view, card } = await inserted();
+    const title = card().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    title.value = "Buy milk p1";
+    title.dispatchEvent(new Event("input"));
+    await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
+    expect(extra.delete).not.toHaveBeenCalled();
+    expect(extra.update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "New To-Do" }), expect.objectContaining({ title: "Buy milk", priority: 1 }));
+  });
+
+  it("opens the task editor in other styles", async () => {
+    const { view, plugin } = await setup([note("A.md", 1)]);
+    plugin.settings.style = "griply";
+    await view.setState({ mode: "today" });
+    view.newTask();
+    expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ mode: "today" }));
   });
 });

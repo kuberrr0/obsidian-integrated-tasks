@@ -122,8 +122,8 @@ export interface TaskManagerSettings {
   smartLists: SmartList[];
   taskMode: boolean;
   linkDates: boolean;
-  /** Turn plain #tags in tasks into task tags (#[[tag]]), moved to the end of the task. */
-  linkTags: boolean;
+  /** How task tags are written, and the only form read as one: `#tag` ("hash") or `#[[tag]]` ("wikilink"). */
+  tagFormat: "hash" | "wikilink";
   dateFormat: string;
   /** Format used before a pending date-token migration. */
   previousDateFormat?: string;
@@ -160,7 +160,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   smartLists: [],
   taskMode: false,
   linkDates: false,
-  linkTags: false,
+  tagFormat: "hash",
   dateFormat: "",
   sectionHeadingLevel: 1,
   showGroupTaskCounts: false,

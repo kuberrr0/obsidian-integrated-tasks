@@ -14,6 +14,8 @@ export interface CachedNote {
   size: number;
   schema: number;
   dateFormat: string;
+  /** The Tag format the note was read with; a note read with the other must be read again. */
+  tagFormat?: string;
   sectionHeadingLevel: number;
   /** Set when a task used a relative date, which only holds on the day it was parsed. */
   day?: string;
@@ -32,6 +34,8 @@ export interface NoteScan {
   mtime: number;
   size: number;
   dateFormat: string;
+  /** The Tag format the note was read with; a note read with the other must be read again. */
+  tagFormat?: string;
   sectionHeadingLevel: number;
   /** Local ISO date the note was parsed on. */
   day: string;

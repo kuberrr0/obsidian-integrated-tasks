@@ -4,7 +4,6 @@ vi.mock("obsidian", async importOriginal => ({
 }));
 import { EditorState } from "@codemirror/state";
 import { noteDateChanges, noteDateInput } from "../src/note-date-input";
-import { inlineTaskTokens, taskMetadataStart, taskModeEditorText } from "../src/task-line-editor";
 import { taskTokens, tokenClass } from "../src/task-tokens";
 import { noteTaskPresentation } from "../src/note-task-presentation";
 import { noteTokenMarks } from "../src/note-token-editor";
@@ -51,12 +50,6 @@ describe("note tokens", () => {
     syntax.between(0, 100, (from, to, value) => { marks.push({ from, to, cls: value.spec.class }); });
     expect(marks).toEqual([{ from: 12, to: 13, cls: "tm-note-token-brace" }]);
     expect(TASK_PROPERTY_ICONS.defer).toBe("eye-off");
-  });
-  it("keeps defer on the secondary line of the task-mode editor", () => {
-    const text = "Renew #[[x]] >2026-10-01 p1 {2026-09-20} [[2026-09-15]]";
-    expect(taskModeEditorText(text, "YYYY-MM-DD")).toBe("Renew {2026-09-20} p1 [[2026-09-15]] >2026-10-01 #[[x]]");
-    const tokens = inlineTaskTokens("Renew {2026-09-20} >2026-10-01", "YYYY-MM-DD");
-    expect(taskMetadataStart(tokens)).toBe("Renew {2026-09-20} ".length);
   });
 });
 

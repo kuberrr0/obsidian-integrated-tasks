@@ -54,7 +54,7 @@ export class TasksImportModal extends Modal {
       row.createDiv({ cls: "setting-item-description", text: hint });
       input.addEventListener("change", () => { this.options[key] = input.checked; void this.preview(); });
     };
-    option("Convert #tags", "convertTags", "Turn #tags on tasks into this plugin's #[[tags]], which link to tag notes.");
+    option("Convert #tags", "convertTags", "Make #tags on tasks this plugin's task tags, moved to the end of each task and written in the Tag format.");
     option("Remove created dates (➕)", "dropCreatedDates", "This plugin doesn't use created dates. Turn this off to keep them as text.");
 
     const filterRow = contentEl.createEl("label", { cls: "tm-import-option" });

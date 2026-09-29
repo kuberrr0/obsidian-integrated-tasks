@@ -4,7 +4,7 @@ import type momentFactory from "moment";
 import { formatDate, parseDateTimeExpression } from "./date";
 import { parseTaskLine, type ParsedTokenRange } from "./parser";
 import { nonBodyLines } from "./structure";
-import { linkPlainTags, PLAIN_TAG } from "./tag-links";
+import { PLAIN_TAG } from "./tag-links";
 
 const moment = obsidianMoment as unknown as typeof momentFactory;
 
@@ -181,7 +181,7 @@ const editedLines = StateField.define<ReadonlySet<number>>({
  * Resolve dates and order properties when the caret leaves a task line the user edited (including Enter).
  * Lines the caret merely passes through, and completed tasks, are never changed.
  */
-export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boolean, getLinkDates: () => boolean = () => true, getLinkTags: () => boolean = () => false) {
+export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boolean, getLinkDates: () => boolean = () => true) {
   const filter = EditorState.transactionFilter.of(transaction => {
     if (isTaskMode() || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
     if (!transaction.selection && !transaction.docChanged) return transaction;
@@ -212,10 +212,8 @@ export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boo
       const dateFormat = getDateFormat();
       for (const { text, number, from } of tasks) {
         if (nonBody.has(number - 1)) continue;
-        // With Link tags on, plain #tags become task tags first, so the dates are read on the tidied line.
-        const tagged = getLinkTags() ? linkPlainTags(text) : text;
-        const resolvedDates = noteDateChanges(tagged, dateFormat, reference, getLinkDates());
-        let resolved = tagged;
+        const resolvedDates = noteDateChanges(text, dateFormat, reference, getLinkDates());
+        let resolved = text;
         for (const change of resolvedDates.reverse()) {
           resolved = resolved.slice(0, change.from) + change.insert + resolved.slice(change.to);
         }

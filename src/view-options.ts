@@ -1,11 +1,17 @@
 import { setIcon } from "obsidian";
 import { renderPropertyFilter } from "./filter-editor";
 import { propertyValue, resolveDateToken, TASK_PROPERTIES } from "./task-properties";
-import { STATUS_LABELS, TASK_STATUSES } from "./task-status";
+import { OPEN_STATUSES, STATUS_LABELS, TASK_STATUSES } from "./task-status";
 import type { Task, TaskFilter, TaskGrouping, TaskProperty, TaskSort } from "./types";
 
 /** Sort, group and filter state the task view keeps; the panel reads and changes it through the host. */
-export interface ViewOptionsState { sort: TaskSort; descending: boolean; grouping: TaskGrouping; filters: TaskFilter[] }
+export interface ViewOptionsState {
+  sort: TaskSort; descending: boolean; grouping: TaskGrouping; filters: TaskFilter[];
+  /** Without a status filter the view leaves completed (done and cancelled) tasks out, showing only open statuses. */
+  openOnly?: boolean;
+  /** What View default groups by in this view, such as "Note" or "Action date". */
+  defaultGroup?: string;
+}
 export interface ViewOptionsHost {
   state(): ViewOptionsState;
   update(change: Partial<ViewOptionsState>): void;
@@ -167,7 +173,10 @@ export class ViewOptionsPanel {
     const groupRow = this.row(sorting, "layers", "Group");
     this.selectButton(groupRow, "group", "Group", () => ({
       label: "Group", multi: false,
-      options: () => GROUPS.map(([value, label]) => ({ value, label, selected: this.host.state().grouping === value })),
+      options: () => GROUPS.map(([value, label]) => {
+        const shown = value === "default" && this.host.state().defaultGroup ? `${label} (${this.host.state().defaultGroup})` : label;
+        return { value, label: shown, selected: this.host.state().grouping === value };
+      }),
       choose: value => { this.host.update({ grouping: value as TaskGrouping }); this.sync(); this.closeDropdown(true); }
     }));
 
@@ -217,10 +226,13 @@ export class ViewOptionsPanel {
     this.directionButton.setAttribute("title", descending ? "Descending — click for ascending" : "Ascending — click for descending");
     this.directionButton.setAttribute("aria-pressed", String(descending));
     this.summary("sort", SORTS.find(([value]) => value === state.sort)?.[1] ?? "Action date", false);
-    this.summary("group", GROUPS.find(([value]) => value === state.grouping)?.[1] ?? "View default", false);
+    // View default names what it groups by here; its option in the list is the one checked.
+    this.summary("group", state.grouping === "default" ? state.defaultGroup ?? "View default" : GROUPS.find(([value]) => value === state.grouping)?.[1] ?? "View default", false);
     for (const property of TASK_PROPERTIES) {
       const filter = filters.find(item => item.property === property.key);
-      this.summary(property.key, filterSummary(property, filter), !filter);
+      // Without a status filter, a view hiding completed tasks shows the open statuses, not any.
+      const summary = !filter && property.key === "status" && state.openOnly ? OPEN_STATUSES.map(status => STATUS_LABELS[status]).join(", ") : filterSummary(property, filter);
+      this.summary(property.key, summary, !filter);
     }
     this.dropdown?.render();
   }
@@ -295,21 +307,31 @@ export class ViewOptionsPanel {
         this.showEditor(property, row);
         return undefined;
       }
-      if (CHOICE_PROPERTIES.has(property.key)) return {
-        label, multi: true,
-        options: () => {
-          const selected = new Set(current()?.values ?? []);
-          return [{ value: "\u0000any", label: "Any", selected: !selected.size },
-            ...choices().map(value => ({ value, label: choiceLabel(property.key, value), selected: selected.has(value) })), more()];
-        },
-        choose: value => {
-          if (value === "\u0000more") { this.showEditor(property, row); this.closeDropdown(true); return; }
-          if (value === "\u0000any") { setFilter(undefined); return; }
-          const selected = new Set(current()?.values ?? []);
-          if (selected.has(value)) selected.delete(value); else selected.add(value);
-          setFilter(selected.size ? { operator: "is", values: [...selected] } : undefined);
-        }
-      };
+      if (CHOICE_PROPERTIES.has(property.key)) {
+        // A view that hides completed tasks already shows only the open statuses: they start checked, and its
+        // first option is the view's default rather than any status.
+        const implicit = (): string[] => property.key === "status" && this.host.state().openOnly ? OPEN_STATUSES.map(status => STATUS_LABELS[status]) : [];
+        const selection = (): Set<string> => new Set(current()?.values ?? implicit());
+        return {
+          label, multi: true,
+          options: () => {
+            const selected = selection();
+            const byDefault = implicit().length > 0;
+            return [{ value: "\u0000any", label: byDefault ? "View default" : "Any", selected: !current() },
+              ...choices().map(value => ({ value, label: choiceLabel(property.key, value), selected: selected.has(value) })), more()];
+          },
+          choose: value => {
+            if (value === "\u0000more") { this.showEditor(property, row); this.closeDropdown(true); return; }
+            if (value === "\u0000any") { setFilter(undefined); return; }
+            const selected = selection();
+            if (selected.has(value)) selected.delete(value); else selected.add(value);
+            // Back at exactly the view's own choice, there is no filter to keep.
+            const byDefault = implicit();
+            const unchanged = byDefault.length > 0 && selected.size === byDefault.length && byDefault.every(item => selected.has(item));
+            setFilter(selected.size && !unchanged ? { operator: "is", values: [...selected] } : undefined);
+          }
+        };
+      }
       if (property.key === "title") return {
         label, multi: false,
         input: {

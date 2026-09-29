@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
+import { setTagFormat } from "../src/task-tags";
 import { installObsidianDom } from "./helpers/obsidian-dom";
 import { animateCardClose, animateCardOpen, cardNotes, renderThingsTaskCard, typedTags, type TaskCardOptions } from "../src/things-task-card";
 import { descriptionLines } from "../src/task-description";
@@ -280,5 +281,55 @@ describe("Things task card", () => {
     notes.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     notes.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
     expect(options.collapse).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("the card title's highlight", () => {
+  it("marks what typing into the title will set, behind the text", () => {
+    const { element } = card("- [ ] Call mom", { dateFormat: "YYYY-MM-DD" });
+    const title = element.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    const layer = element.querySelector<HTMLElement>(".tm-things-card-title-backdrop")!;
+    expect(layer.getAttribute("aria-hidden")).toBe("true");
+    expect(layer.querySelector(".tm-nlp-token")).toBeNull();
+    title.value = "Call mom friday p1 #[[home]]";
+    title.dispatchEvent(new Event("input"));
+    expect(Array.from(layer.querySelectorAll(".tm-nlp-token")).map(mark => mark.textContent)).toEqual(["friday", "p1", "#[[home]]"]);
+    expect(layer.textContent).toBe("Call mom friday p1 #[[home]] ");
+  });
+});
+
+describe("the card's properties while typing its title", () => {
+  it("show what tokens typed into the title set, before saving", () => {
+    const { element } = card("- [ ] Call mom", { dateFormat: "YYYY-MM-DD", project: { label: "Inbox", choose: vi.fn() } });
+    const toolbar = () => Array.from(element.querySelectorAll(".tm-things-card-toolbar .clickable-icon")).map(button => button.getAttribute("aria-label"));
+    const lines = () => Array.from(element.querySelectorAll(".tm-things-card-property .tm-things-card-label")).map(label => label.textContent);
+    expect(toolbar()).toEqual(["When", "Tags", "Checklist", "Priority", "Repeat", "Deadline"]);
+    const title = element.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    title.value = "Call mom p1 {2027-03-05} #[[home]] ~[[Work]]";
+    title.dispatchEvent(new Event("input"));
+    expect(lines()).toEqual(["High priority", "Deadline: Fri, Mar 5, 2027"]);
+    expect(Array.from(element.querySelectorAll(".tm-things-card-tags .tm-things-card-tag:not(.tm-things-add-tag)")).map(tag => tag.textContent)).toEqual(["home"]);
+    expect(toolbar()).toEqual(["When", "Checklist", "Repeat"]);
+    expect(element.querySelector(".tm-things-card-project-label")!.textContent).toBe("Work");
+    expect(element.querySelector(".tm-things-card-head .tm-task-checkbox")!.classList.contains("is-p1")).toBe(true);
+    // Taking the tokens out again puts the card back.
+    title.value = "Call mom";
+    title.dispatchEvent(new Event("input"));
+    expect(lines()).toEqual([]);
+    expect(toolbar()).toEqual(["When", "Tags", "Checklist", "Priority", "Repeat", "Deadline"]);
+    expect(element.querySelector(".tm-things-card-project-label")!.textContent).toBe("Inbox");
+  });
+});
+
+describe("#tag tags in the card title", () => {
+  afterEach(() => setTagFormat("wikilink"));
+  it("marks them as tags and shows them among the card's tags while typing", () => {
+    setTagFormat("hash");
+    const { element } = card("- [ ] Call mom", { dateFormat: "YYYY-MM-DD" });
+    const title = element.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    title.value = "Call mom #family";
+    title.dispatchEvent(new Event("input"));
+    expect(Array.from(element.querySelectorAll(".tm-things-card-title-backdrop .tm-nlp-token.is-tag")).map(mark => mark.textContent)).toEqual(["#family"]);
+    expect(Array.from(element.querySelectorAll(".tm-things-card-tags .tm-things-card-tag:not(.tm-things-add-tag)")).map(tag => tag.textContent)).toEqual(["family"]);
   });
 });

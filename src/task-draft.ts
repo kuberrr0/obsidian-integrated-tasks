@@ -34,10 +34,14 @@ const TYPED: Array<keyof ParsedTaskMetadata> = ["scheduledDate", "scheduledTime"
  * "Plan for tomorrow" keeps its words. `~[[Note]]` moves the task unless `move` is off.
  */
 export function draftFromTitle(task: Task, text: string, reference = new Date(), dateFormat?: string, move = true): TaskDraft {
-  const draft = draftFromTask(task);
-  const parsed = parseEditedTaskInput(text.trim(), task.title, reference, dateFormat);
-  if (!parsed) return { ...draft, title: text.trim() || task.title };
-  const next: TaskDraft = { ...draft, title: parsed.title.trim() || task.title };
+  return draftWithTitle(draftFromTask(task), task.title, text, reference, dateFormat, move);
+}
+
+/** `draftFromTitle` from any starting values (`draft`, whose title was `original`), such as the task editor's. */
+export function draftWithTitle(draft: TaskDraft, original: string, text: string, reference = new Date(), dateFormat?: string, move = true): TaskDraft {
+  const parsed = parseEditedTaskInput(text.trim(), original, reference, dateFormat);
+  if (!parsed) return { ...draft, title: text.trim() || original };
+  const next: TaskDraft = { ...draft, title: parsed.title.trim() || original };
   const values = next as unknown as Record<string, unknown>;
   for (const key of TYPED) if (parsed[key] !== undefined) values[key] = parsed[key];
   if (parsed.tags?.length) next.tags = [...new Set([...(draft.tags ?? []), ...parsed.tags])];

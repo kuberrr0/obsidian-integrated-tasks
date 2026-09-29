@@ -33,8 +33,8 @@ describe("task menu", () => {
     const { handle } = menu();
     const labels = Array.from(handle.element.querySelectorAll("button")).map(item => item.getAttribute("aria-label") ?? item.querySelector(".tm-task-menu-label")?.textContent);
     expect(labels).toEqual(["Complete", "Today", "Tomorrow", "Next week", "Pick a date", "P1", "P2", "P3", "Project", "Deadline", "Duplicate", "Delete"]);
-    expect(Array.from(handle.element.querySelectorAll(".tm-task-menu-shortcut")).map(item => item.textContent)).toEqual(["D", "P", "G", "⇧D"]);
-    expect(document.activeElement?.textContent).toBe("Complete");
+    expect(Array.from(handle.element.querySelectorAll(".tm-task-menu-shortcut")).map(item => item.textContent)).toEqual(["C", "D", "P", "G", "⇧D"]);
+    expect(document.activeElement?.querySelector(".tm-task-menu-label")?.textContent).toBe("Complete");
   });
 
   it("applies a date or priority and closes, returning focus to the row", () => {
@@ -69,6 +69,7 @@ describe("task menu", () => {
     const { handle, calls, button, key } = menu();
     key("g");
     expect(calls.project).toHaveBeenCalledOnce();
+    expect(calls.complete).not.toHaveBeenCalled();
     key("D", true);
     expect(calls.deadline).toHaveBeenCalledOnce();
     key("d");
@@ -146,4 +147,11 @@ describe("duplicating tasks", () => {
     // A subtask selected with its parent is copied once, inside the parent's copy.
     expect(duplicateTaskBlocks(content, [child, a])).toBe(duplicateTaskBlocks(content, [a]));
   });
+});
+
+it("completes from its letter", () => {
+  const { calls, key, handle } = menu();
+  key("c");
+  expect(calls.complete).toHaveBeenCalledOnce();
+  expect(handle.element.isConnected).toBe(false);
 });
