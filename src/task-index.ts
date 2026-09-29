@@ -59,7 +59,7 @@ export class TaskIndex {
   // Notes parsed since the last cache write, with what they were parsed from.
   private readonly unsaved = new Map<string, NoteScan>();
   private readonly unsavedDeletes = new Set<string>();
-  private saveTimer?: ReturnType<typeof setTimeout>;
+  private saveTimer?: number;
   private firstUnsaved?: number;
 
   constructor(
@@ -177,7 +177,7 @@ export class TaskIndex {
     const { ignoredPaths = [], ignoredTags = [] } = this.getSettings();
     if (isIgnoredPath(file.path, ignoredPaths)) return true;
     if (!ignoredTags.length) return false;
-    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
     return frontmatterTags(frontmatter).some(tag => isIgnoredTag(tag, ignoredTags));
   }
 
@@ -401,10 +401,12 @@ export class TaskIndex {
     for (let start = 0; start < files.length; start += SCAN_BATCH) {
       if (this.destroyed) return false;
       // One unreadable note (for example, deleted mid-scan) must not stop the rest.
-      await Promise.all(files.slice(start, start + SCAN_BATCH).map((file) => this.installCached(file, cached?.get(file.path), day) ? undefined : this.scanFile(file, force)
+      // Notes unchanged since the saved index are installed from it; the rest are read.
+      const unread = files.slice(start, start + SCAN_BATCH).filter((file) => !this.installCached(file, cached?.get(file.path), day));
+      await Promise.all(unread.map((file) => this.scanFile(file, force)
         .catch((error: unknown) => console.error(`Task manager could not index ${file.path}`, error))));
       if (performance.now() - yielded > SCAN_SLICE_MS) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
         yielded = performance.now();
       }
     }
@@ -482,13 +484,13 @@ export class TaskIndex {
   private scheduleSave(): void {
     if (this.destroyed) return;
     this.firstUnsaved ??= Date.now();
-    clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => void this.saveCache(), Math.max(0, Math.min(SAVE_DELAY_MS, this.firstUnsaved + SAVE_MAX_DELAY_MS - Date.now())));
+    window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => void this.saveCache(), Math.max(0, Math.min(SAVE_DELAY_MS, this.firstUnsaved + SAVE_MAX_DELAY_MS - Date.now())));
   }
 
   /** Writes queued notes in one batch, from the tasks already parsed. */
   private async saveCache(): Promise<void> {
-    clearTimeout(this.saveTimer);
+    window.clearTimeout(this.saveTimer);
     this.saveTimer = undefined;
     this.firstUnsaved = undefined;
     if (!this.cache) return;

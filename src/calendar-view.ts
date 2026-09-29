@@ -316,10 +316,10 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
           handle.setAttribute("aria-valuenow", String(boundary));
           handle.setAttribute("aria-valuetext", minuteTime(boundary));
         };
-        let keyTimer: ReturnType<typeof setTimeout> | undefined;
+        let keyTimer: number | undefined;
         const reset = (): void => { range = { start: begin, duration: end - begin }; restore(); };
         const save = (): void => {
-          clearTimeout(keyTimer);
+          window.clearTimeout(keyTimer);
           keyTimer = undefined;
           if (range.start === begin && range.duration === end - begin) { reset(); return; }
           moving = true;
@@ -362,22 +362,22 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         handle.addEventListener("keydown", event => {
           if (event.key === "Escape" && keyTimer !== undefined) {
             event.preventDefault(); event.stopPropagation();
-            clearTimeout(keyTimer); keyTimer = undefined; reset();
+            window.clearTimeout(keyTimer); keyTimer = undefined; reset();
             return;
           }
           if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
           event.preventDefault();
           event.stopPropagation();
           if (moving) return;
-          clearTimeout(keyTimer);
-          keyTimer = setTimeout(save, KEY_SAVE_DELAY_MS);
+          window.clearTimeout(keyTimer);
+          keyTimer = window.setTimeout(save, KEY_SAVE_DELAY_MS);
           card.addClass("is-resizing");
           update((edge === "start" ? range.start : range.start + range.duration) + (event.key === "ArrowUp" ? -15 : 15));
         });
         handle.addEventListener("keyup", event => {
           if (keyTimer === undefined || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
-          clearTimeout(keyTimer);
-          keyTimer = setTimeout(save, KEY_SAVE_DELAY_MS);
+          window.clearTimeout(keyTimer);
+          keyTimer = window.setTimeout(save, KEY_SAVE_DELAY_MS);
         });
         handle.addEventListener("blur", () => { if (keyTimer !== undefined) save(); });
       }

@@ -142,7 +142,7 @@ export function parseTaskLine(
   tokenRanges?: ParsedTokenRange[],
   fallbackDateFormats: string[] = []
 ): ParsedTaskLine | undefined {
-  return parseLine(line, reference, dateFormat, naturalDates, tokenRanges as LineRange[] | undefined, fallbackDateFormats, false);
+  return parseLine(line, reference, dateFormat, naturalDates, tokenRanges, fallbackDateFormats, false);
 }
 
 function parseLine(

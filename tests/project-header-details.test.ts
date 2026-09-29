@@ -87,7 +87,7 @@ it("shows the Things dates in the Things style: one calendar line whose start an
     const root = new Element(), edit = vi.fn();
     renderProjectHeaderDetails(root as never, { ...project, scheduledDate: "2026-09-20", endDate: "2027-01-10", deadline: "2026-10-25" }, edit, "YYYY-MM-DD", now, undefined, true);
     const [dates, deadline] = root.children;
-    expect(dates.cls).toBe("tm-things-card-property tm-things-project-dates");
+    expect(dates.cls).toBe("tm-things-card-property tm-things-project-dates is-dated");
     expect(deadline.cls).toBe("tm-things-card-property tm-things-project-deadline");
     const [icon, label] = dates.children;
     expect(icon.cls).toBe("tm-things-card-icon");

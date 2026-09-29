@@ -116,7 +116,7 @@ const STORE = "notes";
 
 function defaultFactory(): IDBFactory | undefined {
   // Reading indexedDB throws in some sandboxed and private contexts.
-  try { return globalThis.indexedDB ?? undefined; } catch { return undefined; }
+  try { return window.indexedDB ?? undefined; } catch { return undefined; }
 }
 
 /** Kept outside the vault so sync services do not copy it or churn on every edit. Any failure means no cache. */

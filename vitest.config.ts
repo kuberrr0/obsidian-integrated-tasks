@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
-    setupFiles: ["tests/setup-tag-format.ts"]
+    setupFiles: ["tests/setup-window.ts", "tests/setup-tag-format.ts"]
   },
   resolve: {
     alias: {

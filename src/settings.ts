@@ -13,7 +13,7 @@ type SettingGroup = typeof SETTING_GROUPS[number];
 export const TEXT_SETTING_DELAY_MS = 500;
 
 export class TaskManagerSettingTab extends PluginSettingTab {
-  private readonly pendingText = new Map<string, { timer: ReturnType<typeof setTimeout>; apply: () => Promise<void> }>();
+  private readonly pendingText = new Map<string, { timer: number; apply: () => Promise<void> }>();
 
   constructor(app: App, private readonly plugin: TaskManagerPlugin) {
     super(app, plugin);
@@ -21,8 +21,8 @@ export class TaskManagerSettingTab extends PluginSettingTab {
 
   private applySoon(key: string, apply: () => Promise<void>): void {
     const pending = this.pendingText.get(key);
-    if (pending) clearTimeout(pending.timer);
-    const timer = setTimeout(() => {
+    if (pending) window.clearTimeout(pending.timer);
+    const timer = window.setTimeout(() => {
       this.pendingText.delete(key);
       void apply().catch(error => new Notice(String(error)));
     }, TEXT_SETTING_DELAY_MS);
@@ -32,7 +32,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
   /** Apply edits still waiting when the settings page closes. */
   hide(): void {
     for (const pending of this.pendingText.values()) {
-      clearTimeout(pending.timer);
+      window.clearTimeout(pending.timer);
       void pending.apply().catch(error => new Notice(String(error)));
     }
     this.pendingText.clear();
@@ -187,7 +187,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           })); }
       },
       {
-        section: "Appearance" as SettingGroup,
+        section: "Appearance",
         name: "Show subtasks in task views",
         desc: "List subtasks as their own rows under their task. When off, they appear in the task's card, and a subtask shows on its own only in views its task is not in.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showSubtasks).onChange(async value => {
@@ -201,7 +201,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         ["calendarProjectColors", "Color calendar tasks by project", "Tint each task in the calendar with its project's color."],
         ["calendarPriorityColors", "Color calendar checkboxes by priority", "Color each calendar task's checkbox by its priority, as in lists."]
       ] as const).map(([key, name, desc]) => ({
-        section: "Calendar" as SettingGroup, name, desc,
+        section: "Calendar" as const, name, desc,
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
           this.plugin.settings[key] = value;
           await this.plugin.saveSettings();

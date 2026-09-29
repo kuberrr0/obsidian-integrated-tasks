@@ -105,7 +105,7 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
     if (creating) {
       const exact = options.choices.some(choice => choice.label.toLocaleLowerCase() === text);
       creating.hidden = !text || exact;
-      creating.querySelector(".tm-choice-create-label")!.setText(create!.label(input.value.trim()));
+      creating.querySelector(".tm-choice-create-label")!.setText(create.label(input.value.trim()));
     }
     if (hint) {
       const value = parsed();
@@ -129,7 +129,7 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
     }
     else if (event.key === "Enter" && fromInput) {
       // A typed value first; otherwise the first choice the search leaves, or creating one when none does.
-      const first = typed?.filter && input!.value.trim() ? shown[0] : undefined;
+      const first = typed?.filter && input.value.trim() ? shown[0] : undefined;
       const value = parsed()?.value ?? (first && first !== creating ? first.getAttribute("data-value") ?? undefined : undefined);
       if (value !== undefined) pick(value);
       else if (first === creating) runCreate();

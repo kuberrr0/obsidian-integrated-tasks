@@ -1773,7 +1773,7 @@ button.tm-options-select.is-open, button.tm-options-select:focus-visible {
 .tm-options-select-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tm-options-chevron { color: var(--text-muted); }
 .tm-options-chevron svg, .tm-options-check svg { width: 16px; height: 16px; }
-.tm-options-row:has(.tm-options-direction) button.tm-options-select { flex-basis: 128px; }
+.tm-options-row.has-direction button.tm-options-select { flex-basis: 128px; }
 button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 .tm-options-dropdown {
   position: absolute; z-index: 2; max-height: 360px; overflow-y: auto; padding: 6px;
@@ -2091,7 +2091,7 @@ button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-bl
 .tm-things-card-property.is-today .tm-things-card-icon { color: var(--color-yellow); }
 .tm-things-card-property.is-today .tm-things-card-icon svg,
 .tm-things-card-property .tm-things-card-icon svg.lucide-flag { fill: currentColor; }
-.tm-things-card-property:has(.lucide-calendar) .tm-things-card-icon { color: var(--color-red); }
+.tm-things-card-property.is-dated .tm-things-card-icon { color: var(--color-red); }
 .tm-things-card-property.is-urgent :is(.tm-things-card-label, .tm-things-card-icon) { color: var(--text-error); }
 /* The priority line's icon takes the checkbox's priority colour. */
 .tm-things-card-property.is-p1 .tm-things-card-icon { color: var(--text-error); }

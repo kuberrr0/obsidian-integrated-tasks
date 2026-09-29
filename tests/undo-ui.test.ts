@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const notices: Array<{ message: string | DocumentFragment; hide: ReturnType<typeof vi.fn> }> = [];
 vi.mock("obsidian", async importOriginal => ({
@@ -23,6 +23,7 @@ import type { App } from "obsidian";
 import TaskManagerPlugin from "../src/main";
 import { DEFAULT_SETTINGS } from "../src/types";
 import type { TaskChange } from "../src/task-store";
+import { installObsidianDom } from "./helpers/obsidian-dom";
 
 const text = (message: string | DocumentFragment) => typeof message === "string" ? message : message.textContent;
 
@@ -36,6 +37,7 @@ function plugin(changes: TaskChange[] = [{ label: "Completed “Pay rent”", fi
   return { instance, undo, refreshPath, offerUndo, changes };
 }
 
+beforeAll(() => installObsidianDom());
 beforeEach(() => { notices.length = 0; });
 
 describe("undo notices", () => {

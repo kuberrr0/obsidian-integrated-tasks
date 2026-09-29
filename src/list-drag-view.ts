@@ -86,12 +86,12 @@ export class ListDragController {
    * Moves something while every row it displaces slides from where it was to where it lands,
    * so rows glide aside as the drop gap opens, closes or moves.
    */
-  private slide(scope: ParentNode, change: () => void): void {
+  private slide(scope: Element | Document, change: () => void): void {
     const rows = Array.from(scope.querySelectorAll<HTMLElement>(".tm-task-item:not(.tm-drag-preview), .tm-drop-gap"));
     // Measured mid-slide, so a slide interrupted by the next one continues from where the row is.
     const before = new Map(rows.map(row => [row, row.getBoundingClientRect().top]));
     change();
-    const duration = motion(scope instanceof Document ? scope : (scope as Element).ownerDocument);
+    const duration = motion(scope.instanceOf(Document) ? scope : scope.ownerDocument);
     for (const row of rows) {
       this.slides.get(row)?.cancel();
       if (!row.isConnected || !duration || typeof row.animate !== "function") continue;
@@ -135,7 +135,7 @@ export class ListDragController {
   /** The nearest row above the gap that still shows (dragged rows are folded away). */
   private rowAboveGap(): HTMLElement | undefined {
     for (let row = this.gap?.previousElementSibling; row; row = row.previousElementSibling) {
-      if (row instanceof HTMLElement && this.rowTasks.has(row) && !row.classList.contains("tm-drag-source") && !row.classList.contains("tm-drag-preview")) return row;
+      if (row.instanceOf(HTMLElement) && this.rowTasks.has(row) && !row.classList.contains("tm-drag-source") && !row.classList.contains("tm-drag-preview")) return row;
     }
     return undefined;
   }
@@ -170,7 +170,7 @@ export class ListDragController {
   /** The last top-level task in a list, so a drop at the end of a section lands after it in the note. */
   private lastRow(list: HTMLElement): Task | undefined {
     const row = Array.from(list.children).reverse().find((row): row is HTMLElement =>
-      row instanceof HTMLElement && this.rowTasks.has(row) && !row.classList.contains("tm-drag-source")
+      row.instanceOf(HTMLElement) && this.rowTasks.has(row) && !row.classList.contains("tm-drag-source")
       && !row.classList.contains("tm-drag-preview") && depthOf(row) === 0);
     return row && this.rowTasks.get(row);
   }
@@ -195,7 +195,7 @@ export class ListDragController {
     for (const row of rows) {
       const end = subtreeEnd(row);
       for (let next: Element | null = row; next; next = next.nextElementSibling) {
-        if (next instanceof HTMLElement && next.classList.contains("tm-task-item")) all.add(next);
+        if (next.instanceOf(HTMLElement) && next.classList.contains("tm-task-item")) all.add(next);
         if (next === end) break;
       }
     }
@@ -234,7 +234,7 @@ export class ListDragController {
     const previous = lists[lists.indexOf(list) - 1];
     if (!previous) return { group, indicator: "group", gap: { element: list, where: "start", depth: 0 } };
     const last = Array.from(previous.children).reverse().find((row): row is HTMLElement =>
-      row instanceof HTMLElement && row.classList.contains("tm-task-item") && !row.classList.contains("tm-drag-source")
+      row.instanceOf(HTMLElement) && row.classList.contains("tm-task-item") && !row.classList.contains("tm-drag-source")
       && !row.classList.contains("tm-drag-preview") && depthOf(row) === 0 && this.targets.has(row));
     if (!last) return this.targets.get(previous)?.({ clientX: 0, clientY: 0 }) ?? { group, indicator: "group", gap: { element: list, where: "start", depth: 0 } };
     // Resolve as a point just below the row, level with its title: "after", neither nested nor outdented.

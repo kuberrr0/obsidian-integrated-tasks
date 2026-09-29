@@ -254,7 +254,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       let originScroll = 0;
       let delta = 0;
       let keyDelta = 0;
-      let keyTimer: ReturnType<typeof setTimeout> | undefined;
+      let keyTimer: number | undefined;
       const reset = (): void => { pointer = undefined; interacting = false; delta = 0; row.removeClass("is-resizing"); paint(project); };
       const save = async (change: number): Promise<void> => {
         const { field, value } = resizeProjectDate(project, handle, change);
@@ -263,7 +263,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
         reset();
       };
       const saveKeys = (): void => {
-        clearTimeout(keyTimer);
+        window.clearTimeout(keyTimer);
         keyTimer = undefined;
         const change = keyDelta;
         keyDelta = 0;
@@ -294,7 +294,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       button.addEventListener("keydown", event => {
         if (event.key === "Escape" && keyTimer !== undefined) {
           event.preventDefault();
-          clearTimeout(keyTimer); keyTimer = undefined; keyDelta = 0; reset();
+          window.clearTimeout(keyTimer); keyTimer = undefined; keyDelta = 0; reset();
           return;
         }
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -304,13 +304,13 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
         const { field, value } = resizeProjectDate(project, handle, keyDelta);
         paint({ ...project, [field]: value });
         row.addClass("is-resizing");
-        clearTimeout(keyTimer);
-        keyTimer = setTimeout(saveKeys, KEY_SAVE_DELAY_MS);
+        window.clearTimeout(keyTimer);
+        keyTimer = window.setTimeout(saveKeys, KEY_SAVE_DELAY_MS);
       });
       button.addEventListener("keyup", event => {
         if (keyTimer === undefined || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
-        clearTimeout(keyTimer);
-        keyTimer = setTimeout(saveKeys, KEY_SAVE_DELAY_MS);
+        window.clearTimeout(keyTimer);
+        keyTimer = window.setTimeout(saveKeys, KEY_SAVE_DELAY_MS);
       });
       button.addEventListener("blur", () => { if (keyTimer !== undefined) saveKeys(); });
     }

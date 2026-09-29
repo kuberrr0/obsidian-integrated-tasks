@@ -324,15 +324,17 @@ export class TaskStore {
   undo(change: TaskChange | undefined = this.lastChange()): Promise<string[]> {
     const result = this.queue.then(async () => {
       if (!change || !this.history.includes(change)) throw new Error("Nothing to undo.");
-      const targets = change.files.map(entry => ({ entry, file: this.app.vault.getAbstractFileByPath(entry.path) }));
-      for (const { entry, file } of targets) {
+      const targets: { entry: TaskChange["files"][number]; file: TFile }[] = [];
+      for (const entry of change.files) {
+        const file = this.app.vault.getAbstractFileByPath(entry.path);
         if (!(file instanceof TFile) || await this.app.vault.read(file) !== entry.after) {
           throw new Error(`Can't undo: ${entry.path.replace(/\.md$/i, "")} has changed since.`);
         }
+        targets.push({ entry, file });
       }
-      for (const { entry, file } of [...targets].reverse()) {
-        if (entry.before === undefined) await this.app.fileManager.trashFile(file as TFile);
-        else await this.app.vault.process(file as TFile, current => {
+      for (const { entry, file } of targets.reverse()) {
+        if (entry.before === undefined) await this.app.fileManager.trashFile(file);
+        else await this.app.vault.process(file, current => {
           if (current !== entry.after) throw new Error(`Can't undo: ${entry.path.replace(/\.md$/i, "")} has changed since.`);
           return entry.before!;
         });

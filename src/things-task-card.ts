@@ -70,8 +70,8 @@ export function longDate(date: string, now: Date): string {
 }
 
 function autosize(area: HTMLTextAreaElement): void {
-    area.style.height = "auto";
-    area.style.height = `${area.scrollHeight}px`;
+    area.setCssStyles({ height: "auto" });
+    area.setCssStyles({ height: `${area.scrollHeight}px` });
 }
 
 /**
@@ -124,7 +124,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     // Size now when already on the page, so the opening animation measures the final height.
     const fit = (): void => { autosize(title); autosize(notes); };
     if (card.isConnected) fit();
-    requestAnimationFrame(fit);
+    window.requestAnimationFrame(fit);
 
     // The checklist: subtask names edit in place, and Enter starts a new subtask right below.
     const checklist = card.createDiv({ cls: "tm-things-card-checklist", attr: { role: "list", "aria-label": "Subtasks" } });
@@ -291,7 +291,7 @@ export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags
     if (task.scheduledDate) {
         const isToday = task.scheduledDate === today;
         const day = isToday ? "Today" : longDate(task.scheduledDate, now);
-        line(isToday ? "star" : "calendar", time ? `${day}, ${time}` : day, "scheduledDate", undefined, isToday ? "is-today" : "");
+        line(isToday ? "star" : "calendar", time ? `${day}, ${time}` : day, "scheduledDate", undefined, isToday ? "is-today" : "is-dated");
     } else if (time) line("clock", time, task.scheduledTime ? "scheduledDate" : "durationMinutes");
     if (task.priority) line("signal", `${PRIORITY_NAMES[task.priority]} priority`, "priority", `P${task.priority}`, `is-p${task.priority}`);
     if (task.repeat) line("repeat", `Repeats ${repeatLabel(task.repeat).toLowerCase()}`, "repeat");

@@ -229,12 +229,9 @@ export default class TaskManagerPlugin extends Plugin {
   /** A short notice after each task action, with an Undo button. */
   private offerUndo(change: TaskChange): void {
     if (!this.settings.showUndoNotices) return;
-    const fragment = document.createDocumentFragment();
-    fragment.append(`${change.label}. `);
-    const button = document.createElement("button");
-    button.className = "tm-undo-button";
-    button.textContent = "Undo";
-    fragment.append(button);
+    const fragment = createFragment();
+    fragment.appendText(`${change.label}. `);
+    const button = fragment.createEl("button", { cls: "tm-undo-button", text: "Undo" });
     const notice = new Notice(fragment, 6000);
     button.addEventListener("click", event => {
       event.stopPropagation();
@@ -640,7 +637,7 @@ export default class TaskManagerPlugin extends Plugin {
       if (file instanceof TFile && file.extension === "md") this.taskModeController?.renamePath(oldPath, file.path);
       for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
         const viewState = leaf.getViewState();
-        const state = (viewState.state ?? {}) as Record<string, unknown>;
+        const state = viewState.state ?? {};
         const next: Record<string, unknown> = { ...state };
         let path: string | undefined;
         for (const key of ["pagePath", "projectPath"] as const) {
@@ -659,7 +656,7 @@ export default class TaskManagerPlugin extends Plugin {
     const deleted = (path: unknown): boolean => typeof path === "string" &&
       (file instanceof TFolder ? path.startsWith(`${file.path}/`) : path === file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
-      const state = (leaf.getViewState().state ?? {}) as Record<string, unknown>;
+      const state = leaf.getViewState().state ?? {};
       if (deleted(state.pagePath) || deleted(state.projectPath)) leaf.detach();
     }
   }

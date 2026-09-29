@@ -49,7 +49,7 @@ function editable(element: HTMLElement, label: string, field: keyof ProjectDraft
 /** The Things dates: a calendar line reading "Mon, Sep 14 – Fri, Oct 16", as an open task card shows its date; each end opens its own editor. */
 export function renderThingsProjectDates(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date()): void {
     if (!project.scheduledDate && !project.endDate) return;
-    const dates = parent.createSpan({ cls: "tm-things-card-property tm-things-project-dates" });
+    const dates = parent.createSpan({ cls: "tm-things-card-property tm-things-project-dates is-dated" });
     setIcon(dates.createSpan({ cls: "tm-things-card-icon", attr: { "aria-hidden": "true" } }), "calendar");
     const label = dates.createSpan({ cls: "tm-things-card-label" });
     if (project.scheduledDate) {

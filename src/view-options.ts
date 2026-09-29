@@ -30,7 +30,7 @@ interface DropdownSpec {
   multi: boolean;
   options(): Option[];
   choose(value: string): void;
-  input?: { placeholder: string; value(): string; change(value: string): void };
+  input?: { placeholder: string; value: () => string; change: (value: string) => void };
 }
 
 const SORTS: Array<[TaskSort, string]> = [
@@ -168,6 +168,7 @@ export class ViewOptionsPanel {
       options: () => SORTS.map(([value, label]) => ({ value, label, selected: this.host.state().sort === value })),
       choose: value => { this.host.update({ sort: value as TaskSort }); this.sync(); this.closeDropdown(true); }
     }));
+    sortRow.addClass("has-direction");
     this.directionButton = sortRow.createEl("button", { cls: "tm-options-direction clickable-icon", attr: { type: "button", "data-tm-focus-key": "option-direction" } });
     this.directionButton.addEventListener("click", () => { this.host.update({ descending: !this.host.state().descending }); this.sync(); });
     const groupRow = this.row(sorting, "layers", "Group");
@@ -381,7 +382,7 @@ export class ViewOptionsPanel {
     const close = header.createEl("button", { cls: "clickable-icon", attr: { type: "button", "aria-label": `Hide ${property.label} conditions` } });
     setIcon(close, "x");
     close.addEventListener("click", () => {
-      editor!.remove();
+      editor.remove();
       this.editors.delete(property.key);
       this.summaries.get(property.key)?.focus();
     });

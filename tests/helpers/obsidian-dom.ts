@@ -21,7 +21,8 @@ function apply(element: HTMLElement, info?: Info): void {
 }
 
 export function installObsidianDom(): void {
-  const targets = [HTMLElement.prototype, DocumentFragment.prototype] as unknown as Array<Record<string, unknown>>;
+  // happy-dom's fragments may not inherit from the global DocumentFragment.
+  const targets = [...new Set([HTMLElement.prototype, DocumentFragment.prototype, Object.getPrototypeOf(document.createDocumentFragment()) as object])] as unknown as Array<Record<string, unknown>>;
   for (const proto of targets) {
     proto.createEl = function (this: Node, tag: string, info?: Info, callback?: (element: HTMLElement) => void) {
       const element = document.createElement(tag);
@@ -36,11 +37,20 @@ export function installObsidianDom(): void {
     proto.setText = function (this: Node, text: string) { this.textContent = text; };
     proto.appendText = function (this: Node, text: string) { this.appendChild(document.createTextNode(text)); };
   }
+  (Node.prototype as unknown as Record<string, unknown>).instanceOf = function (this: Node, type: new () => unknown) { return this instanceof type; };
+  // Obsidian's global helpers make detached elements and fragments.
+  const global = globalThis as unknown as Record<string, unknown>;
+  global.createFragment = (callback?: (fragment: DocumentFragment) => void) => { const fragment = document.createDocumentFragment(); callback?.(fragment); return fragment; };
+  for (const [name, tag] of [["createDiv", "div"], ["createSpan", "span"]] as const) {
+    global[name] = (info?: Info) => (document.createDocumentFragment() as unknown as { createEl: (tag: string, info?: Info) => HTMLElement }).createEl(tag, info);
+  }
+  global.createEl = (tag: string, info?: Info) => (document.createDocumentFragment() as unknown as { createEl: (tag: string, info?: Info) => HTMLElement }).createEl(tag, info);
   const element = HTMLElement.prototype as unknown as Record<string, unknown>;
   element.addClass = function (this: HTMLElement, ...names: string[]) { this.classList.add(...names); };
   element.removeClass = function (this: HTMLElement, ...names: string[]) { this.classList.remove(...names); };
   element.toggleClass = function (this: HTMLElement, name: string, value: boolean) { this.classList.toggle(name, value); };
   element.hasClass = function (this: HTMLElement, name: string) { return this.classList.contains(name); };
+  element.setCssStyles = function (this: HTMLElement, styles: Partial<CSSStyleDeclaration>) { Object.assign(this.style, styles); };
   element.setAttr = function (this: HTMLElement, name: string, value: string) { this.setAttribute(name, value); };
   for (const proto of [HTMLElement.prototype, Document.prototype] as unknown as object[]) {
     Object.defineProperty(proto, "win", { configurable: true, get(this: Node) { return (this as Document).defaultView ?? this.ownerDocument?.defaultView ?? window; } });
