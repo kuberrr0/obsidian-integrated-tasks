@@ -200,6 +200,7 @@ Select tasks to change their dates, priorities, tags, or other details together.
 | Select a range | Shift + click |
 | Add to your selection | Cmd/Ctrl + click |
 | Select a range from the keyboard | Shift + ↑ / ↓ |
+| Select every task in the view | Cmd/Ctrl + A |
 | Clear your selection | Click outside the selected tasks, or press Escape while a selected task is focused |
 
 Right-click a task, or run **Open task menu**, for its menu; with several tasks selected it changes them all:

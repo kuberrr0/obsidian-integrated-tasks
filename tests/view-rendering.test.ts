@@ -398,6 +398,18 @@ describe("undo and snooze", () => {
     expect(plugin.undoTaskChange).toHaveBeenCalledOnce();
   });
 
+  it("selects every task on Cmd+A, but not while typing in a field", async () => {
+    const { view, content } = await setup([note("A.md", 3)]);
+    await view.onOpen();
+    await view.setState({ mode: "all" });
+    const search = content().appendChild(document.createElement("input"));
+    key(search, "a", { metaKey: true });
+    expect(view.getSelectedTasks()).toEqual([]);
+    key(rows(content())[1], "a", { metaKey: true });
+    expect(view.getSelectedTasks().map(task => task.line)).toEqual([0, 1, 2]);
+    expect(rows(content()).every(row => row.classList.contains("is-selected"))).toBe(true);
+  });
+
   it("snoozes from the Shift+S list, offering Stop snoozing only for a snoozed task, which stays visible in All Tasks", async () => {
     const { view, content, store, index } = await setup([["A.md", "- [ ] Later >someday\n- [ ] Now"]]);
     const bulkUpdate = vi.fn().mockResolvedValue([]);

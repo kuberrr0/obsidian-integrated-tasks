@@ -204,6 +204,8 @@ export class TaskMainView extends ItemView {
       if (!mod) return;
       if (key === "k") { event.preventDefault(); this.plugin.openQuickSwitcher(); }
       else if (key === "z") { event.preventDefault(); void this.plugin.undoTaskChange(); }
+      // Selects every task the view shows (folded subtasks stay out, as they have no row).
+      else if (key === "a" && this.visibleTasks.length) { event.preventDefault(); this.selection.select(this.visibleTasks); this.updateSelection(); }
       else if (key === "c" && selected.length) { event.preventDefault(); void this.copyTasks(selected); }
       else if (key === "v") { event.preventDefault(); void this.pasteTasks(); }
       else if (key === "d" && selected.length) { event.preventDefault(); void this.commit(() => this.plugin.store.duplicate(selected), "Could not duplicate the tasks."); }

@@ -922,9 +922,10 @@ button.tm-gantt-handle.is-finish:focus-visible,
   max-height: none;
 }
 
+/* Selected tasks take the theme's text selection colour, as selected text does. */
 .tm-main-view .tm-task-row.is-selected,
 .tm-main-view .tm-calendar .tm-calendar-task.is-selected {
-  background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary));
+  background: var(--text-selection);
   box-shadow: none;
   border-color: transparent;
   border-radius: 6px;
@@ -1863,7 +1864,8 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   cursor: pointer;
 }
 .tm-things-box.tm-things-done { cursor: default; }
-.tm-things-box.tm-things-when.is-overdue { color: var(--text-error); }
+/* An overdue date sits on a faint tint of its own red, so it reads as the same red as an overdue deadline. */
+.tm-things-box.tm-things-when.is-overdue { background: color-mix(in srgb, var(--text-error) 15%, transparent); color: var(--text-error); }
 .tm-things-today { display: inline-flex; align-items: center; color: var(--color-yellow); cursor: pointer; }
 .tm-things-today svg { width: 13px; height: 13px; fill: currentColor; }
 .tm-things-repeat { display: inline-flex; align-items: center; color: var(--text-faint); cursor: pointer; }
@@ -1906,7 +1908,7 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
 .tm-things-deadline .tm-task-detail-icon svg { fill: currentColor; }
 .tm-things-secondary { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .tm-things-source { overflow: hidden; color: var(--text-muted); font-size: var(--font-ui-smaller); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-:is(.tm-things-box, .tm-things-tag, .tm-things-source, .tm-things-repeat):not(.tm-things-done):hover,
+:is(.tm-things-box, .tm-things-tag, .tm-things-source, .tm-things-repeat):not(.tm-things-done, .is-overdue):hover,
 .tm-things-deadline:not(.is-urgent):hover { color: var(--text-normal); }
 .tm-task-row.is-completed :is(.tm-things-lead, .tm-things-tag, .tm-things-deadline, .tm-things-secondary) { opacity: 0.7; }
 
@@ -1922,9 +1924,9 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
 .tm-main-view.tm-style-things .tm-section.is-alert h2 { color: var(--text-error); }
 .tm-main-view.tm-style-things .tm-section h2 .tm-section-count { background: none; padding: 0; color: var(--text-faint); }
 
-/* Selection: an accent-tinted rounded block; consecutive selected rows join into one. */
+/* Selection: a rounded block in the text selection colour; consecutive selected rows join into one. */
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item.is-selected {
-  background: color-mix(in srgb, var(--interactive-accent) 22%, var(--background-primary));
+  background: var(--text-selection);
   border-radius: 6px;
 }
 .tm-main-view.tm-style-things .tm-task-row.tm-task-item.is-selected:has(+ .tm-task-row.is-selected) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
@@ -2077,12 +2079,15 @@ button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-bl
 .tm-things-card-tag {
   padding: 1px 9px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--interactive-accent) 40%, var(--background-primary));
-  color: var(--text-normal);
+  /* The theme's tag colours, as tags show in notes. */
+  border: var(--tag-border-width) solid var(--tag-border-color);
+  background: var(--tag-background);
+  color: var(--tag-color);
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
   cursor: pointer;
 }
+.tm-things-card-tag:not(.tm-things-add-tag):hover { border-color: var(--tag-border-color-hover); background: var(--tag-background-hover); color: var(--tag-color-hover); }
 .tm-things-card-property { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-ui-small); cursor: pointer; }
 .tm-things-card-label { color: var(--text-normal); font-weight: var(--font-semibold); }
 .tm-things-card-extra { color: var(--text-muted); }
@@ -2161,9 +2166,10 @@ button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-bl
 .tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card.has-project-color {
   box-shadow: inset 3px 0 0 var(--tm-project-color), 0 1px 2px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.12);
 }
+/* The selection colour is laid over the card, which keeps its own background beneath. */
 .tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card.is-selected {
   border-radius: 10px;
-  background: color-mix(in srgb, var(--interactive-accent) 22%, var(--background-primary));
+  background: linear-gradient(var(--text-selection), var(--text-selection)), var(--background-secondary);
 }
 .tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-task-item.tm-things-board-card .tm-checkbox-target { align-self: start; padding-top: 3px; }
 .tm-main-view.tm-style-things .tm-kanban .tm-things-board-card .tm-task-content { display: flex; flex-direction: column; gap: 8px; padding: 0; }

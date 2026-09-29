@@ -234,7 +234,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
             renderAddTag(pills, { add: addTags, suggestions: options.tagSuggestions ?? [], tags, remove: options.removeTag }, true);
         });
         // The first subtask starts here; later ones follow with Enter.
-        if (!options.children.length) add("list-todo", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
+        if (!options.children.length) add("list-check", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
         if (!shown.priority) add("signal", "Priority", "priority", () => options.edit("priority"));
         if (!shown.repeat) add("repeat", "Repeat", "repeat", () => options.edit("repeat"));
         if (!shown.deadline) add("flag", "Deadline", "deadline", () => options.edit("deadline"));
