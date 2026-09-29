@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
+import { Platform } from "obsidian";
 import { installObsidianDom } from "./helpers/obsidian-dom";
-import { openChoicePopover, PRIORITY_CHOICES, type ChoiceInput } from "../src/choice-popover";
+import { openChoicePopover, placePopover, PRIORITY_CHOICES, type ChoiceInput } from "../src/choice-popover";
 import { parseRepeatInput } from "../src/parser";
 
 beforeAll(() => installObsidianDom());
@@ -122,5 +123,39 @@ describe("typed repeats", () => {
   it("reads rules with or without every, and common words", () => {
     expect(["every 3 days", "Monday", "2 weeks", "weekly", "fortnightly", "annually", "every other month", "", "sometimes", "every 0 days"].map(parseRepeatInput))
       .toEqual(["every 3 days", "every monday", "every 2 weeks", "every week", "every 2 weeks", "every year", "every other month", undefined, undefined, undefined]);
+  });
+});
+
+describe("popover placement", () => {
+  const rect = (top: number, height: number, left = 20, width = 100) => ({ top, bottom: top + height, left, right: left + width, width, height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+  function place(inSheet: boolean) {
+    const sheet = document.body.createDiv({ cls: inSheet ? "tm-bottom-sheet" : "" });
+    const anchor = sheet.createEl("button", { text: "When" });
+    const popover = document.body.createDiv();
+    vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(rect(400, 30));
+    vi.spyOn(popover, "getBoundingClientRect").mockReturnValue(rect(0, 200, 0, 240));
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+    placePopover(popover, anchor);
+    return popover.style.top;
+  }
+
+  it("opens at the top of the screen, centred, on phones", () => {
+    const platform = Platform as { isMobile?: boolean };
+    platform.isMobile = true;
+    try {
+      const popover = document.body.createDiv();
+      vi.spyOn(popover, "getBoundingClientRect").mockReturnValue(rect(0, 200, 0, 240));
+      vi.spyOn(window, "innerWidth", "get").mockReturnValue(400);
+      placePopover(popover, document.body.createEl("button"));
+      expect(popover.style.left).toBe("80px");
+      expect(popover.classList.contains("tm-popover-top")).toBe(true);
+      expect(popover.style.getPropertyValue("--tm-popover-top")).toBe("8px");
+    } finally { platform.isMobile = false; }
+  });
+
+  it("opens below its anchor when there is room, but rises from it in a bottom sheet", () => {
+    expect(place(false)).toBe("434px");
+    // Its bottom sits just above the button: 400 - 4 - 200.
+    expect(place(true)).toBe("196px");
   });
 });

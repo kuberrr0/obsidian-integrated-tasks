@@ -15,12 +15,12 @@ beforeAll(() => {
 // Saturday, Sep 19 2026.
 const now = new Date(2026, 8, 19, 12);
 
-function row(line: string, options: { grouping?: TaskGrouping; source?: string; todayMarker?: boolean } = {}) {
+function row(line: string, options: { grouping?: TaskGrouping; source?: string; todayMarker?: boolean; datesBelow?: boolean } = {}) {
   const lead = document.createElement("span"), inline = document.createElement("div"), secondary = document.createElement("div");
   const task = scanTasks("Note.md", line, now)[0];
   const edit = vi.fn(), openSource = vi.fn();
   renderThingsTaskDetails({ lead, inline, secondary }, task, {
-    now, grouping: options.grouping ?? "none", dateFormat: "MMM D, YYYY", tags: task.tags ?? [], source: options.source, todayMarker: options.todayMarker, edit, openSource
+    now, grouping: options.grouping ?? "none", dateFormat: "MMM D, YYYY", tags: task.tags ?? [], source: options.source, todayMarker: options.todayMarker, datesBelow: options.datesBelow, edit, openSource
   });
   return { lead, inline, secondary, edit, openSource };
 }
@@ -42,14 +42,23 @@ describe("Things labels", () => {
 });
 
 describe("Things task row", () => {
-  it("puts repeat and tags after the title, then date, time and deadline together at the end", () => {
+  it("on phones, puts the dates, time and deadline below the title, before the note", () => {
+    const { inline, secondary } = row("- [ ] Plan 2026-10-08 10:00 {2026-09-30} #[[Errand]]", { source: "Work.md", datesBelow: true });
+    expect(classes(inline)).toEqual(["tm-things-tag is-long"]);
+    expect(classes(secondary)).toEqual(["tm-things-trailing", "tm-things-source"]);
+    expect(secondary.querySelector(".tm-things-trailing")!.textContent).toBe("Oct 8, 10:00 AM11 days left");
+  });
+
+  it("puts repeat and tags after the title, then the date with its time and the deadline, as text, at the end", () => {
     const { lead, inline } = row("- [ ] Plan 2026-10-08 10:00 30m {2026-09-30} every week #[[Errand]] #[[Office]]");
     expect(lead.childElementCount).toBe(0);
     expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag is-long", "tm-things-tag is-long", "tm-things-trailing"]);
     const trailing = inline.querySelector<HTMLElement>(".tm-things-trailing")!;
     expect(Array.from(trailing.children).map(child => [child.className, child.textContent])).toEqual([
-      ["tm-things-box tm-things-when", "Oct 8"], ["tm-things-box tm-things-time", "10:00-10:30 AM"], ["tm-things-deadline", "11 days left"]
+      ["tm-things-date tm-things-when", "Oct 8, 10:00-10:30 AM"], ["tm-things-deadline", "11 days left"]
     ]);
+    // Today's star stands in for the date, so a time today reads by the clock.
+    expect(row("- [ ] Call 2026-09-19 15:00").inline.querySelector(".tm-things-when")!.textContent).toBe("3:00 PM");
   });
 
   it("marks a task with subtasks unless its subtasks are listed as rows", () => {
@@ -81,7 +90,7 @@ describe("Things task row", () => {
     expect(classes(row("- [ ] Call 2026-09-19").lead)).toEqual(["tm-things-today"]);
     const overdue = row("- [ ] Call 2026-09-10");
     expect(overdue.lead.childElementCount).toBe(0);
-    expect(overdue.inline.querySelector(".tm-things-when")!.className).toBe("tm-things-box tm-things-when is-overdue");
+    expect(overdue.inline.querySelector(".tm-things-when")!.className).toBe("tm-things-date tm-things-when is-overdue");
     expect(overdue.inline.querySelector(".tm-things-when")!.textContent).toBe("Sep 10");
     expect(row("- [ ] Call 2026-09-19", { todayMarker: false }).lead.childElementCount).toBe(0);
   });
@@ -106,7 +115,7 @@ describe("Things task row", () => {
     for (const grouping of ["date", "scheduledDate", "deadline", "scheduledTime", "repeat", "priority"] as const) {
       const { inline } = row(line, { grouping, source: "Work.md" });
       expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag is-long", "tm-things-trailing"]);
-      expect(inline.querySelectorAll(".tm-things-trailing > *")).toHaveLength(3);
+      expect(inline.querySelectorAll(".tm-things-trailing > *")).toHaveLength(2);
     }
     expect(row(line, { grouping: "tags" }).inline.querySelector(".tm-things-tag")).toBeNull();
     expect(row(line, { grouping: "source", source: "Work.md" }).secondary.childElementCount).toBe(0);

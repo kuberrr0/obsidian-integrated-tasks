@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 vi.mock("obsidian", async (importOriginal) => ({
   ...await importOriginal<typeof import("./obsidian-mock")>(),
@@ -686,20 +686,30 @@ it("creates a project note from a name alone, refusing an existing note", async 
   await expect(plugin.createProjectNote({ name: "Garden" })).rejects.toThrow("already exists");
 });
 
-it("inserts a task in the open view's context: a task view, a project or tag note, else the Inbox", () => {
+it("creates a new task in the open view's context: a task view, a project or tag note, else the Inbox", () => {
   const plugin = new TaskManagerPlugin({} as App, {} as never);
-  let taskView: { newTask: ReturnType<typeof vi.fn> } | null = { newTask: vi.fn() };
-  let note: { file: { path: string } } | null = null;
-  plugin.app = { workspace: { getActiveViewOfType: (type: unknown) => type === TaskMainView ? taskView : note } } as unknown as App;
+  const newTask = vi.fn();
+  const taskView = Object.assign(Object.create(TaskMainView.prototype) as TaskMainView, { newTask });
+  const note = (path: string) => Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, { file: { path } });
+  let active: unknown = taskView;
+  let recent: unknown = null;
+  plugin.app = { workspace: {
+    getActiveViewOfType: (type: new () => unknown) => active instanceof type ? active : null,
+    getMostRecentLeaf: () => recent ? { view: recent } : null
+  } } as unknown as App;
   (plugin as unknown as { index: unknown }).index = { isProject: (path: string) => path === "Work.md", tagForPath: (path: string) => path === "Tags/Errand.md" ? "Errand" : undefined };
   const open = vi.spyOn(plugin, "openEditor").mockImplementation(() => {});
-  plugin.insertTask();
-  expect(taskView.newTask).toHaveBeenCalledOnce();
+  plugin.newTask();
+  expect(newTask).toHaveBeenCalledOnce();
+  // From a sidebar, the context is the last view in the main area.
+  active = null; recent = taskView;
+  plugin.newTask();
+  expect(newTask).toHaveBeenCalledTimes(2);
   expect(open).not.toHaveBeenCalled();
-  taskView = null;
-  for (const path of ["Work.md", "Tags/Errand.md", "Loose.md"]) { note = { file: { path } }; plugin.insertTask(); }
-  note = null;
-  plugin.insertTask();
+  recent = null;
+  for (const path of ["Work.md", "Tags/Errand.md", "Loose.md"]) { active = note(path); plugin.newTask(); }
+  active = null;
+  plugin.newTask();
   expect(open.mock.calls.map(([state]) => state)).toEqual([
     { mode: "all", projectPath: "Work.md" }, { mode: "tags", tag: "Errand", pagePath: "Tags/Errand.md" }, { mode: "inbox" }, { mode: "inbox" }
   ]);

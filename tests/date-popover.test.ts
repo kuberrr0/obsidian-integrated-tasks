@@ -66,10 +66,10 @@ describe("reading the one input", () => {
 });
 
 describe("date popover", () => {
-  it("has one input, quick picks and a calendar, and shows the current value under the input", () => {
+  it("has one input, No date and a calendar, and shows the current value under the input", () => {
     const { handle, input, hint } = popover({ value: { date: "2026-09-28", time: "09:45", duration: 30 } });
     expect(handle.element.querySelectorAll("input")).toHaveLength(1);
-    expect(Array.from(handle.element.querySelectorAll(".tm-date-popover-choice")).map(row => row.textContent)).toEqual(["Today", "Tomorrow", "Next week", "No date"]);
+    expect(Array.from(handle.element.querySelectorAll(".tm-date-popover-choice")).map(row => row.textContent)).toEqual(["No date"]);
     expect(hint()).toBe("Mon, Sep 28, 2026, 9:45 AM · 30m");
     expect(handle.element.querySelector(".is-selected")!.getAttribute("data-date")).toBe("2026-09-28");
     expect(handle.element.querySelector(".is-today")!.getAttribute("data-date")).toBe("2026-09-29");
@@ -77,7 +77,7 @@ describe("date popover", () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it("saves and closes on a picked day or quick pick", () => {
+  it("saves and closes on a picked day or No date", () => {
     const first = popover();
     first.handle.element.querySelector<HTMLElement>('[data-date="2026-10-08"]')!.click();
     expect(first.save).toHaveBeenCalledExactlyOnceWith({ date: "2026-10-08" });
@@ -85,9 +85,6 @@ describe("date popover", () => {
     const second = popover({ value: { date: "2026-10-08", time: "09:00" } });
     second.find("No date").click();
     expect(second.save).toHaveBeenCalledExactlyOnceWith({ date: undefined, time: undefined });
-    const third = popover();
-    third.find("Next week").click();
-    expect(third.save).toHaveBeenCalledExactlyOnceWith({ date: "2026-10-05" });
   });
 
   it("previews what is typed, keeps text it does not understand, and saves on Enter", () => {

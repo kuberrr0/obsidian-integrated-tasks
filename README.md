@@ -59,7 +59,7 @@ A task can include:
 
 Tags go at the end of a task. **Tag format** in settings chooses how they're written, and only that form counts as a task tag: Obsidian's own `#tag` (the default; a space in a tag name becomes a hyphen, as in `#open-house`), or `#[[tag]]`, which links to a note named after the tag. Switching doesn't change your notes; **Convert notes** beside the setting, or the **Convert task tags to the tag format** command, rewrites the tags on your tasks into the chosen form after asking, as one change you can undo.
 
-Run **Insert task** to add a task where you are: in a tag's view the editor starts with that tag, in Today with today's date, in Upcoming with tomorrow's, and in a project with the project, all after a space with the cursor at the start, so you only type the title. It works the same from a project's or tag's note; elsewhere the task goes to your Inbox. In the Things style, Insert task (and a list's **+** button) adds a blank card right in the list instead, as Things does; close it without typing anything and the task is removed again.
+Run **Create new task** (or click **+** in the ribbon, or **Create task** in the task sidebar) to add a task where you are: in a tag's view the editor starts with that tag, in Today with today's date, in Upcoming with tomorrow's, and in a project with the project, all after a space with the cursor at the start, so you only type the title. It works the same from a project's or tag's note; elsewhere the task goes to your Inbox. A group's **+** button also starts the task with that group's value, such as its date or priority. In the Things style, these (and a list's **+** button) add a blank card right in the list, in its group, as Things does; close it without typing anything and the task is removed again.
 
 Below the text, buttons for **When**, **Deadline**, **Priority**, **Project**, **Tags** and **Repeat** show what the text sets and open a picker for each; a choice rewrites that part of the text. Editing a task works like a task card: the field holds just its title, its properties sit on the buttons, and a property typed into the title (such as `p1` or "tomorrow 3pm") sets it. The text stays plain text: whatever it will set is highlighted as you type, here and in a task card's title—dates, times and durations in blue, the deadline in red, a priority in its colour, tags in grey and the project in green. In the Things style, an open card's properties follow what you type into its title straight away.
 
@@ -232,9 +232,9 @@ Work on tasks right in the review, with the same checkboxes, keys, and swipes as
 
 ## Use it on your phone
 
-Swipe a task to the right to complete it, or to the left to snooze it until tomorrow. Both can be undone, like other changes.
+Swipe a task to the right to select or deselect it, or to the left to open its actions. Double-tap a task to open it. To move a task, press and hold it until it lifts, then drag it.
 
-On phones, the task editors open as a sheet from the bottom of the screen. Drag the sheet's handle down to close it.
+On phones, the task editor opens as a sheet from the top of the screen; drag its handle up to close it. The project editor opens from the bottom; drag its handle down. Popovers and menus open at the top of the screen.
 
 ## Undo a change
 

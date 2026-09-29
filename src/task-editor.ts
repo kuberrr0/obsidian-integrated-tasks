@@ -4,7 +4,7 @@ import type { TaskEditorPreset } from "./types";
 import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
 import { draftFromTask, draftWithTitle } from "./task-draft";
 import { formatTags } from "./task-tags";
-import { Modal, Notice, setIcon, type App } from "obsidian";
+import { Modal, Notice, Platform, setIcon, type App } from "obsidian";
 import { todayIso, tomorrowIso } from "./date";
 import { repeatLabel, serializeTask, serializeTaskInput } from "./parser";
 import { openDatePopover } from "./date-popover";
@@ -70,7 +70,8 @@ export class TaskEditorModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("tm-editor-modal");
-    this.stopBottomSheet = presentAsBottomSheet(this.modalEl, () => this.close());
+    // On phones the editor hangs from the top of the screen, clear of the keyboard, with its popovers above it.
+    this.stopBottomSheet = presentAsBottomSheet(this.modalEl, () => this.close(), Platform.isMobile);
     const { contentEl } = this;
     contentEl.empty();
     this.modalEl.setAttribute("aria-label", this.options.task ? "Edit task" : "New task");

@@ -119,7 +119,7 @@ export function describeWhen(value: DatePopoverValue): string {
 
 /**
  * A Things-like date picker: one natural-language input for the date, time and duration
- * ("next fri 3pm 30m"), Today / Tomorrow / Next week / No date, and a month calendar.
+ * ("next fri 3pm 30m"), No date, and a month calendar.
  * Picking a date saves and closes; Enter in the input, or a click outside, saves what was typed.
  * Escape closes without saving. Only one popover is open at a time.
  */
@@ -164,10 +164,6 @@ export function openDatePopover(options: DatePopoverOptions): DatePopover {
     if (!date) pending.time = undefined;
     close(true, false);
   };
-  divider();
-  choice("calendar", "Today", () => pickDate(today));
-  choice("sunrise", "Tomorrow", () => pickDate(addDays(today, 1)));
-  choice("square-arrow-right", "Next week", () => pickDate(nextWeek(today)));
   divider();
   choice("calendar-x", "No date", () => pickDate(undefined));
   divider();

@@ -17,6 +17,8 @@ export interface ThingsDetailsOptions extends TaskDetailsOptions {
     todayMarker?: boolean;
     /** Mark tasks that have subtasks; off where the subtasks are listed as rows themselves. */
     subtaskMark?: boolean;
+    /** Put the dates, time and deadline on the line below the title instead of at its end (on phones). */
+    datesBelow?: boolean;
 }
 
 /** "Tomorrow", a weekday within the coming week, then "Oct 8" (with the year outside the current one). */
@@ -35,8 +37,12 @@ export function thingsDeadlineLabel(date: string, now = new Date()): string {
     return `${count} day${count === 1 ? "" : "s"} ${days < 0 ? "ago" : "left"}`;
 }
 
-function box(parent: HTMLElement, cls: string, text: string, title: string): HTMLElement {
-    return parent.createSpan({ cls: `tm-things-box ${cls}`, text, attr: { title } });
+/** A date as plain text after its icon, as the deadline reads. */
+function dateText(parent: HTMLElement, cls: string, text: string, title: string, icon = "calendar"): HTMLElement {
+    const element = parent.createSpan({ cls: `tm-things-date ${cls}`, attr: { title } });
+    setIcon(element.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), icon);
+    element.createSpan({ text });
+    return element;
 }
 
 export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, options: ThingsDetailsOptions): void {
@@ -79,18 +85,22 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
         else editable(label, `Edit tags: ${tag}`, `tag:${tag}`, () => options.edit("tags"));
     }
 
-    // At the end of the line: date and time boxes, then the deadline.
-    const trailing = parts.inline.createSpan({ cls: "tm-things-trailing" });
-    if (done) box(trailing, "tm-things-done", taskDoneDateLabel(done, now), `Completed ${formatDate(done, options.dateFormat)}`);
-    else if (scheduled && scheduled !== today) editScheduled(box(trailing, `tm-things-when${scheduled < today ? " is-overdue" : ""}`, thingsDateLabel(scheduled, now), scheduledTitle));
+    // At the end of the line (or below the title): the date with its time, then the deadline, each as text after its icon.
+    const trailing = (options.datesBelow ? parts.secondary : parts.inline).createSpan({ cls: "tm-things-trailing" });
+    if (done) dateText(trailing, "tm-things-done", taskDoneDateLabel(done, now), `Completed ${formatDate(done, options.dateFormat)}`, "calendar-check");
     const time = taskTimeDurationLabel(
         show("scheduledTime") ? task.scheduledTime : undefined,
         show("duration") ? task.durationMinutes : undefined
     );
-    if (time) {
+    // Today's star stands in for its date, so a time today (or a time alone) reads by the clock.
+    const dated = Boolean(scheduled && scheduled !== today);
+    if (dated || time) {
         const hasTime = Boolean(task.scheduledTime && show("scheduledTime"));
-        const label = box(trailing, "tm-things-time", time, hasTime ? "Scheduled time" : "Duration");
-        editable(label, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, "time", () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
+        const label = [dated ? thingsDateLabel(scheduled!, now) : "", time].filter(Boolean).join(", ");
+        const when = dateText(trailing, `tm-things-when${dated && scheduled! < today ? " is-overdue" : ""}`, label,
+            dated ? scheduledTitle : hasTime ? "Scheduled time" : "Duration", dated ? "calendar" : "clock");
+        if (dated) editScheduled(when);
+        else editable(when, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, "time", () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
     }
     const due = task.deadline && showDate("deadline") ? thingsDeadlineLabel(task.deadline, now) : "";
     const dueTime = task.deadlineTime && show("deadlineTime") ? taskTimeLabel(task.deadlineTime) : "";
@@ -129,14 +139,14 @@ export function renderThingsProjectDetails(parts: ThingsRowParts, project: Proje
     // At the end of the line: the dates (a start still ahead reads like a task's; a range while it runs), then the deadline.
     const trailing = parts.inline.createSpan({ cls: "tm-things-trailing" });
     if (project.scheduledDate && project.endDate) {
-        const range = box(trailing, "tm-things-when", `${label(project.scheduledDate)} – ${label(project.endDate)}`,
+        const range = dateText(trailing, "tm-things-when", `${label(project.scheduledDate)} – ${label(project.endDate)}`,
             `${formatDate(project.scheduledDate, options.dateFormat)} – ${formatDate(project.endDate, options.dateFormat)}`);
         editable(range, `Edit project dates: ${range.textContent ?? ""}`, "project-date", () => options.edit("date"));
     } else if (project.scheduledDate && project.scheduledDate > today) {
-        const start = box(trailing, "tm-things-when", thingsDateLabel(project.scheduledDate, now), `Starts ${formatDate(project.scheduledDate, options.dateFormat)}`);
+        const start = dateText(trailing, "tm-things-when", thingsDateLabel(project.scheduledDate, now), `Starts ${formatDate(project.scheduledDate, options.dateFormat)}`);
         editable(start, `Edit project start date: ${start.textContent ?? ""}`, "project-date", () => options.edit("date"));
     } else if (project.endDate) {
-        const end = box(trailing, "tm-things-when", `Until ${label(project.endDate)}`, `Ends ${formatDate(project.endDate, options.dateFormat)}`);
+        const end = dateText(trailing, "tm-things-when", `Until ${label(project.endDate)}`, `Ends ${formatDate(project.endDate, options.dateFormat)}`);
         editable(end, `Edit project end date: ${end.textContent ?? ""}`, "project-end", () => options.edit("endDate"));
     }
     renderThingsProjectDeadline(trailing, project, options);

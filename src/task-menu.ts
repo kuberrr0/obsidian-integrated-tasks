@@ -1,7 +1,7 @@
 import { setIcon } from "obsidian";
 import { addDays } from "./calendar";
 import { nextWeek } from "./date-popover";
-import { placePopover, popoverHost } from "./choice-popover";
+import { pinPopoverToTop, placePopover, popoverHost } from "./choice-popover";
 
 type Priority = 1 | 2 | 3;
 
@@ -189,14 +189,16 @@ export function openActionMenu(options: ActionMenuOptions): TaskMenu {
     event.preventDefault(); event.stopPropagation();
   });
 
-  // At the pointer, flipped to stay inside the window.
+  // At the pointer, flipped to stay inside the window (on phones, at the top of the screen).
   const win = doc.defaultView ?? window;
-  const box = element.getBoundingClientRect();
-  const margin = 8;
-  const left = options.at.x + box.width <= win.innerWidth - margin ? options.at.x : options.at.x - box.width;
-  const top = options.at.y + box.height <= win.innerHeight - margin ? options.at.y : options.at.y - box.height;
-  element.style.left = `${Math.max(margin, Math.min(left, win.innerWidth - box.width - margin))}px`;
-  element.style.top = `${Math.max(margin, Math.min(top, win.innerHeight - box.height - margin))}px`;
+  if (!pinPopoverToTop(element)) {
+    const box = element.getBoundingClientRect();
+    const margin = 8;
+    const left = options.at.x + box.width <= win.innerWidth - margin ? options.at.x : options.at.x - box.width;
+    const top = options.at.y + box.height <= win.innerHeight - margin ? options.at.y : options.at.y - box.height;
+    element.style.left = `${Math.max(margin, Math.min(left, win.innerWidth - box.width - margin))}px`;
+    element.style.top = `${Math.max(margin, Math.min(top, win.innerHeight - box.height - margin))}px`;
+  }
 
   const outside = (event: PointerEvent): void => {
     const target = event.target as HTMLElement | null;

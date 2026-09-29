@@ -721,6 +721,9 @@ button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var
 }
 .tm-main-view .tm-task-row.tm-drag-preview,
 .tm-main-view .tm-task-row.tm-drag-preview * { pointer-events: none; }
+/* On touch screens a long press lifts the row, ready to drag; it holds no text selection or callout. */
+.tm-main-view .tm-task-item.is-drag-armed { background: var(--background-modifier-hover); box-shadow: 0 4px 14px rgb(0 0 0 / 22%); }
+body.is-mobile .tm-main-view .tm-task-item { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 /* Dragging lifts the rows out (their slots fold away) and a grey gap shows where they will land.
    The fold is a transient state that must beat every layout's row sizing, hence !important. */
 .tm-main-view .tm-task-row.tm-drag-preview { opacity: 1; border-radius: 6px; box-shadow: 0 8px 24px rgb(0 0 0 / 28%), 0 1px 3px rgb(0 0 0 / 20%); }
@@ -1640,6 +1643,21 @@ body .modal-container .modal.tm-bottom-sheet > .tm-editor-actions { flex-shrink:
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
 }
+/* On phones the task editor hangs from the top instead, its handle at the bottom; an upward swipe closes it. */
+body .modal-container.tm-bottom-sheet-container.is-top { align-items: flex-start; }
+body .modal-container .modal.tm-bottom-sheet.tm-bottom-sheet.is-top {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: 28px;
+  border-top: 0;
+  border-bottom: var(--modal-border-width, 1px) solid var(--modal-border-color, var(--background-modifier-border));
+  border-radius: 0 0 var(--radius-xl, 16px) var(--radius-xl, 16px);
+  animation-name: tm-sheet-down;
+}
+body .modal-container .modal.tm-bottom-sheet.is-top::before { top: auto; bottom: 10px; }
+@keyframes tm-sheet-down {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
 @media (prefers-reduced-motion: reduce) {
   body .modal-container .modal.tm-bottom-sheet.tm-bottom-sheet { animation: none; }
 }
@@ -1671,9 +1689,9 @@ body .modal-container .modal.tm-bottom-sheet > .tm-editor-actions { flex-shrink:
   opacity: .55;
   pointer-events: none;
 }
-.tm-task-item[data-swipe="complete"]::before { content: "Complete"; justify-content: flex-start; background: var(--color-green); }
-.tm-task-item[data-swipe="reopen"]::before { content: "Reopen"; justify-content: flex-start; background: var(--color-orange); }
-.tm-task-item[data-swipe="snooze"]::before { content: "Snooze until tomorrow"; justify-content: flex-end; background: var(--color-purple); }
+.tm-task-item[data-swipe="select"]::before { content: "Select"; justify-content: flex-start; background: var(--color-blue); }
+.tm-task-item[data-swipe="deselect"]::before { content: "Deselect"; justify-content: flex-start; background: var(--color-base-50, var(--text-faint)); }
+.tm-task-item[data-swipe="actions"]::before { content: "Actions"; justify-content: flex-end; background: var(--interactive-accent); }
 .tm-task-item.is-swipe-armed::before { opacity: 1; }
 
 /* Repeats and completion dates */
@@ -1805,6 +1823,10 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 @media (max-width: 480px) {
   .tm-options-panel { position: fixed; top: auto; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); left: 8px; width: auto; max-height: 80vh; }
 }
+/* On phones popovers and menus open at the top of the screen, below any notch, wherever they were opened from. */
+.tm-popover-top { top: calc(var(--tm-popover-top, 8px) + env(safe-area-inset-top, 0px)); }
+/* On phones it opens at the top of the screen, as every popover does there. */
+body.is-mobile .tm-options-panel { position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); right: 8px; bottom: auto; left: 8px; width: auto; max-height: 80vh; }
 @media (prefers-reduced-motion: no-preference) {
   .tm-options-panel:not([hidden]) { animation: tm-options-in 120ms ease-out; }
 }
@@ -1850,22 +1872,19 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 }
 
 .tm-things-lead { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
-.tm-things-box {
+/* Dates and times read as plain text after a calendar (or clock) icon, like the deadline. */
+.tm-things-date {
   display: inline-flex;
   align-items: center;
-  padding: 0 5px;
-  border-radius: 4px;
-  background: var(--background-modifier-hover);
+  gap: 5px;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   font-weight: var(--font-semibold);
-  line-height: 1.5;
   white-space: nowrap;
   cursor: pointer;
 }
-.tm-things-box.tm-things-done { cursor: default; }
-/* An overdue date sits on a faint tint of its own red, so it reads as the same red as an overdue deadline. */
-.tm-things-box.tm-things-when.is-overdue { background: color-mix(in srgb, var(--text-error) 15%, transparent); color: var(--text-error); }
+.tm-things-date.tm-things-done { cursor: default; }
+.tm-things-date.tm-things-when.is-overdue { color: var(--text-error); }
 .tm-things-today { display: inline-flex; align-items: center; color: var(--color-yellow); cursor: pointer; }
 .tm-things-today svg { width: 13px; height: 13px; fill: currentColor; }
 .tm-things-repeat { display: inline-flex; align-items: center; color: var(--text-faint); cursor: pointer; }
@@ -1892,6 +1911,8 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
   .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > .tm-things-tag.is-long { display: none; }
 }
 .tm-things-trailing { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; margin-inline-start: auto; padding-inline-start: 12px; }
+/* On phones they sit below the title, before the note the task lives in. */
+.tm-things-secondary > .tm-things-trailing { margin-inline-start: 0; padding-inline-start: 0; }
 .tm-things-checklist { display: inline-flex; align-items: center; color: var(--text-faint); }
 .tm-things-checklist svg { width: 12px; height: 12px; }
 .tm-things-deadline {
@@ -1906,9 +1927,9 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
 }
 .tm-things-deadline.is-urgent { color: var(--text-error); }
 .tm-things-deadline .tm-task-detail-icon svg { fill: currentColor; }
-.tm-things-secondary { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.tm-things-secondary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .tm-things-source { overflow: hidden; color: var(--text-muted); font-size: var(--font-ui-smaller); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-:is(.tm-things-box, .tm-things-tag, .tm-things-source, .tm-things-repeat):not(.tm-things-done, .is-overdue):hover,
+:is(.tm-things-date, .tm-things-tag, .tm-things-source, .tm-things-repeat):not(.tm-things-done, .is-overdue):hover,
 .tm-things-deadline:not(.is-urgent):hover { color: var(--text-normal); }
 .tm-task-row.is-completed :is(.tm-things-lead, .tm-things-tag, .tm-things-deadline, .tm-things-secondary) { opacity: 0.7; }
 
@@ -2108,7 +2129,9 @@ button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-bl
 .tm-things-card-property.tm-things-project-dates:hover .tm-things-card-label { text-decoration: none; }
 .tm-things-project-dates [role="button"] { cursor: pointer; }
 .tm-things-project-dates [role="button"]:hover { text-decoration: underline; text-decoration-color: var(--text-faint); }
-.tm-things-card-toolbar { display: flex; justify-content: flex-end; gap: 2px; margin-top: 4px; }
+.tm-things-card-toolbar { display: flex; justify-content: flex-end; gap: 2px; min-width: 0; margin-top: 4px; }
+/* The property buttons keep their size; the project button gives way, its name ending in an ellipsis. */
+.tm-things-card-toolbar > .clickable-icon { flex: none; }
 .tm-things-card-toolbar .clickable-icon { color: var(--text-faint); }
 .tm-things-card-toolbar .clickable-icon:hover { color: var(--text-normal); }
 
@@ -2467,8 +2490,10 @@ button.tm-task-menu-icon-button.is-p3 { color: var(--color-blue); }
 .tm-things-card-toolbar { align-items: center; }
 button.tm-things-card-project {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 5px;
+  min-width: 0;
   max-width: 60%;
   height: auto;
   margin-inline-end: auto;

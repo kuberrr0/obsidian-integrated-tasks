@@ -1,4 +1,4 @@
-import { setIcon } from "obsidian";
+import { Platform, setIcon } from "obsidian";
 import { parseRepeatInput, repeatLabel } from "./parser";
 import type { Project } from "./types";
 
@@ -175,8 +175,11 @@ export function popoverHost(anchor: HTMLElement): HTMLElement {
 /**
  * Position a fixed popover by its anchor, always inside the window: below it when there is room, otherwise
  * above; or, `beside` it (a menu item's submenu), to its right when there is room, otherwise to its left.
+ * In a bottom sheet (an editor on phones) it rises from the anchor instead, its bottom at the anchor, since
+ * the keyboard covers the space below.
  */
 export function placePopover(element: HTMLElement, anchorElement: HTMLElement, beside = false): void {
+  if (pinPopoverToTop(element)) return;
   const win = element.ownerDocument.defaultView ?? window;
   const anchor = anchorElement.getBoundingClientRect();
   const box = element.getBoundingClientRect();
@@ -186,11 +189,26 @@ export function placePopover(element: HTMLElement, anchorElement: HTMLElement, b
     left = anchor.right + 4 + box.width <= win.innerWidth - margin ? anchor.right + 4 : anchor.left - 4 - box.width;
     top = Math.min(anchor.top - 6, win.innerHeight - box.height - margin);
   } else {
-    top = anchor.bottom + 4 + box.height <= win.innerHeight - margin ? anchor.bottom + 4 : anchor.top - 4 - box.height;
+    const fitsBelow = anchor.bottom + 4 + box.height <= win.innerHeight - margin;
+    const fitsAbove = anchor.top - 4 - box.height >= margin;
+    const rise = anchorElement.closest(".tm-bottom-sheet") ? fitsAbove || !fitsBelow : !fitsBelow;
+    top = rise ? anchor.top - 4 - box.height : anchor.bottom + 4;
     left = Math.min(anchor.left, win.innerWidth - box.width - margin);
   }
   element.style.top = `${Math.max(margin, top)}px`;
   element.style.left = `${Math.max(margin, left)}px`;
+}
+
+/** On phones a popover (or menu) opens at the top of the screen, centred, wherever it was opened from. */
+export function pinPopoverToTop(element: HTMLElement): boolean {
+  if (!Platform.isMobile) return false;
+  const win = element.ownerDocument.defaultView ?? window;
+  const width = element.getBoundingClientRect().width;
+  // The stylesheet adds the safe area (a notch) to this offset.
+  element.addClass("tm-popover-top");
+  element.style.setProperty("--tm-popover-top", `${(win.visualViewport?.offsetTop ?? 0) + 8}px`);
+  element.style.left = `${Math.max(8, (win.innerWidth - width) / 2)}px`;
+  return true;
 }
 
 /** P1–P3 with their colours, and No priority below. */

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { installObsidianDom } from "./helpers/obsidian-dom";
 
 vi.mock("obsidian", async importOriginal => {
@@ -35,7 +35,9 @@ import { scanTasks } from "../src/parser";
 import { DEFAULT_SETTINGS, type Project } from "../src/types";
 
 beforeAll(() => installObsidianDom());
-afterEach(() => { document.body.innerHTML = ""; vi.unstubAllGlobals(); });
+// Date labels ("Thu", "Tomorrow") depend on today: a Monday, Sep 28 2026.
+beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026, 8, 28, 12)); });
+afterEach(() => { document.body.innerHTML = ""; vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 const projects: Project[] = [{ path: "Work.md", name: "Work", openTasks: 0, completedTasks: 0, archived: false }];
 
@@ -109,7 +111,7 @@ describe("property buttons in the task editor", () => {
     const { raw, button } = open();
     raw.value = "Call mom tomorrow about dinner";
     button("When").click();
-    document.querySelectorAll<HTMLElement>(".tm-date-popover button")[0].click();
+    document.querySelector<HTMLElement>(`.tm-date-popover [data-date="${todayIso()}"]`)!.click();
     const date = DEFAULT_SETTINGS.linkDates ? `[[${todayIso()}]]` : todayIso();
     expect(raw.value).toBe(`Call mom about dinner ${date}`);
     button("Tags").click();

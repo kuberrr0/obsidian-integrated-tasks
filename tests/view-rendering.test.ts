@@ -468,21 +468,44 @@ describe("today header, density and gestures", () => {
     expect(content().classList.contains("tm-density-compact")).toBe(true);
   });
 
-  it("completes on a right swipe and snoozes until tomorrow on a left swipe, touch only", async () => {
-    const { view, content, store, index } = await setup([note("A.md", 2)]);
+  it("toggles a task's selection on a right swipe and opens its actions on a left swipe, touch only", async () => {
+    const { view, content, store } = await setup([note("A.md", 2)]);
     await view.setState({ mode: "all" });
+    const lines = () => view.getSelectedTasks().map(task => task.line);
+    swipe(rows(content())[1], 100);
+    expect(lines()).toEqual([1]);
     swipe(rows(content())[0], 100);
-    expect(store.toggle).toHaveBeenCalledWith(index.allTasks()[0], true);
+    expect(lines()).toEqual([0, 1]);
+    swipe(rows(content())[1], 100);
+    expect(lines()).toEqual([0]);
+    expect(document.querySelector(".tm-task-menu")).toBeNull();
     swipe(rows(content())[1], -100);
-    await Promise.resolve();
-    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-    expect(store.bulkDrop).toHaveBeenLastCalledWith([index.allTasks()[1]], { property: "defer", value: todayIso(tomorrow) }, undefined, undefined);
-    store.toggle.mockClear(); store.bulkDrop.mockClear();
+    expect(document.querySelector(".tm-task-menu")).not.toBeNull();
+    // Short, mostly vertical, and mouse drags are no swipes.
+    document.body.querySelectorAll(".tm-task-menu").forEach(menu => menu.remove());
     swipe(rows(content())[0], 40);
-    swipe(rows(content())[0], 30, 120);
+    swipe(rows(content())[0], -30, 120);
+    swipe(rows(content())[0], -100, 0, "mouse");
     swipe(rows(content())[0], 100, 0, "mouse");
+    expect(lines()).toEqual([0]);
+    expect(document.querySelector(".tm-task-menu")).toBeNull();
     expect(store.toggle).not.toHaveBeenCalled();
-    expect(store.bulkDrop).not.toHaveBeenCalled();
+  });
+
+  it("opens a task on a double tap, once even when the browser also sends dblclick", async () => {
+    const { view, content, plugin } = await setup([note("A.md", 2)]);
+    plugin.settings.style = "griply";
+    await view.setState({ mode: "all" });
+    const tap = (row: HTMLElement) => { pointer(row, "pointerdown", 10, 10); row.click(); };
+    tap(rows(content())[0]);
+    expect(plugin.openEditor).not.toHaveBeenCalled();
+    tap(rows(content())[0]);
+    rows(content())[0].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: expect.objectContaining({ line: 0 }) }));
+    // Taps on two different tasks only select.
+    tap(rows(content())[0]); tap(rows(content())[1]);
+    expect(plugin.openEditor).toHaveBeenCalledOnce();
+    expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
   });
 
   it("opens the quick switcher on Cmd+K", async () => {
@@ -744,7 +767,7 @@ describe("Things card subtasks", () => {
   });
 });
 
-describe("Insert task in the Things style", () => {
+describe("Create new task in the Things style", () => {
   async function inserted() {
     const inbox = DEFAULT_SETTINGS.inboxPath;
     const ctx = await setup([[inbox, "- [ ] Existing"]]);
@@ -785,6 +808,32 @@ describe("Insert task in the Things style", () => {
     await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
     expect(extra.delete).not.toHaveBeenCalled();
     expect(extra.update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "New To-Do" }), expect.objectContaining({ title: "Buy milk", priority: 1 }));
+  });
+
+  it("starts a group's card with the group's value, as its heading's + button adds it", async () => {
+    const { extra, view, plugin, content } = await inserted();
+    const drafts: unknown[] = [];
+    (plugin as unknown as { newTaskDraft: (state: { preset?: object }) => object }).newTaskDraft = state => {
+      drafts.push(state.preset);
+      return { title: "", completed: false, indent: 0, destination: DEFAULT_SETTINGS.inboxPath, ...state.preset };
+    };
+    await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
+    view.newTask({ priority: 2 });
+    await vi.waitFor(() => expect(extra.create).toHaveBeenCalledTimes(2));
+    expect(drafts).toEqual([{ priority: 2 }]);
+    expect(extra.create).toHaveBeenLastCalledWith(expect.objectContaining({ title: "New To-Do", priority: 2 }));
+    await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).not.toBeNull());
+    expect(plugin.openEditor).not.toHaveBeenCalled();
+  });
+
+  it("opens the new card in its column on a board, too", async () => {
+    const { extra, view, plugin, content } = await inserted();
+    await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
+    await view.setState({ mode: "inbox", layout: "kanban" } as never);
+    view.newTask();
+    await vi.waitFor(() => expect(extra.create).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(content().querySelector(".tm-kanban .tm-things-card")).not.toBeNull());
+    expect(plugin.openEditor).not.toHaveBeenCalled();
   });
 
   it("opens the task editor in other styles", async () => {

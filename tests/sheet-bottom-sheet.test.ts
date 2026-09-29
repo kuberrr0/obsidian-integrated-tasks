@@ -62,6 +62,9 @@ describe("bottom sheet presentation", () => {
     expect(mobile.containerEl.classList.contains("tm-bottom-sheet-container")).toBe(true);
     // Keyboard tracking still applies alongside the sheet.
     expect(mobile.containerEl.classList.contains("tm-editor-container")).toBe(true);
+    // On phones it hangs from the top of the screen.
+    expect(mobile.modalEl.classList.contains("is-top")).toBe(true);
+    expect(mobile.containerEl.classList.contains("is-top")).toBe(true);
     mobile.close();
     expect(mobile.modalEl.classList.contains("tm-bottom-sheet")).toBe(false);
 
@@ -71,6 +74,7 @@ describe("bottom sheet presentation", () => {
     const small = create();
     small.open();
     expect(small.modalEl.classList.contains("tm-bottom-sheet")).toBe(true);
+    expect(small.modalEl.classList.contains("is-top")).toBe(false);
     small.close();
   });
 });
@@ -109,6 +113,22 @@ describe("swipe down to dismiss", () => {
     pointer(el, "pointercancel", 200);
     pointer(el, "pointerup", 200);
     expect(close).not.toHaveBeenCalled();
+  });
+
+  it("closes a sheet at the top after dragging its bottom handle up more than 80px", () => {
+    narrow(true);
+    const modal = document.body.createDiv();
+    vi.spyOn(modal, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 400 } as DOMRect);
+    const close = vi.fn();
+    presentAsBottomSheet(modal, close, true);
+    pointer(modal, "pointerdown", 100);
+    pointer(modal, "pointerup", 0);
+    expect(close).not.toHaveBeenCalled();
+    pointer(modal, "pointerdown", 390);
+    pointer(modal, "pointermove", 340);
+    expect(modal.style.transform).toBe("translateY(-50px)");
+    pointer(modal, "pointerup", 290);
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("stops listening once removed", () => {

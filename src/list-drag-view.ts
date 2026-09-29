@@ -14,6 +14,9 @@ interface DropIntent {
 /** How long each drag motion takes: lifting, a gap moving, rows sliding, and settling on drop. */
 export const DRAG_MOTION_MS = 150;
 const DRAG_EASING = "cubic-bezier(0.2, 0, 0, 1)";
+/** On touch screens a row lifts for dragging after a press held this long (and within PRESS_SLOP px of where it began). */
+const LONG_PRESS_MS = 350;
+const PRESS_SLOP = 8;
 
 function motion(doc: Document): number {
   return doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : DRAG_MOTION_MS;
@@ -342,19 +345,53 @@ export class ListDragController {
       const animation = current.animate([{ transform: "none" }, { transform: `translate(${to.left - from.left}px, ${to.top - from.top}px)` }], { duration, easing: DRAG_EASING, fill: "forwards" });
       await animation.finished.catch(() => {});
     };
+    // Touch: a long press lifts the row (armed), and moving the finger then drags it. Before that, a quick
+    // horizontal move is a swipe (see TaskMainView.bindSwipe) and a vertical one scrolls the list.
+    let press: { timer: number; id: number; x: number; y: number } | undefined;
+    let armed = false;
+    const cancelPress = (): void => {
+      if (press) row.ownerDocument.defaultView?.clearTimeout(press.timer);
+      press = undefined;
+    };
     row.addEventListener("pointerdown", event => {
-      // Touch drags on a row are swipe gestures (see TaskMainView.bindSwipe), not reordering.
-      if (event.pointerType === "touch" || event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || this.busy) return;
+      if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || this.busy) return;
       const target = event.target as HTMLElement;
       if (target.closest("input, label, select, textarea, a, button") &&
           !target.closest(".tm-task-title, .tm-list-drag-handle")) return;
+      if (event.pointerType === "touch") {
+        cancelPress();
+        const win = row.ownerDocument.defaultView ?? window;
+        const at = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        press = { ...at, timer: win.setTimeout(() => {
+          press = undefined;
+          pointer = at.id;
+          origin = { x: at.x, y: at.y };
+          dragging = false;
+          armed = true;
+          row.draggable = false;
+          row.addClass("is-drag-armed");
+          win.navigator.vibrate?.(10);
+        }, LONG_PRESS_MS) };
+        return;
+      }
       event.stopPropagation();
       pointer = event.pointerId;
       origin = { x: event.clientX, y: event.clientY };
       dragging = false;
       row.draggable = false;
     });
+    // Once lifted, the finger drags the row instead of scrolling the list or opening a sidebar.
+    row.addEventListener("touchmove", event => {
+      if (!armed && !dragging) return;
+      event.preventDefault(); event.stopPropagation();
+    }, { passive: false });
+    // A long press would also open the context menu (the task's actions); lifting the row takes its place.
+    row.addEventListener("contextmenu", event => {
+      if (!armed && !dragging) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+    }, true);
     row.addEventListener("pointermove", event => {
+      if (press?.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > PRESS_SLOP) cancelPress();
       if (pointer !== event.pointerId) return;
       if (!dragging && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 5) return;
       event.preventDefault();
@@ -423,6 +460,9 @@ export class ListDragController {
       preview?.remove();
       preview = undefined;
       stopEscape?.();
+      cancelPress();
+      armed = false;
+      row.removeClass("is-drag-armed");
       pointer = undefined; dragging = false; row.draggable = true; row.removeClass("is-dragging"); this.taskId = undefined; this.clear();
     };
     const cancelDrag = (): void => {
@@ -454,7 +494,10 @@ export class ListDragController {
       stopEscape = () => { doc.removeEventListener("keydown", onKey, true); stopEscape = undefined; };
     };
     row.addEventListener("pointerup", event => {
+      cancelPress();
       if (pointer !== event.pointerId) return;
+      // A long press let go without moving selects nothing.
+      if (armed && !dragging) suppressClickUntil = Date.now() + 250;
       if (dragging) { event.preventDefault(); event.stopPropagation(); }
       const target = dragging ? this.intent : undefined;
       if (dragging) suppressClickUntil = Date.now() + 250;
@@ -479,9 +522,11 @@ export class ListDragController {
       }
       flyBack();
     });
-    row.addEventListener("pointerleave", () => { if (!dragging) reset(); });
+    row.addEventListener("pointerleave", event => { if (!dragging && !(armed && event.pointerId === pointer)) reset(); });
     row.addEventListener("pointercancel", () => { if (dragging) cancelDrag(); else reset(); });
-    row.addEventListener("lostpointercapture", () => { if (dragging && pointer !== undefined) cancelDrag(); });
+    // Only the row losing its own capture ends the drag. On touch, the element first pressed (such as the title)
+    // holds the pointer until the drag moves the capture to the row; its lostpointercapture bubbles up here.
+    row.addEventListener("lostpointercapture", event => { if (event.target === row && dragging && pointer !== undefined) cancelDrag(); });
     row.addEventListener("dragover", event => {
       if (!this.taskId || this.busy) return;
       event.preventDefault(); event.stopPropagation();

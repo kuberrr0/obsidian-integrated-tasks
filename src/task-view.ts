@@ -33,7 +33,8 @@ import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } 
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { groupTasks, isDeferred, orderTaskTree, sortTasks } from "./query";
 import type TaskManagerPlugin from "./main";
-import type { TaskFilter, Project, Task, TaskDraft, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
+import type { OpenEditorState } from "./main";
+import type { TaskFilter, Project, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 /** What a new task's card is called in its note until a title is typed, as Things names a new to-do. */
@@ -51,6 +52,8 @@ const STALE_DAYS = 30;
 const SWIPE_START = 12;
 const SWIPE_COMMIT = 80;
 const SWIPE_MAX = 120;
+/** Two taps on a task this close together open it. */
+const DOUBLE_TAP_MS = 350;
 
 /** What had focus before a re-render, so the same control can be focused afterwards. */
 interface FocusKey { taskId?: string; index?: number; part?: string; key?: string }
@@ -97,6 +100,10 @@ export class TaskMainView extends ItemView {
   /** Set while the card plays its closing animation. */
   private cardClosing?: Promise<void>;
   private contextSelectionOnPress = false;
+  // Double taps, recognised from clicks: the pointer that pressed last, the last tap, and when a double tap opened a task.
+  private lastPointer = "";
+  private lastTap?: { id: string; at: number };
+  private tapOpenedAt = 0;
   private visibleTasks: Task[] = [];
   private selectionRows = new Map<string, HTMLElement[]>();
   private draggedTasks: Task[] = [];
@@ -115,7 +122,7 @@ export class TaskMainView extends ItemView {
   private liveRegion?: HTMLElement;
   /** A moved task gets a new id (its line changes); focus it again by note and title. */
   private pendingFocus?: { path: string; title: string };
-  /** The card of a task Insert task just added; closing it untouched removes the task. */
+  /** The card of a task Create new task (or an Add task button) just added; closing it untouched removes the task. */
   private newCardId?: string;
   private rovingRow?: HTMLElement;
   private moveTargets = new Map<string, { title: string; target: ListDropGroup }>();
@@ -690,19 +697,22 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * A new task in this view's context: its tag, its project, or today's (or tomorrow's) date. In the Things style a
-   * list opens it as a blank card in place, as Things does; otherwise the task editor opens.
+   * A new task in this view's context: its tag, its project, or today's (or tomorrow's) date, and a group's value
+   * when added from the group's heading (`preset`). In the Things style a list or board opens it as a blank card
+   * in place, in its group or column, as Things does; otherwise the task editor opens.
    */
-  newTask(): void {
-    const list = this.layout === "list" && !this.propertyFilters.length && (Boolean(this.taskSourcePath) || ["inbox", "today", "upcoming", "all", "tags"].includes(this.state.mode));
-    if (this.plugin.settings.style === "things" && list) void this.newTaskCard();
-    else this.plugin.openEditor(this.state);
+  newTask(preset?: TaskEditorPreset): void {
+    const state = preset ? { ...this.state, preset } : this.state;
+    // Lists and boards show a card in place; the calendar has no room for one.
+    const list = this.layout !== "calendar" && !this.propertyFilters.length && (Boolean(this.taskSourcePath) || ["inbox", "today", "upcoming", "all", "tags"].includes(this.state.mode));
+    if (this.plugin.settings.style === "things" && list) void this.newTaskCard(state);
+    else this.plugin.openEditor(state);
   }
 
   /** Writes the new task at once (titled "New To-Do" in its note) and opens its card with the title empty to type. */
-  private async newTaskCard(): Promise<void> {
+  private async newTaskCard(state: OpenEditorState): Promise<void> {
     await this.collapseCard();
-    const draft: TaskDraft = { ...this.plugin.newTaskDraft(this.state), title: NEW_TASK_TITLE };
+    const draft: TaskDraft = { ...this.plugin.newTaskDraft(state), title: NEW_TASK_TITLE };
     const path = draft.destination.split("#")[0];
     try {
       const line = await this.plugin.store.create(draft);
@@ -1070,7 +1080,7 @@ export class TaskMainView extends ItemView {
     add.addEventListener("click", event => {
       event.stopPropagation();
       const blank: Task = { id: "", path: this.taskSourcePath ?? this.plugin.settings.inboxPath, title: "", status: "todo", completed: false, line: 0, endLine: 0, raw: "", indent: 0, childIds: [] };
-      this.plugin.openEditor({ ...this.state, preset: draftForGroup(blank, target) });
+      this.newTask(draftForGroup(blank, target));
     });
   }
 
@@ -1507,6 +1517,7 @@ export class TaskMainView extends ItemView {
     };
     // Select on press: contextmenu may wait for release or the native menu gesture.
     row.addEventListener("pointerdown", event => {
+      this.lastPointer = event.pointerType;
       this.contextSelectionOnPress = event.button === 2 || (Platform.isMacOS && event.button === 0 && event.ctrlKey);
       if (this.contextSelectionOnPress) selectForContextMenu(event);
     });
@@ -1522,24 +1533,39 @@ export class TaskMainView extends ItemView {
       this.openTaskMenu(task, row, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : { x: rect.left + 24, y: rect.bottom });
     });
     row.addEventListener("pointercancel", () => { this.contextSelectionOnPress = false; });
+    const open = (): void => {
+      this.selection.clear();
+      this.selection.click(task, this.visibleTasks);
+      this.updateSelection();
+      this.openTask(task);
+    };
     // A click selects: alone, or with Cmd/Ctrl to toggle and Shift for a range.
     row.addEventListener("click", event => {
       if (Platform.isMacOS && event.ctrlKey) return;
       const additive = Platform.isMacOS ? event.metaKey : event.ctrlKey;
       if (!additive && !event.shiftKey && control(event.target)) return;
       event.preventDefault(); event.stopPropagation();
+      // Touch screens do not always send dblclick for a double tap, so a second tap soon after opens the task.
+      if (this.lastPointer === "touch" && !additive && !event.shiftKey) {
+        const now = Date.now();
+        if (this.lastTap?.id === task.id && now - this.lastTap.at < DOUBLE_TAP_MS) {
+          this.lastTap = undefined;
+          this.tapOpenedAt = now;
+          open();
+          return;
+        }
+        this.lastTap = { id: task.id, at: now };
+      }
       this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
       row.focus({ preventScroll: true });
       this.updateSelection();
     }, true);
-    // A double-click opens the task's editor.
+    // A double-click opens the task's editor (unless a double tap already has).
     row.addEventListener("dblclick", event => {
       if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey || control(event.target)) return;
       event.preventDefault(); event.stopPropagation();
-      this.selection.clear();
-      this.selection.click(task, this.visibleTasks);
-      this.updateSelection();
-      this.openTask(task);
+      if (Date.now() - this.tapOpenedAt < DOUBLE_TAP_MS) return;
+      open();
     }, true);
     row.addEventListener("keydown", event => {
       this.contextSelectionOnPress = false;
@@ -1796,7 +1822,7 @@ export class TaskMainView extends ItemView {
     if (board) this.renderBoardCard(primary, metadata, task, details);
     else if (lead) {
       // With subtasks listed as rows, the mark saying a task has them would only repeat what is in view.
-      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today", subtaskMark: !this.plugin.settings.showSubtasks });
+      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today", subtaskMark: !this.plugin.settings.showSubtasks, datesBelow: Platform.isMobile });
       if (!lead.childElementCount) lead.remove();
     } else renderTaskDetails(primary, metadata, task, details);
     if (!metadata.childElementCount) metadata.remove();
@@ -1813,7 +1839,7 @@ export class TaskMainView extends ItemView {
     }
     row.createSpan({ cls: "tm-sr-only tm-selected-marker" });
     this.bindRowKeyboard(row, task, target, foldable);
-    this.bindSwipe(row, task, checkbox);
+    this.bindSwipe(row, task);
   }
 
   /**
@@ -2118,10 +2144,10 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * Touch gestures on a row: swipe right to complete (or reopen), left to snooze until tomorrow.
+   * Touch gestures on a row: swipe right to select or deselect the task, left to open its actions.
    * Only horizontal touch drags count; vertical movement scrolls as usual and mouse input is ignored.
    */
-  private bindSwipe(row: HTMLElement, task: Task, checkbox: HTMLInputElement): void {
+  private bindSwipe(row: HTMLElement, task: Task): void {
     let start: { x: number; y: number; id: number } | undefined;
     let offset = 0;
     let swiping = false;
@@ -2138,6 +2164,8 @@ export class TaskMainView extends ItemView {
     });
     row.addEventListener("pointermove", event => {
       if (!start || event.pointerId !== start.id) return;
+      // A long press lifted the row for dragging (see ListDragController): the finger moves it, not a swipe.
+      if (row.hasClass("is-drag-armed") || row.hasClass("is-dragging")) { reset(); return; }
       const dx = event.clientX - start.x;
       const dy = event.clientY - start.y;
       if (!swiping) {
@@ -2150,7 +2178,7 @@ export class TaskMainView extends ItemView {
       event.preventDefault();
       offset = Math.max(-SWIPE_MAX, Math.min(SWIPE_MAX, dx));
       row.style.setProperty("--tm-swipe-offset", `${offset}px`);
-      row.setAttribute("data-swipe", offset > 0 ? (task.completed ? "reopen" : "complete") : "snooze");
+      row.setAttribute("data-swipe", offset < 0 ? "actions" : this.selection.has(task) ? "deselect" : "select");
       row.toggleClass("is-swipe-armed", Math.abs(offset) >= SWIPE_COMMIT);
     });
     // Keep Obsidian's own mobile swipe gestures (such as opening a sidebar) from also reacting.
@@ -2161,11 +2189,12 @@ export class TaskMainView extends ItemView {
       if (swiping) suppressClick = true;
       reset();
       if (committed >= SWIPE_COMMIT) {
-        checkbox.checked = !task.completed;
-        checkbox.dispatchEvent(new Event("change"));
+        this.selection.click(task, this.visibleTasks, false, true);
+        this.updateSelection();
       } else if (committed <= -SWIPE_COMMIT) {
-        this.prepareDrag(task);
-        void this.dropListTask(task, { property: "defer", value: addDays(todayIso(), 1) });
+        // The actions menu opens under the row, for the selection when the task is in it.
+        const rect = row.getBoundingClientRect();
+        this.openTaskMenu(task, row, { x: rect.left + 24, y: rect.bottom });
       }
     });
     row.addEventListener("pointercancel", reset);

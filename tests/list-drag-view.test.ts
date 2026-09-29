@@ -382,3 +382,64 @@ it("drops at the end of a section after its last task, so the note's order chang
   fire(rows[0].row, "pointerup", { clientY: 30 });
   await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], section, tasks[1], "after"));
 });
+
+it("drags on touch after a long press; a quick move stays a swipe or scroll, and the lift blocks scrolling and the menu", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { tasks, rows, drop, start, point } = list("- [ ] A\n- [ ] B");
+    const touch = { pointerType: "touch" };
+    // Moving before the press is long enough never lifts the row.
+    fire(rows[0].row, "pointerdown", { ...touch, clientX: 20, clientY: 10 });
+    fire(rows[0].row, "pointermove", { ...touch, clientX: 60, clientY: 10 });
+    vi.advanceTimersByTime(400);
+    expect(rows[0].row.classList.contains("is-drag-armed")).toBe(false);
+    expect(fire(rows[0].row, "touchmove").defaultPrevented).toBe(false);
+    fire(rows[0].row, "pointerup", touch);
+
+    fire(rows[0].row, "pointerdown", { ...touch, clientX: 20, clientY: 10 });
+    vi.advanceTimersByTime(349);
+    expect(rows[0].row.classList.contains("is-drag-armed")).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(rows[0].row.classList.contains("is-drag-armed")).toBe(true);
+    expect(fire(rows[0].row, "touchmove").defaultPrevented).toBe(true);
+    expect(fire(rows[0].row, "contextmenu").defaultPrevented).toBe(true);
+    point(rows[1].row);
+    fire(rows[0].row, "pointermove", { ...touch, clientX: 20, clientY: 30 });
+    expect(start).toHaveBeenCalledExactlyOnceWith(tasks[0]);
+    fire(rows[0].row, "pointerup", { ...touch, clientX: 20, clientY: 30 });
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], undefined, tasks[1], "after"));
+    expect(rows[0].row.classList.contains("is-drag-armed")).toBe(false);
+  } finally { vi.useRealTimers(); }
+});
+
+it("drops a touch long press let go without moving, and keeps its click from selecting", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { rows, start } = list("- [ ] A");
+    fire(rows[0].row, "pointerdown", { pointerType: "touch" });
+    vi.advanceTimersByTime(400);
+    fire(rows[0].row, "pointerup", { pointerType: "touch" });
+    expect(start).not.toHaveBeenCalled();
+    expect(rows[0].row.classList.contains("is-drag-armed")).toBe(false);
+    expect(fire(rows[0].row, "click").defaultPrevented).toBe(true);
+  } finally { vi.useRealTimers(); }
+});
+
+it("keeps a touch drag going when the pressed title hands its pointer capture to the row", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { tasks, rows, drop, point } = list("- [ ] A\n- [ ] B");
+    const touch = { pointerType: "touch" };
+    fire(rows[0].title, "pointerdown", { ...touch, clientX: 100, clientY: 10 });
+    vi.advanceTimersByTime(400);
+    point(rows[1].row);
+    fire(rows[0].row, "pointermove", { ...touch, clientX: 20, clientY: 30 });
+    // The title's implicit capture ends as the row takes it; the event bubbles to the row.
+    fire(rows[0].title, "lostpointercapture", touch);
+    expect(preview()).not.toBeNull();
+    fire(rows[0].row, "pointerup", { ...touch, clientX: 20, clientY: 30 });
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], undefined, tasks[1], "after"));
+  } finally { vi.useRealTimers(); }
+});

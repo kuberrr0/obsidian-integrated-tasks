@@ -33,7 +33,7 @@ import { TaskQuickSwitcher } from "./quick-switcher";
 
 const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay", "linkTags", "taskHoverHighlight", "wrapTaskTitles", "wrapCalendarTaskTitles", "wrapKanbanTaskTitles", "showSubtaskCounts", "showGroupTaskCounts"];
 
-interface OpenEditorState extends TaskViewState {
+export interface OpenEditorState extends TaskViewState {
   focusProperty?: TaskEditorOptions["focusProperty"];
   preset?: TaskEditorPreset;
   task?: Task;
@@ -152,8 +152,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.addCommand({ id: "edit-task", name: "Edit task", editorCheckCallback: (checking, editor, view) =>
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Open task menu", checkCallback: checking => this.editSelectedTaskProperties(checking) });
-    this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
-    this.addCommand({ id: "insert-task", name: "Insert task", callback: () => this.insertTask() });
+    this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.newTask() });
     this.addCommand({ id: "convert-task-tags", name: "Convert task tags to the tag format", callback: () => void this.convertTaskTags() });
     this.addCommand({ id: "insert-task-query", name: "Insert task query", editorCallback: editor => editor.replaceSelection(TASK_QUERY_TEMPLATE) });
     this.addCommand({ id: "import-tasks-plugin", name: "Import tasks from the Tasks plugin", callback: () => this.openTasksImport() });
@@ -166,7 +165,7 @@ export default class TaskManagerPlugin extends Plugin {
       if (!checking) void this.undoTaskChange();
       return true;
     } });
-    this.addRibbonIcon("plus", "Create new task", () => this.openEditor({ mode: "inbox" }));
+    this.addRibbonIcon("plus", "Create new task", () => this.newTask());
 
     this.addCommand({ id: "toggle-task-mode", name: "Toggle task mode", callback: () => {
       void this.setTaskMode(!this.settings.taskMode).catch(error => new Notice(String(error)));
@@ -569,13 +568,15 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   /**
-   * The new task editor in the open view's context: a task view's tag, project or date (as its Add task
-   * button), or the open note when it is a project or a tag's note; otherwise the Inbox.
+   * A new task in the open view's context: a task view's tag, project or date (as its Add task button, so in the
+   * Things style a blank card in the list), or the open note when it is a project or a tag's note; otherwise the
+   * Inbox. With a sidebar focused (such as the task navigation), the context is the last view in the main area.
    */
-  insertTask(): void {
-    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
-    if (view) { view.newTask(); return; }
-    const path = this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path;
+  newTask(): void {
+    const workspace = this.app.workspace;
+    const view = workspace.getActiveViewOfType(TaskMainView) ?? workspace.getActiveViewOfType(MarkdownView) ?? workspace.getMostRecentLeaf()?.view;
+    if (view instanceof TaskMainView) { view.newTask(); return; }
+    const path = view instanceof MarkdownView ? view.file?.path : undefined;
     const tag = path ? this.index.tagForPath(path) : undefined;
     if (path && this.index.isProject(path)) this.openEditor({ mode: "all", projectPath: path });
     else if (path && tag) this.openEditor({ mode: "tags", tag, pagePath: path });
@@ -583,7 +584,7 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   /** A new task as a view would start it: its tag, its project, or today's (or tomorrow's) date. */
-  newTaskDraft(state: TaskViewState): TaskDraft {
+  newTaskDraft(state: OpenEditorState): TaskDraft {
     return initialDraft(this.editorContext(state));
   }
 
