@@ -13,8 +13,12 @@ describe("where task text sets properties", () => {
     ]);
   });
 
-  it("finds dates written in words, in the middle too, only where newly typed", () => {
-    expect(spans("Call mom tomorrow at 3pm about dinner")).toEqual(["scheduledDate:tomorrow at 3pm"]);
+  it("finds dates written in words that end the title, only where newly typed", () => {
+    expect(spans("Call mom about dinner tomorrow at 3pm")).toEqual(["scheduledDate:tomorrow at 3pm"]);
+    // Only properties may follow the date; in the middle of the title it is a word.
+    expect(spans("Call mom tomorrow at 3pm about dinner")).toEqual([]);
+    expect(spans("Call mom tomorrow p1 3pm")).toEqual(["scheduledDate:tomorrow", "priority:p1", "scheduledDate:3pm"]);
+    expect(spans("Buy sun cream")).toEqual([]);
     expect(spans("Pay rent {next friday} p2")).toEqual(["deadline:{next friday}", "priority:p2"]);
     // Words already in the title are prose, not a date.
     expect(spans("Plan for tomorrow", "Plan for tomorrow")).toEqual([]);
@@ -28,7 +32,7 @@ describe("rewriting one property's token", () => {
 
   it("replaces a token, or words read as a date, and appends the new one", () => {
     expect(replace("Call mom p2 #[[x]]", ["priority"], "p1")).toBe("Call mom #[[x]] p1");
-    expect(replace("Call mom tomorrow at 3pm about dinner", ["scheduledDate", "durationMinutes"], "[[2026-10-05]]")).toBe("Call mom about dinner [[2026-10-05]]");
+    expect(replace("Call mom about dinner tomorrow at 3pm", ["scheduledDate", "durationMinutes"], "[[2026-10-05]]")).toBe("Call mom about dinner [[2026-10-05]]");
     expect(replace("Call mom p2", ["priority"], "")).toBe("Call mom");
   });
 

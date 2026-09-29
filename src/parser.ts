@@ -1,6 +1,6 @@
 import { formatTags, normalizeTags, tagFormat, trailingTag } from "./task-tags";
 import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
-import { findInputDate, findInputDeadline, findInputTime, formatDate, formatLocalDate, parseDateTimeExpression, removeSpans } from "./date";
+import { findInputDate, findInputDeadline, findInputTime, formatDate, formatLocalDate, parseDateTimeExpression, parseTimeExpression, removeSpans } from "./date";
 import { STATUS_CHARS, draftStatus, isClosedStatus, statusFromChar } from "./task-status";
 import type { ParsedTaskMetadata, Priority, Task, TaskDraft, TaskStatus } from "./types";
 
@@ -12,6 +12,8 @@ const DEADLINE = /(?:^|\s)\{([^{}]+)\}\s*$/;
 const DEFER = /(?:^|\s)>([^\s>][^>]*?)\s*$/;
 const SCHEDULED = /(?:^|\s)(\[\[([^\]]+)\]\](?:\s+([^{}[\]]+))?)\s*$/;
 const DURATION = /(?:^|\s)((?:\d+h)?(?:\d+m)?)\s*$/i;
+// A time on its own, such as 21:30 or at 9:30pm: the scheduled time, when a date without one comes before it.
+const LONE_TIME = /(?:^|\s)((?:at\s+)?(?:(?:[01]?\d|2[0-3]):[0-5]\d(?:\s?[ap]m)?|(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s?[ap]m))\s*$/i;
 // A heading may hold balanced [[links]]; the path part holds no brackets or '#'.
 const DESTINATION = /(?:^|\s)~\[\[([^[\]#\r\n]+(?:#(?:[^[\]\r\n]|\[\[[^[\]\r\n]*\]\])*)?)\]\]\s*$/;
 const BLOCK_ID = /\s\^[A-Za-z0-9-]+\s*$/;
@@ -172,6 +174,9 @@ function parseLine(
     if (kind !== "destination" || internalRanges) tokenRanges?.push({ kind, from: offset + match.index + match[0].search(/\S/), to: offset + remainder.trimEnd().length });
   };
 
+  // A lone time held for a date further left, with the parse as it stood before it, to go back to if none comes.
+  // (Reading natural language, the time is found with its date instead: "tomorrow p1 3pm".)
+  let pendingTime: { time: string; remainder: string; metadata: typeof metadata; ranges: number } | undefined;
   for (;;) {
     let match: RegExpExecArray | null;
     let defer: ReturnType<typeof parseDefer>;
@@ -246,6 +251,11 @@ function parseLine(
         consumed.add("scheduled");
         changed = true;
       }
+    } else if (!naturalDates && !pendingTime && !consumed.has("scheduled") && (match = LONE_TIME.exec(remainder)) && (text = parseTimeExpression(match[1], reference))) {
+      pendingTime = { time: text, remainder, metadata: { ...metadata }, ranges: tokenRanges?.length ?? 0 };
+      recordToken("scheduledDate", match);
+      remainder = remainder.slice(0, match.index).trimEnd();
+      changed = true;
     }
 
     if (!changed && naturalDates && !consumed.has("deadline")) {
@@ -282,6 +292,17 @@ function parseLine(
       }
     }
     if (!changed) break;
+  }
+  if (pendingTime) {
+    // The time belongs to the date before it; with none (or one that has its own time), it is title text, and so is
+    // everything before it.
+    if (metadata.scheduledDate && !metadata.scheduledTime) metadata.scheduledTime = pendingTime.time;
+    else {
+      remainder = pendingTime.remainder;
+      for (const key of Object.keys(metadata) as (keyof typeof metadata)[]) delete metadata[key];
+      Object.assign(metadata, pendingTime.metadata);
+      if (tokenRanges) tokenRanges.length = pendingTime.ranges;
+    }
   }
 
   if (metadata.tags) metadata.tags = [...new Set(metadata.tags)];
@@ -340,8 +361,8 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
   const dateText = (date: string): string => linkDates ? `[[${formatDate(date, dateFormat)}]]` : formatDate(date, dateFormat);
   const metadata = [
     draft.scheduledDate ? `${dateText(draft.scheduledDate)}${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
-    draft.repeat ?? "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
+    draft.repeat ?? "",
     draft.deadline ? `{${dateText(draft.deadline)}${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
     deferText(draft, dateText),
     draft.priority ? `p${draft.priority}` : "",
@@ -352,7 +373,7 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
   return `${indent}- [${STATUS_CHARS[draftStatus(draft)]}] ${title}${metadataGap}${metadata.join(" ")}`;
 }
 
-const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "repeat", "durationMinutes", "deadline", "defer", "priority", "tags", "completedDate", "destination"];
+const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "durationMinutes", "repeat", "deadline", "defer", "priority", "tags", "completedDate", "destination"];
 
 /**
  * Edit an existing task line in place: keep indentation, checkbox spacing, title spelling,
@@ -419,7 +440,25 @@ export function rewriteTaskLine(raw: string, draft: TaskDraft, dateFormat?: stri
   }
   if (blockId) parts.push({ kind: "blockId", gap: raw.slice(previous, blockId.from), text: raw.slice(blockId.from, blockId.to) });
   const body = parts.reduce((text, part) => text + (text ? part.gap || " " : "") + part.text, title);
-  return indent + marker + body + raw.slice(blockId?.to ?? contentEnd);
+  const line = indent + marker + body + raw.slice(blockId?.to ?? contentEnd);
+  return draft.sortProperties ? sortTaskProperties(line, dateFormat, reference) : line;
+}
+
+/**
+ * A task line with its properties in the usual order (date and time, duration, repeat, deadline, defer, priority,
+ * tags, completion date), each keeping its spelling; the spacing between them and a destination stay put.
+ */
+export function sortTaskProperties(line: string, dateFormat?: string, reference = new Date()): string {
+  const ranges: ParsedTokenRange[] = [];
+  parseTaskLine(line, reference, dateFormat, false, ranges);
+  ranges.sort((a, b) => a.from - b.from);
+  const tokens = [...ranges].sort((a, b) => CANONICAL_ORDER.indexOf(a.kind) - CANONICAL_ORDER.indexOf(b.kind))
+    .map(range => line.slice(range.from, range.to));
+  for (let index = ranges.length - 1; index >= 0; index--) {
+    const range = ranges[index];
+    line = line.slice(0, range.from) + tokens[index] + line.slice(range.to);
+  }
+  return line;
 }
 
 /** Add, replace or (with no date) remove a line's completion date in place. */

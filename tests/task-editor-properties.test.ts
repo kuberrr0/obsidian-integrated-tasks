@@ -109,7 +109,7 @@ describe("property buttons in the task editor", () => {
 
   it("sets the date from the date popover, replacing words read as a date, and toggles tags", () => {
     const { raw, button } = open();
-    raw.value = "Call mom tomorrow about dinner";
+    raw.value = "Call mom about dinner tomorrow";
     button("When").click();
     document.querySelector<HTMLElement>(`.tm-date-popover [data-date="${todayIso()}"]`)!.click();
     const date = DEFAULT_SETTINGS.linkDates ? `[[${todayIso()}]]` : todayIso();

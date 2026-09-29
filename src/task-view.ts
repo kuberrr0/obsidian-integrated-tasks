@@ -1946,7 +1946,8 @@ export class TaskMainView extends ItemView {
     const notes = card.notes.trim() === cardNotes(task.description).trim() ? undefined : card.notes;
     if (draftMatchesTask(task, draft) && notes === undefined) return;
     try {
-      await this.plugin.store.update(task, { ...draft, description: notes });
+      // Saving a card puts the line's properties in order, as the note does when its line is left.
+      await this.plugin.store.update(task, { ...draft, description: notes, sortProperties: true });
       await this.plugin.index.refreshPath(task.path);
       if (draft.destination !== draftFromTask(task).destination) await this.plugin.index.refreshPath(draft.destination.split("#")[0]);
       if (this.expanded?.id === card.id) this.expanded = { ...this.expanded, title: draft.title, notes: notes ?? this.expanded.notes };
@@ -1999,7 +2000,7 @@ export class TaskMainView extends ItemView {
         // A subtask stays under its parent: its title's tokens set properties but do not move it.
         const draft = draftFromTitle(child, title, new Date(), this.plugin.dateFormat(), false);
         if (draftMatchesTask(child, draft)) return;
-        void this.plugin.store.update(child, draft)
+        void this.plugin.store.update(child, { ...draft, sortProperties: true })
           .then(() => this.plugin.index.refreshPath(child.path))
           .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not rename the subtask."); });
       },

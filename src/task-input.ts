@@ -41,6 +41,14 @@ export function parseTaskTreeInput(input: string, destination: string, reference
   return main;
 }
 
+/**
+ * The text with its tokens (already read) masked, so no date is read inside them (a `>tomorrow` defer is no schedule)
+ * and a date in words before them still ends the title. The mask keeps places, and Chrono never joins across it.
+ */
+function maskTokens(text: string, tokens: Array<{ from: number; to: number }>): string {
+  return tokens.reduce((masked, token) => masked.slice(0, token.from) + "\u00a6".repeat(token.to - token.from) + masked.slice(token.to), text);
+}
+
 /** The span of `text` newly typed over `original`: between their shared start and shared end. */
 function typedSpan(text: string, original: string): { from: number; to: number } {
   let from = 0;
@@ -62,9 +70,7 @@ export function taskInputRanges(text: string, original = "", reference = new Dat
   const strict: InputTokenRange[] = taskTextRanges(text, reference, dateFormat).sort((a, b) => a.from - b.from);
   const within = typedSpan(text, original);
   if (!text.slice(within.from, within.to).trim()) return strict;
-  // A `>tomorrow` defer is already read; its words are not a schedule.
-  const defer = strict.find(range => range.kind === "defer");
-  const prose = defer ? text.slice(0, defer.from) + " ".repeat(defer.to - defer.from) + text.slice(defer.to) : text;
+  const prose = maskTokens(text, strict);
   const natural: InputTokenRange[] = [];
   const add = (kind: InputTokenKind, match: { index: number; text: string } | undefined): void => {
     if (!match) return;
@@ -133,9 +139,7 @@ export function parseEditedTaskInput(text: string, original: string, reference =
   const strict = parseTaskLine(checkbox + text, reference, dateFormat, false, ranges);
   const within = typedSpan(text, original);
   if (!strict || !text.slice(within.from, within.to).trim()) return strict;
-  // A `>tomorrow` defer is already parsed; its words are not a schedule.
-  const defer = ranges.find(range => range.kind === "defer");
-  const prose = defer ? text.slice(0, defer.from - checkbox.length) + " ".repeat(defer.to - defer.from) + text.slice(defer.to - checkbox.length) : text;
+  const prose = maskTokens(text, ranges.map(range => ({ ...range, from: range.from - checkbox.length, to: range.to - checkbox.length })));
   const deadline = strict.deadline ? undefined : findInputDeadline(prose, reference, dateFormat, within);
   const scheduled = strict.scheduledDate ? undefined : findInputDate(prose, reference, within);
   // A time typed apart from a date token gives that date its time.

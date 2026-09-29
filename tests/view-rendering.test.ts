@@ -807,7 +807,7 @@ describe("Create new task in the Things style", () => {
     title.dispatchEvent(new Event("input"));
     await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
     expect(extra.delete).not.toHaveBeenCalled();
-    expect(extra.update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "New To-Do" }), expect.objectContaining({ title: "Buy milk", priority: 1 }));
+    expect(extra.update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "New To-Do" }), expect.objectContaining({ title: "Buy milk", priority: 1, sortProperties: true }));
   });
 
   it("starts a group's card with the group's value, as its heading's + button adds it", async () => {

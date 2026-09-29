@@ -610,7 +610,8 @@ export default class TaskManagerPlugin extends Plugin {
       } : undefined,
       onSave: async (draft) => {
         try {
-          if (state.task) await this.store.update(state.task, draft);
+          // Editing a task puts its line's properties in order; a new task is written in order already.
+          if (state.task) await this.store.update(state.task, { ...draft, sortProperties: true });
           else await this.store.create(draft);
           await this.index.refreshPath(draft.destination);
           if (state.task && state.task.path !== draft.destination) await this.index.refreshPath(state.task.path);

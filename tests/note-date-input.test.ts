@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { noteDateInput } from "../src/note-date-input";
+import { setTagFormat } from "../src/task-tags";
 
 const today = new Date(2026, 8, 8, 12);
 afterEach(() => vi.useRealTimers());
@@ -99,8 +100,29 @@ it("keeps protected dates and durations unchanged", () => {
   expect(enter(state(line)).doc.toString()).not.toContain("[[2026-");
 });
 
-it("does not consume protected content between a date and a time", () => {
+it("reads a date and a time written apart, keeping the protected content between them", () => {
   const result = enter(state("- [ ] Task tomorrow #[[work]] at 9am {next week}"));
-  expect(result.doc.toString()).toContain("#[[work]]");
-  expect(result.doc.toString()).toContain("at 9am");
+  expect(result.doc.toString()).toBe("- [ ] Task [[2026-09-09]] 09:00 {[[2026-09-15]]} #[[work]]\n");
+});
+
+it("reads properties typed in any order, then sorts them", () => {
+  setTagFormat("hash");
+  try {
+    const result = enter(state("- [ ] do this tomorrow {sunday} 5m 9:30pm p2 #call"));
+    expect(result.doc.toString()).toBe("- [ ] do this [[2026-09-09]] 21:30 5m {[[2026-09-13]]} p2 #call\n");
+    expect(enter(state("- [ ] Water 9:30pm p1 tomorrow")).doc.toString()).toBe("- [ ] Water [[2026-09-09]] 21:30 p1\n");
+  } finally { setTagFormat("wikilink"); }
+  setTagFormat("hash");
+  try {
+    // A repeat among the properties, and a time written apart from an existing date.
+    expect(enter(state("- [ ] do this tomorrow every monday {sunday} 5m 9:30pm p2 #call")).doc.toString())
+      .toBe("- [ ] do this [[2026-09-09]] 21:30 5m every monday {[[2026-09-13]]} p2 #call\n");
+    expect(enter(state("- [ ] do this [[2026-10-01]] every monday 21:30 5m {[[2026-10-04]]} p2 #call")).doc.toString())
+      .toBe("- [ ] do this [[2026-10-01]] 21:30 5m every monday {[[2026-10-04]]} p2 #call\n");
+  } finally { setTagFormat("wikilink"); }
+  // With #[[tag]] tags, a plain #tag is prose, so the date follows it to stay the schedule.
+  expect(enter(state("- [ ] do this tomorrow {sunday} 5m 9:30pm p2 #call")).doc.toString())
+    .toBe("- [ ] do this {[[2026-09-13]]} 5m p2 #call [[2026-09-09]] 21:30\n");
+  // A date inside the title's prose stays prose.
+  expect(enter(state("- [ ] Call #mom tomorrow about dinner")).doc.toString()).toBe("- [ ] Call #mom tomorrow about dinner\n");
 });

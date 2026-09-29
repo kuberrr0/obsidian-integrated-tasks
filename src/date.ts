@@ -104,12 +104,38 @@ function inputProse(value: string, within?: InputRange): string {
   return onlyWithin(value.replace(/\{[^}]*\}?|\[\[[\s\S]*?\]\]|`[^`]*`|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\b(?:\d+h(?:\d+m)?|\d+m)\b/g, match => "\u00a6".repeat(match.length)), within);
 }
 
-/** Chrono's readings of editor prose that may set a schedule: whole words, inside `within`, and not a repeat's ("every Friday"). */
+/** A bare weekday abbreviation is far more often a word ("sun cream") than a date; "5/10" is a fraction. */
+const NOT_A_DATE = /^(?:sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat|\d{1,2}\/\d{1,2})$/i;
+
+/**
+ * Chrono's readings of editor prose that may set a schedule: whole words, inside `within`, not a repeat's
+ * ("every Friday") or the past's ("last Friday"), and never a bare weekday abbreviation or a fraction.
+ */
 function inputResults(value: string, reference: Date, within?: InputRange): chrono.ParsedResult[] {
   const prose = inputProse(value, within);
   return chrono.parse(prose, reference, { forwardDate: true }).filter(match =>
     !match.end && (!within || boundedMatch(value, match.index, match.text.length, /[\p{L}\p{N}]/u))
-    && !/(?:^|\s)(?:every|each)\s*$/i.test(prose.slice(0, match.index)));
+    && !/(?:^|\s)(?:every|each|last|past|previous)\s*$/i.test(prose.slice(0, match.index))
+    && !/^(?:last|past|previous)\b/i.test(match.text) && !NOT_A_DATE.test(match.text.trim()));
+}
+
+/** A task's properties as typed after its title: tags, a project, a duration, a priority, a repeat, dates, times. */
+const PROPERTY_TEXT = new RegExp([
+  String.raw`\{[^{}]*\}`, String.raw`[#~]\[\[[^\]]*\]\]`, String.raw`#[^\s#\[]\S*`, String.raw`(?:\d+h(?:\d+m)?|\d+m)`, String.raw`[pP][123]`,
+  String.raw`every\s+(?:(?:other|second|third|fourth|\d+(?:st|nd|rd|th)?)\s+)?(?:day|week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?`,
+  String.raw`>\S+`, String.raw`(?:✓|✅\s*)\S+`,
+  String.raw`(?:at\s+)?(?:(?:[01]?\d|2[0-3]):[0-5]\d(?:\s?[ap]m)?|(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s?[ap]m|noon|midnight)`
+].map(part => `(?:${part})`).join("|"), "giu");
+
+/**
+ * Whether a date typed in words ends the title: after it (and the other parts of it, such as its time) come only
+ * properties. "Call mom tomorrow about dinner" keeps its "tomorrow"; "tomorrow {sunday} 5m 9:30pm p2" does not.
+ */
+function endsTitle(value: string, parts: Array<{ index: number; text: string }>): boolean {
+  const from = Math.min(...parts.map(part => part.index));
+  const rest = removeSpans(value.slice(from), parts.map(part => ({ index: part.index - from, text: part.text })));
+  // Tokens the caller already read are masked with ¦.
+  return !rest.replace(/\u00a6+/g, " ").replace(PROPERTY_TEXT, " ").trim();
 }
 
 const certainDay = (result: chrono.ParsedResult): boolean => result.start.isCertain("day") || result.start.isCertain("weekday");
@@ -127,6 +153,8 @@ export function findInputDate(value: string, reference = new Date(), within?: In
   const extra = dated && !resultTime(dated) ? timed : undefined;
   const time = resultTime(first) ?? (extra && resultTime(extra));
   const parts = [first, extra].filter((result): result is chrono.ParsedResult => Boolean(result)).map(result => ({ index: result.index, text: result.text })).sort((a, b) => a.index - b.index);
+  // A date in the middle of the title is part of it.
+  if (!endsTitle(value, parts)) return undefined;
   return { date: formatLocalDate(first.start.date()), ...(time ? { time } : {}), parts };
 }
 
@@ -134,7 +162,7 @@ export function findInputDate(value: string, reference = new Date(), within?: In
 export function findInputTime(value: string, reference = new Date(), within?: InputRange): { index: number; text: string; time: string } | undefined {
   const result = inputResults(value, reference, within).find(item => item.start.isCertain("hour") && !certainDay(item));
   const time = result && resultTime(result);
-  return result && time ? { index: result.index, text: result.text, time } : undefined;
+  return result && time && endsTitle(value, [result]) ? { index: result.index, text: result.text, time } : undefined;
 }
 
 /** Takes the given spans out of text, closing up the spaces around each. */

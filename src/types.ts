@@ -107,6 +107,8 @@ export interface TaskDraft extends ParsedTaskMetadata {
   completed: boolean;
   destination: string;
   indent: number;
+  /** Put the whole line's properties in the usual order when saving (the task editor and cards do). */
+  sortProperties?: boolean;
 }
 
 export interface SmartList {

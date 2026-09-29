@@ -14,7 +14,7 @@ describe("highlighting what typed text sets", () => {
   it("shows the task editor's text as typed, highlighting what it sets in that property's colour", () => {
     const host = document.body.createDiv();
     const editor = new TaskLineEditor(host, "", "YYYY-MM-DD", vi.fn(), "", true);
-    editor.value = "Call mom tomorrow at 3pm about dinner {2026-10-09} p1 #[[home]] ~[[Work]]";
+    editor.value = "Call mom about dinner tomorrow at 3pm {2026-10-09} p1 #[[home]] ~[[Work]]";
     expect(host.querySelector(".cm-line")!.textContent).toBe(editor.value);
     const marks = Array.from(host.querySelectorAll(".tm-nlp-token")).map(mark => [mark.textContent, mark.className.replace("tm-nlp-token ", "")]);
     expect(marks).toEqual([["tomorrow at 3pm", "is-date"], ["{2026-10-09}", "is-deadline"], ["p1", "is-priority is-p1"], ["#[[home]]", "is-tag"], ["~[[Work]]", "is-project"]]);

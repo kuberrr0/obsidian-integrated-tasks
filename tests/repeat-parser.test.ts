@@ -57,9 +57,9 @@ describe("inline repeat parsing", () => {
 describe("inline repeat writing", () => {
   const draft = (overrides: Partial<TaskDraft>): TaskDraft => ({ title: "Water plants", completed: false, destination: "Inbox.md", indent: 0, ...overrides });
 
-  it("serialises the rule after the scheduled date and time, before the duration", () => {
+  it("serialises the rule after the scheduled date, time and duration", () => {
     const line = serializeTask(draft({ scheduledDate: "2026-09-28", scheduledTime: "10:00", repeat: "every week", durationMinutes: 15, priority: 2 }), "YYYY-MM-DD", false);
-    expect(line).toBe("- [ ] Water plants 2026-09-28 10:00 every week 15m p2");
+    expect(line).toBe("- [ ] Water plants 2026-09-28 10:00 15m every week p2");
     expect(parse(line)).toMatchObject({ title: "Water plants", scheduledDate: "2026-09-28", scheduledTime: "10:00", repeat: "every week", durationMinutes: 15, priority: 2 });
   });
 
@@ -67,9 +67,9 @@ describe("inline repeat writing", () => {
     const raw = "  - [ ] Water  plants 2026-09-28 15m p1 ~[[Garden]] ^w1";
     const base = { ...parse(raw), destination: "Garden.md", indent: 2 };
     const added = rewriteTaskLine(raw, { ...base, repeat: "every week" }, "YYYY-MM-DD", false);
-    expect(added).toBe("  - [ ] Water  plants 2026-09-28 every week 15m p1 ~[[Garden]] ^w1");
+    expect(added).toBe("  - [ ] Water  plants 2026-09-28 15m every week p1 ~[[Garden]] ^w1");
     const replaced = rewriteTaskLine(added, { ...base, repeat: "every 2 weeks" }, "YYYY-MM-DD", false);
-    expect(replaced).toBe("  - [ ] Water  plants 2026-09-28 every 2 weeks 15m p1 ~[[Garden]] ^w1");
+    expect(replaced).toBe("  - [ ] Water  plants 2026-09-28 15m every 2 weeks p1 ~[[Garden]] ^w1");
     expect(rewriteTaskLine(replaced, { ...base, repeat: undefined }, "YYYY-MM-DD", false)).toBe(raw);
     // An unchanged rule keeps its spelling.
     const spelled = "- [ ] Meet Every Monday";

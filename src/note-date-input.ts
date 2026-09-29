@@ -2,7 +2,7 @@ import { EditorState, StateEffect, StateField, type ChangeSpec, type Transaction
 import { moment as obsidianMoment } from "obsidian";
 import type momentFactory from "moment";
 import { formatDate, parseDateTimeExpression } from "./date";
-import { parseTaskLine, type ParsedTokenRange } from "./parser";
+import { parseTaskLine, sortTaskProperties, type ParsedTokenRange } from "./parser";
 import { nonBodyLines } from "./structure";
 import { PLAIN_TAG } from "./tag-links";
 
@@ -14,6 +14,7 @@ const WEEKDAY_ABBREVIATION = /^(?:sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)$/
 const NON_SCHEDULE_PREFIX = /^(?:every|each|last|past|previous)$/i;
 const PAST_EXPRESSION = /^(?:last|past|previous)\b/i;
 const FRACTION = /(?:^|\s)\d{1,2}\/\d{1,2}(?=\s|$)/;
+const REPEAT_PHRASE = /(^|\s)every\s+(?:(?:other|second|third|fourth|\d+(?:st|nd|rd|th)?)\s+)?(?:day|week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?(?=\s|$)/gi;
 /** Longest trailing expression considered, in words ("a week from next friday at 5pm"). */
 const MAX_EXPRESSION_WORDS = 8;
 
@@ -31,7 +32,17 @@ function acceptsExpression(expression: string, previousWord: string, dateFormat:
  * may follow), the last `{…}` deadline and a trailing `>…` defer. Existing date links win over earlier prose.
  */
 export function noteDateChanges(text: string, dateFormat: string, reference = new Date(), linkDates = true): { from: number; to: number; insert: string }[] {
+  return readNoteDates(text, dateFormat, reference, linkDates).changes;
+}
+
+/** Where the words of a date typed in words sit in an open task's line, as leaving it would convert them. */
+export function noteDateWords(text: string, dateFormat: string, reference = new Date()): { from: number; to: number }[] {
+  return /^\s*-\s+\[[ /?]\]\s/.test(text) ? readNoteDates(text, dateFormat, reference, true).words : [];
+}
+
+function readNoteDates(text: string, dateFormat: string, reference: Date, linkDates: boolean): { changes: { from: number; to: number; insert: string }[]; words: { from: number; to: number }[] } {
   type Change = { from: number; to: number; insert: string };
+  const words: { from: number; to: number }[] = [];
   const blank = (value: string): string => " ".repeat(value.length);
   // Prose that must never be parsed, but still counts as prose (so a date before it is not trailing).
   const opaque = (value: string): string => "\u0001".repeat(value.length);
@@ -72,52 +83,48 @@ export function noteDateChanges(text: string, dateFormat: string, reference = ne
     lastDateLink = offset + whole.length;
     return blank(whole);
   }).replace(/(^|\s)(?:\d+h(?:\d+m)?|\d+m|[pP][123])(?=\s|$)/g, (whole: string, space: string) => space + blank(whole.slice(space.length)))
+    // An `every …` repeat among the properties is metadata too, so a date and time around it still read as one.
+    .replace(REPEAT_PHRASE, (whole: string, space: string) => space + blank(whole.slice(space.length)))
     // Plain #tags are metadata too, whatever Link tags says: "Buy milk tomorrow #errand" still dates.
     .replace(PLAIN_TAG, (whole: string, space: string) => space + blank(whole.slice(space.length)));
 
   const changes: Change[] = [];
   const end = prose.trimEnd().length;
-  const words = [...prose.slice(0, end).matchAll(/\S+/g)].slice(-MAX_EXPRESSION_WORDS);
-  // Longest trailing expression wins ("next friday 5pm" over "5pm").
-  for (let index = 0; index < words.length; index++) {
-    const from = words[index].index ?? 0;
+  const candidates = [...prose.slice(0, end).matchAll(/\S+/g)].slice(-MAX_EXPRESSION_WORDS);
+  // Longest trailing expression wins ("next friday 5pm" over "5pm"). Its words may sit apart, with metadata between
+  // them, in any order: "tomorrow {sunday} 5m 9:30pm p2" reads "tomorrow 9:30pm" as the schedule.
+  for (let index = 0; index < candidates.length; index++) {
+    const parts = candidates.slice(index);
+    const from = parts[0].index ?? 0;
     if (from < lastDateLink) continue;
-    const expression = prose.slice(from, end);
-    if (expression !== text.slice(from, end)) continue;
+    // Every word must be the line's own text (not a masked token or protected prose).
+    if (parts.some(part => text.slice(part.index, (part.index ?? 0) + part[0].length) !== part[0])) continue;
+    const expression = parts.map(part => part[0]).join(" ");
     const previousWord = /(\S+)\s*$/.exec(prose.slice(0, from))?.[1] ?? "";
     // Never split an unrecognized `>…` token into prose and a date.
     if (previousWord.startsWith(">")) continue;
     if (!acceptsExpression(expression, previousWord, dateFormat)) continue;
     const insert = replacement(expression);
     if (insert === undefined) continue;
+    for (const part of parts) words.push({ from: part.index ?? 0, to: (part.index ?? 0) + part[0].length });
+    // Each word goes, with the space before it; the date takes the first word's place.
+    const removals = parts.map(part => {
+      const start = part.index ?? 0;
+      return { from: start - /\s*$/.exec(text.slice(0, start))![0].length, to: start + part[0].length, insert: "" };
+    });
     // A date before plain #tags would not be read as the schedule (they are prose to the task),
     // so it moves to the end of the line, after them: "Buy milk tomorrow #errand" → "Buy milk #errand [[…]]".
-    if (new RegExp(PLAIN_TAG.source, "u").test(text.slice(end))) {
-      const gap = /\s*$/.exec(text.slice(0, from))![0].length;
+    if (new RegExp(PLAIN_TAG.source, "u").test(text.slice(from))) {
       const lineEnd = text.trimEnd().length;
-      changes.push({ from: from - gap, to: end, insert: "" }, { from: lineEnd, to: lineEnd, insert: ` ${insert}` });
-    } else changes.push({ from, to: end, insert });
+      changes.push(...removals, { from: lineEnd, to: lineEnd, insert: ` ${insert}` });
+    } else changes.push({ from, to: from + parts[0][0].length, insert }, ...removals.slice(1));
     break;
   }
   if (deadline) changes.push(deadline);
   if (defer) changes.push(defer);
-  return changes.filter(change => text.slice(change.from, change.to) !== change.insert).sort((a, b) => a.from - b.from);
+  return { changes: changes.filter(change => text.slice(change.from, change.to) !== change.insert).sort((a, b) => a.from - b.from), words };
 }
 
-/** Reorder recognized token slots, retaining source spelling, spacing and destinations. */
-function orderNoteProperties(text: string, dateFormat: string, reference: Date): string {
-  const ranges: ParsedTokenRange[] = [];
-  parseTaskLine(text, reference, dateFormat, false, ranges);
-  ranges.sort((a, b) => a.from - b.from);
-  const order: ParsedTokenRange["kind"][] = ["scheduledDate", "repeat", "durationMinutes", "deadline", "defer", "priority", "tags", "completedDate"];
-  const tokens = [...ranges].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
-    .map(range => text.slice(range.from, range.to));
-  for (let index = ranges.length - 1; index >= 0; index--) {
-    const range = ranges[index];
-    text = text.slice(0, range.from) + tokens[index] + text.slice(range.to);
-  }
-  return text;
-}
 
 const USER_EDIT_EVENTS = ["input", "delete", "move", "paste", "drop"];
 
@@ -217,7 +224,7 @@ export function noteDateInput(getDateFormat: () => string, isTaskMode: () => boo
         for (const change of resolvedDates.reverse()) {
           resolved = resolved.slice(0, change.from) + change.insert + resolved.slice(change.to);
         }
-        const ordered = orderNoteProperties(resolved, dateFormat, reference);
+        const ordered = sortTaskProperties(resolved, dateFormat, reference);
         if (ordered !== text) changes.push({ from, to: from + text.length, insert: ordered });
       }
     }

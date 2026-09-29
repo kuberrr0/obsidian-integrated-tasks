@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseDateExpression } from "../src/date";
 import { dailyNoteDateFormat } from "../src/daily-notes";
-import { parseTaskInput, parseTaskLine, scanTasks, serializeTask, serializeTaskInput } from "../src/parser";
+import { parseTaskInput, parseTaskLine, rewriteTaskLine, scanTasks, serializeTask, serializeTaskInput } from "../src/parser";
 
 const reference = new Date(2026, 8, 4, 10, 0, 0);
 
@@ -220,10 +220,15 @@ describe("plain-language task input dates", () => {
     ["Call tomorrow", "Call", "2026-09-05"],
     ["Review next Friday", "Review", "2026-09-11"],
     ["Call in two days", "Call", "2026-09-06"],
-    ["today call Sam", "call Sam", "2026-09-04"],
-    ["Call tomorrow about the launch", "Call about the launch", "2026-09-05"]
+    ["Call Sam at 3pm tomorrow p1", "Call Sam", "2026-09-05"]
   ])("parses %s", (input, title, scheduledDate) => {
     expect(parseTaskInput(input, reference)).toMatchObject({ title, scheduledDate });
+  });
+
+  it.each(["today call Sam", "Call tomorrow about the launch", "Buy sun cream", "Get some sun", "Done last Friday", "Read chapter 5/10"])("leaves %s as the title", input => {
+    const parsed = parseTaskInput(input, reference)!;
+    expect(parsed.title).toBe(input);
+    expect(parsed.scheduledDate).toBeUndefined();
   });
 
   it("combines plain dates with duration, priority, deadline, and heading destination", () => {
@@ -294,6 +299,25 @@ describe("task times", () => {
 
   it.each([["9pm", "21:00"], ["at 9:15 pm", "21:15"], ["21:30", "21:30"], ["noon", "12:00"], ["midnight", "00:00"]])("parses linked dates with %s", (time, expected) => {
     expect(parseTaskLine(`- [ ] Call [[05-09-2026]] ${time} {[[07-09-2026]] ${time}}`, reference, "DD-MM-YYYY")).toMatchObject({ title: "Call", scheduledTime: expected, deadlineTime: expected });
+  });
+
+  it("reads a time written apart from its date, with other properties between them", () => {
+    const line = "- [ ] do this [[2026-10-01]] every monday 21:30 5m {[[2026-10-04]]} p2";
+    expect(parseTaskLine(line, reference)).toMatchObject({ title: "do this", scheduledDate: "2026-10-01", scheduledTime: "21:30", repeat: "every monday", durationMinutes: 5, deadline: "2026-10-04", priority: 2 });
+    expect(parseTaskLine("- [ ] Call 2026-10-01 p1 at 9:30pm", reference)).toMatchObject({ title: "Call", scheduledDate: "2026-10-01", scheduledTime: "21:30", priority: 1 });
+    // Without a date to join (or with a date that has its own time), the time is title text, and so is what is before it.
+    expect(parseTaskLine("- [ ] Meet 5m at 21:30 p1", reference)).toMatchObject({ title: "Meet 5m at 21:30", priority: 1 });
+    expect(parseTaskLine("- [ ] Meet 5m at 21:30 p1", reference)?.durationMinutes).toBeUndefined();
+    expect(parseTaskLine("- [ ] Call [[2026-10-01]] 09:00 21:30", reference)).toMatchObject({ title: "Call [[2026-10-01]] 09:00 21:30" });
+  });
+
+  it("puts a saved line's properties in order when its draft asks, keeping each one's spelling", () => {
+    const raw = "- [ ] Water [[2026-10-01]] p1 every week 30m";
+    const parsed = parseTaskLine(raw, reference)!;
+    expect(rewriteTaskLine(raw, { ...parsed, destination: "", deadline: "2026-10-05" }, "YYYY-MM-DD", true, reference))
+      .toBe("- [ ] Water [[2026-10-01]] p1 every week 30m {[[2026-10-05]]}");
+    expect(rewriteTaskLine(raw, { ...parsed, destination: "", deadline: "2026-10-05", sortProperties: true }, "YYYY-MM-DD", true, reference))
+      .toBe("- [ ] Water [[2026-10-01]] 30m every week {[[2026-10-05]]} p1");
   });
 
   it("preserves times in natural scheduled and deadline input", () => {

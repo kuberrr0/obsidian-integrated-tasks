@@ -17,6 +17,26 @@ describe("note highlights", () => {
     ]);
   });
 
+  it("highlights a time written apart from its date as part of the schedule", () => {
+    expect(highlighted("- [ ] do this [[2026-10-01]] every monday 21:30 5m p2")).toEqual([
+      ["[[2026-10-01]]", "tm-nlp-token is-date"],
+      ["every monday", "tm-nlp-token is-other"],
+      ["21:30", "tm-nlp-token is-date"],
+      ["5m", "tm-nlp-token is-date"],
+      ["p2", "tm-nlp-token is-priority is-p2"]
+    ]);
+  });
+
+  it("highlights a date still in words, which leaving the line converts, and the properties before it", () => {
+    expect(highlighted("- [ ] Water p1 every week 30m tomorrow")).toEqual([
+      ["p1", "tm-nlp-token is-priority is-p1"], ["every week", "tm-nlp-token is-other"], ["30m", "tm-nlp-token is-date"], ["tomorrow", "tm-nlp-token is-date"]
+    ]);
+    expect(highlighted("- [ ] do this tomorrow {sunday} 5m 9:30pm p2").map(([text]) => text)).toEqual(["tomorrow", "{sunday}", "5m", "9:30pm", "p2"]);
+    // Not in the middle of the title, and not on a completed task, which leaving the line never changes.
+    expect(highlighted("- [ ] Call mom tomorrow about dinner")).toEqual([]);
+    expect(highlighted("- [x] Call mom tomorrow")).toEqual([]);
+  });
+
   it("leaves tags unhighlighted, as Obsidian shows them", () => {
     expect(highlighted("- [ ] Call Sam p2 #[[home]] #[[calls]]")).toEqual([["p2", "tm-nlp-token is-priority is-p2"]]);
   });
