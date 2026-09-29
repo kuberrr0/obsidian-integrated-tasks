@@ -10,7 +10,8 @@ export function projectDateLabel(date: string, now = new Date()): string {
     return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "MMM D" : "MMM D, YYYY");
 }
 
-export function renderProjectHeaderDetails(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date(), deadlineParent = parent, things = false): void {
+/** `showParent`: the parent project, shown on a project's page but not in the Projects list. */
+export function renderProjectHeaderDetails(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date(), deadlineParent = parent, things = false, showParent = true): void {
     if (things) renderThingsProjectDates(parent, project, edit, dateFormat, now);
     else if (project.scheduledDate || project.endDate) {
         const range = parent.createSpan({ cls: "tm-project-date-range" });
@@ -28,7 +29,7 @@ export function renderProjectHeaderDetails(parent: HTMLElement, project: Project
     }
     if (things) renderThingsProjectDeadline(deadlineParent, project, edit, dateFormat, now);
     else renderProjectDeadline(deadlineParent, project, edit, dateFormat, now);
-    if (project.parent) {
+    if (project.parent && showParent) {
         const name = project.parent.replace(/\.md$/i, "");
         const source = parent.createSpan({ cls: "tm-task-source", text: name.split("/").pop(), attr: { title: name } });
         editable(source, `parent project: ${name}`, "parent", edit);

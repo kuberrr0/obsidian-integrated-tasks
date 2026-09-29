@@ -427,11 +427,12 @@ const DETAILS_SHOWN: Keyframe = { opacity: 1, transform: "none" };
  * Opens the card out of the space its row (and subtask rows) filled: it grows to its full height while
  * its surface fades in, and the notes, checklist and properties fade in below the title.
  */
-export function animateCardOpen(card: HTMLElement, fromHeight: number, duration = CARD_OPEN_MS): void {
+export async function animateCardOpen(card: HTMLElement, fromHeight: number, duration = CARD_OPEN_MS): Promise<void> {
     const frames = cardKeyframes(card, fromHeight);
     if (!frames) return;
-    card.animate(frames, { duration, easing: CARD_EASING });
+    const growing = card.animate(frames, { duration, easing: CARD_EASING });
     for (const child of cardDetails(card)) child.animate([DETAILS_HIDDEN, DETAILS_SHOWN], { duration, easing: CARD_EASING });
+    try { await growing.finished; } catch { /* Cancelled when the card is redrawn. */ }
 }
 
 /**

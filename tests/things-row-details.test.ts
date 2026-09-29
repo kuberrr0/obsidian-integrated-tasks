@@ -124,30 +124,43 @@ describe("Things task row", () => {
 });
 
 describe("Things project row", () => {
-  function projectRow(properties: Partial<Project>) {
+  function projectRow(properties: Partial<Project>, datesBelow = false) {
     const lead = document.createElement("span"), inline = document.createElement("div"), secondary = document.createElement("div");
     const project: Project = { name: "New Project", path: "Projects/New Project.md", openTasks: 0, completedTasks: 0, archived: false, ...properties };
     const edit = vi.fn();
-    renderThingsProjectDetails({ lead, inline, secondary }, project, { dateFormat: "MMM D, YYYY", now, edit });
+    renderThingsProjectDetails({ lead, inline, secondary }, project, { dateFormat: "MMM D, YYYY", now, edit, datesBelow });
     return { lead, inline, secondary, edit };
   }
 
-  it("shows the remaining count, then a future start and the deadline together at the end, and the parent below", () => {
+  it("shows the remaining count, then a future start and the deadline together at the end, and no parent", () => {
     const { lead, inline, secondary, edit } = projectRow({ scheduledDate: "2026-10-08", deadline: "2026-10-25", openTasks: 3, parent: "Area.md" });
     expect(lead.childElementCount).toBe(0);
     expect(Array.from(inline.children).map(child => child.className)).toEqual(["tm-things-count", "tm-things-trailing"]);
     expect(Array.from(inline.querySelector(".tm-things-trailing")!.children).map(child => child.textContent)).toEqual(["Oct 8", "36 days left"]);
-    expect(secondary.textContent).toBe("Area");
+    expect(secondary.childElementCount).toBe(0);
     (inline.querySelector(".tm-things-deadline") as HTMLElement).click();
     expect(edit).toHaveBeenCalledWith("deadline");
   });
 
   it("shows a running project's date range and leaves out an empty count", () => {
-    const { inline } = projectRow({ scheduledDate: "2026-09-07", endDate: "2026-09-25" });
+    const { inline, edit } = projectRow({ scheduledDate: "2026-09-07", endDate: "2026-09-25" });
     expect(inline.textContent).toBe("Sep 7 – Sep 25");
+    // Each end opens its own date.
+    const [start, end] = Array.from(inline.querySelectorAll<HTMLElement>(".tm-things-range [role=button]"));
+    expect([start.textContent, end.textContent]).toEqual(["Sep 7", "Sep 25"]);
+    start.click();
+    end.click();
+    expect(edit.mock.calls).toEqual([["date"], ["endDate"]]);
     expect(inline.querySelector(".tm-things-count")).toBeNull();
     // A start already past, without an end, needs no box.
     expect(projectRow({ scheduledDate: "2026-09-07" }).inline.childElementCount).toBe(0);
+  });
+
+  it("on phones, puts the dates and deadline below the name", () => {
+    const { inline, secondary } = projectRow({ scheduledDate: "2026-10-08", deadline: "2026-10-25", openTasks: 3 }, true);
+    expect(Array.from(inline.children).map(child => child.className)).toEqual(["tm-things-count"]);
+    expect(Array.from(secondary.children).map(child => child.className)).toEqual(["tm-things-trailing"]);
+    expect(secondary.textContent).toBe("Oct 836 days left");
   });
 
   it("marks an overdue project deadline as urgent", () => {

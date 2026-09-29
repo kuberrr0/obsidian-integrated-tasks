@@ -40,7 +40,7 @@ vi.mock("obsidian", async importOriginal => {
   return { ...original, ItemView, Menu, Notice: class {}, setIcon: vi.fn() };
 });
 
-import { TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { Platform, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { DEFAULT_SETTINGS } from "../src/types";
@@ -842,6 +842,33 @@ describe("Create new task in the Things style", () => {
     await view.setState({ mode: "today" });
     view.newTask();
     expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ mode: "today" }));
+  });
+});
+
+describe("opening a card on a phone", () => {
+  it("scrolls the card to the middle of the visible list once it has opened", async () => {
+    const platform = Platform as { isMobile?: boolean };
+    platform.isMobile = true;
+    try {
+      const { view, content, plugin } = await setup([note("A.md", 3)]);
+      plugin.settings.style = "things";
+      await view.setState({ mode: "all" });
+      // The list scrolls within 0–800px; the opened card sits at 700–800px, its middle 350px below the list's.
+      const list = content().parentElement!;
+      list.style.overflowY = "auto";
+      Object.defineProperty(list, "scrollHeight", { configurable: true, value: 2000 });
+      Object.defineProperty(list, "clientHeight", { configurable: true, value: 800 });
+      vi.spyOn(list, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 800, height: 800 } as DOMRect);
+      const scrollBy = vi.fn();
+      list.scrollBy = scrollBy as never;
+      vi.stubGlobal("visualViewport", undefined);
+      vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        return (this === list ? { top: 0, bottom: 800, height: 800 } : this.classList.contains("tm-things-card") ? { top: 700, bottom: 800, height: 100 } : { top: 0, bottom: 40, height: 40 }) as DOMRect;
+      });
+      rows(content())[2].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(scrollBy).toHaveBeenCalledWith({ top: 350, behavior: "smooth" }));
+    } finally { platform.isMobile = false; vi.restoreAllMocks(); }
   });
 });
 

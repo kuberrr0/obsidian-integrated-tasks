@@ -124,11 +124,13 @@ export interface ThingsProjectOptions {
     dateFormat: string;
     now?: Date;
     edit: (field: keyof ProjectDraft) => void;
+    /** Put the dates and deadline on the line below the name instead of at its end (on phones). */
+    datesBelow?: boolean;
 }
 
 /**
- * A project row as Things lists one: a count of its remaining tasks after the name, its dates and
- * deadline at the end of the line, and the parent project below.
+ * A project row as Things lists one: a count of its remaining tasks after the name, then its dates and
+ * deadline at the end of the line (or, on phones, below the name).
  */
 export function renderThingsProjectDetails(parts: ThingsRowParts, project: Project, options: ThingsProjectOptions): void {
     const now = options.now ?? new Date();
@@ -136,12 +138,19 @@ export function renderThingsProjectDetails(parts: ThingsRowParts, project: Proje
     // Ranges read as plain dates; a weekday on one end would be ambiguous.
     const label = (date: string): string => taskDoneDateLabel(date, now);
     if (project.openTasks) parts.inline.createSpan({ cls: "tm-things-count", text: String(project.openTasks), attr: { title: `${project.openTasks} remaining` } });
-    // At the end of the line: the dates (a start still ahead reads like a task's; a range while it runs), then the deadline.
-    const trailing = parts.inline.createSpan({ cls: "tm-things-trailing" });
+    // At the end of the line (or below the name): the dates (a start still ahead reads like a task's; a range while
+    // it runs), then the deadline.
+    const trailing = (options.datesBelow ? parts.secondary : parts.inline).createSpan({ cls: "tm-things-trailing" });
     if (project.scheduledDate && project.endDate) {
-        const range = dateText(trailing, "tm-things-when", `${label(project.scheduledDate)} – ${label(project.endDate)}`,
+        // One calendar icon for the range; each end opens its own date's popover.
+        const range = dateText(trailing, "tm-things-when tm-things-range", "",
             `${formatDate(project.scheduledDate, options.dateFormat)} – ${formatDate(project.endDate, options.dateFormat)}`);
-        editable(range, `Edit project dates: ${range.textContent ?? ""}`, "project-date", () => options.edit("date"));
+        const text = range.lastElementChild as HTMLElement;
+        const start = text.createSpan({ text: label(project.scheduledDate), attr: { title: `Starts ${formatDate(project.scheduledDate, options.dateFormat)}` } });
+        editable(start, `Edit project start date: ${start.textContent ?? ""}`, "project-date", () => options.edit("date"));
+        text.appendText(" – ");
+        const end = text.createSpan({ text: label(project.endDate), attr: { title: `Ends ${formatDate(project.endDate, options.dateFormat)}` } });
+        editable(end, `Edit project end date: ${end.textContent ?? ""}`, "project-end", () => options.edit("endDate"));
     } else if (project.scheduledDate && project.scheduledDate > today) {
         const start = dateText(trailing, "tm-things-when", thingsDateLabel(project.scheduledDate, now), `Starts ${formatDate(project.scheduledDate, options.dateFormat)}`);
         editable(start, `Edit project start date: ${start.textContent ?? ""}`, "project-date", () => options.edit("date"));
@@ -151,11 +160,6 @@ export function renderThingsProjectDetails(parts: ThingsRowParts, project: Proje
     }
     renderThingsProjectDeadline(trailing, project, options);
     if (!trailing.childElementCount) trailing.remove();
-    if (project.parent) {
-        const name = project.parent.replace(/\.md$/i, "");
-        const parent = parts.secondary.createSpan({ cls: "tm-things-source", text: name.split("/").pop(), attr: { title: name } });
-        editable(parent, `Edit parent project: ${name}`, "project-parent", () => options.edit("parent"));
-    }
 }
 
 /** A project's deadline as a Things row shows it: a flag and "N days left", red once due; opens the deadline editor. */

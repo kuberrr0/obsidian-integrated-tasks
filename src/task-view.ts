@@ -1059,15 +1059,13 @@ export class TaskMainView extends ItemView {
       });
       if (lead) {
         const secondary = content.createDiv({ cls: "tm-things-secondary" });
-        renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field) });
+        renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field), datesBelow: Platform.isMobile });
         if (!lead.childElementCount) lead.remove();
         if (!secondary.childElementCount) secondary.remove();
         continue;
       }
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
-      const parentColor = project.parentPath ? this.plugin.index.projectColor(project.parentPath) : undefined;
-      if (parentColor) metadata.style.setProperty("--tm-project-color", parentColor);
-      renderProjectHeaderDetails(metadata, project, property => this.openProjectProperty(project, property), this.plugin.dateFormat(), undefined, primary);
+      renderProjectHeaderDetails(metadata, project, property => this.openProjectProperty(project, property), this.plugin.dateFormat(), undefined, primary, false, false);
       if (!metadata.childElementCount) metadata.remove();
     }
   }
@@ -1889,7 +1887,35 @@ export class TaskMainView extends ItemView {
     this.renderTaskResults();
     const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
     card?.querySelector<HTMLTextAreaElement>(".tm-things-card-title")?.focus({ preventScroll: true });
-    if (card && from) animateCardOpen(card, from);
+    const opened = card && from ? animateCardOpen(card, from) : Promise.resolve();
+    if (card && Platform.isMobile) void opened.then(() => this.centerCard(card));
+  }
+
+  /**
+   * On phones, scrolls an open card to the middle of the part of the screen it can be seen in (above the keyboard),
+   * and again if the keyboard then opens for its title.
+   */
+  private centerCard(card: HTMLElement): void {
+    const win = card.ownerDocument.defaultView;
+    let scroller = card.parentElement;
+    while (scroller && !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(win?.getComputedStyle(scroller).overflowY ?? ""))) scroller = scroller.parentElement;
+    if (!win || !scroller) return;
+    const list = scroller;
+    const center = (): void => {
+      if (!card.isConnected) return;
+      const area = list.getBoundingClientRect();
+      const viewport = win.visualViewport;
+      const top = Math.max(area.top, viewport?.offsetTop ?? 0);
+      const bottom = Math.min(area.bottom, viewport ? viewport.offsetTop + viewport.height : win.innerHeight);
+      const rect = card.getBoundingClientRect();
+      list.scrollBy({ top: rect.top + rect.height / 2 - (top + bottom) / 2, behavior: "smooth" });
+    };
+    center();
+    const viewport = win.visualViewport;
+    if (!viewport) return;
+    const again = (): void => { viewport.removeEventListener("resize", again); win.clearTimeout(stop); center(); };
+    const stop = win.setTimeout(() => viewport.removeEventListener("resize", again), 1000);
+    viewport.addEventListener("resize", again);
   }
 
   /**

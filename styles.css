@@ -1884,6 +1884,9 @@ body.is-mobile .tm-options-panel { position: fixed; top: calc(8px + env(safe-are
   cursor: pointer;
 }
 .tm-things-date.tm-things-done { cursor: default; }
+/* A project's range: each end is its own button. */
+.tm-things-date.tm-things-range { cursor: default; }
+.tm-things-range [role="button"] { cursor: pointer; }
 .tm-things-date.tm-things-when.is-overdue { color: var(--text-error); }
 .tm-things-today { display: inline-flex; align-items: center; color: var(--color-yellow); cursor: pointer; }
 .tm-things-today svg { width: 13px; height: 13px; fill: currentColor; }
@@ -1929,7 +1932,8 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
 .tm-things-deadline .tm-task-detail-icon svg { fill: currentColor; }
 .tm-things-secondary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .tm-things-source { overflow: hidden; color: var(--text-muted); font-size: var(--font-ui-smaller); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-:is(.tm-things-date, .tm-things-tag, .tm-things-source, .tm-things-repeat):not(.tm-things-done, .is-overdue):hover,
+:is(.tm-things-date, .tm-things-tag, .tm-things-source, .tm-things-repeat):not(.tm-things-done, .is-overdue, .tm-things-range):hover,
+.tm-things-range [role="button"]:hover,
 .tm-things-deadline:not(.is-urgent):hover { color: var(--text-normal); }
 .tm-task-row.is-completed :is(.tm-things-lead, .tm-things-tag, .tm-things-deadline, .tm-things-secondary) { opacity: 0.7; }
 
