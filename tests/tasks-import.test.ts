@@ -8,7 +8,7 @@ const convert = (line: string, overrides: Partial<TasksImportOptions> = {}) => c
 describe("Tasks plugin import", () => {
   it("converts emoji dates, priority, recurrence and tags", () => {
     const result = convert("- [ ] Pay rent ⏫ 🔁 every month ⏳ 2026-09-28 📅 2026-10-01 🛫 2026-09-25 ➕ 2026-09-01 #home");
-    expect(result.line).toBe("- [ ] Pay rent Sep 28, 2026 every month {Oct 1, 2026} >Sep 25, 2026 p1 #[[home]]");
+    expect(result.line).toBe("- [ ] Pay rent Sep 28, 2026 {Oct 1, 2026} every month >Sep 25, 2026 p1 #[[home]]");
     expect(parseTaskLine(result.line, options.reference, options.dateFormat)).toMatchObject({
       title: "Pay rent", scheduledDate: "2026-09-28", deadline: "2026-10-01", deferDate: "2026-09-25", priority: 1, repeat: "every month", tags: ["home"]
     });
@@ -27,7 +27,7 @@ describe("Tasks plugin import", () => {
 
   it("reads Dataview-style fields", () => {
     expect(convert("- [ ] Plan [due:: 2026-10-01] [scheduled:: 2026-09-28] (priority:: high) [repeat:: every week when done]").line)
-      .toBe("- [ ] Plan Sep 28, 2026 every week {Oct 1, 2026} p1");
+      .toBe("- [ ] Plan Sep 28, 2026 {Oct 1, 2026} every week p1");
   });
 
   it("removes the global filter tag, optionally keeps #tags and created dates", () => {

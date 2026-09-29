@@ -362,8 +362,8 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
   const metadata = [
     draft.scheduledDate ? `${dateText(draft.scheduledDate)}${draft.scheduledTime ? ` ${draft.scheduledTime}` : ""}` : "",
     draft.durationMinutes ? formatDuration(draft.durationMinutes) : "",
-    draft.repeat ?? "",
     draft.deadline ? `{${dateText(draft.deadline)}${draft.deadlineTime ? ` ${draft.deadlineTime}` : ""}}` : "",
+    draft.repeat ?? "",
     deferText(draft, dateText),
     draft.priority ? `p${draft.priority}` : "",
     formatTags(draft.tags),
@@ -373,7 +373,7 @@ export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates =
   return `${indent}- [${STATUS_CHARS[draftStatus(draft)]}] ${title}${metadataGap}${metadata.join(" ")}`;
 }
 
-const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "durationMinutes", "repeat", "deadline", "defer", "priority", "tags", "completedDate", "destination"];
+const CANONICAL_ORDER: LineRange["kind"][] = ["scheduledDate", "durationMinutes", "deadline", "repeat", "defer", "priority", "tags", "completedDate", "destination"];
 
 /**
  * Edit an existing task line in place: keep indentation, checkbox spacing, title spelling,
@@ -445,7 +445,7 @@ export function rewriteTaskLine(raw: string, draft: TaskDraft, dateFormat?: stri
 }
 
 /**
- * A task line with its properties in the usual order (date and time, duration, repeat, deadline, defer, priority,
+ * A task line with its properties in the usual order (date and time, duration, deadline, repeat, defer, priority,
  * tags, completion date), each keeping its spelling; the spacing between them and a destination stay put.
  */
 export function sortTaskProperties(line: string, dateFormat?: string, reference = new Date()): string {

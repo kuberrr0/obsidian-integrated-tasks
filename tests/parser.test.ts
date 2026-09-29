@@ -317,7 +317,7 @@ describe("task times", () => {
     expect(rewriteTaskLine(raw, { ...parsed, destination: "", deadline: "2026-10-05" }, "YYYY-MM-DD", true, reference))
       .toBe("- [ ] Water [[2026-10-01]] p1 every week 30m {[[2026-10-05]]}");
     expect(rewriteTaskLine(raw, { ...parsed, destination: "", deadline: "2026-10-05", sortProperties: true }, "YYYY-MM-DD", true, reference))
-      .toBe("- [ ] Water [[2026-10-01]] 30m every week {[[2026-10-05]]} p1");
+      .toBe("- [ ] Water [[2026-10-01]] 30m {[[2026-10-05]]} every week p1");
   });
 
   it("preserves times in natural scheduled and deadline input", () => {

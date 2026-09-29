@@ -116,9 +116,9 @@ it("reads properties typed in any order, then sorts them", () => {
   try {
     // A repeat among the properties, and a time written apart from an existing date.
     expect(enter(state("- [ ] do this tomorrow every monday {sunday} 5m 9:30pm p2 #call")).doc.toString())
-      .toBe("- [ ] do this [[2026-09-09]] 21:30 5m every monday {[[2026-09-13]]} p2 #call\n");
+      .toBe("- [ ] do this [[2026-09-09]] 21:30 5m {[[2026-09-13]]} every monday p2 #call\n");
     expect(enter(state("- [ ] do this [[2026-10-01]] every monday 21:30 5m {[[2026-10-04]]} p2 #call")).doc.toString())
-      .toBe("- [ ] do this [[2026-10-01]] 21:30 5m every monday {[[2026-10-04]]} p2 #call\n");
+      .toBe("- [ ] do this [[2026-10-01]] 21:30 5m {[[2026-10-04]]} every monday p2 #call\n");
   } finally { setTagFormat("wikilink"); }
   // With #[[tag]] tags, a plain #tag is prose, so the date follows it to stay the schedule.
   expect(enter(state("- [ ] do this tomorrow {sunday} 5m 9:30pm p2 #call")).doc.toString())
