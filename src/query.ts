@@ -89,18 +89,34 @@ const MISSING_GROUP: Partial<Record<Exclude<TaskGrouping, "default" | "none">, s
   scheduledDate: "scheduled date", scheduledTime: "scheduled time", deadlineTime: "deadline time", completed: "completion date"
 };
 
-/** Group an already sorted list, keeping its selected order within each group. */
-export function groupTasks(tasks: Task[], grouping: Exclude<TaskGrouping, "default" | "none">): Map<string, Task[]> {
+/** Groupings whose values have a natural order: their groups follow it rather than the list sort. */
+const ORDERED_GROUPINGS = new Set<TaskGrouping>(["date", "scheduledDate", "scheduledTime", "deadline", "deadlineTime", "defer", "completed", "priority", "duration"]);
+
+/**
+ * Group an already sorted list, keeping its selected order within each group.
+ * Dates, times, priorities and durations come in ascending order (descending when asked), and the group without a value comes last.
+ */
+export function groupTasks(tasks: Task[], grouping: Exclude<TaskGrouping, "default" | "none">, descending = false): Map<string, Task[]> {
   const groups = new Map<string, Task[]>();
+  const ranks = new Map<string, string | number | undefined>();
   for (const task of tasks) {
     const value = grouping === "date" ? actionDate(task) : propertyValue(task, grouping);
-    const key = value === undefined || value === "" ? grouping === "defer" ? "Not hidden" : `No ${MISSING_GROUP[grouping] ?? grouping}`
+    const missing = value === undefined || value === "";
+    const key = missing ? grouping === "defer" ? "Not hidden" : `No ${MISSING_GROUP[grouping] ?? grouping}`
       : grouping === "date" ? String(value) : propertyLabel(grouping, value);
     const group = groups.get(key) ?? [];
     group.push(task);
     groups.set(key, group);
+    ranks.set(key, missing ? undefined : value);
   }
-  return groups;
+  if (!ORDERED_GROUPINGS.has(grouping)) return groups;
+  return new Map([...groups].sort(([left], [right]) => {
+    const a = ranks.get(left), b = ranks.get(right);
+    if (a === undefined) return b === undefined ? 0 : 1;
+    if (b === undefined) return -1;
+    const comparison = typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b));
+    return descending ? -comparison : comparison;
+  }));
 }
 
 /** Keep visible children next to their parent while sorting sibling tasks. */

@@ -32,10 +32,11 @@ describe("Kanban columns", () => {
     expect(draftForGroup(tasks[0], columns[2].target).priority).toBe(3);
     expect(draftForGroup(tasks[0], columns[3].target).priority).toBeUndefined();
   });
-  it("uses the actual date value for column drops and preserves selected ordering", () => {
+  it("uses the actual date value for column drops and puts undated tasks last, in selected order", () => {
     const columns = kanbanColumns(tasks, "scheduledDate");
-    expect(columns[0].tasks).toEqual(tasks.slice(0, 2));
-    expect(draftForGroup(tasks[0], columns[1].target).scheduledDate).toBe("2027-03-28");
+    expect(columns.map(column => column.title)).toEqual(["2027-03-28", "No scheduled date"]);
+    expect(columns[1].tasks).toEqual(tasks.slice(0, 2));
+    expect(draftForGroup(tasks[0], columns[0].target).scheduledDate).toBe("2027-03-28");
   });
   it("supports one ungrouped column and source-note destinations", () => {
     expect(kanbanColumns(tasks, "none")).toEqual([{ title: "Tasks", tasks }]);

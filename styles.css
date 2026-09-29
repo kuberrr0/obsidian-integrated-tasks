@@ -1926,6 +1926,7 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
   cursor: pointer;
 }
 .tm-things-box.tm-things-done { cursor: default; }
+.tm-things-box.tm-things-when.is-overdue { color: var(--text-error); }
 .tm-things-today { display: inline-flex; align-items: center; color: var(--color-yellow); cursor: pointer; }
 .tm-things-today svg { width: 13px; height: 13px; fill: currentColor; }
 .tm-things-repeat { display: inline-flex; align-items: center; color: var(--text-faint); cursor: pointer; }

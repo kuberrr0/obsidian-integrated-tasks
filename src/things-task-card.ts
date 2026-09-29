@@ -262,10 +262,9 @@ export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags
     // The scheduled time (and duration) joins its date on one line, as the deadline's time does.
     const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
     if (task.scheduledDate) {
-        const isToday = task.scheduledDate <= today;
+        const isToday = task.scheduledDate === today;
         const day = isToday ? "Today" : longDate(task.scheduledDate, now);
-        line(isToday ? "star" : "calendar", time ? `${day}, ${time}` : day, "scheduledDate",
-            task.scheduledDate < today ? `since ${longDate(task.scheduledDate, now)}` : undefined, isToday ? "is-today" : "");
+        line(isToday ? "star" : "calendar", time ? `${day}, ${time}` : day, "scheduledDate", undefined, isToday ? "is-today" : "");
     } else if (time) line("clock", time, task.scheduledTime ? "scheduledDate" : "durationMinutes");
     if (task.priority) line("signal", `${PRIORITY_NAMES[task.priority]} priority`, "priority", `P${task.priority}`, `is-p${task.priority}`);
     if (task.repeat) line("repeat", `Repeats ${repeatLabel(task.repeat).toLowerCase()}`, "repeat");

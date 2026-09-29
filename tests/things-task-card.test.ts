@@ -189,7 +189,7 @@ describe("Things task card", () => {
 
   it("puts the scheduled time on the same line as its date, as the deadline's time is", () => {
     const lines = (markdown: string) => Array.from(card(markdown).element.querySelectorAll(".tm-things-card-property")).map(line => line.textContent);
-    expect(lines("- [ ] Task 1 2026-09-17 09:45 90m {2026-09-30 17:30}")).toEqual(["Today, 9:45-11:15 AMsince Thu, Sep 17", "Deadline: Wed, Sep 30, 5:30 PM11 days left"]);
+    expect(lines("- [ ] Task 1 2026-09-17 09:45 90m {2026-09-30 17:30}")).toEqual(["Thu, Sep 17, 9:45-11:15 AM", "Deadline: Wed, Sep 30, 5:30 PM11 days left"]);
     expect(lines("- [ ] Task 1 2026-10-08 10:00")).toEqual(["Thu, Oct 8, 10:00 AM"]);
     // A duration without a date keeps its own line.
     expect(lines("- [ ] Task 1 30m")).toEqual(["30m"]);

@@ -94,10 +94,14 @@ describe("shared task view controls", () => {
     expect(tasks.map((item) => item.id)).toEqual(["a", "b"]);
   });
 
-  it("includes undated and unprioritized tasks in groups without re-sorting", () => {
-    const ordered = [...tasks, task({ id: "c", completed: true })];
-    expect([...groupTasks(ordered, "date").keys()]).toEqual(["2026-09-06", "2026-09-05", "No date"]);
+  it("orders date and priority groups by value, with undated and unprioritized tasks last", () => {
+    const ordered = [task({ id: "c", completed: true }), ...tasks];
+    expect([...groupTasks(ordered, "date").keys()]).toEqual(["2026-09-05", "2026-09-06", "No date"]);
+    expect([...groupTasks(ordered, "date", true).keys()]).toEqual(["2026-09-06", "2026-09-05", "No date"]);
+    expect([...groupTasks(ordered, "scheduledDate").keys()]).toEqual(["2026-09-05", "2026-09-06", "No scheduled date"]);
     expect([...groupTasks(ordered, "priority").keys()]).toEqual(["P1", "P3", "No priority"]);
+    expect([...groupTasks(ordered, "duration").keys()]).toEqual(["15m", "1h", "No duration"]);
+    expect([...groupTasks([...tasks].reverse(), "title").keys()]).toEqual(["Alpha", "Zulu"]);
     expect(groupTasks(ordered, "source").get("Project.md")).toEqual(ordered);
     expect(groupTasks(ordered, "status").get("Done")?.map((item) => item.id)).toEqual(["c"]);
   });

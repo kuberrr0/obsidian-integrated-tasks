@@ -63,9 +63,12 @@ describe("Things task row", () => {
     expect(classes(row("- [ ] Plan").inline)).toEqual([]);
   });
 
-  it("stars tasks scheduled today or earlier, except in the Today list", () => {
+  it("stars only tasks scheduled today, except in the Today list", () => {
     expect(classes(row("- [ ] Call 2026-09-19").lead)).toEqual(["tm-things-today"]);
-    expect(classes(row("- [ ] Call 2026-09-10").lead)).toEqual(["tm-things-today is-overdue"]);
+    const overdue = row("- [ ] Call 2026-09-10");
+    expect(overdue.lead.childElementCount).toBe(0);
+    expect(overdue.inline.querySelector(".tm-things-when")!.className).toBe("tm-things-box tm-things-when is-overdue");
+    expect(overdue.inline.querySelector(".tm-things-when")!.textContent).toBe("Sep 10");
     expect(row("- [ ] Call 2026-09-19", { todayMarker: false }).lead.childElementCount).toBe(0);
   });
 

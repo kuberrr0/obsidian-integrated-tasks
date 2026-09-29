@@ -13,7 +13,7 @@ export interface ThingsRowParts {
 }
 
 export interface ThingsDetailsOptions extends TaskDetailsOptions {
-    /** Mark tasks scheduled for today (or earlier) with a star; off in the Today list itself. */
+    /** Mark tasks scheduled for today with a star; off in the Today list itself. */
     todayMarker?: boolean;
 }
 
@@ -46,14 +46,14 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
     const show = options.show ?? ((): boolean => true);
     const showDate = (field: "scheduledDate" | "deadline") => show(field);
 
-    // Before the title: a star for today, and for anything overdue, which Things folds into Today.
+    // Before the title: a star for today. An earlier date shows in its box, as a later one does.
     // A completed date, when recorded, stands in for the scheduled one.
     const done = task.status === "done" && task.completedDate && show("completed") ? task.completedDate : undefined;
     const scheduled = !done && task.scheduledDate && showDate("scheduledDate") ? task.scheduledDate : undefined;
     const scheduledTitle = scheduled ? `Scheduled ${formatDate(scheduled, options.dateFormat)}` : "";
     const editScheduled = (element: HTMLElement): void => editable(element, `Edit scheduled date: ${formatDate(scheduled!, options.dateFormat)}`, "scheduledDate", () => options.edit("scheduledDate"));
-    if (scheduled && scheduled <= today && options.todayMarker !== false) {
-        const star = parts.lead.createSpan({ cls: `tm-things-today${scheduled < today ? " is-overdue" : ""}`, attr: { title: scheduledTitle } });
+    if (scheduled === today && options.todayMarker !== false) {
+        const star = parts.lead.createSpan({ cls: "tm-things-today", attr: { title: scheduledTitle } });
         setIcon(star, "star");
         editScheduled(star);
     }
@@ -80,7 +80,7 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
     // At the end of the line: date and time boxes, then the deadline.
     const trailing = parts.inline.createSpan({ cls: "tm-things-trailing" });
     if (done) box(trailing, "tm-things-done", taskDoneDateLabel(done, now), `Completed ${formatDate(done, options.dateFormat)}`);
-    else if (scheduled && scheduled > today) editScheduled(box(trailing, "tm-things-when", thingsDateLabel(scheduled, now), scheduledTitle));
+    else if (scheduled && scheduled !== today) editScheduled(box(trailing, `tm-things-when${scheduled < today ? " is-overdue" : ""}`, thingsDateLabel(scheduled, now), scheduledTitle));
     const time = taskTimeDurationLabel(
         show("scheduledTime") ? task.scheduledTime : undefined,
         show("duration") ? task.durationMinutes : undefined

@@ -566,7 +566,8 @@ export class TaskMainView extends ItemView {
       return;
     }
     if (this.grouping !== "default") {
-      for (const [key, group] of groupTasks(tasks, this.grouping)) {
+      // Grouped by the property the list is sorted on, a descending sort also turns the groups around.
+      for (const [key, group] of groupTasks(tasks, this.grouping, this.descending && this.sort === this.grouping)) {
         // Date groupings are keyed by ISO date; show them in the user's format.
         const title = ["date", "scheduledDate", "deadline", "defer"].includes(this.grouping) && /^\d{4}-\d{2}-\d{2}$/.test(key)
           ? `${this.grouping === "defer" ? "Hidden until " : ""}${formatDate(key, this.plugin.dateFormat())}`
