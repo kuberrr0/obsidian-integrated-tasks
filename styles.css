@@ -1936,7 +1936,8 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
   margin: 10px 0 10px calc(var(--tm-depth, 0) * 24px);
   padding: 12px 14px 10px 8px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary));
+  /* The theme's secondary background, set off by its shadow and a faint outline. */
+  background: var(--background-secondary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 6px 18px rgba(0, 0, 0, 0.16), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
   font-family: var(--font-interface);
 }
