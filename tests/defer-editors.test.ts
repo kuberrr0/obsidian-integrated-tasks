@@ -3,48 +3,16 @@ vi.mock("obsidian", async importOriginal => ({
   ...await importOriginal<typeof import("./obsidian-mock")>(), Modal: class {}, Notice: class {}, setIcon: vi.fn()
 }));
 import { EditorState } from "@codemirror/state";
-import { bulkInlinePatch, bulkInlineText, bulkPropertyPatch, bulkPropertyValues, commonBulkValues } from "../src/bulk-task-editor";
 import { noteDateChanges, noteDateInput } from "../src/note-date-input";
 import { inlineTaskTokens, taskMetadataStart, taskModeEditorText } from "../src/task-line-editor";
 import { taskTokens, tokenClass } from "../src/task-tokens";
 import { noteTaskPresentation } from "../src/note-task-presentation";
 import { noteTokenMarks } from "../src/note-token-editor";
 import { TASK_PROPERTY_ICONS } from "../src/task-property-icons";
-import { scanTasks } from "../src/parser";
 
 const US = "MMM D, YYYY";
 const reference = new Date(2026, 8, 8, 12);
 afterEach(() => vi.useRealTimers());
-
-describe("bulk editor defer", () => {
-  const tasks = scanTasks("Work.md", "- [ ] A >2026-10-01\n- [ ] B >someday\n- [ ] C\n- [ ] D >2026-10-01\n");
-  it("reads each task's defer and shows only a common value", () => {
-    expect(tasks.map(task => bulkPropertyValues(task, US).defer)).toEqual(["Oct 1, 2026", "someday", "", "Oct 1, 2026"]);
-    expect(commonBulkValues([tasks[0], tasks[3]], US).defer).toBe("Oct 1, 2026");
-    expect("defer" in commonBulkValues(tasks, US)).toBe(false);
-  });
-  it("patches a date, someday, or a clear", () => {
-    expect(bulkPropertyPatch({ defer: "Oct 3, 2026" }, US)).toEqual({ deferDate: "2026-10-03", someday: undefined });
-    expect(bulkPropertyPatch({ defer: "friday" }, US, reference)).toEqual({ deferDate: "2026-09-11", someday: undefined });
-    expect(bulkPropertyPatch({ defer: "Someday" }, US)).toEqual({ deferDate: undefined, someday: true });
-    const cleared = bulkPropertyPatch({ defer: "" }, US);
-    expect(cleared).toEqual({ deferDate: undefined, someday: undefined });
-    expect("deferDate" in cleared && "someday" in cleared).toBe(true);
-    expect(bulkPropertyPatch({}, US)).toEqual({});
-    expect(() => bulkPropertyPatch({ defer: "tomorrow 9am" }, US)).toThrow(/hidden-until/);
-    expect(() => bulkPropertyPatch({ defer: "maybe" }, US)).toThrow(/hidden-until/);
-  });
-  it("edits the defer inline, leaving mixed values unchanged", () => {
-    const initial = bulkInlineText(commonBulkValues([tasks[0], tasks[3]], US), US);
-    expect(initial).toBe(">[[Oct 1, 2026]] ~[[Work]]");
-    expect(bulkInlinePatch(">someday p1 ~[[Work]]", initial, US, "Inbox.md")).toEqual({ deferDate: undefined, someday: true, priority: 1 });
-    expect(bulkInlinePatch("~[[Work]]", initial, US, "Inbox.md")).toEqual({ deferDate: undefined, someday: undefined });
-    const mixed = bulkInlineText(commonBulkValues(tasks, US), US);
-    expect(mixed).toBe("~[[Work]]");
-    expect(bulkInlinePatch("p2 ~[[Work]]", mixed, US, "Inbox.md")).toEqual({ priority: 2 });
-    expect(bulkInlinePatch(">Oct 5, 2026 ~[[Work]]", mixed, US, "Inbox.md")).toEqual({ deferDate: "2026-10-05", someday: undefined });
-  });
-});
 
 describe("note tokens", () => {
   it("labels a linked defer and displays its formatted date", () => {

@@ -6,7 +6,7 @@ vi.mock("obsidian", async importOriginal => ({
 }));
 vi.mock("../src/note-token-editor", () => ({ noteTokenEditor: vi.fn() }));
 import TaskManagerPlugin from "../src/main";
-import { ProjectCreatorModal, type ProjectDraft } from "../src/project-creator";
+import type { ProjectDraft } from "../src/project-creator";
 import type { TaskIndex } from "../src/task-index";
 
 it("saves to the existing note, preserves its folder on rename, and refuses name collisions", async () => {
@@ -24,21 +24,18 @@ it("saves to the existing note, preserves its folder on rename, and refuses name
   plugin.index = { projects: () => [{ path: file.path, name: "Launch", openTasks: 1, completedTasks: 0, archived: false }], refreshPath } as unknown as TaskIndex;
   vi.spyOn(plugin, "dateFormat").mockReturnValue("YYYY-MM-DD");
   vi.spyOn(plugin, "openProject").mockResolvedValue(undefined);
-  let options!: { initial: ProjectDraft; createProject: (draft: ProjectDraft) => Promise<void> };
-  const open = vi.spyOn(ProjectCreatorModal.prototype, "open").mockImplementation(function (this: ProjectCreatorModal) {
-    options = (this as unknown as { options: typeof options }).options;
-  });
-  plugin.openProjectEditor(file.path, "deadline");
-  await expect(options.createProject({ ...options.initial, name: "Taken" })).rejects.toThrow("already exists");
+  await expect(plugin.updateProject(file.path, draft => ({ ...draft, name: "Taken" }))).rejects.toThrow("already exists");
   expect(processFrontMatter).not.toHaveBeenCalled();
-  await expect(options.createProject({ ...options.initial, parent: file.path })).rejects.toThrow("own parent");
-  await options.createProject({ ...options.initial, name: "Renamed", priority: "1" });
+  await expect(plugin.updateProject(file.path, draft => ({ ...draft, parent: file.path }))).rejects.toThrow("own parent");
+  let before!: ProjectDraft;
+  await expect(plugin.updateProject(file.path, draft => { before = draft; return { ...draft, name: "Renamed", priority: "1" }; })).resolves.toBe("Projects/Renamed.md");
+  // The change starts from the note's current values.
+  expect(before).toMatchObject({ name: "Launch", date: "2026-09-18" });
   expect(renameFile).toHaveBeenCalledWith(file, "Projects/Renamed.md");
   expect(metadata.custom).toBe("keep");
   expect(metadata.priority).toBe(1);
   expect(refreshPath).toHaveBeenCalledWith(file);
   expect(file.path).toBe("Projects/Renamed.md");
-  // With no tab showing the project, it opens in a new one.
-  expect(plugin.openProject).toHaveBeenCalledWith("Projects/Renamed.md", undefined);
-  open.mockRestore();
+  // A popover edit stays where it is: nothing new opens.
+  expect(plugin.openProject).not.toHaveBeenCalled();
 });

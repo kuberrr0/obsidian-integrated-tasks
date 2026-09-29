@@ -90,16 +90,16 @@ it("renders colour swatches as a keyboard-navigable radio group with a hex field
 });
 
 const blank: ProjectDraft = { name: "Launch", date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "project", archived: false };
-const openModal = (initial?: ProjectDraft) => {
+const openModal = () => {
   const createProject = vi.fn<(draft: ProjectDraft) => Promise<void>>().mockResolvedValue(undefined);
-  const modal = new ProjectCreatorModal({} as App, { projects: [], dateFormat: "YYYY-MM-DD", linkDates: false, createProject, initial });
+  const modal = new ProjectCreatorModal({} as App, { projects: [], dateFormat: "YYYY-MM-DD", linkDates: false, createProject });
   modal.onOpen();
   const view = modal as unknown as { contentEl: HTMLElement; modalEl: HTMLElement };
   const save = Array.from(view.modalEl.querySelectorAll("button")).find(button => button.classList.contains("mod-cta"))!;
   return { createProject, content: view.contentEl, save, error: view.contentEl.querySelector(".tm-editor-error")! };
 };
 
-it("saves the chosen colour, None, or leaves an unreadable colour unchanged", async () => {
+it("saves the chosen colour for a new project, and refuses an unreadable hex", async () => {
   const created = openModal();
   expect(checked(created.content)).toEqual(["None"]);
   created.content.querySelector<HTMLInputElement>('input[aria-label="Project name"]')!.value = "Launch";
@@ -107,19 +107,8 @@ it("saves the chosen colour, None, or leaves an unreadable colour unchanged", as
   created.save.click();
   await vi.waitFor(() => expect(created.createProject).toHaveBeenCalledWith({ ...blank, color: "blue" }));
 
-  const edited = openModal({ ...blank, color: "red" });
-  expect(checked(edited.content)).toEqual(["Red"]);
-  radios(edited.content)[0].click();
-  edited.save.click();
-  await vi.waitFor(() => expect(edited.createProject).toHaveBeenCalledWith({ ...blank, color: "" }));
-
-  const unknown = openModal({ ...blank, color: undefined });
-  expect(checked(unknown.content)).toEqual([]);
-  unknown.save.click();
-  await vi.waitFor(() => expect(unknown.createProject).toHaveBeenCalledOnce());
-  expect(unknown.createProject.mock.calls[0][0].color).toBeUndefined();
-
-  const invalid = openModal({ ...blank, color: "" });
+  const invalid = openModal();
+  invalid.content.querySelector<HTMLInputElement>('input[aria-label="Project name"]')!.value = "Launch";
   const hex = invalid.content.querySelector<HTMLInputElement>('input[aria-label="Custom color"]')!;
   hex.value = "#12";
   hex.dispatchEvent(new Event("input"));

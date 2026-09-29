@@ -80,10 +80,9 @@ function selectionView() {
   const tasks = scanTasks("Work.md", "- [ ] A\n- [ ] B\n- [ ] C");
   const bulkDrop = vi.fn().mockResolvedValue([]);
   const openEditor = vi.fn();
-  const openBulkEditor = vi.fn();
   const update = vi.fn().mockResolvedValue(undefined);
   const addSubtask = vi.fn().mockResolvedValue(undefined);
-  const plugin = { settings: {} as Record<string, unknown>, openEditor, openBulkEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop, update, addSubtask }, index: { taskById: (id: string) => tasks.find(task => task.id === id), refreshPath: vi.fn() } };
+  const plugin = { settings: {} as Record<string, unknown>, openEditor, dateFormat: () => "YYYY-MM-DD", store: { bulkDrop, update, addSubtask }, index: { taskById: (id: string) => tasks.find(task => task.id === id), tasksForPath: (path: string) => tasks.filter(task => task.path === path), refreshPath: vi.fn() } };
   const view = new TaskMainView({} as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   const internals = view as unknown as {
@@ -93,11 +92,13 @@ function selectionView() {
     clearSelectionOutside(event: unknown): void;
     dropListTask(task: Task, group?: unknown, anchor?: Task, placement?: string): Promise<void>;
   };
+  // The menu itself needs a real document; here it only records what it was opened for.
+  const openTaskMenu = vi.spyOn(view as unknown as { openTaskMenu(task: Task): void }, "openTaskMenu").mockImplementation(() => {});
   const rows = tasks.map(task => {
     const handlers = new Map<string, (event: unknown) => void>();
     const classes = new Map<string, boolean>();
     const row = { classList: { toggle: (key: string, value: boolean) => classes.set(key, value) },
-      setAttribute: vi.fn(), focus: vi.fn(), closest: () => undefined,
+      setAttribute: vi.fn(), focus: vi.fn(), closest: () => undefined, getBoundingClientRect: () => ({ left: 0, bottom: 0 }),
       contains: (target: unknown) => target === row,
       addEventListener: (key: string, callback: (event: unknown) => void) => handlers.set(key, callback)
     };
@@ -124,11 +125,11 @@ function selectionView() {
     };
     return { row, classes, click, dblclick, contextmenu, pointerdown };
   });
-  return { view, internals, tasks, rows, bulkDrop, openEditor, openBulkEditor, plugin, update, addSubtask };
+  return { view, internals, tasks, rows, bulkDrop, openEditor, openTaskMenu, plugin, update, addSubtask };
 }
 
 it("left-click selects only the clicked task, with Mod to toggle and Shift for a range", () => {
-  const { view, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  const { view, rows, tasks, openEditor, openTaskMenu } = selectionView();
   rows[0].click();
   expect(view.getSelectedTasks()).toEqual([tasks[0]]);
   rows[2].click({ shiftKey: true });
@@ -142,15 +143,15 @@ it("left-click selects only the clicked task, with Mod to toggle and Shift for a
   expect(rows[1].click({ target: title }).preventDefault).toHaveBeenCalled();
   expect(view.getSelectedTasks()).toEqual([tasks[1]]);
   expect(openEditor).not.toHaveBeenCalled();
-  expect(openBulkEditor).not.toHaveBeenCalled();
+  expect(openTaskMenu).not.toHaveBeenCalled();
 });
 
 it("double-click opens the task editor for just that task", () => {
-  const { view, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  const { view, rows, tasks, openEditor, openTaskMenu } = selectionView();
   rows[0].click(); rows[2].click({ metaKey: true });
   rows[2].dblclick();
   expect(openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: tasks[2] }));
-  expect(openBulkEditor).not.toHaveBeenCalled();
+  expect(openTaskMenu).not.toHaveBeenCalled();
   expect(view.getSelectedTasks()).toEqual([tasks[2]]);
   rows[1].dblclick({ metaKey: true });
   expect(openEditor).toHaveBeenCalledOnce();
@@ -262,47 +263,59 @@ it("applies properties typed into a card title when the card closes", async () =
   expect(update).toHaveBeenCalledExactlyOnceWith(tasks[0], expect.objectContaining({ title: "A", priority: 1, tags: ["Errand"], durationMinutes: 30 }));
 });
 
-it("right-click on an already selected task opens task properties for the selection", () => {
-  const { view, rows, openBulkEditor } = selectionView();
-  rows[0].pointerdown(); rows[0].contextmenu();
-  expect(openBulkEditor).not.toHaveBeenCalled();
+it("right-click selects the task and opens its menu, for the selection when it is selected", () => {
+  const { view, rows, tasks, openTaskMenu } = selectionView();
+  rows[0].pointerdown();
+  const first = rows[0].contextmenu();
+  expect(first.preventDefault).toHaveBeenCalled();
+  expect(openTaskMenu).toHaveBeenLastCalledWith(tasks[0], rows[0].row, { x: 24, y: 0 });
   rows[1].click({ metaKey: true });
   rows[1].pointerdown();
-  const event = rows[1].contextmenu();
-  expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view);
-  expect(event.preventDefault).toHaveBeenCalled();
+  rows[1].contextmenu(undefined, { clientX: 40, clientY: 60 });
+  expect(openTaskMenu).toHaveBeenLastCalledWith(tasks[1], rows[1].row, { x: 40, y: 60 });
   expect(view.getSelectedTasks().map(task => task.title)).toEqual(["A", "B"]);
-  // With a modifier, right-click only changes the selection.
+  // Cmd-right-clicking a selected task takes it out of the selection, with no menu.
   rows[1].pointerdown({ metaKey: true }); rows[1].contextmenu(undefined, { metaKey: true });
-  expect(openBulkEditor).toHaveBeenCalledOnce();
+  expect(openTaskMenu).toHaveBeenCalledTimes(2);
+  expect(view.getSelectedTasks().map(task => task.title)).toEqual(["A"]);
 });
 
-it("drags the selected set together and drags an unselected task without selecting it", async () => {
+it("drags the selected set together, keeping it selected, and drags an unselected task without selecting it", async () => {
   const { view, internals, rows, tasks, bulkDrop } = selectionView();
   rows[0].contextmenu(); rows[2].contextmenu(undefined, { metaKey: true });
   internals.prepareDrag(tasks[2]);
   await internals.dropListTask(tasks[2], undefined, tasks[1], "after");
   expect(bulkDrop).toHaveBeenCalledExactlyOnceWith([tasks[0], tasks[2]], undefined, tasks[1], "after");
-  expect(view.getSelectedTasks()).toEqual([]);
+  expect(view.getSelectedTasks()).toEqual([tasks[0], tasks[2]]);
   internals.prepareDrag(tasks[1]);
-  expect(view.getSelectedTasks()).toEqual([]);
   await internals.dropListTask(tasks[1], undefined, tasks[2], "before");
   expect(bulkDrop).toHaveBeenLastCalledWith([tasks[1]], undefined, tasks[2], "before");
+  expect(view.getSelectedTasks()).toEqual([tasks[0], tasks[2]]);
 });
 
-it("offers Edit task properties only for an active view with selected tasks", () => {
+it("selects moved tasks again by their note and title, the nearest one when titles repeat", () => {
+  const { view, internals, rows, tasks } = selectionView();
+  rows[1].click();
+  const moved = scanTasks("Other.md", "- [ ] B\n- [ ] A\n- [ ] B");
+  (internals as unknown as { plugin: { index: { tasksForPath(path: string): Task[] } } }).plugin.index.tasksForPath = path => path === "Other.md" ? moved : [];
+  (view as unknown as { visibleTasks: Task[] }).visibleTasks.push(...moved);
+  (view as unknown as { reselect(before: Task[], moveTo?: string): void }).reselect([tasks[1]], "Other.md");
+  expect(view.getSelectedTasks()).toEqual([moved[0]]);
+});
+
+it("offers Open task menu only for an active view with selected tasks", () => {
   const plugin = new TaskManagerPlugin({} as App, {} as never);
   let selected: Task[] = [];
-  let active: { getSelectedTasks: () => Task[] } | undefined = { getSelectedTasks: () => selected };
+  const open = vi.fn();
+  let active: { getSelectedTasks: () => Task[]; openSelectionMenu: () => void } | undefined = { getSelectedTasks: () => selected, openSelectionMenu: open };
   plugin.app = { workspace: { getActiveViewOfType: () => active } } as unknown as App;
-  const open = vi.spyOn(plugin, "openBulkEditor").mockImplementation(() => {});
   const check = (plugin as unknown as { editSelectedTaskProperties(checking: boolean): boolean }).editSelectedTaskProperties.bind(plugin);
   expect(check(false)).toBe(false);
   selected = scanTasks("Work.md", "- [ ] Selected");
   expect(check(true)).toBe(true);
   expect(open).not.toHaveBeenCalled();
   expect(check(false)).toBe(true);
-  expect(open).toHaveBeenCalledExactlyOnceWith(active);
+  expect(open).toHaveBeenCalledOnce();
   active = undefined;
   expect(check(false)).toBe(false);
 });
@@ -472,39 +485,49 @@ it("clears selection on outside left clicks, but preserves it on task rows and r
   // Another row's own click handler decides the selection, e.g. extending it with Shift.
   internals.clearSelectionOutside({ button: 0, target: rows[1].row });
   expect(view.getSelectedTasks()).toHaveLength(1);
+  // Clicks in the task menu, or a popover it opened, act on the selection.
+  for (const popover of [".tm-task-menu", ".tm-tags-popover"]) {
+    internals.clearSelectionOutside({ button: 0, target: { closest: (selectors: string) => selectors.split(", ").includes(popover) ? {} : undefined } });
+    expect(view.getSelectedTasks()).toHaveLength(1);
+  }
   rows[0].contextmenu();
   internals.clearSelectionOutside({ button: 0, target: {} });
   expect(view.getSelectedTasks()).toHaveLength(0);
 });
 
-it("opens properties for one selected task and clears selection when opening another task", () => {
-  const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
+it("opens the editor for one task, the menu for several, and clears the selection when opening another task", () => {
+  const { view, internals, rows, tasks, openEditor, openTaskMenu } = selectionView();
   rows[0].contextmenu();
+  openTaskMenu.mockClear();
   internals.editTask(tasks[0]);
-  expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view);
+  expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task: tasks[0] }));
+  rows[1].click({ metaKey: true });
   internals.editTask(tasks[1]);
+  expect(openTaskMenu).toHaveBeenCalledExactlyOnceWith(tasks[1], rows[1].row, { x: 24, y: 0 });
+  internals.editTask(tasks[2]);
   expect(view.getSelectedTasks()).toHaveLength(0);
-  expect(openEditor).toHaveBeenCalledWith(expect.objectContaining({ task: tasks[1] }));
+  expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task: tasks[2] }));
 });
 
-it.each(["tags", "repeat"])("property clicks focus %s in the bulk editor when selected", property => {
-  const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
+it.each([["tags", "openTagsEditor"], ["repeat", "openRepeatEditor"], ["defer", "openSnoozeEditor"]])("property clicks edit %s in a popover for the selection", (property, editor) => {
+  const { view, internals, rows, tasks, openEditor } = selectionView();
+  const popover = vi.spyOn(view as unknown as Record<string, (tasks: Task[]) => void>, editor).mockImplementation(() => {});
   rows[0].contextmenu(); rows[1].contextmenu(undefined, { metaKey: true });
   internals.editTask(tasks[0], property);
-  expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view, property);
+  expect(popover).toHaveBeenCalledOnce();
+  expect(popover.mock.calls[0][0]).toEqual([tasks[0], tasks[1]]);
   expect(openEditor).not.toHaveBeenCalled();
   expect(view.getSelectedTasks()).toHaveLength(2);
 });
 
 it.each(["scheduledDate", "deadline", "durationMinutes", "priority"])("edits %s in a popover, for the whole selection, instead of a modal", property => {
-  const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  const { view, internals, rows, tasks, openEditor } = selectionView();
   const popover = vi.spyOn(view as unknown as { openDateEditor(tasks: Task[], property: string): boolean }, "openDateEditor").mockReturnValue(true);
   rows[0].contextmenu(); rows[1].contextmenu(undefined, { metaKey: true });
   internals.editTask(tasks[0], property);
-  expect(popover).toHaveBeenCalledExactlyOnceWith([tasks[0], tasks[1]], property);
+  expect(popover).toHaveBeenCalledExactlyOnceWith([tasks[0], tasks[1]], property, undefined);
   internals.editTask(tasks[2], property);
-  expect(popover).toHaveBeenLastCalledWith([tasks[2]], property);
-  expect(openBulkEditor).not.toHaveBeenCalled();
+  expect(popover).toHaveBeenLastCalledWith([tasks[2]], property, undefined);
   expect(openEditor).not.toHaveBeenCalled();
 });
 
@@ -629,29 +652,45 @@ it("edits the task on the current editor line only when task mode is off", () =>
 
 
 it("Mod-clicking a selected title deselects only that task without opening an editor", () => {
-  const { view, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  const { view, rows, tasks, openEditor, openTaskMenu } = selectionView();
   rows[0].contextmenu(); rows[2].contextmenu(undefined, { metaKey: true });
+  openTaskMenu.mockClear();
   const title = { closest: () => ({ tagName: "BUTTON" }) };
   const event = rows[0].click({ metaKey: true, target: title });
   expect(view.getSelectedTasks()).toEqual([tasks[2]]);
   expect(event.stopPropagation).toHaveBeenCalledOnce();
   expect(openEditor).not.toHaveBeenCalled();
-  expect(openBulkEditor).not.toHaveBeenCalled();
+  expect(openTaskMenu).not.toHaveBeenCalled();
   rows[2].click({ metaKey: true });
   expect(view.getSelectedTasks()).toEqual([]);
 });
 
 it.each([false, true])("lets property controls handle clicks before opening an editor (selected: %s)", selected => {
-  const { view, internals, rows, tasks, openEditor, openBulkEditor } = selectionView();
+  const { view, internals, rows, tasks, openEditor } = selectionView();
+  const repeat = vi.spyOn(view as unknown as { openRepeatEditor(tasks: Task[]): void }, "openRepeatEditor").mockImplementation(() => {});
   if (selected) rows[0].contextmenu();
   const property = { role: "button" };
   const target = { closest: (selectors: string) => selectors.split(", ").includes("[role=button]") ? property : undefined };
   const event = rows[0].click({ target });
   expect(event.stopPropagation).not.toHaveBeenCalled();
   expect(openEditor).not.toHaveBeenCalled();
-  expect(openBulkEditor).not.toHaveBeenCalled();
-  // The property handler receives the event and requests its own field.
+  // The property handler receives the event and opens its own popover.
   internals.editTask(tasks[0], "repeat");
-  if (selected) expect(openBulkEditor).toHaveBeenCalledExactlyOnceWith(view, "repeat");
-  else expect(openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: tasks[0], focusProperty: "repeat" }));
+  expect(repeat).toHaveBeenCalledOnce();
+  expect(repeat.mock.calls[0][0]).toEqual([tasks[0]]);
+  expect(openEditor).not.toHaveBeenCalled();
+});
+
+it("creates a project note from a name alone, refusing an existing note", async () => {
+  const plugin = new TaskManagerPlugin({} as App, {} as never);
+  const create = vi.fn().mockResolvedValue(undefined);
+  let existing: unknown = null;
+  plugin.app = { vault: { getAbstractFileByPath: () => existing, create } } as unknown as App;
+  const refreshPath = vi.fn().mockResolvedValue(undefined);
+  (plugin as unknown as { index: unknown }).index = { refreshPath };
+  await expect(plugin.createProjectNote({ name: "Garden" })).resolves.toBe("Garden.md");
+  expect(create).toHaveBeenCalledExactlyOnceWith("Garden.md", expect.stringContaining('tags: ["project"]'));
+  expect(refreshPath).toHaveBeenCalledWith("Garden.md");
+  existing = {};
+  await expect(plugin.createProjectNote({ name: "Garden" })).rejects.toThrow("already exists");
 });

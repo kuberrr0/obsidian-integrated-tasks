@@ -90,7 +90,7 @@ describe("adding tags in the card", () => {
     expect(typedTags(" #errand, [[Office]] ,, errand ")).toEqual(["errand", "Office"]);
   });
 
-  it("turns the + pill after the tags into an input that adds on Enter and suggests existing tags", () => {
+  it("turns the + pill after the tags into an input that adds on Enter, with no autocomplete list", () => {
     const addTags = vi.fn();
     const { element } = card("- [ ] Task 1 #[[Errand]]", { addTags, tagSuggestions: ["Errand", "Office"] });
     const pills = element.querySelector<HTMLElement>(".tm-things-card-tags")!;
@@ -98,13 +98,39 @@ describe("adding tags in the card", () => {
     pills.querySelector<HTMLElement>(".tm-things-add-tag")!.click();
     const input = pills.querySelector<HTMLInputElement>(".tm-things-add-tag input")!;
     expect(element.ownerDocument.activeElement).toBe(input);
-    expect(Array.from(pills.querySelectorAll("datalist option")).map(option => option.getAttribute("value"))).toEqual(["Errand", "Office"]);
+    expect(input.hasAttribute("list")).toBe(false);
+    expect(pills.querySelector("datalist")).toBeNull();
     input.value = "Office, #Calls";
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(addTags).toHaveBeenCalledExactlyOnceWith(["Office", "Calls"]);
     // The pill is back, ready for another.
     expect(pills.querySelector("input")).toBeNull();
     expect(pills.querySelector(".tm-things-add-tag")).not.toBeNull();
+  });
+
+  it("opens the tag list from the input's dropdown button, checking the task's tags", () => {
+    const addTags = vi.fn(), removeTag = vi.fn();
+    const { element } = card("- [ ] Task 1 #[[Errand]]", { addTags, removeTag, tagSuggestions: ["Errand", "Office"] });
+    element.querySelector<HTMLElement>(".tm-things-add-tag")!.click();
+    const input = element.querySelector<HTMLInputElement>(".tm-things-add-tag input")!;
+    input.value = "Off";
+    element.querySelector<HTMLElement>(".tm-things-add-tag-menu")!.click();
+    // The typed text becomes the list's search, and is not added as a tag.
+    expect(addTags).not.toHaveBeenCalled();
+    expect(element.querySelector(".tm-things-add-tag input")).toBeNull();
+    const popover = document.querySelector<HTMLElement>(".tm-tags-popover")!;
+    expect(popover.querySelector<HTMLInputElement>("input")!.value).toBe("Off");
+    const option = (name: string) => Array.from(popover.querySelectorAll<HTMLElement>("[role=option]")).find(item => item.getAttribute("data-value") === name);
+    expect(option("Errand")).toBeUndefined();
+    option("Office")!.click();
+    expect(addTags).toHaveBeenCalledExactlyOnceWith(["Office"]);
+    const search = popover.querySelector<HTMLInputElement>("input")!;
+    search.value = "";
+    search.dispatchEvent(new Event("input"));
+    expect(option("Errand")!.getAttribute("aria-selected")).toBe("true");
+    option("Errand")!.click();
+    expect(removeTag).toHaveBeenCalledExactlyOnceWith("Errand");
+    popover.remove();
   });
 
   it("opens a tag's view from its pill, and removes it from the cross shown on hover", () => {

@@ -5,6 +5,11 @@ export class TaskSelection {
   private selected = new Map<string, Task>();
   private anchor?: string;
   clear(): void { this.selected.clear(); this.anchor = undefined; }
+  /** Selects exactly these tasks, the last one as the anchor for Shift ranges. */
+  select(tasks: Task[]): void {
+    this.selected = new Map(tasks.map(task => [task.id, task]));
+    this.anchor = tasks[tasks.length - 1]?.id;
+  }
   has(task: Task): boolean { return this.selected.get(task.id)?.raw === task.raw; }
   tasks(visible: Task[]): Task[] { return visible.filter(task => this.has(task)); }
   retain(visible: Task[]): void {

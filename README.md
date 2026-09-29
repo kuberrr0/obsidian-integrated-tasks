@@ -102,11 +102,13 @@ Use your note's sections as a board, or group tasks by properties such as priori
 
 ## Turn notes into projects
 
-Create a project from the task sidebar, or open an existing note and run **Convert to project** from the command palette. Use headings to divide its tasks into sections, and give the project dates, a deadline, and a priority.
+Create a project from the task sidebar, or open an existing note and run **Convert to project** from the command palette. When you move a task to a project, you can also type a name that isn't a project yet and choose **Create project** to make it on the spot. Use headings to divide its tasks into sections, and give the project dates, a deadline, and a priority.
+
+The **…** button beside a project's title (or a right-click on it in the Projects list, or **Open project actions**) opens the project's actions: its priority at once; its start date, end date and deadline, parent, tags, colour and name, each in a popover beside the menu; **Archive**, **Open note** and **Delete project**, which asks first and moves the note, with its tasks, to the trash. Clicking a project's date, deadline or parent where it shows opens the same popover.
 
 Projects show completion progress, including subtasks. Assign a parent project to organize related projects together.
 
-Give a project a colour in the project editor, or with a `color` property such as `color: blue` or `color: "#3b82f6"`. Its tasks' source label takes the colour in mixed lists, board cards get a coloured stripe, and its bar in the Gantt chart uses the colour. Subprojects without their own colour use their parent's.
+Give a project a colour from its **…** menu, or with a `color` property such as `color: blue` or `color: "#3b82f6"`. Its tasks' source label takes the colour in mixed lists, board cards get a coloured stripe, and its bar in the Gantt chart uses the colour. Subprojects without their own colour use their parent's.
 
 **Task mode** opens project notes as task views. Opening a project from the Projects list enables it automatically. Turn Task mode off whenever you want to return to the regular note view.
 
@@ -169,13 +171,21 @@ Select tasks to change their dates, priorities, tags, or other details together.
 
 | Action | Gesture |
 | --- | --- |
-| Select a task | Right-click |
-| Select a range | Shift + right-click |
-| Add to your selection | Cmd/Ctrl + right-click |
+| Select a task | Click, or right-click to open its menu too |
+| Select a range | Shift + click |
+| Add to your selection | Cmd/Ctrl + click |
 | Select a range from the keyboard | Shift + ↑ / ↓ |
 | Clear your selection | Click outside the selected tasks, or press Escape while a selected task is focused |
 
-Click a selected task title or run **Edit task properties** to make a shared change. Only the fields you edit are applied; **Mixed — unchanged** preserves each task's existing value.
+Right-click a task, or run **Open task menu**, for its menu; with several tasks selected it changes them all:
+
+- **Complete** (or **Reopen**)
+- **Date**: Today, Tomorrow, Next week, or pick any date, time and duration
+- **Priority**: P1–P3; choosing a task's own priority takes it off
+- **Project**, **Deadline**, **Tags**, **Repeat**, **Snooze** and **Status**, each in a list beside the menu
+- **Duplicate**, which copies each task with its notes and subtasks right below it, and **Delete**
+
+While the menu is open, each row's letter opens it: **D** for a date, **P** for priority, **G** for the project, **Shift+D** for the deadline, **T** for tags, **R** for repeat, **H** to snooze and **S** for the status. A task's tags list checks the tags every selected task has and marks those only some have with a dash. Clicking a tag toggles it on every task, and typing adds new ones (separate several with commas).
 
 You can also drag a selection to move tasks together, drop it onto the calendar to reschedule it, or delete selected tasks along with their subtasks.
 
@@ -232,7 +242,7 @@ The Today summary shows how many of today's tasks are in progress, and smart lis
 
 End a task with `>` and a date to hide it from Inbox, Today, and Upcoming until that day, such as `- [ ] Renew passport >Oct 1, 2026`. Use `>someday` to set a task aside with no date. Snoozed tasks still appear in All Tasks, projects, and tags, labelled **Hidden until**, and come back on their own when the date arrives.
 
-In a task view, press **M** on a task and choose a **Snooze** option, or set **Hidden until** for several tasks at once in the bulk editor. In a note, you can type a natural date such as `>tomorrow`; it becomes a date when you move off the line.
+In a task view, press **M** on a task and choose a **Snooze** option, or right-click several selected tasks and choose **Snooze**. In a note, you can type a natural date such as `>tomorrow`; it becomes a date when you move off the line.
 
 ## Build recurring routines
 

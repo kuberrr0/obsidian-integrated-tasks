@@ -32,6 +32,23 @@ export function liveTaskBlock(source: string | NoteSnapshot, task: Task, dateFor
   return { start, end, indent: live.indent, lines: lines.slice(start, end), description: live.description, descriptionLines: live.descriptionLines };
 }
 
+/**
+ * Inserts a copy of each task's block (its line, notes and subtasks) right below it. A task inside another
+ * copied block is copied with it, once. Block ids (`^id`) are left out of the copies, so links keep their target.
+ */
+export function duplicateTaskBlocks(content: string, tasks: Task[], dateFormat?: string, sectionHeadingLevel = 1): string {
+  const note = noteSnapshot(tasks[0]?.path ?? "", content, dateFormat, sectionHeadingLevel);
+  const blocks = tasks.map(task => liveTaskBlock(note, task, dateFormat, sectionHeadingLevel))
+    .filter((block, index, all) => !all.some((other, at) => at !== index && other.start <= block.start && block.end <= other.end && (other.start !== block.start || at < index)))
+    .sort((a, b) => b.start - a.start);
+  const lines = content.split("\n");
+  for (const block of blocks) {
+    const copy = lines.slice(block.start, block.end).map(line => line.replace(/\s+\^[A-Za-z0-9-]+(\r?)$/, "$1"));
+    lines.splice(block.end, 0, ...copy);
+  }
+  return lines.join("\n");
+}
+
 /** Rewrite the task line in place and shift the rest of the block; unchanged indentation (tabs included) is kept. */
 export function rewriteBlock(block: TaskBlock, draft: TaskDraft, indent: number, dateFormat?: string, linkDates = true): string[] {
   return [rewriteTaskLine(block.lines[0], { ...draft, indent }, dateFormat, linkDates), ...block.lines.slice(1).map(line => {

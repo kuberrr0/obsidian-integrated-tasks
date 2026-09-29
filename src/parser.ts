@@ -31,6 +31,19 @@ export function parseRepeatRule(value: string): string | undefined {
   return Number.isInteger(count) && count >= 1 && count <= 1000 ? rule : undefined;
 }
 
+const REPEAT_WORDS: Record<string, string> = {
+  daily: "every day", weekly: "every week", fortnightly: "every 2 weeks", biweekly: "every 2 weeks",
+  monthly: "every month", yearly: "every year", annually: "every year"
+};
+
+/** A repeat typed loosely: "every 3 days", "weekly", "monday", "2 weeks"; undefined when not a rule. */
+export function parseRepeatInput(value: string): string | undefined {
+  const text = value.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!text) return undefined;
+  const rule = REPEAT_WORDS[text] ?? (text.startsWith("every ") ? text : `every ${text}`);
+  return parseRepeatRule(rule);
+}
+
 /** Display text for a repeat rule, e.g. "Every Monday". */
 export function repeatLabel(rule: string): string {
   return rule.replace(/^every/, "Every").replace(/\b(sun|mon|tues|wednes|thurs|fri|satur)day/g, day => day[0].toUpperCase() + day.slice(1));

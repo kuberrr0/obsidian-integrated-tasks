@@ -5,7 +5,7 @@ import { updateTaskDateTokens } from "./task-date-update";
 import { newTaskLines } from "./task-description";
 import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
-import { liveTaskBlock } from "./task-block";
+import { duplicateTaskBlocks, liveTaskBlock } from "./task-block";
 import { serializeTask } from "./parser";
 import { TASK_INDENT } from "./task-indentation";
 import type { ListPlacement } from "./list-drag";
@@ -196,10 +196,27 @@ export class TaskStore {
     });
   }
 
-  async bulkUpdate(tasks: Task[], patch: BulkTaskPatch): Promise<string[]> {
-    if (!Object.keys(patch).length) return [];
-    const closed = patch.status && { completed: isClosedStatus(patch.status) };
-    return this.bulkChange(tasks, task => ({ ...draftForGroup(task), ...patch, ...closed }), {}, `Edited ${tasksName(tasks)}`);
+  /** One patch for every task, or a patch for each (for example to add a tag to what each task has). */
+  async bulkUpdate(tasks: Task[], patch: BulkTaskPatch | ((task: Task) => BulkTaskPatch)): Promise<string[]> {
+    if (typeof patch !== "function" && !Object.keys(patch).length) return [];
+    const patchFor = typeof patch === "function" ? patch : () => patch;
+    return this.bulkChange(tasks, task => {
+      const change = patchFor(task);
+      const closed = change.status && { completed: isClosedStatus(change.status) };
+      return { ...draftForGroup(task), ...change, ...closed };
+    }, {}, `Edited ${tasksName(tasks)}`);
+  }
+
+  /** Copies each task, with its notes and subtasks, right below it. */
+  duplicate(tasks: Task[]): Promise<string[]> {
+    return this.run(`Duplicated ${tasksName(tasks)}`, async () => {
+      const paths = [...new Set(tasks.map(task => task.path))];
+      for (const path of paths) {
+        await this.process(this.requireFile(path), content =>
+          duplicateTaskBlocks(content, tasks.filter(task => task.path === path), this.getDateFormat(), this.getSectionHeadingLevel()));
+      }
+      return paths;
+    });
   }
 
   /** Done completes a repeating task (advancing it) and cancelled skips its occurrence, as Complete and Skip do. */

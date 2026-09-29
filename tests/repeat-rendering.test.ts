@@ -6,7 +6,6 @@ import { renderTaskDetails } from "../src/task-row-details";
 import { noteTaskPresentation, renderNoteTaskDetails } from "../src/note-task-presentation";
 import { renderNoteTokens } from "../src/note-token-reading";
 import { handleRecurringTaskClick } from "../src/note-task-edit";
-import { bulkInlinePatch, bulkPropertyPatch, commonBulkValues } from "../src/bulk-task-editor";
 import { matchesFilter } from "../src/task-properties";
 import { groupTasks, sortTasks } from "../src/query";
 import { scanTasks } from "../src/parser";
@@ -103,13 +102,4 @@ describe("repeat and completion date properties", () => {
     expect([...groupTasks(tasks, "repeat").keys()]).toEqual(["No repeat", "Every week"]);
   });
 
-  it("edits the repeat in the bulk editor", () => {
-    expect(bulkInlinePatch("every 2 weeks", "", "YYYY-MM-DD", "Inbox.md")).toEqual({ repeat: "every 2 weeks" });
-    expect(bulkInlinePatch("", "every week", "YYYY-MM-DD", "Inbox.md")).toEqual({ repeat: undefined });
-    expect(() => bulkInlinePatch("every time", "", "YYYY-MM-DD", "Inbox.md")).toThrow(/task property syntax/);
-    expect(bulkPropertyPatch({ repeat: "Monday" }, "YYYY-MM-DD")).toEqual({ repeat: "every monday" });
-    expect(bulkPropertyPatch({ repeat: "" }, "YYYY-MM-DD")).toEqual({ repeat: undefined });
-    expect(() => bulkPropertyPatch({ repeat: "sometimes" }, "YYYY-MM-DD")).toThrow(/every week/);
-    expect(commonBulkValues([tasks[2]], "YYYY-MM-DD").repeat).toBe("every week");
-  });
 });

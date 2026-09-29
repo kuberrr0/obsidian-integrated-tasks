@@ -10,7 +10,6 @@ import { planBulkTasks } from "../src/bulk-tasks";
 vi.mock("obsidian", async importOriginal => ({
   ...await importOriginal<typeof import("./obsidian-mock")>(), Modal: class {}, Notice: class {}
 }));
-import { bulkPropertyPatch } from "../src/bulk-task-editor";
 
 it("round-trips multiple tags interleaved with other metadata, retaining order and deduplicating", () => {
   const parsed = parseTaskLine("- [ ] Report #[[work]] [[2026-09-08]] #[[client notes]] 30m {[[2026-09-15]]} p1 #[[work]]")!;
@@ -68,6 +67,6 @@ it("preserves tags during unrelated bulk changes and supports replacing and clea
   const [task] = scanTasks("Inbox.md", content);
   const plan = (patch: object) => planBulkTasks(new Map([[task.path, content]]), [{ task, draft: { ...task, destination: task.path, ...patch } }]).get(task.path);
   expect(plan({ priority: 1 })).toBe("- [ ] Task p1 #[[work]] #[[client notes]]");
-  expect(plan(bulkPropertyPatch({ tags: "#[[home]] #[[errands]]" }, "YYYY-MM-DD"))).toBe("- [ ] Task #[[home]] #[[errands]]");
-  expect(plan(bulkPropertyPatch({ tags: "" }, "YYYY-MM-DD"))).toBe("- [ ] Task");
+  expect(plan({ tags: ["home", "errands"] })).toBe("- [ ] Task #[[home]] #[[errands]]");
+  expect(plan({ tags: [] })).toBe("- [ ] Task");
 });

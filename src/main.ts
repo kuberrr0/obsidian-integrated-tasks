@@ -7,7 +7,6 @@ import { applyProjectDraft, projectEditDraft } from "./project-editor";
 import { cloneTaskFilters } from "./task-filters";
 import { SmartListEditorModal, type SmartListDraft } from "./smart-list-editor";
 import { ProjectCreatorModal, projectNotePath, projectNoteContent, type ProjectDraft } from "./project-creator";
-import { BulkTaskEditorModal } from "./bulk-task-editor";
 import { TaskModeController } from "./task-mode";
 import type { TaskEditorPreset } from "./types";
 import { noteDateInput } from "./note-date-input";
@@ -23,7 +22,7 @@ import { TaskStore, type TaskChange } from "./task-store";
 import { TasksImportModal } from "./tasks-import-modal";
 import { TASK_QUERY_LANGUAGE, TASK_QUERY_TEMPLATE, TaskQueryBlock } from "./task-query-block";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
-import { DEFAULT_SETTINGS, type SmartList, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
+import { DEFAULT_SETTINGS, type Project, type SmartList, type Task, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
@@ -137,11 +136,10 @@ export default class TaskManagerPlugin extends Plugin {
       if (!checking) void this.deleteSmartList(list.id).catch(error => new Notice(String(error)));
       return true;
     } });
-    this.addCommand({ id: "edit-project", name: "Edit project", checkCallback: checking => {
-      const view = this.app.workspace.getActiveViewOfType(TaskMainView) ?? this.app.workspace.getActiveViewOfType(MarkdownView);
-      const path = view instanceof TaskMainView ? view.pagePath : view instanceof MarkdownView ? view.file?.path : undefined;
-      if (!path || !this.index.isProject(path)) return false;
-      if (!checking) this.openProjectEditor(path);
+    this.addCommand({ id: "edit-project", name: "Open project actions", checkCallback: checking => {
+      const view = this.app.workspace.getActiveViewOfType(TaskMainView);
+      if (!view?.pagePath || !this.index.isProject(view.pagePath)) return false;
+      if (!checking) view.openProjectActions();
       return true;
     } });
     for (const [action, outcome] of [["complete", "COMPLETED"], ["skip", "SKIPPED"], ["fail", "FAILED"]] as const) {
@@ -150,7 +148,7 @@ export default class TaskManagerPlugin extends Plugin {
     }
     this.addCommand({ id: "edit-task", name: "Edit task", editorCheckCallback: (checking, editor, view) =>
       this.editCurrentLineTask(checking, editor, view.file) });
-    this.addCommand({ id: "edit-task-properties", name: "Edit task properties", checkCallback: checking => this.editSelectedTaskProperties(checking) });
+    this.addCommand({ id: "edit-task-properties", name: "Open task menu", checkCallback: checking => this.editSelectedTaskProperties(checking) });
     this.addCommand({ id: "new-task", name: "Create new task", callback: () => this.openEditor({ mode: "inbox" }) });
     this.addCommand({ id: "insert-task-query", name: "Insert task query", editorCallback: editor => editor.replaceSelection(TASK_QUERY_TEMPLATE) });
     this.addCommand({ id: "import-tasks-plugin", name: "Import tasks from the Tasks plugin", callback: () => this.openTasksImport() });
@@ -376,57 +374,58 @@ export default class TaskManagerPlugin extends Plugin {
   openProjectCreator(): void {
     new ProjectCreatorModal(this.app, {
       projects: this.index.projects(), dateFormat: this.dateFormat(), linkDates: this.settings.linkDates,
-      createProject: async draft => {
-        const path = projectNotePath(draft.name);
-        if (this.app.vault.getAbstractFileByPath(path)) throw new Error("A note with this name already exists.");
-        await this.app.vault.create(path, projectNoteContent(draft, this.dateFormat(), this.settings.linkDates));
-        await this.index.refreshPath(path);
-        await this.openProject(path);
-      }
+      createProject: async draft => { await this.openProject(await this.createProjectNote(draft)); }
     }).open();
   }
 
-  openProjectEditor(path: string, focusProperty?: keyof ProjectDraft): void {
+  /** Writes a new project note (a name alone is enough) and indexes it; returns its path. */
+  async createProjectNote(draft: Partial<ProjectDraft> & { name: string }): Promise<string> {
+    const full: ProjectDraft = { date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "", archived: false, ...draft };
+    const path = projectNotePath(full.name);
+    if (this.app.vault.getAbstractFileByPath(path)) throw new Error("A note with this name already exists.");
+    await this.app.vault.create(path, projectNoteContent(full, this.dateFormat(), this.settings.linkDates));
+    await this.index.refreshPath(path);
+    return path;
+  }
+
+
+  /** A project's current properties, as read from its note. */
+  projectDraft(project: Project): ProjectDraft {
+    const file = this.app.vault.getAbstractFileByPath(project.path);
+    return projectEditDraft(project, file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter ?? {} : {});
+  }
+
+  /**
+   * Changes a project's properties (and, with a new name, its note's name, in the same folder) from its
+   * current values; returns its path afterwards. Views showing it follow a rename.
+   */
+  async updateProject(path: string, change: (draft: ProjectDraft) => ProjectDraft): Promise<string> {
     const file = this.app.vault.getAbstractFileByPath(path);
     const project = this.index.projects().find(project => project.path === path);
-    if (!(file instanceof TFile) || !project) { new Notice("Project note no longer exists."); return; }
-    const initial = projectEditDraft(project, this.app.metadataCache.getFileCache(file)?.frontmatter ?? {});
-    const projects = this.index.projects().filter(project => project.path !== path);
-    if (initial.parent && !projects.some(project => project.path === initial.parent)) {
-      projects.push({ path: initial.parent, name: initial.parent, openTasks: 0, completedTasks: 0, archived: false });
+    if (!(file instanceof TFile) || !project) throw new Error("Project note no longer exists.");
+    const draft = change(projectEditDraft(project, this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}));
+    const folder = file.path.slice(0, file.path.lastIndexOf("/") + 1);
+    const destination = folder + projectNotePath(draft.name);
+    const existing = this.app.vault.getAbstractFileByPath(destination);
+    if (existing && existing !== file) throw new Error("A note with this name already exists.");
+    if (draft.parent === file.path || draft.parent === destination) throw new Error("A project cannot be its own parent.");
+    await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) =>
+      applyProjectDraft(frontmatter, draft, this.dateFormat(), this.settings.linkDates));
+    if (destination !== file.path) {
+      const oldPath = file.path;
+      await this.app.fileManager.renameFile(file, destination);
+      // Usually already done by the rename event; repeating it is a no-op.
+      await this.retargetViews(file, oldPath);
     }
-    new ProjectCreatorModal(this.app, {
-      projects, dateFormat: this.dateFormat(), linkDates: this.settings.linkDates, initial, focusProperty,
-      createProject: async draft => {
-        const basename = projectNotePath(draft.name);
-        const folder = file.path.slice(0, file.path.lastIndexOf("/") + 1);
-        const destination = folder + basename;
-        const existing = this.app.vault.getAbstractFileByPath(destination);
-        if (existing && existing !== file) throw new Error("A note with this name already exists.");
-        if (draft.parent === file.path || draft.parent === destination) throw new Error("A project cannot be its own parent.");
-        await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) =>
-          applyProjectDraft(frontmatter, draft, this.dateFormat(), this.settings.linkDates));
-        if (destination !== file.path) {
-          const oldPath = file.path;
-          await this.app.fileManager.renameFile(file, destination);
-          // Usually already done by the rename event; repeating it is a no-op.
-          await this.retargetViews(file, oldPath);
-        }
-        await this.index.refreshPath(file);
-        await this.revealProject(file.path);
-      }
-    }).open();
+    await this.index.refreshPath(file);
+    return file.path;
   }
 
-  /** Reveal a tab already showing the project, or open one. */
-  private async revealProject(path: string): Promise<void> {
-    const shows = (leaf: WorkspaceLeaf): boolean => {
-      const state = (leaf.getViewState().state ?? {}) as Record<string, unknown>;
-      return state.pagePath === path || state.projectPath === path || state.file === path;
-    };
-    const leaves = [...this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW), ...this.app.workspace.getLeavesOfType("markdown")].filter(shows);
-    const recent = this.app.workspace.getMostRecentLeaf();
-    await this.openProject(path, leaves.find(leaf => leaf === recent) ?? leaves[0]);
+  /** Moves a project's note, and so its tasks, to the trash (the vault's or the system's, per Obsidian's setting). */
+  async deleteProject(path: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
+    await this.app.fileManager.trashFile(file);
   }
 
   async openProject(path: string, existing?: WorkspaceLeaf): Promise<void> {
@@ -529,7 +528,7 @@ export default class TaskManagerPlugin extends Plugin {
   private editSelectedTaskProperties(checking: boolean): boolean {
     const view = this.app.workspace.getActiveViewOfType(TaskMainView);
     if (!view?.getSelectedTasks().length) return false;
-    if (!checking) this.openBulkEditor(view);
+    if (!checking) view.openSelectionMenu();
     return true;
   }
 
@@ -570,20 +569,6 @@ export default class TaskManagerPlugin extends Plugin {
     } catch (error) {
       new Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
     }
-  }
-
-  openBulkEditor(view: TaskMainView, focusProperty?: TaskEditorOptions["focusProperty"]): void {
-    const tasks = view.getSelectedTasks();
-    if (!tasks.length) return;
-    const refresh = async (paths: string[]): Promise<void> => {
-      view.clearSelection();
-      for (const path of paths) await this.index.refreshPath(path);
-    };
-    new BulkTaskEditorModal(this.app, {
-      tasks, focusProperty, projects: this.index.projects(), dateFormat: this.dateFormat(), inboxPath: this.settings.inboxPath,
-      onSave: async patch => { await refresh(await this.store.bulkUpdate(tasks, patch)); },
-      onDelete: async () => { await refresh(await this.store.bulkDelete(tasks)); }
-    }).open();
   }
 
   openEditor(state: OpenEditorState): void {

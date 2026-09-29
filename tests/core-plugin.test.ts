@@ -49,7 +49,6 @@ vi.mock("../src/note-token-editor", () => ({ noteTokenEditor: vi.fn() }));
 import { Setting, TFile, TFolder } from "obsidian";
 import TaskManagerPlugin from "../src/main";
 import * as parser from "../src/parser";
-import { ProjectCreatorModal, type ProjectDraft } from "../src/project-creator";
 import { TaskManagerSettingTab } from "../src/settings";
 import { TASK_MAIN_VIEW } from "../src/task-view";
 import { FakeEvents, flush } from "./core-events";
@@ -231,23 +230,15 @@ describe("task views follow their notes", () => {
     expect(env.leaves).toEqual([kept, dashboard]);
   });
 
-  it("updates and reveals the edited project's tab after renaming it instead of opening a duplicate", async () => {
+  it("points the project's tab at its new name after renaming it instead of opening a duplicate", async () => {
     const { env, plugin } = await loaded(["Projects/Launch.md"]);
     env.frontmatter.set("Projects/Launch.md", { tags: ["project"] });
     env.metadataCache.trigger("changed", env.files[0]);
     const leaf = env.addLeaf(TASK_MAIN_VIEW, { mode: "all", pagePath: "Projects/Launch.md", layout: "calendar" });
-    let options!: { initial: ProjectDraft; createProject: (draft: ProjectDraft) => Promise<void> };
-    const open = vi.spyOn(ProjectCreatorModal.prototype, "open").mockImplementation(function (this: ProjectCreatorModal) {
-      options = (this as unknown as { options: typeof options }).options;
-    });
-    try {
-      plugin.openProjectEditor("Projects/Launch.md");
-      await options.createProject({ ...options.initial, name: "Renamed" });
-    } finally { open.mockRestore(); }
+    await plugin.updateProject("Projects/Launch.md", draft => ({ ...draft, name: "Renamed" }));
     expect(env.fileManager.renameFile).toHaveBeenCalledOnce();
     expect(leaf.state).toMatchObject({ pagePath: "Projects/Renamed.md", layout: "calendar" });
     expect(env.workspace.getLeaf).not.toHaveBeenCalled();
-    expect(env.workspace.revealLeaf).toHaveBeenCalledWith(leaf);
     expect(plugin.index.isProject("Projects/Renamed.md")).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import { setIcon } from "obsidian";
+import { placePopover } from "./choice-popover";
 import { addDays } from "./calendar";
-import { formatDate, parseDateTimeExpression, parseTimeExpression, todayIso } from "./date";
+import { formatDate, parseDateExpression, parseDateTimeExpression, parseTimeExpression, todayIso } from "./date";
 import { durationToMinutes, formatDuration } from "./parser";
 import { taskTimeLabel } from "./task-row-details";
 
@@ -11,7 +12,8 @@ export interface DatePopoverValue {
   duration?: number;
 }
 
-export type DatePopoverKind = "scheduled" | "deadline";
+/** A schedule takes a date, time and duration; a deadline a date and time; a plain date (a project's) only a date. */
+export type DatePopoverKind = "scheduled" | "deadline" | "date";
 
 export interface DatePopoverOptions {
   /** The element the popover opens beside. */
@@ -23,6 +25,10 @@ export interface DatePopoverOptions {
   now?: Date;
   /** Called once, when the popover closes with a change. */
   save: (value: DatePopoverValue) => void;
+  /** Open to the side of the anchor (a menu item), instead of below it. */
+  beside?: boolean;
+  /** The popover's name for screen readers, such as "Start date". */
+  label?: string;
 }
 
 export interface DatePopover {
@@ -73,6 +79,10 @@ const DURATION = /(?:^|\s)(?:for\s+)?(\d+(?:\.\d+)?\s*(?:hours?|hrs?|h)(?:\s*\d+
 export function parseWhenInput(text: string, kind: DatePopoverKind, current: DatePopoverValue, now = new Date(), dateFormat = "YYYY-MM-DD"): DatePopoverValue | undefined {
   let rest = text.trim();
   if (!rest) return undefined;
+  if (kind === "date") {
+    const date = parseDateExpression(rest, now, dateFormat);
+    return date ? { ...current, date } : undefined;
+  }
   const next: DatePopoverValue = { ...current };
   let understood = false;
   rest = rest.replace(/(?:^|\s)no\s+time(?=\s|$)/i, () => { next.time = undefined; understood = true; return " "; });
@@ -123,19 +133,19 @@ export function openDatePopover(options: DatePopoverOptions): DatePopover {
   const pending: DatePopoverValue = { ...options.value };
   let month = monthStart(pending.date ?? today);
 
-  const element = doc.body.createDiv({ cls: "tm-date-popover", attr: { role: "dialog", "aria-label": options.kind === "deadline" ? "Deadline" : "When" } });
+  const element = doc.body.createDiv({ cls: "tm-date-popover", attr: { role: "dialog", "aria-label": options.label ?? (options.kind === "deadline" ? "Deadline" : "When") } });
 
   // One input on top; underneath, what it reads as (or, while empty, the current value).
   const top = element.createDiv({ cls: "tm-date-popover-row tm-date-popover-input" });
   setIcon(top.createSpan({ cls: "tm-date-popover-icon", attr: { "aria-hidden": "true" } }), "calendar");
-  const placeholder = options.kind === "scheduled" ? "Type a date, time or duration" : "Type a date or time";
-  const input = top.createEl("input", { type: "text", attr: { placeholder, "aria-label": options.kind === "scheduled" ? "Date, time and duration" : "Date and time", spellcheck: "false" } });
+  const reads = options.kind === "scheduled" ? "date, time or duration" : options.kind === "deadline" ? "date or time" : "date";
+  const input = top.createEl("input", { type: "text", attr: { placeholder: `Type a ${reads}`, "aria-label": options.kind === "scheduled" ? "Date, time and duration" : options.kind === "deadline" ? "Date and time" : "Date", spellcheck: "false" } });
   const hint = element.createDiv({ cls: "tm-date-popover-hint" });
   const read = (): DatePopoverValue | undefined => parseWhenInput(input.value, options.kind, pending, now, options.dateFormat);
   const paintHint = (): void => {
     const typed = input.value.trim();
     const value = typed ? read() : pending;
-    hint.setText(value ? describeWhen(value) : `Not a ${options.kind === "scheduled" ? "date, time or duration" : "date or time"}`);
+    hint.setText(value ? describeWhen(value) : `Not a ${reads}`);
     hint.toggleClass("is-invalid", !value);
   };
   input.addEventListener("input", paintHint);
@@ -202,17 +212,7 @@ export function openDatePopover(options: DatePopoverOptions): DatePopover {
     close(true);
   });
 
-  // Beside the anchor, below it when there is room, and always inside the window.
-  const place = (): void => {
-    const anchor = options.anchor.getBoundingClientRect();
-    const box = element.getBoundingClientRect();
-    const margin = 8;
-    const below = anchor.bottom + 4 + box.height <= win.innerHeight - margin;
-    const top = below ? anchor.bottom + 4 : Math.max(margin, anchor.top - 4 - box.height);
-    const left = Math.min(Math.max(margin, anchor.left), win.innerWidth - box.width - margin);
-    element.style.top = `${Math.max(margin, top)}px`;
-    element.style.left = `${Math.max(margin, left)}px`;
-  };
+  const place = (): void => placePopover(element, options.anchor, options.beside);
   place();
 
   // A click outside saves what was typed and closes.

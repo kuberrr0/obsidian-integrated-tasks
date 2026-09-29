@@ -6,7 +6,6 @@ import { matchesFilter, propertyValue } from "../src/task-properties";
 import { groupTasks, sortTasks, taskMatchesQuery } from "../src/query";
 import { parseTaskQuery } from "../src/task-query";
 import { todaySummary } from "../src/today-summary";
-import { bulkPropertyPatch, bulkPropertyValues, bulkInlineText, commonBulkValues } from "../src/bulk-task-editor";
 import { taskTagSummaries } from "../src/task-tags";
 import { TaskIndex } from "../src/task-index";
 import { DEFAULT_SETTINGS, type TaskFilter } from "../src/types";
@@ -64,22 +63,5 @@ describe("counting statuses", () => {
     const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
     await index.initialize();
     expect(index.projects()[0]).toMatchObject({ openTasks: 2, completedTasks: 1 });
-  });
-});
-
-describe("bulk status field", () => {
-  it("accepts the five labels, and leaves statuses alone when empty", () => {
-    expect(bulkPropertyPatch({ status: "In progress" }, "YYYY-MM-DD")).toEqual({ status: "doing" });
-    expect(bulkPropertyPatch({ status: "cancelled" }, "YYYY-MM-DD")).toEqual({ status: "cancelled" });
-    expect(bulkPropertyPatch({ status: "" }, "YYYY-MM-DD")).toEqual({});
-    expect(() => bulkPropertyPatch({ status: "Someday" }, "YYYY-MM-DD")).toThrow(/status/);
-  });
-
-  it("reports a shared status without writing it into the inline properties", () => {
-    const [doing] = tasks.slice(1);
-    expect(bulkPropertyValues(doing, "YYYY-MM-DD").status).toBe("In progress");
-    expect(commonBulkValues([doing, doing], "YYYY-MM-DD").status).toBe("In progress");
-    expect(commonBulkValues(tasks, "YYYY-MM-DD").status).toBeUndefined();
-    expect(bulkInlineText(commonBulkValues([doing], "YYYY-MM-DD"), "YYYY-MM-DD")).toBe("#[[t]] ~[[A]]");
   });
 });

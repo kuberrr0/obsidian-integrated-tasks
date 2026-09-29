@@ -11,14 +11,17 @@ import { renderDescriptionIndicator } from "./task-description-indicator";
 import { cloneTaskFilters } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
+import type { ProjectDraft } from "./project-creator";
 import { draftFromTask, draftFromTitle, draftMatchesTask } from "./task-draft";
-import { openDatePopover } from "./date-popover";
-import { openChoicePopover, PRIORITY_CHOICES, type Choice } from "./choice-popover";
+import { nextWeek, openDatePopover } from "./date-popover";
+import { openActionMenu, openTagsPopover, openTaskMenu, priorityIcons } from "./task-menu";
+import { openConfirm } from "./confirm-modal";
+import { openChoicePopover, PRIORITY_CHOICES, type Choice, type ChoiceInput } from "./choice-popover";
 import { linkPlainTags } from "./tag-links";
 import type { BulkTaskPatch } from "./bulk-tasks";
-import { parseTaskInput } from "./parser";
+import { parseRepeatInput, parseTaskInput, repeatLabel } from "./parser";
 import { TaskSelection } from "./task-selection";
-import { updateProjectDates } from "./project-properties";
+import { PROJECT_COLORS, projectColorValue, updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
 import type { GanttZoom } from "./gantt";
 import { projectHierarchy } from "./project-hierarchy";
@@ -654,7 +657,14 @@ export class TaskMainView extends ItemView {
       back.addEventListener("click", () => void this.plugin.openTaskView({ mode: "projects" }));
     }
     const heading = titleGroup.createDiv();
-    heading.createEl("h1", { text: this.getDisplayText() });
+    const titleRow = heading.createDiv({ cls: "tm-title-row" });
+    titleRow.createEl("h1", { text: this.getDisplayText() });
+    const project = this.taskSourcePath ? this.plugin.index.projects().find(project => project.path === this.taskSourcePath) : undefined;
+    if (project) {
+      const more = titleRow.createEl("button", { cls: "clickable-icon tm-title-more", attr: { type: "button", "aria-label": "Project actions", title: "Project actions", "aria-haspopup": "menu", "data-tm-focus-key": "project-actions" } });
+      setIcon(more, "more-horizontal");
+      more.addEventListener("click", event => { event.stopPropagation(); this.openProjectMenu(project, more); });
+    }
     this.headerMetadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
     this.renderHeaderMetadata();
 
@@ -673,6 +683,128 @@ export class TaskMainView extends ItemView {
     return toggle;
   }
 
+  /** The Open project actions command: the menu below the project title's "…" button. */
+  openProjectActions(): void {
+    const project = this.taskSourcePath ? this.plugin.index.projects().find(item => item.path === this.taskSourcePath) : undefined;
+    const button = this.content?.querySelector<HTMLElement>(".tm-title-more");
+    if (project && button) this.openProjectMenu(project, button);
+  }
+
+  private projectDraft(project: Project): ProjectDraft { return this.plugin.projectDraft(project); }
+
+  /** Saves a change to a project's properties; a failure shows as a notice. */
+  private updateProject(project: Project, change: (draft: ProjectDraft) => ProjectDraft): void {
+    void this.plugin.updateProject(project.path, change).catch((cause: unknown) => {
+      new Notice(cause instanceof Error ? cause.message : "Could not update the project.");
+    });
+  }
+
+  /**
+   * The project's actions, like a task's: priority at once; dates, parent, tags, colour and name in popovers
+   * beside the menu; archive, open its note, or delete it.
+   */
+  private openProjectMenu(project: Project, anchor: HTMLElement, at?: { x: number; y: number }): void {
+    const rect = anchor.getBoundingClientRect();
+    const beside = (property: keyof ProjectDraft) => (target: HTMLElement): void => this.openProjectProperty(project, property, target, true, () => menu.close());
+    // The button reads as pressed while its menu is open.
+    anchor.setAttribute("aria-expanded", "true");
+    const menu = openActionMenu({
+      doc: anchor.ownerDocument, at: at ?? { x: rect.left, y: rect.bottom + 4 }, label: "Project actions", returnFocus: anchor,
+      onClose: () => anchor.setAttribute("aria-expanded", "false"),
+      entries: [
+        { kind: "icons", label: "Priority", key: "p", buttons: priorityIcons(project.priority, priority => this.updateProject(project, draft => ({ ...draft, priority: priority ? String(priority) : "" }))) },
+        { kind: "separator" },
+        { kind: "submenu", label: "Start date", icon: "calendar", key: "d", open: beside("date") },
+        { kind: "submenu", label: "End date", icon: "calendar-check", key: "e", open: beside("endDate") },
+        { kind: "submenu", label: "Deadline", icon: "flag", key: "D", open: beside("deadline") },
+        { kind: "submenu", label: "Parent project", icon: "folder-tree", key: "g", open: beside("parent") },
+        { kind: "submenu", label: "Tags", icon: "tag", key: "t", open: beside("tags") },
+        { kind: "submenu", label: "Color", icon: "palette", key: "c", open: beside("color") },
+        { kind: "submenu", label: "Rename", icon: "pencil", key: "n", open: beside("name") },
+        { kind: "separator" },
+        { kind: "item", label: project.archived ? "Unarchive project" : "Archive project", icon: project.archived ? "archive-restore" : "archive",
+          run: () => this.updateProject(project, draft => ({ ...draft, archived: !project.archived })) },
+        { kind: "item", label: "Open note", icon: "file-text", run: () => {
+          const file = this.app.vault.getAbstractFileByPath(project.path);
+          if (file instanceof TFile) void this.app.workspace.getLeaf("tab").openFile(file);
+        } },
+        { kind: "separator" },
+        { kind: "item", label: "Delete project", icon: "trash-2", danger: true, run: () => this.confirmDeleteProject(project) }
+      ]
+    });
+  }
+
+  private confirmDeleteProject(project: Project): void {
+    const tasks = project.openTasks + project.completedTasks;
+    openConfirm(this.app, {
+      title: `Delete “${project.name}”?`,
+      message: `Its note${tasks ? `, with ${tasks} task${tasks === 1 ? "" : "s"},` : ""} moves to the trash. Subprojects keep their notes.`,
+      confirm: "Delete project", danger: true,
+      run: () => void this.plugin.deleteProject(project.path).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not delete the project."); })
+    });
+  }
+
+  /** A project property's popover beside `anchor` (the property itself, or a menu row): a date, priority, parent, tags, colour or name. */
+  private openProjectProperty(project: Project, property: keyof ProjectDraft, anchor = this.popoverAnchor() ?? this.content, beside = false, done?: () => void): void {
+    if (!anchor) return;
+    const current = this.projectDraft(project);
+    const save = (change: (draft: ProjectDraft) => ProjectDraft): void => { done?.(); this.updateProject(project, change); };
+    if (property === "date" || property === "endDate" || property === "deadline") {
+      const label = property === "date" ? "Start date" : property === "endDate" ? "End date" : "Deadline";
+      const value = property === "date" ? project.scheduledDate : property === "endDate" ? project.endDate : project.deadline;
+      openDatePopover({
+        anchor, beside, kind: "date", label, dateFormat: this.plugin.dateFormat(), value: { date: value },
+        // The note stores dates in the vault's format; the editor reads ISO dates too.
+        save: next => save(draft => ({ ...draft, [property]: next.date ?? "" }))
+      });
+    } else if (property === "priority") {
+      openChoicePopover({ anchor, beside, label: "Priority", choices: PRIORITY_CHOICES, selected: current.priority, choose: value => save(draft => ({ ...draft, priority: value })) });
+    } else if (property === "parent") {
+      // Not the project itself, nor one of its subprojects: a project cannot sit inside itself.
+      const projects = this.plugin.index.projects();
+      const inside = (candidate: Project): boolean => {
+        for (let path: string | undefined = candidate.path, depth = 0; path && depth < 50; depth++) {
+          if (path === project.path) return true;
+          path = projects.find(item => item.path === path)?.parentPath;
+        }
+        return false;
+      };
+      const choices: Choice[] = projects.filter(item => !item.archived && !inside(item)).sort((a, b) => a.name.localeCompare(b.name))
+        .map(item => ({ value: item.path, label: item.name, icon: "circle", color: item.color }));
+      choices.push({ value: "", label: "No parent", separated: true });
+      openChoicePopover({ anchor, beside, label: "Parent project", choices, selected: current.parent, input: { placeholder: "Find a project", filter: true },
+        choose: value => save(draft => ({ ...draft, parent: value })) });
+    } else if (property === "tags") {
+      const own = current.tags.split(/[,\s]+/).filter(Boolean);
+      // Other projects' tags are the ones to offer.
+      const vault = [...new Set(this.plugin.index.projects().filter(item => item.path !== project.path)
+        .flatMap(item => this.projectDraft(item).tags.split(/[,\s]+/)).filter(tag => tag && !own.includes(tag)))].sort((a, b) => a.localeCompare(b));
+      let tags = own;
+      const write = (): void => this.updateProject(project, draft => ({ ...draft, tags: tags.join(", ") }));
+      openTagsPopover({
+        anchor, beside, tags: [...own.map(name => ({ name, state: "all" as const })), ...vault.map(name => ({ name, state: "none" as const }))],
+        // Frontmatter tags have no spaces: a typed "open house" becomes "open-house".
+        toggle: (tag, on) => { tags = on ? [...new Set([...tags, tag])] : tags.filter(item => item !== tag); write(); },
+        add: added => { tags = [...new Set([...tags, ...added.map(tag => tag.replace(/\s+/g, "-"))])]; write(); }
+      });
+    } else if (property === "color") {
+      const choices: Choice[] = PROJECT_COLORS.map(color => ({ value: color, label: color[0].toUpperCase() + color.slice(1), icon: "circle", color: projectColorValue(color) }));
+      choices.push({ value: "", label: "No color", separated: true });
+      openChoicePopover({
+        anchor, beside, label: "Color", choices, selected: current.color,
+        input: { placeholder: "Find a color, or type a hex such as #3b82f6", filter: true,
+          parse: text => /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(text) ? { value: `#${text.replace(/^#/, "").toLowerCase()}`, label: `Use #${text.replace(/^#/, "").toLowerCase()}` } : undefined },
+        choose: value => save(draft => ({ ...draft, color: value }))
+      });
+    } else if (property === "name") {
+      openChoicePopover({
+        anchor, beside, label: "Rename project", choices: [],
+        input: { placeholder: project.name, invalid: "", parse: text => text && text !== project.name ? { value: text, label: `Rename to “${text}”` } : undefined },
+        choose: name => save(draft => ({ ...draft, name }))
+      });
+    }
+  }
+
   private renderHeaderMetadata(): void {
     const metadata = this.headerMetadata;
     if (!metadata) return;
@@ -689,7 +821,7 @@ export class TaskMainView extends ItemView {
     const parentColor = project.parentPath ? this.plugin.index.projectColor(project.parentPath) : undefined;
     if (parentColor) metadata.style.setProperty("--tm-project-color", parentColor);
     else metadata.style.removeProperty("--tm-project-color");
-    renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat(), undefined, undefined, this.plugin.settings.style === "things");
+    renderProjectHeaderDetails(metadata, project, property => this.openProjectProperty(project, property), this.plugin.dateFormat(), undefined, undefined, this.plugin.settings.style === "things");
     renderProjectProgress(metadata, project);
   }
 
@@ -809,7 +941,7 @@ export class TaskMainView extends ItemView {
         navigate: (anchor, zoom) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.render(); },
         viewportChanged: anchor => { this.ganttAnchor = anchor; },
         open: project => { void this.plugin.openProject(project.path).catch(error => new Notice(String(error))); },
-        edit: (project, field) => this.plugin.openProjectEditor(project.path, field),
+        edit: (project, field) => this.openProjectProperty(project, field),
         update: async (project, changes) => {
           const file = this.app.vault.getAbstractFileByPath(project.path);
           if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
@@ -839,9 +971,14 @@ export class TaskMainView extends ItemView {
       const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
       const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
       button.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
+      // Right-click opens the project's actions, as it does a task's.
+      row.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        this.openProjectMenu(project, button, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined);
+      });
       if (lead) {
         const secondary = content.createDiv({ cls: "tm-things-secondary" });
-        renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.plugin.openProjectEditor(project.path, field) });
+        renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field) });
         if (!lead.childElementCount) lead.remove();
         if (!secondary.childElementCount) secondary.remove();
         continue;
@@ -849,7 +986,7 @@ export class TaskMainView extends ItemView {
       const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
       const parentColor = project.parentPath ? this.plugin.index.projectColor(project.parentPath) : undefined;
       if (parentColor) metadata.style.setProperty("--tm-project-color", parentColor);
-      renderProjectHeaderDetails(metadata, project, property => this.plugin.openProjectEditor(project.path, property), this.plugin.dateFormat(), undefined, primary);
+      renderProjectHeaderDetails(metadata, project, property => this.openProjectProperty(project, property), this.plugin.dateFormat(), undefined, primary);
       if (!metadata.childElementCount) metadata.remove();
     }
   }
@@ -997,11 +1134,15 @@ export class TaskMainView extends ItemView {
       }
       const anchor = originalAnchor ? this.plugin.index.taskById(originalAnchor.id) : undefined;
       if (originalAnchor && (!anchor || anchor.raw !== originalAnchor.raw)) throw new Error("Drop target changed while dragging. Refresh and try again.");
+      // The moved tasks stay selected when they were; dragging an unselected task leaves the selection alone.
+      const kept = this.getSelectedTasks();
+      const moved = selected.every(task => kept.some(item => item.id === task.id));
       const paths = await this.plugin.store.bulkDrop(selected, group, anchor, placement);
       const resort = Boolean(anchor && placement) && (this.sort !== "source" || this.descending);
       if (anchor && placement) { this.sort = "source"; this.descending = false; }
-      this.clearSelection();
       for (const path of paths) await this.plugin.index.refreshPath(path);
+      const moveTo = anchor ? anchor.path : group?.destination ? group.destination.split("#")[0] : undefined;
+      if (moved) this.reselect(kept, moveTo);
       // Index updates refresh the results; a new sort order also changes the filter panel.
       if (resort) this.render();
     } catch (cause) {
@@ -1017,22 +1158,238 @@ export class TaskMainView extends ItemView {
     if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || !this.getSelectedTasks().length) return;
     // Clicking any task row changes the selection itself, so only clicks elsewhere clear it.
     const target = event.target as HTMLElement | null;
-    // Working in the date popover edits the selection; it does not end it.
-    if (target?.closest?.(".tm-date-popover, .tm-choice-popover")) return;
+    // Working in the task menu or a popover edits the selection; it does not end it.
+    if (target?.closest?.(".tm-task-menu, .tm-date-popover, .tm-choice-popover, .tm-tags-popover")) return;
     const onRow = Array.from(this.selectionRows.values()).some(rows => rows.some(row => target && row.contains(target)));
     if (!onRow) this.clearSelection();
   }
 
   private editTask(task: Task, focusProperty?: TaskEditorProperty): void {
     if (!this.selection.has(task)) this.clearSelection();
-    // Dates, times and durations edit in a popover beside the property, for the whole selection.
-    if (focusProperty && this.openDateEditor(this.selection.has(task) ? this.getSelectedTasks() : [task], focusProperty)) return;
-    if (this.selection.has(task)) {
-      if (focusProperty) this.plugin.openBulkEditor(this, focusProperty);
-      else this.plugin.openBulkEditor(this);
+    const tasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
+    // A property edits in a popover beside it, for the whole selection.
+    if (focusProperty && this.openPropertyEditor(tasks, focusProperty)) return;
+    // Several selected tasks open their menu; one task opens its editor.
+    if (tasks.length > 1) {
+      const row = this.selectionRows.get(task.id)?.[0];
+      const rect = row?.getBoundingClientRect();
+      if (row && rect) this.openTaskMenu(task, row, { x: rect.left + 24, y: rect.bottom });
     }
     else if (focusProperty) this.plugin.openEditor({ ...this.state, task, focusProperty });
     else this.plugin.openEditor({ ...this.state, task });
+  }
+
+  /** The Edit task properties command: the selection's menu, below its first row. */
+  openSelectionMenu(): void {
+    const [task] = this.getSelectedTasks();
+    const row = task && this.selectionRows.get(task.id)?.[0];
+    if (!row) return;
+    const rect = row.getBoundingClientRect();
+    this.openTaskMenu(task, row, { x: rect.left + 24, y: rect.bottom });
+  }
+
+  /**
+   * The right-click menu, for the selection when the task is selected: complete, dates and priority at once,
+   * project, deadline, tags, repeat, snooze and status in popovers beside it, duplicate and delete.
+   */
+  private openTaskMenu(task: Task, row: HTMLElement, at: { x: number; y: number }): void {
+    const tasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
+    const first = tasks[0];
+    if (!first) return;
+    const shared = <T>(value: (task: Task) => T): T | undefined => tasks.every(item => value(item) === value(first)) ? value(first) : undefined;
+    const today = todayIso();
+    const menu = openTaskMenu({
+      doc: row.ownerDocument, at, today, returnFocus: row,
+      completed: tasks.every(item => item.completed),
+      scheduled: shared(item => item.scheduledDate), priority: shared(item => item.priority),
+      complete: () => this.setStatus(task, tasks.every(item => item.completed) ? "todo" : "done", tasks),
+      schedule: date => void this.commit(() => this.plugin.store.bulkUpdate(tasks, { scheduledDate: date })),
+      pickDate: anchor => void this.openDateEditor(tasks, "scheduledDate", anchor, true, () => menu.close()),
+      setPriority: priority => void this.commit(() => this.plugin.store.bulkUpdate(tasks.filter(item => item.priority !== priority), { priority })),
+      submenus: [
+        { label: "Project", icon: "folder-input", key: "g", open: anchor => this.openProjectChoice(tasks, anchor, true, () => menu.close()) },
+        { label: "Deadline", icon: "flag", key: "D", open: anchor => void this.openDateEditor(tasks, "deadline", anchor, true, () => menu.close()) },
+        { label: "Tags", icon: "tag", key: "t", open: anchor => this.openTagsEditor(tasks, anchor, true) },
+        { label: "Repeat", icon: "repeat", key: "r", open: anchor => this.openRepeatEditor(tasks, anchor, true, () => menu.close()) },
+        { label: "Snooze", icon: "alarm-clock-off", key: "h", open: anchor => this.openSnoozeEditor(tasks, anchor, true, () => menu.close()) },
+        { label: "Status", icon: "circle-dot", key: "s", open: anchor => this.openStatusEditor(task, tasks, anchor, () => menu.close()) }
+      ],
+      duplicate: () => void this.commit(() => this.plugin.store.duplicate(tasks), "Could not duplicate the task."),
+      delete: () => void this.commit(async () => {
+        const paths = await this.plugin.store.bulkDelete(tasks);
+        this.clearSelection();
+        return paths;
+      }, "Could not delete the task.", false)
+    });
+  }
+
+  /**
+   * Writes a change, then refreshes the notes it touched; a failure shows as a notice. The selection is
+   * kept, as the tasks now read (in `moveTo` when they moved there); `false` for tasks that are gone.
+   */
+  private async commit(write: () => Promise<string[]>, failure = "Could not update the task.", keep: { moveTo?: string } | false = {}): Promise<void> {
+    const selected = keep ? this.getSelectedTasks() : [];
+    try {
+      for (const path of await write()) await this.plugin.index.refreshPath(path);
+      if (keep) this.reselect(selected, keep.moveTo);
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : failure);
+    }
+  }
+
+  /**
+   * Selects tasks again after a write changed them (and so their ids or text): each by its title in its note
+   * (`moveTo` when it moved), the nearest to its old line when the title repeats.
+   */
+  private reselect(before: Task[], moveTo?: string): void {
+    if (!before.length) return;
+    const chosen: Task[] = [];
+    for (const task of before) {
+      const path = moveTo ?? task.path;
+      const candidates = this.plugin.index.tasksForPath(path).filter(item => item.title === task.title && !chosen.includes(item));
+      const nearest = candidates.sort((a, b) => Math.abs(a.line - task.line) - Math.abs(b.line - task.line))[0];
+      if (nearest) chosen.push(nearest);
+    }
+    this.selection.select(chosen);
+    this.updateSelection();
+  }
+
+  /** A property's popover: dates, times and durations, priority, tags, repeat or snooze. False for anything else. */
+  private openPropertyEditor(tasks: Task[], property: TaskEditorProperty, anchor = this.popoverAnchor()): boolean {
+    if (this.openDateEditor(tasks, property, anchor)) return true;
+    const target = anchor ?? (tasks[0] && this.selectionRows.get(tasks[0].id)?.[0]) ?? this.content;
+    if (!target || !tasks.length) return false;
+    if (property === "tags") this.openTagsEditor(tasks, target);
+    else if (property === "repeat") this.openRepeatEditor(tasks, target);
+    else if (property === "defer") this.openSnoozeEditor(tasks, target);
+    else return false;
+    return true;
+  }
+
+  /** Inbox and the active projects; choosing one moves the tasks (with their subtasks) there. */
+  private openProjectChoice(tasks: Task[], anchor: HTMLElement, beside = false, done?: () => void): void {
+    const current = tasks.every(task => task.path === tasks[0].path) ? tasks[0].path : undefined;
+    const move = (path: string): void => {
+      done?.();
+      const moving = tasks.filter(task => task.path !== path);
+      if (moving.length) void this.commit(() => this.plugin.store.bulkUpdate(moving, { destination: path }), "Could not move the task.", { moveTo: path });
+    };
+    openChoicePopover({
+      anchor, beside, label: "Move to project", choices: this.projectChoices(current), selected: current,
+      input: this.projectSearch(path => move(path)), choose: move
+    });
+  }
+
+  /** Searches the projects; typed text that names none can become a new project, which `use` then receives. */
+  private projectSearch(use: (path: string) => void): ChoiceInput {
+    return {
+      placeholder: "Find or create a project", filter: true,
+      create: {
+        label: text => `Create project “${text}”`, icon: "folder-plus",
+        run: text => {
+          this.plugin.createProjectNote({ name: text }).then(path => {
+            new Notice(`Created project ${text}`);
+            use(path);
+          }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not create the project."); });
+        }
+      }
+    };
+  }
+
+  /** Inbox, the given note when it is not a project, then the active projects by name. */
+  private projectChoices(current?: string): Choice[] {
+    const inbox = this.plugin.settings.inboxPath;
+    const projects = this.plugin.index.projects().filter(project => !project.archived).sort((a, b) => a.name.localeCompare(b.name));
+    const name = (path: string): string => path.replace(/\.md$/i, "").split("/").pop() ?? path;
+    const choices: Choice[] = [{ value: inbox, label: "Inbox", icon: "inbox" }];
+    if (current && current !== inbox && !projects.some(project => project.path === current)) choices.push({ value: current, label: name(current), icon: "file-text" });
+    projects.forEach((project, index) => choices.push({
+      value: project.path, label: project.name, icon: "circle", color: project.color, separated: index === 0,
+      detail: project.parentPath ? name(project.parentPath) : undefined
+    }));
+    return choices;
+  }
+
+  /**
+   * Tags on the tasks (checked, or a dash when only some have one), then the vault's other tags. Each change
+   * writes at once, one after another, to the tasks as they then read.
+   */
+  private openTagsEditor(tasks: Task[], anchor: HTMLElement, beside = false): void {
+    const ids = tasks.map(task => task.id);
+    const counts = new Map<string, number>();
+    for (const task of tasks) for (const tag of task.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    const own = [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => ({ name, state: count === tasks.length ? "all" as const : "some" as const }));
+    const others = this.plugin.index.tagSummaries().map(tag => tag.name).filter(name => !counts.has(name)).map(name => ({ name, state: "none" as const }));
+    let queue = Promise.resolve();
+    const change = (next: (tags: string[]) => string[]): void => {
+      queue = queue.then(() => this.commit(() => {
+        const current = ids.map(id => this.plugin.index.taskById(id)).filter((task): task is Task => Boolean(task));
+        const changed = current.filter(task => next(task.tags ?? []).join("\n") !== (task.tags ?? []).join("\n"));
+        return changed.length ? this.plugin.store.bulkUpdate(changed, task => ({ tags: next(task.tags ?? []) })) : Promise.resolve([]);
+      }));
+    };
+    openTagsPopover({
+      anchor, beside, tags: [...own, ...others],
+      toggle: (tag, on) => change(tags => on ? [...new Set([...tags, tag])] : tags.filter(item => item !== tag)),
+      add: added => change(tags => [...new Set([...tags, ...added])])
+    });
+  }
+
+  private openRepeatEditor(tasks: Task[], anchor: HTMLElement, beside = false, done?: () => void): void {
+    const current = tasks.every(task => task.repeat === tasks[0].repeat) ? tasks[0].repeat ?? "" : undefined;
+    const rules = ["every day", "every week", "every 2 weeks", "every month", "every year"];
+    if (current && !rules.includes(current)) rules.push(current);
+    const choices: Choice[] = rules.map(rule => ({ value: rule, label: repeatLabel(rule), icon: "repeat" }));
+    choices.push({ value: "", label: "Doesn't repeat", separated: true });
+    openChoicePopover({
+      anchor, beside, label: "Repeat", choices, selected: current,
+      input: {
+        placeholder: "Type a repeat, e.g. every 3 days", invalid: "Try every day, every 2 weeks or every monday",
+        parse: text => { const rule = parseRepeatInput(text); return rule ? { value: rule, label: repeatLabel(rule), icon: "repeat" } : undefined; }
+      },
+      choose: value => {
+        done?.();
+        const repeat = value || undefined;
+        void this.commit(() => this.plugin.store.bulkUpdate(tasks.filter(task => task.repeat !== repeat), { repeat }));
+      }
+    });
+  }
+
+  /** Snoozing hides a task from Inbox, Today and Upcoming until the date (see isDeferred). */
+  private openSnoozeEditor(tasks: Task[], anchor: HTMLElement, beside = false, done?: () => void): void {
+    const today = todayIso();
+    const choices: Choice[] = [
+      { value: addDays(today, 1), label: "Until tomorrow", icon: "sunrise" },
+      { value: nextWeek(today), label: "Until next week", icon: "square-arrow-right" },
+      { value: "someday", label: "Someday", icon: "archive" }
+    ];
+    if (tasks.some(task => task.deferDate || task.someday)) choices.push({ value: "", label: "Stop snoozing", icon: "alarm-clock", separated: true });
+    const current = tasks.every(task => task.someday) ? "someday" : tasks.every(task => task.deferDate && task.deferDate === tasks[0].deferDate) ? tasks[0].deferDate : undefined;
+    openChoicePopover({
+      anchor, beside, label: "Snooze", choices, selected: current,
+      input: {
+        placeholder: "Snooze until, e.g. next fri", invalid: "Not a date",
+        parse: text => {
+          if (/^some ?day$/i.test(text)) return { value: "someday", label: "Someday" };
+          const date = parseDateExpression(text, new Date(), this.plugin.dateFormat());
+          return date ? { value: date, label: `Until ${formatDate(date, "ddd, MMM D, YYYY")}` } : undefined;
+        }
+      },
+      choose: value => {
+        done?.();
+        const patch: BulkTaskPatch = value === "someday" ? { deferDate: undefined, someday: true } : { deferDate: value || undefined, someday: undefined };
+        void this.commit(() => this.plugin.store.bulkUpdate(tasks, patch));
+      }
+    });
+  }
+
+  private openStatusEditor(task: Task, tasks: Task[], anchor: HTMLElement, done?: () => void): void {
+    const current = tasks.every(item => item.status === tasks[0].status) ? tasks[0].status : undefined;
+    openChoicePopover({
+      anchor, beside: true, label: "Status", selected: current,
+      choices: TASK_STATUSES.map(status => ({ value: status, label: STATUS_LABELS[status], icon: STATUS_ICONS[status] })),
+      choose: value => { done?.(); this.setStatus(task, value as TaskStatus, tasks); }
+    });
   }
 
   /** A selected task drags the whole selection along; returns what moves. */
@@ -1064,31 +1421,21 @@ export class TaskMainView extends ItemView {
       row.focus({ preventScroll: true });
       this.updateSelection();
     };
-    // Right-clicking a task that was already selected edits the selection's properties.
-    let selectedBeforeContext = false;
-    const plainContext = (event: MouseEvent): boolean => !event.shiftKey && !event.altKey && !(Platform.isMacOS ? event.metaKey : event.ctrlKey);
     // Select on press: contextmenu may wait for release or the native menu gesture.
     row.addEventListener("pointerdown", event => {
       this.contextSelectionOnPress = event.button === 2 || (Platform.isMacOS && event.button === 0 && event.ctrlKey);
-      if (this.contextSelectionOnPress) {
-        selectedBeforeContext = this.selection.has(task);
-        selectForContextMenu(event);
-      }
+      if (this.contextSelectionOnPress) selectForContextMenu(event);
     });
-    // Also support keyboard context-menu requests and other non-pointer input.
+    // Right-clicking opens the task menu for the selection. Also support keyboard context-menu requests.
     row.addEventListener("contextmenu", event => {
       // Consume the context gesture even if the row moved after press.
-      // Consume the gesture across the view, even if its menu targets another row.
-      if (!this.contextSelectionOnPress) {
-        selectedBeforeContext = this.selection.has(task);
-        selectForContextMenu(event);
-      }
+      if (!this.contextSelectionOnPress) selectForContextMenu(event);
       this.contextSelectionOnPress = false;
-      if (selectedBeforeContext && plainContext(event) && this.selection.has(task)) {
-        event.preventDefault();
-        this.plugin.openBulkEditor(this);
-      }
-      selectedBeforeContext = false;
+      event.preventDefault();
+      // Cmd/Ctrl-right-clicking a selected task takes it out of the selection instead.
+      if (!this.selection.has(task)) return;
+      const rect = row.getBoundingClientRect();
+      this.openTaskMenu(task, row, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : { x: rect.left + 24, y: rect.bottom });
     });
     row.addEventListener("pointercancel", () => { this.contextSelectionOnPress = false; });
     // A click selects: alone, or with Cmd/Ctrl to toggle and Shift for a range.
@@ -1175,6 +1522,10 @@ export class TaskMainView extends ItemView {
     row.addEventListener("keydown", event => {
       if (event.metaKey || event.ctrlKey || event.defaultPrevented) return;
       const key = event.key;
+      // Actions need a selected task: a row that keeps focus after Escape (or a click elsewhere) is not one.
+      const acting = (key === "m" || key === "M" || key === "s" || key === "S") && !event.altKey && !event.shiftKey
+        || (event.altKey && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key));
+      if (acting && !this.selection.has(task)) return;
       if ((key === "m" || key === "M") && !event.altKey && !event.shiftKey) {
         event.preventDefault(); event.stopPropagation();
         this.openMoveMenu(task, row);
@@ -1269,12 +1620,13 @@ export class TaskMainView extends ItemView {
     menu.showAtPosition({ x: rect.left, y: rect.bottom });
   }
 
-  /** Applies to the whole selection when the task is selected, like the move menu. */
-  private setStatus(task: Task, status: TaskStatus): void {
-    const tasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
+  /** Applies to the whole selection when the task is selected (or to the tasks given), like the move menu. */
+  private setStatus(task: Task, status: TaskStatus, tasks = this.selection.has(task) ? this.getSelectedTasks() : [task]): void {
     this.pendingFocus = { path: task.path, title: task.title };
+    const selected = this.getSelectedTasks();
     void this.plugin.store.setStatus(tasks, status).then(async paths => {
       for (const path of paths) await this.plugin.index.refreshPath(path);
+      this.reselect(selected);
       this.announce(`${tasks.length === 1 ? taskTitleLabel(task.title) : `${tasks.length} tasks`}: ${STATUS_LABELS[status].toLowerCase()}`);
     }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); });
   }
@@ -1476,14 +1828,15 @@ export class TaskMainView extends ItemView {
   private collapseCardOutside(event: MouseEvent): void {
     if (!this.expanded || event.button !== 0) return;
     const target = event.target as HTMLElement | null;
-    if (target?.closest?.(".tm-things-card, .tm-date-popover, .tm-choice-popover, .modal-container, .menu, .suggestion-container")) return;
+    if (target?.closest?.(".tm-things-card, .tm-task-menu, .tm-date-popover, .tm-choice-popover, .tm-tags-popover, .modal-container, .menu, .suggestion-container")) return;
     void this.collapseCard();
   }
 
   /** Subtasks of the open card, at any depth. */
   private expandedDescendants(): Set<string> {
     const ids = new Set<string>();
-    if (!this.expanded || this.plugin.settings.style !== "things") return ids;
+    // With Show subtasks on, subtasks keep their own rows below the card.
+    if (!this.expanded || this.plugin.settings.style !== "things" || this.plugin.settings.showSubtasks) return ids;
     const visit = (id: string): void => {
       for (const child of this.plugin.index.taskById(id)?.childIds ?? []) if (!ids.has(child)) { ids.add(child); visit(child); }
     };
@@ -1502,7 +1855,7 @@ export class TaskMainView extends ItemView {
         todayMarker: this.state.mode !== "today", edit: property => void this.editFromCard(child.id, property), openSource: () => {},
         openTag: tag => void this.openTagView(tag)
       }),
-      children: task.childIds.map(id => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child)),
+      children: this.plugin.settings.showSubtasks ? [] : task.childIds.map(id => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child)),
       change: draft => { if (this.expanded?.id === task.id) this.expanded = { id: task.id, ...draft }; },
       toggle: (item, completed) => {
         void this.plugin.store.toggle(item, completed).catch((cause: unknown) => {
@@ -1520,8 +1873,9 @@ export class TaskMainView extends ItemView {
           .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not rename the subtask."); });
       },
       addChild: (title, after, next) => void this.addCardSubtask(task.id, title, after, next),
-      addTags: tags => void this.addCardTags(task.id, tags),
-      removeTag: tag => void this.removeCardTag(task.id, tag),
+      // One after another, so quick changes in the tag list each see the last one.
+      addTags: tags => { this.cardTagEdits = this.cardTagEdits.then(() => this.addCardTags(task.id, tags)); },
+      removeTag: tag => { this.cardTagEdits = this.cardTagEdits.then(() => this.removeCardTag(task.id, tag)); },
       project: { label: task.path.replace(/\.md$/i, "").split("/").pop() ?? task.path, choose: anchor => this.openProjectPicker(task.id, anchor) },
       openTag: tag => void this.openTagView(tag),
       tagSuggestions: this.plugin.index.tagSummaries().map(tag => tag.name)
@@ -1546,16 +1900,10 @@ export class TaskMainView extends ItemView {
   private openProjectPicker(id: string, anchor: HTMLElement): void {
     const task = this.plugin.index.taskById(id);
     if (!task) return;
-    const inbox = this.plugin.settings.inboxPath;
-    const projects = this.plugin.index.projects().filter(project => !project.archived).sort((a, b) => a.name.localeCompare(b.name));
-    const name = (path: string): string => path.replace(/\.md$/i, "").split("/").pop() ?? path;
-    const choices: Choice[] = [{ value: inbox, label: "Inbox", icon: "inbox" }];
-    if (task.path !== inbox && !projects.some(project => project.path === task.path)) choices.push({ value: task.path, label: name(task.path), icon: "file-text" });
-    projects.forEach((project, index) => choices.push({
-      value: project.path, label: project.name, icon: "circle", color: project.color, separated: index === 0,
-      detail: project.parentPath ? name(project.parentPath) : undefined
-    }));
-    openChoicePopover({ anchor, label: "Move to project", choices, selected: task.path, choose: path => void this.moveCardTask(id, path) });
+    openChoicePopover({
+      anchor, label: "Move to project", choices: this.projectChoices(task.path), selected: task.path,
+      input: this.projectSearch(path => void this.moveCardTask(id, path)), choose: path => void this.moveCardTask(id, path)
+    });
   }
 
   private async moveCardTask(id: string, path: string): Promise<void> {
@@ -1573,6 +1921,8 @@ export class TaskMainView extends ItemView {
       new Notice(cause instanceof Error ? cause.message : "Could not move the task.");
     }
   }
+
+  private cardTagEdits: Promise<void> = Promise.resolve();
 
   /** The cross on a card's tag takes that tag off the task. */
   private async removeCardTag(id: string, tag: string): Promise<void> {
@@ -1633,13 +1983,13 @@ export class TaskMainView extends ItemView {
   }
 
   /** Priority edits in a small list beside the property: P1–P3 or none, for every task given. */
-  private openPriorityEditor(tasks: Task[], anchor = this.popoverAnchor()): boolean {
+  private openPriorityEditor(tasks: Task[], anchor = this.popoverAnchor(), beside = false): boolean {
     const first = tasks[0];
     const target = anchor ?? (first && this.selectionRows.get(first.id)?.[0]) ?? this.content;
     if (!first || !target) return false;
     const shared = tasks.every(task => task.priority === first.priority);
     openChoicePopover({
-      anchor: target, label: "Priority", choices: PRIORITY_CHOICES, selected: shared ? String(first.priority ?? "") : undefined,
+      anchor: target, beside, label: "Priority", choices: PRIORITY_CHOICES, selected: shared ? String(first.priority ?? "") : undefined,
       choose: value => {
         const priority = value ? Number(value) as Task["priority"] : undefined;
         const changed = tasks.filter(task => task.priority !== priority);
@@ -1662,17 +2012,18 @@ export class TaskMainView extends ItemView {
    * Opens the date popover for a schedule (with its time and duration) or a deadline (with its time),
    * saving to every task given. Returns false for properties it does not edit.
    */
-  private openDateEditor(tasks: Task[], property: TaskEditorProperty, anchor = this.popoverAnchor()): boolean {
-    if (property === "priority") return this.openPriorityEditor(tasks, anchor);
+  private openDateEditor(tasks: Task[], property: TaskEditorProperty, anchor = this.popoverAnchor(), beside = false, saved?: () => void): boolean {
+    if (property === "priority") return this.openPriorityEditor(tasks, anchor, beside);
     const kind = property === "deadline" ? "deadline" : property === "scheduledDate" || property === "durationMinutes" ? "scheduled" : undefined;
     const first = tasks[0];
     if (!kind || !first) return false;
     const target = anchor ?? this.selectionRows.get(first.id)?.[0] ?? this.content;
     if (!target) return false;
     openDatePopover({
-      anchor: target, kind, dateFormat: this.plugin.dateFormat(),
+      anchor: target, kind, beside, dateFormat: this.plugin.dateFormat(),
       value: kind === "deadline" ? { date: first.deadline, time: first.deadlineTime } : { date: first.scheduledDate, time: first.scheduledTime, duration: first.durationMinutes },
       save: value => {
+        saved?.();
         // Only what changed is written, so a multi-selection keeps each task's other values.
         const patch: BulkTaskPatch = {};
         if (kind === "deadline") {

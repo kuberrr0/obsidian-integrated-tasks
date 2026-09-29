@@ -27,9 +27,7 @@ vi.mock("../src/task-line-editor", async original => ({
 
 import { Platform, type App } from "obsidian";
 import { TaskEditorModal } from "../src/task-editor";
-import { BulkTaskEditorModal } from "../src/bulk-task-editor";
 import { presentAsBottomSheet } from "../src/mobile-layout";
-import { scanTasks } from "../src/parser";
 import { DEFAULT_SETTINGS } from "../src/types";
 
 beforeAll(() => installObsidianDom());
@@ -41,9 +39,6 @@ afterEach(() => {
 
 const narrow = (matches: boolean) => vi.spyOn(window, "matchMedia").mockImplementation(query => ({ matches: matches && query === "(max-width: 600px)", media: query } as MediaQueryList));
 const taskEditor = () => new TaskEditorModal({} as App, { mode: "inbox", projects: [], settings: DEFAULT_SETTINGS, dateFormat: "YYYY-MM-DD", onSave: async () => {} });
-const bulkEditor = () => new BulkTaskEditorModal({} as App, {
-  tasks: scanTasks("Work.md", "- [ ] A\n- [ ] B"), projects: [], dateFormat: "YYYY-MM-DD", inboxPath: "Inbox.md", onSave: async () => {}, onDelete: async () => {}
-});
 
 function pointer(target: EventTarget, type: string, clientY: number, pointerId = 1): void {
   target.dispatchEvent(new PointerEvent(type, { pointerId, clientY, button: 0, pointerType: "touch", bubbles: true }));
@@ -51,8 +46,7 @@ function pointer(target: EventTarget, type: string, clientY: number, pointerId =
 
 describe("bottom sheet presentation", () => {
   it.each([
-    ["task", taskEditor],
-    ["bulk", bulkEditor]
+    ["task", taskEditor]
   ] as const)("presents the %s editor as a bottom sheet on narrow windows and on mobile, not on desktop", (_name, create) => {
     narrow(false);
     const desktop = create();

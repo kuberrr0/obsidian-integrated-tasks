@@ -5,6 +5,7 @@ import { deadlineIsOverdue, editable, taskTimeDurationLabel, taskTimeLabel } fro
 import type { TaskEditorProperty } from "./task-editor";
 import { checkboxLabel, statusClass } from "./task-status";
 import { renderThingsTaskDetails, thingsDeadlineLabel, type ThingsDetailsOptions } from "./things-row-details";
+import { openTagsPopover } from "./task-menu";
 import type { Task } from "./types";
 
 /** The card's unsaved title, notes and new subtask, kept by the view so a re-render does not lose typing. */
@@ -215,7 +216,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
         if (!properties.parentElement || properties.nextElementSibling !== toolbar) toolbar.before(properties);
         const pills = properties.createDiv({ cls: "tm-things-card-tags" });
         properties.prepend(pills);
-        renderAddTag(pills, { add: addTags, suggestions: options.tagSuggestions ?? [] }, true);
+        renderAddTag(pills, { add: addTags, suggestions: options.tagSuggestions ?? [], tags: options.tags, remove: options.removeTag }, true);
     });
     // The first subtask starts here; later ones follow with Enter.
     if (!options.children.length) add("list-todo", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
@@ -257,7 +258,7 @@ export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags
                 remove.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); actions.remove!(tag); });
             }
         }
-        if (actions?.add) renderAddTag(pills, { add: actions.add, suggestions: actions.suggestions ?? [] });
+        if (actions?.add) renderAddTag(pills, { add: actions.add, suggestions: actions.suggestions ?? [], tags, remove: actions.remove });
     }
     // The scheduled time (and duration) joins its date on one line, as the deadline's time does.
     const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
@@ -281,7 +282,12 @@ export function renderThingsCardProperties(parent: HTMLElement, task: Task, tags
 /** Adding tags right in the card: what to do with them, and which existing tags to suggest. */
 export interface TagAdding {
     add: (tags: string[]) => void;
+    /** Existing tags, offered in the tag list. */
     suggestions: string[];
+    /** The task's own tags, checked in the tag list. */
+    tags?: string[];
+    /** Takes a tag off the task when it is unchecked in the tag list. */
+    remove?: (tag: string) => void;
 }
 
 /** What a card's (or board card's) tag pills can do besides opening the tag editor. */
@@ -300,18 +306,16 @@ export function typedTags(text: string): string[] {
     return [...new Set(text.split(",").map(tag => tag.trim().replace(/^#/, "").replace(/^\[\[(.*)\]\]$/, "$1").trim()).filter(Boolean))];
 }
 
-let suggestionLists = 0;
-
 /**
  * A "+" pill after the tags (no fill, dashed border) that becomes a small input when clicked:
- * Enter adds what was typed, suggesting existing tags; Escape, or leaving it empty, puts the pill back.
+ * Enter adds what was typed; Escape, or leaving it empty, puts the pill back. Its dropdown button
+ * opens the tag list instead, to check or uncheck existing tags (what was typed becomes its search).
  */
 export function renderAddTag(pills: HTMLElement, adding: TagAdding, open = false): void {
     const pill = pills.createEl("button", { cls: "tm-things-card-tag tm-things-add-tag", attr: { type: "button", "aria-label": "Add tag", title: "Add tag", "data-tm-focus-key": "card-add-tag" } });
     setIcon(pill, "plus");
     const start = (): void => {
-        const list = `tm-tag-suggestions-${++suggestionLists}`;
-        const input = createInput(pills, list, adding.suggestions);
+        const input = createInput(pills);
         pill.replaceWith(input.wrapper);
         input.field.focus();
         let done = false;
@@ -325,20 +329,35 @@ export function renderAddTag(pills: HTMLElement, adding: TagAdding, open = false
         input.field.addEventListener("keydown", event => {
             if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.stopPropagation(); finish(true); }
             else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); finish(false); pill.focus(); }
+            else if (event.key === "ArrowDown" && event.altKey) { event.preventDefault(); event.stopPropagation(); input.menu.click(); }
         });
         input.field.addEventListener("blur", () => { if (input.wrapper.isConnected) finish(true); });
+        // Keep focus in the field while pressing the button, so leaving it does not add the text.
+        input.menu.addEventListener("mousedown", event => event.preventDefault());
+        input.menu.addEventListener("click", event => {
+            event.stopPropagation();
+            const query = input.field.value;
+            finish(false);
+            const own = adding.tags ?? [];
+            openTagsPopover({
+                anchor: pill, query,
+                tags: [...own.map(name => ({ name, state: "all" as const })), ...adding.suggestions.filter(name => !own.includes(name)).map(name => ({ name, state: "none" as const }))],
+                toggle: (tag, on) => { if (on) adding.add([tag]); else adding.remove?.(tag); },
+                add: tags => adding.add(tags)
+            });
+        });
     };
     pill.addEventListener("click", event => { event.stopPropagation(); start(); });
     if (open) start();
 }
 
-function createInput(parent: HTMLElement, list: string, suggestions: string[]): { wrapper: HTMLElement; field: HTMLInputElement } {
+function createInput(parent: HTMLElement): { wrapper: HTMLElement; field: HTMLInputElement; menu: HTMLButtonElement } {
     const wrapper = parent.createSpan({ cls: "tm-things-card-tag tm-things-add-tag is-editing" });
-    const field = wrapper.createEl("input", { type: "text", attr: { "aria-label": "New tag", placeholder: "Tag", list, spellcheck: "false" } });
-    const options = wrapper.createEl("datalist", { attr: { id: list } });
-    for (const name of suggestions) options.createEl("option", { attr: { value: name } });
+    const field = wrapper.createEl("input", { type: "text", attr: { "aria-label": "New tag", placeholder: "Tag", spellcheck: "false", autocomplete: "off" } });
+    const menu = wrapper.createEl("button", { cls: "tm-things-add-tag-menu", attr: { type: "button", "aria-label": "Choose tags", title: "Choose tags", "aria-haspopup": "dialog", tabindex: "-1" } });
+    setIcon(menu, "chevron-down");
     wrapper.remove();
-    return { wrapper, field };
+    return { wrapper, field, menu };
 }
 
 /** How long a card takes to open or close. */

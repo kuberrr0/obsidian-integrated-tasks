@@ -71,7 +71,7 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
       on: (event: string, callback: (file: TFile) => void) => { if (event === "modify") emitModify = callback; return {}; },
       offref: () => {}
     },
-    metadataCache: { getFileCache: (file: TFile) => frontmatter[file.path] ? { frontmatter: frontmatter[file.path] } : {}, on: () => ({}), offref: () => {}, getFirstLinkpathDest: () => null },
+    metadataCache: { getFileCache: (file: TFile) => frontmatter[file.path] ? { frontmatter: frontmatter[file.path] } : {}, on: () => ({}), offref: () => {}, getFirstLinkpathDest: (link: string) => files.get(link.endsWith(".md") ? link : `${link}.md`) ?? null },
     workspace: { getLeaf: () => ({ openFile: vi.fn() }) }
   } as unknown as App;
   const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
@@ -79,7 +79,9 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
   const store = { toggle: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]), bulkChange: vi.fn().mockResolvedValue([]), setStatus: vi.fn().mockResolvedValue([]) };
   const plugin = {
     settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
-    openEditor: vi.fn(), openBulkEditor: vi.fn(), openTaskView: vi.fn(), openProjectEditor: vi.fn(), undoTaskChange: vi.fn(), openQuickSwitcher: vi.fn(), saveSettings: vi.fn()
+    openEditor: vi.fn(), openTaskView: vi.fn(), undoTaskChange: vi.fn(), openQuickSwitcher: vi.fn(), saveSettings: vi.fn(),
+    projectDraft: vi.fn(() => ({ name: "Site", date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "work", archived: false, color: "" })),
+    updateProject: vi.fn().mockResolvedValue("Site.md"), deleteProject: vi.fn().mockResolvedValue(undefined)
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const internals = view as unknown as { refresh(): void; content: HTMLElement };
@@ -91,6 +93,8 @@ const rows = (container: HTMLElement, section?: HTMLElement) => Array.from((sect
 const sections = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>("section.tm-section"));
 const key = (target: HTMLElement, key: string, options: KeyboardEventInit = {}) =>
   target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options }));
+/** Row actions (S, M, Alt+arrows) need the task selected: click it first. */
+const act = (row: HTMLElement, name: string, options: KeyboardEventInit = {}) => { row.click(); return key(row, name, options); };
 
 describe("paged task lists", () => {
   it("keeps rows the user loaded in a later section across re-renders, with a minimum per section", async () => {
@@ -247,7 +251,7 @@ describe("keyboard", () => {
     key(rows(content())[1], "Enter");
     expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
     expect(plugin.openEditor).not.toHaveBeenCalled();
-    expect(plugin.openBulkEditor).not.toHaveBeenCalled();
+    expect(document.querySelector(".tm-task-menu")).toBeNull();
   });
 
   it("reorders, nests and outdents with Alt+arrows", async () => {
@@ -256,13 +260,13 @@ describe("keyboard", () => {
     await view.setState({ mode: "all" });
     const byTitle = (title: string) => rows(content()).find(row => row.textContent!.includes(title))!;
     const task = (title: string) => index.allTasks().find(item => item.title === title)!;
-    key(byTitle("Three"), "ArrowUp", { altKey: true });
+    act(byTitle("Three"), "ArrowUp", { altKey: true });
     await Promise.resolve();
     expect(store.bulkDrop).toHaveBeenLastCalledWith([task("Three")], { destination: "A.md" }, task("Two"), "before");
-    key(byTitle("Two"), "ArrowRight", { altKey: true });
+    act(byTitle("Two"), "ArrowRight", { altKey: true });
     await Promise.resolve();
     expect(store.bulkDrop).toHaveBeenLastCalledWith([task("Two")], { destination: "A.md" }, task("One"), "child");
-    key(byTitle("Child"), "ArrowLeft", { altKey: true });
+    act(byTitle("Child"), "ArrowLeft", { altKey: true });
     await Promise.resolve();
     expect(store.bulkDrop).toHaveBeenLastCalledWith([task("Child")], { destination: "A.md" }, task("Two"), "after");
   });
@@ -270,7 +274,7 @@ describe("keyboard", () => {
   it("offers groups and dates in a Move to menu on M", async () => {
     const { view, content, store, index } = await setup([note("A.md", 2), note("B.md", 2)]);
     await view.setState({ mode: "all" });
-    key(rows(content())[0], "m");
+    act(rows(content())[0], "m");
     const titles = menus[0].items.map(item => item.title);
     expect(titles).toEqual(["Move to A", "Move to B", "Schedule for today", "Schedule for tomorrow", "Schedule for next week", "Remove dates",
       "Snooze until tomorrow", "Snooze until next week", "Snooze to someday", "Mark as in progress", "Mark as waiting", "Mark as done", "Mark as cancelled"]);
@@ -282,7 +286,7 @@ describe("keyboard", () => {
   it("changes status from the M menu, leaving out the current one, for the whole selection", async () => {
     const { view, content, store, index } = await setup([["A.md", "- [/] Draft\n- [ ] Review\n- [ ] Send"]]);
     await view.setState({ mode: "all" });
-    key(rows(content())[0], "m");
+    act(rows(content())[0], "m");
     const statusItems = menus[0].items.filter(item => item.title.startsWith("Mark as"));
     expect(statusItems.map(item => item.title)).toEqual(["Mark as to do", "Mark as waiting", "Mark as done", "Mark as cancelled"]);
     statusItems[1].click();
@@ -299,10 +303,14 @@ describe("keyboard", () => {
     view["showCompleted"] = true;
     await view.setState({ mode: "all" });
     expect(rows(content())[0].getAttribute("aria-keyshortcuts")).toMatch(/ M S$/);
-    const next = rows(content()).map((row, position) => { key(row, position % 2 ? "S" : "s"); return store.setStatus.mock.lastCall; });
+    const next = rows(content()).map((row, position) => { act(row, position % 2 ? "S" : "s"); return store.setStatus.mock.lastCall; });
     expect(next).toEqual(index.allTasks().map((task, position) => [[task], ["doing", "waiting", "todo", "todo", "todo"][position]]));
     key(rows(content())[0], "s", { altKey: true });
     key(rows(content())[0], "S", { shiftKey: true });
+    expect(store.setStatus).toHaveBeenCalledTimes(5);
+    // After Escape the row keeps focus but is no longer selected, so S does nothing.
+    key(rows(content())[0], "Escape");
+    key(rows(content())[0], "s");
     expect(store.setStatus).toHaveBeenCalledTimes(5);
   });
 
@@ -340,7 +348,7 @@ describe("undo and snooze", () => {
   it("snoozes from the Move to menu", async () => {
     const { view, content, store, index } = await setup([note("A.md", 1)]);
     await view.setState({ mode: "all" });
-    key(rows(content())[0], "m");
+    act(rows(content())[0], "m");
     menus[0].items.find(item => item.title === "Snooze to someday")!.click();
     await Promise.resolve();
     expect(store.bulkDrop).toHaveBeenLastCalledWith([index.allTasks()[0]], { property: "defer", value: "Someday" }, undefined, undefined);
@@ -351,8 +359,8 @@ describe("undo and snooze", () => {
     await view.setState({ mode: "all" });
     const later = rows(content()).find(row => row.textContent!.includes("Later"))!;
     expect(later.querySelector(".tm-task-defer")).toBeNull();
-    key(later, "m");
-    key(rows(content()).find(row => row.textContent!.includes("Now"))!, "m");
+    act(later, "m");
+    act(rows(content()).find(row => row.textContent!.includes("Now"))!, "m");
     expect(menus[0].items.map(item => item.title)).toContain("Stop snoozing");
     expect(menus[1].items.map(item => item.title)).not.toContain("Stop snoozing");
   });
@@ -585,4 +593,91 @@ it("shows the tag list's empty message outside the list", async () => {
   const empty = content().querySelector<HTMLElement>(".tm-empty")!;
   expect(empty.hidden).toBe(false);
   expect(empty.closest("[role=list]")).toBeNull();
+});
+
+describe("project actions", () => {
+  const blank = { name: "Site", date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "work", archived: false, color: "" };
+  const menuButton = (label: string) => Array.from(document.querySelectorAll<HTMLElement>(".tm-task-menu button"))
+    .find(button => button.getAttribute("aria-label") === label || button.querySelector(".tm-task-menu-label")?.textContent === label)!;
+  /** Applies the last change sent to updateProject to a blank draft. */
+  const lastChange = (plugin: { updateProject: ReturnType<typeof vi.fn> }) => (plugin.updateProject.mock.lastCall![1] as (draft: typeof blank) => typeof blank)(blank);
+
+  it("shows the … button beside a project's title, opening its actions", async () => {
+    const { view, content, plugin } = await setup([note("Site.md", 1)], { "Site.md": { tags: ["project", "work"] } });
+    await view.setState({ mode: "all", pagePath: "Site.md" });
+    const more = content().querySelector<HTMLElement>(".tm-title-row .tm-title-more")!;
+    expect(more.getAttribute("aria-label")).toBe("Project actions");
+    more.click();
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    const labels = Array.from(document.querySelectorAll(".tm-task-menu button")).map(button => button.getAttribute("aria-label") ?? button.querySelector(".tm-task-menu-label")?.textContent);
+    expect(labels).toEqual(["P1", "P2", "P3", "Start date", "End date", "Deadline", "Parent project", "Tags", "Color", "Rename", "Archive project", "Open note", "Delete project"]);
+    menuButton("P1").click();
+    expect(plugin.updateProject.mock.lastCall![0]).toBe("Site.md");
+    expect(lastChange(plugin).priority).toBe("1");
+    expect(document.querySelector(".tm-task-menu")).toBeNull();
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("edits a project date in a date-only popover beside the menu", async () => {
+    const { view, content, plugin } = await setup([note("Site.md", 1)], { "Site.md": { tags: ["project"] } });
+    await view.setState({ mode: "all", pagePath: "Site.md" });
+    content().querySelector<HTMLElement>(".tm-title-more")!.click();
+    menuButton("Deadline").click();
+    const popover = document.querySelector<HTMLElement>(".tm-date-popover")!;
+    expect(popover.getAttribute("aria-label")).toBe("Deadline");
+    const input = popover.querySelector<HTMLInputElement>("input")!;
+    expect(input.placeholder).toBe("Type a date");
+    input.value = "2026-10-05";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(lastChange(plugin).deadline).toBe("2026-10-05");
+    // Choosing closes the menu too.
+    expect(document.querySelector(".tm-task-menu")).toBeNull();
+  });
+
+  it("renames, recolours and re-parents a project, leaving out itself and its subprojects", async () => {
+    const { view, content, plugin } = await setup([note("Site.md", 1), note("Sub.md", 1), note("Other.md", 1)],
+      { "Site.md": { tags: ["project"] }, "Sub.md": { tags: ["project"], parent: "[[Site]]" }, "Other.md": { tags: ["project"] } });
+    await view.setState({ mode: "all", pagePath: "Site.md" });
+    const open = (label: string) => { content().querySelector<HTMLElement>(".tm-title-more")!.click(); menuButton(label).click(); return document.querySelector<HTMLElement>(".tm-choice-popover")!; };
+    const enter = (popover: HTMLElement, text: string) => {
+      const input = popover.querySelector<HTMLInputElement>("input")!;
+      input.value = text; input.dispatchEvent(new Event("input"));
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    };
+    enter(open("Rename"), "Website");
+    expect(lastChange(plugin).name).toBe("Website");
+    enter(open("Color"), "#3B82F6");
+    expect(lastChange(plugin).color).toBe("#3b82f6");
+    const parent = open("Parent project");
+    expect(Array.from(parent.querySelectorAll("[role=option]")).map(option => option.textContent)).toEqual(["Other", "No parent"]);
+    parent.querySelector<HTMLElement>("[data-value='Other.md']")!.click();
+    expect(lastChange(plugin).parent).toBe("Other.md");
+  });
+
+  it("asks before deleting a project, from the menu or a right-click on its row", async () => {
+    const { view, content } = await setup([note("Site.md", 1)], { "Site.md": { tags: ["project"] } });
+    const confirm = vi.spyOn(view as unknown as { confirmDeleteProject(project: unknown): void }, "confirmDeleteProject").mockImplementation(() => {});
+    await view.setState({ mode: "projects" });
+    const row = content().querySelector<HTMLElement>(".tm-project-row")!;
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 30, clientY: 40 }));
+    menuButton("Delete project").click();
+    expect(confirm).toHaveBeenCalledOnce();
+    expect((confirm.mock.calls[0][0] as { path: string }).path).toBe("Site.md");
+  });
+});
+
+describe("Things card subtasks", () => {
+  it("leaves subtasks to their own rows when Show subtasks is on", async () => {
+    const { view, content, index, plugin } = await setup([["A.md", "- [ ] Parent\n  - [ ] Child"]]);
+    await view.setState({ mode: "all" });
+    const parent = index.allTasks()[0];
+    const open = (showSubtasks: boolean) => {
+      plugin.settings.showSubtasks = showSubtasks;
+      (view as unknown as { expanded?: object }).expanded = { id: parent.id, title: "Parent", notes: "" };
+      (view as unknown as { renderTaskResults(): void }).renderTaskResults();
+      return { checks: content().querySelectorAll(".tm-things-card .tm-things-card-check:not(.is-new)").length, childRow: rows(content()).some(row => row.textContent!.includes("Child")) };
+    };
+    expect(open(false)).toEqual({ checks: 1, childRow: false });
+    expect(open(true)).toEqual({ checks: 0, childRow: true });
+  });
 });

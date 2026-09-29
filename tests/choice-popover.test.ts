@@ -2,7 +2,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
 import { installObsidianDom } from "./helpers/obsidian-dom";
-import { openChoicePopover, PRIORITY_CHOICES } from "../src/choice-popover";
+import { openChoicePopover, PRIORITY_CHOICES, type ChoiceInput } from "../src/choice-popover";
+import { parseRepeatInput } from "../src/parser";
 
 beforeAll(() => installObsidianDom());
 afterEach(() => { document.body.empty(); });
@@ -48,5 +49,78 @@ describe("priority popover", () => {
     document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     expect(second.handle.element.isConnected).toBe(false);
     expect(second.choose).not.toHaveBeenCalled();
+  });
+});
+
+describe("a field above the choices", () => {
+  function withInput(input: ChoiceInput) {
+    const anchor = document.body.createSpan({ text: "Project" });
+    const choose = vi.fn();
+    const choices = [{ value: "Inbox.md", label: "Inbox" }, { value: "Home.md", label: "Home", separated: true }, { value: "Work.md", label: "Work", detail: "Office" }];
+    const handle = openChoicePopover({ anchor, label: "Move to project", choices, selected: "Work.md", choose, input });
+    const field = handle.element.querySelector<HTMLInputElement>("input")!;
+    const type = (text: string) => { field.value = text; field.dispatchEvent(new Event("input")); };
+    const key = (target: Element, name: string) => target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+    const shown = () => Array.from(handle.element.querySelectorAll<HTMLElement>("[role=option]")).filter(item => !item.hidden).map(item => item.textContent);
+    return { handle, choose, field, type, key, shown };
+  }
+
+  it("focuses the field and searches labels and details, picking the first match with Enter", () => {
+    const { handle, choose, field, type, key, shown } = withInput({ placeholder: "Find a project", filter: true });
+    expect(document.activeElement).toBe(field);
+    type("o");
+    expect(shown()).toEqual(["Inbox", "Home", "WorkOffice"]);
+    type("offi");
+    expect(shown()).toEqual(["WorkOffice"]);
+    expect(handle.element.querySelector<HTMLElement>(".tm-options-separator")!.hidden).toBe(true);
+    key(field, "ArrowDown");
+    expect(document.activeElement?.textContent).toBe("WorkOffice");
+    key(document.activeElement!, "ArrowUp");
+    expect(document.activeElement).toBe(field);
+    key(field, "Enter");
+    expect(choose).toHaveBeenCalledExactlyOnceWith("Work.md");
+  });
+
+  it("offers to create what was typed when no choice is named that, picked with Enter when nothing matches", () => {
+    const run = vi.fn();
+    const { handle, choose, field, type, key, shown } = withInput({ placeholder: "Find or create a project", filter: true, create: { label: text => `Create project “${text}”`, run } });
+    expect(shown()).toEqual(["Inbox", "Home", "WorkOffice"]);
+    type("home");
+    // An exact name needs no new project.
+    expect(shown()).toEqual(["Home"]);
+    type("Hom");
+    expect(shown()).toEqual(["Home", "Create project “Hom”"]);
+    key(field, "ArrowDown"); key(document.activeElement!, "ArrowDown");
+    expect(document.activeElement?.textContent).toBe("Create project “Hom”");
+    type("Garden");
+    expect(shown()).toEqual(["Create project “Garden”"]);
+    key(field, "Enter");
+    expect(run).toHaveBeenCalledExactlyOnceWith("Garden");
+    expect(choose).not.toHaveBeenCalled();
+    expect(handle.element.isConnected).toBe(false);
+  });
+
+  it("reads a typed value, shows how it reads, and picks it with Enter", () => {
+    const { handle, choose, field, type, key } = withInput({
+      placeholder: "Type a repeat", invalid: "Not a repeat",
+      parse: text => { const rule = parseRepeatInput(text); return rule ? { value: rule, label: rule } : undefined; }
+    });
+    const hint = () => handle.element.querySelector(".tm-choice-hint")!;
+    type("sometimes");
+    expect(hint().textContent).toBe("Not a repeat");
+    expect(hint().classList.contains("is-invalid")).toBe(true);
+    key(field, "Enter");
+    expect(choose).not.toHaveBeenCalled();
+    type("3 days");
+    expect(hint().textContent).toBe("every 3 days");
+    key(field, "Enter");
+    expect(choose).toHaveBeenCalledExactlyOnceWith("every 3 days");
+  });
+});
+
+describe("typed repeats", () => {
+  it("reads rules with or without every, and common words", () => {
+    expect(["every 3 days", "Monday", "2 weeks", "weekly", "fortnightly", "annually", "every other month", "", "sometimes", "every 0 days"].map(parseRepeatInput))
+      .toEqual(["every 3 days", "every monday", "every 2 weeks", "every week", "every 2 weeks", "every year", "every other month", undefined, undefined, undefined]);
   });
 });
