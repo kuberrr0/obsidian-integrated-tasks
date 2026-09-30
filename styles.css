@@ -1279,6 +1279,10 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-calendar-check.is-p3 { --tm-priority-color: var(--color-blue); }
 .tm-calendar-check { flex-shrink: 0; width: 11px; height: 11px; border: 1.5px solid var(--tm-priority-color, var(--tm-project-color, var(--interactive-accent))); border-radius: 4px; }
 .tm-calendar-task.is-completed .tm-calendar-check { background: var(--tm-priority-color, var(--tm-project-color, var(--interactive-accent))); }
+/* A project among the calendar's tasks: its progress, at the checkbox's size, stands in for the checkbox. */
+.tm-calendar-project-progress { display: inline-flex; flex-shrink: 0; }
+.tm-calendar-project-progress .tm-project-progress { min-height: 0; font-size: 12px; }
+.tm-calendar-task.is-project .tm-calendar-task-title { font-weight: var(--font-semibold); }
 .tm-calendar-task-flag { display: inline-flex; color: var(--tm-project-color, var(--interactive-accent)); }
 .tm-calendar-task-flag svg { width: 12px; height: 12px; fill: currentColor; }
 .tm-calendar-task-time { display: none; }

@@ -43,7 +43,7 @@ vi.mock("obsidian", async importOriginal => {
 import { Platform, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
-import { DEFAULT_SETTINGS } from "../src/types";
+import { DEFAULT_SETTINGS, type Project } from "../src/types";
 import { todayIso } from "../src/date";
 import type TaskManagerPlugin from "../src/main";
 
@@ -806,6 +806,55 @@ describe("View options › Projects", () => {
     toggle.click();
     expect(projectRows()).toEqual([]);
     expect((view.getState() as { showProjects?: boolean }).showProjects).toBe(false);
+  });
+});
+
+describe("View options › Projects in the calendar", () => {
+  it("shows dated projects on their day, with their progress, opening them as projects; the switch hides them", async () => {
+    const today = todayIso();
+    const { view, content, plugin } = await setup(
+      [["Loose.md", `- [ ] Call ${today}`], note("Launch.md", 1), note("Site.md", 1)],
+      { "Launch.md": { tags: ["project"], deadline: today }, "Site.md": { tags: ["project"] } }
+    );
+    const openProject = vi.fn(async () => {});
+    Object.assign(plugin, { projectDraft: () => ({ tags: "" }), openProject });
+    await view.setState({ mode: "all", layout: "calendar" } as never);
+    const projects = () => Array.from(content().querySelectorAll<HTMLElement>(".tm-calendar-task.is-project"));
+    // Launch shows on its deadline; Site has no date, so no day, and stays out of the unscheduled list too.
+    expect(projects().map(card => card.querySelector(".tm-calendar-task-title")?.textContent)).toEqual(["Launch"]);
+    const [launch] = projects();
+    expect(launch.querySelector(".tm-project-progress")).not.toBeNull();
+    expect(launch.querySelector("input[type=checkbox]")).toBeNull();
+    launch.querySelector<HTMLElement>(".tm-calendar-task-title")!.click();
+    expect(openProject).toHaveBeenCalledExactlyOnceWith("Launch.md");
+    // The calendar has the switch too.
+    const toggle = content().querySelector<HTMLElement>("[data-tm-focus-key='option-projects']")!;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    toggle.click();
+    expect(projects()).toEqual([]);
+  });
+
+  it("moves a project dragged to another day: its start, with its end the same distance after, or its deadline", async () => {
+    const { view, plugin } = await setup([]);
+    const writes: Array<Record<string, unknown>> = [];
+    let note: Record<string, unknown> = {};
+    Object.assign(plugin.store, { updateFrontmatter: vi.fn(async (_file: unknown, change: (frontmatter: Record<string, unknown>) => void) => {
+      const frontmatter = { ...note };
+      change(frontmatter);
+      writes.push(frontmatter);
+    }) });
+    Object.assign(view.app.vault, { getAbstractFileByPath: (path: string) => Object.assign(new TFile(), { path }) });
+    const move = (view as unknown as { moveProject(project: Project, date: string): Promise<void> }).moveProject.bind(view);
+    const base = { path: "Launch.md", name: "Launch", openTasks: 1, completedTasks: 0, archived: false };
+    note = { tags: ["project"], date: "2026-10-05", endDate: "2026-10-09" };
+    await move({ ...base, scheduledDate: "2026-10-05", endDate: "2026-10-09" }, "2026-10-07");
+    expect(writes.pop()).toMatchObject({ date: "2026-10-07", endDate: "2026-10-11" });
+    note = { tags: ["project"], deadline: "2026-10-05" };
+    await move({ ...base, deadline: "2026-10-05" }, "2026-10-02");
+    expect(writes.pop()).toMatchObject({ deadline: "2026-10-02" });
+    // Dropped on its own day, nothing is written.
+    await move({ ...base, scheduledDate: "2026-10-05" }, "2026-10-05");
+    expect(writes).toEqual([]);
   });
 });
 

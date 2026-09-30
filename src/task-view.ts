@@ -21,7 +21,7 @@ import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
 import { PROJECT_COLORS, projectColorValue, updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
-import type { GanttZoom } from "./gantt";
+import { daysBetween, type GanttZoom } from "./gantt";
 import { projectHierarchy } from "./project-hierarchy";
 import { kanbanColumns, type KanbanColumn } from "./kanban";
 import { ListDragController } from "./list-drag-view";
@@ -75,11 +75,12 @@ const TITLES: Record<TaskViewMode, string> = {
  * A project as a stand-in task, so it sorts, groups and filters with a view's tasks (View options › Projects): its
  * start while still ahead (once started, it is no longer waiting on a date), its deadline, priority and tags.
  */
-function projectAsTask(project: Project, tags: string[], today: string, completed = false): Task {
+function projectAsTask(project: Project, tags: string[], today: string, completed = false, calendar = false): Task {
   return {
     id: `project:${project.path}`, path: project.path, title: project.name, status: completed ? "done" : "todo", completed,
     line: 0, endLine: 0, raw: "", indent: 0, childIds: [],
-    scheduledDate: project.scheduledDate && project.scheduledDate >= today ? project.scheduledDate : undefined,
+    // Lists date a project by a start still to come; the calendar shows it on its start, past or not.
+    scheduledDate: project.scheduledDate && (calendar || project.scheduledDate >= today) ? project.scheduledDate : undefined,
     deadline: project.deadline, deadlineTime: project.deadlineTime, priority: project.priority,
     tags: tags.filter(tag => tag !== "project")
   };
@@ -601,7 +602,8 @@ export class TaskMainView extends ItemView {
    */
   private projectItems(query: TaskQuery): Task[] {
     this.shownProjects.clear();
-    if (!this.showProjects || this.layout === "calendar") return [];
+    if (!this.showProjects) return [];
+    const calendar = this.layout === "calendar";
     const today = todayIso();
     const page = this.taskSourcePath;
     const scope: TaskQuery = page ? { ...query, mode: "all", projectPath: undefined, sourcePath: undefined } : query;
@@ -613,7 +615,9 @@ export class TaskMainView extends ItemView {
       const status = statuses.get(project.path);
       if (status === "archived" || (status === "completed" && !query.showCompleted) || project.path === page || (page !== undefined && project.parentPath !== page)) continue;
       const tags = this.plugin.projectDraft(project).tags.split(/,\s*/).filter(Boolean);
-      const item = projectAsTask(project, tags, today, status === "completed");
+      const item = projectAsTask(project, tags, today, status === "completed", calendar);
+      // The calendar shows a project on its start date, or its deadline; one with neither has no day.
+      if (calendar && !item.scheduledDate && !item.deadline) continue;
       if (scope.tagPath && !this.plugin.index.taskHasTagPath(item, scope.tagPath)) continue;
       if (!taskMatchesQuery(item, scope, this.plugin.settings.inboxPath)) continue;
       this.shownProjects.set(item.id, project);
@@ -636,6 +640,8 @@ export class TaskMainView extends ItemView {
         toggle: (task, completed) => this.plugin.store.toggle(task, completed),
         bind: (card, task) => this.bindSelection(card, task),
         dragStart: task => this.prepareDrag(task),
+        project: task => this.shownProjects.get(task.id),
+        openProject: project => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))),
         resize: async (task, date, time, duration) => {
           const latest = this.plugin.index.taskById(task.id);
           if (!latest) throw new Error("Task no longer exists. Refresh the view and try again.");
@@ -643,6 +649,8 @@ export class TaskMainView extends ItemView {
           await this.plugin.index.refreshPath(latest.path);
         },
         move: async (task, date, time) => {
+          const project = this.shownProjects.get(task.id);
+          if (project) { await this.moveProject(project, date); return; }
           const selected = this.draggedTasks.length ? this.draggedTasks : [task];
           const paths = await this.plugin.store.bulkChange(selected, original => rescheduledDraft(original, date, time), {}, `Rescheduled ${selected.length === 1 ? `“${selected[0].title}”` : `${selected.length} tasks`}`);
           this.clearSelection();
@@ -1053,7 +1061,7 @@ export class TaskMainView extends ItemView {
         // Completed tasks are left out unless shown (boards show them in their own columns) or a status filter asks.
         openOnly: !(this.showCompleted || this.layout === "kanban"), defaultGroup: this.defaultGroupLabel(),
         // The calendar has no room for projects.
-        showProjects: this.layout === "calendar" ? undefined : this.showProjects
+        showProjects: this.showProjects
       }),
       update: change => {
         if (change.sort !== undefined) this.sort = change.sort;
@@ -1170,6 +1178,22 @@ export class TaskMainView extends ItemView {
     this.renderProjectGroup(container, "Active", withStatus("active"));
     this.renderProjectGroup(container, "Completed", withStatus("completed"));
     this.renderProjectGroup(container, "Archived", withStatus("archived"));
+  }
+
+  /** Moves a project dragged to `date` in the calendar: its start goes there and its end keeps its distance, or, with
+   * no start, its deadline goes there. */
+  private async moveProject(project: Project, date: string): Promise<void> {
+    const changes: Partial<Record<"scheduledDate" | "endDate" | "deadline", string>> = {};
+    if (project.scheduledDate) {
+      if (project.scheduledDate === date) return;
+      changes.scheduledDate = date;
+      if (project.endDate) changes.endDate = addDays(project.endDate, daysBetween(project.scheduledDate, date));
+    } else if (project.deadline && project.deadline !== date) changes.deadline = date;
+    else return;
+    const file = this.app.vault.getAbstractFileByPath(project.path);
+    if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
+    await this.plugin.store.updateFrontmatter(file, (frontmatter: Record<string, unknown>) => updateProjectDates(frontmatter, changes, project, this.plugin.dateFormat()), `Changed dates of “${project.name}”`);
+    await this.plugin.index.refreshPath(project.path);
   }
 
   private renderProjectGroup(container: HTMLElement, title: string, projects: Project[], heading = true): void {

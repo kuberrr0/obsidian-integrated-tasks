@@ -5,7 +5,8 @@ import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
 import { addDays, SLOT_MINUTES, calendarDate, calendarDays, calendarTime, localDate, minuteTime, resizedRange, selectionPreset, shiftCalendar, timeMinutes, type CalendarPreset, type CalendarScope } from "./calendar";
-import type { Task } from "./types";
+import type { Project, Task } from "./types";
+import { renderProjectProgress } from "./project-progress";
 
 export interface CalendarOptions {
   planning?: boolean;
@@ -25,6 +26,10 @@ export interface CalendarOptions {
   /** Colour each checkbox by its task's priority. */
   priorityColors?: boolean;
   dragStart?: (task: Task) => void;
+  /** The project a card stands for, when projects show among the tasks: its progress takes the checkbox's place, it
+   * opens as a project, and it drags (to move its dates) without selecting or reaching the sidebar. */
+  project?: (task: Task) => Project | undefined;
+  openProject?: (project: Project) => void;
   resize: (task: Task, date: string, time: string, duration: number) => Promise<void>;
   move: (task: Task, date: string, time?: string) => Promise<void>;
   /** A restored time-grid scroll position; without one, day and week views open near the current time. */
@@ -133,6 +138,8 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       attr: { title: `${task.title}${task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ""}` } });
     const color = options.color?.(task);
     if (color) card.style.setProperty("--tm-project-color", color);
+    const project = options.project?.(task);
+    if (project) return projectCard(card, task, project);
     const checkbox = card.createEl("input", { cls: `tm-calendar-check${options.priorityColors && task.priority ? ` is-p${task.priority}` : ""}`, type: "checkbox", attr: { "aria-label": `Complete ${taskTitleLabel(task.title)}` } });
     checkbox.checked = task.completed;
     checkbox.disabled = !options.toggle;
@@ -170,6 +177,25 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         event.dataTransfer.setData("text/plain", task.id);
         event.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
       }
+    });
+    card.addEventListener("dragend", () => { dragged = undefined; root.querySelectorAll(".is-drop-target").forEach(el => el.removeClass("is-drop-target")); });
+    return card;
+  };
+  const projectCard = (card: HTMLElement, task: Task, project: Project): HTMLElement => {
+    card.addClass("is-project");
+    const icon = card.createSpan({ cls: "tm-calendar-project-progress", attr: { "aria-hidden": "true" } });
+    renderProjectProgress(icon, project, false);
+    const open = (event: Event): void => { event.stopPropagation(); options.openProject?.(project); };
+    card.createEl("button", { cls: "tm-calendar-task-title", text: project.name, attr: { type: "button", "aria-label": `Open project ${project.name}`, "data-tm-focus-key": `calendar-title:${task.id}` } })
+      .addEventListener("click", open);
+    card.addEventListener("click", open);
+    if (task.deadline && calendarDate(task) === task.deadline) setIcon(card.createSpan({ cls: "tm-calendar-task-flag", attr: { "aria-label": "Deadline" } }), "flag");
+    card.draggable = true;
+    card.addEventListener("dragstart", event => {
+      dragged = task;
+      grabOffsetMinutes = 0;
+      event.stopPropagation();
+      if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", project.name); }
     });
     card.addEventListener("dragend", () => { dragged = undefined; root.querySelectorAll(".is-drop-target").forEach(el => el.removeClass("is-drop-target")); });
     return card;
