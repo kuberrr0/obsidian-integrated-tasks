@@ -60,7 +60,7 @@ function setup() {
   const tagSummaries = vi.fn(() => [{ name: "work", openTasks: 1, completedTasks: 0 }]);
   const plugin = {
     settings: { taskMode: false, smartLists: [] },
-    index: { subscribe: (callback: () => void) => { listener = callback; return () => { listener = () => {}; }; }, projects: () => [], tagSummaries }
+    index: { subscribe: (callback: () => void) => { listener = callback; return () => { listener = () => {}; }; }, projects: () => [], tagSummaries, query: () => [] }
   } as unknown as TaskManagerPlugin;
   const view = new TaskNavigationView({} as WorkspaceLeaf, plugin);
   const content = new FakeElement();

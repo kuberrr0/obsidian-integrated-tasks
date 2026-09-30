@@ -30,11 +30,16 @@ it("syncs sidebar selection through the supported active-view API", async () => 
   active = { getViewType: () => "task-manager-main", getState: () => ({ mode: "smartLists", smartListId: "work-list" }) };
   changed();
   expect(setActive).toHaveBeenLastCalledWith("smartLists", undefined, undefined, "work-list");
-  expect((view as unknown as { expanded: Set<string> }).expanded.has("all")).toBe(true);
-  expect((view as unknown as { expanded: Set<string> }).expanded.has("smartLists")).toBe(false);
   active = null; changed();
   active = { getViewType: () => "markdown", getState: () => ({}) }; changed();
   expect(setActive).toHaveBeenCalledTimes(3);
   await view.onClose();
   expect(unsubscribe).toHaveBeenCalledOnce();
+  // The Smart Lists section unfolds to show the open list; opening a tag unfolds Tags.
+  const expanded = (view as unknown as { expanded: Set<string> }).expanded;
+  expanded.clear();
+  view.setActive("smartLists", undefined, undefined, "work-list");
+  expect([...expanded]).toEqual(["smartLists"]);
+  view.setActive("tags", "work");
+  expect(expanded.has("tags")).toBe(true);
 });

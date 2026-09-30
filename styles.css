@@ -25,48 +25,77 @@
   align-items: center;
 }
 
-/* Match the file explorer's compact toolbar and indented tree rows. */
+/* The sidebar, after Things: the toolbar, then lists in groups set apart, each a coloured icon, a bold name and (for
+   Inbox, Today and tags) a quiet count, smart lists under All Tasks; then Projects and Tags, each a heading over its
+   items. */
 .tm-nav-header {
   min-height: 40px;
   padding: var(--size-4-2);
   justify-content: center;
 }
 .tm-nav-header .nav-buttons-container { display: flex; gap: var(--size-4-2); justify-content: center; }
-.tm-nav-list { padding: 0 var(--size-4-2) var(--size-4-2); }
+.tm-nav-list { padding: 0 var(--size-4-2) var(--size-4-4); }
+.tm-nav-group + .tm-nav-group { margin-top: var(--size-4-4); }
 .tm-navigation .tm-nav-item {
+  --tm-nav-color: var(--text-muted);
   display: flex;
   align-items: center;
+  gap: 10px;
   position: relative;
-  min-height: var(--nav-item-size, 28px);
-  padding: 0 0 0 24px;
-  border-radius: var(--radius-s);
-  color: var(--nav-item-color, var(--text-muted));
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--text-normal);
 }
+.tm-navigation .tm-nav-item.is-blue { --tm-nav-color: var(--color-blue); }
+.tm-navigation .tm-nav-item.is-yellow { --tm-nav-color: var(--color-yellow); }
+.tm-navigation .tm-nav-item.is-red { --tm-nav-color: var(--color-red); }
+.tm-navigation .tm-nav-item.is-cyan { --tm-nav-color: var(--color-cyan); }
+.tm-navigation .tm-nav-item.is-green { --tm-nav-color: var(--color-green); }
+.tm-navigation .tm-nav-item.is-purple { --tm-nav-color: var(--color-purple); }
+.tm-navigation .tm-nav-item.is-orange { --tm-nav-color: var(--color-orange); }
+.tm-navigation .tm-nav-item.is-muted, .tm-navigation .tm-nav-item.is-section { --tm-nav-color: var(--text-faint); }
+.tm-nav-icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 16px; color: var(--tm-nav-color); }
+.tm-nav-icon svg { width: 16px; height: 16px; }
+/* Today's star is filled, as Things draws it. */
+.tm-navigation .tm-nav-item.is-yellow .tm-nav-icon svg { fill: currentColor; }
 .tm-navigation button.tm-nav-label {
   display: block;
-  width: 100%;
   flex: 1;
   min-width: 0;
   height: auto;
-  padding: 4px;
+  padding: 4px 0;
   border: 0;
   box-shadow: none;
   background: transparent;
   color: inherit;
-  font-size: var(--nav-item-size, 14px);
-  font-weight: var(--nav-item-weight, 400);
+  /* The size of Obsidian's own sidebar items, such as the file explorer's. */
+  font-size: var(--nav-item-size, var(--font-ui-small));
+  font-weight: var(--font-semibold);
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
 }
+.tm-nav-count { flex: none; color: var(--text-faint); font-size: var(--font-ui-small); font-weight: var(--font-semibold); font-variant-numeric: tabular-nums; }
+/* Hover and the open item look as the file explorer's do, in the theme's own colours. */
 .tm-navigation .tm-nav-item:hover { background: var(--nav-item-background-hover, var(--background-modifier-hover)); }
-.tm-navigation .tm-nav-item.is-active { background: var(--nav-item-background-active, var(--background-modifier-active-hover)); color: var(--nav-item-color-active, var(--text-normal)); }
-.tm-navigation .tm-nav-collapse { position: absolute; left: 0; padding: 2px; width: 24px; height: 24px; box-shadow: none; }
-.tm-navigation .tm-nav-collapse svg { width: 16px; height: 16px; }
-.tm-navigation .tm-nav-children { margin-left: 12px; padding-left: 8px; border-left: 1px solid var(--background-modifier-border); }
-.tm-nav-empty { padding: 4px 12px; font-size: var(--font-ui-small); color: var(--text-faint); }
+.tm-navigation .tm-nav-item.is-active { background: var(--nav-item-background-active, var(--background-modifier-hover)); color: var(--nav-item-color-active, var(--text-normal)); }
+/* A section's heading (and All Tasks, over its smart lists): the chevron that folds it shows on hover (or focus),
+   at the right. */
+.tm-navigation .tm-nav-section > .tm-nav-item .tm-nav-label { color: var(--text-muted); }
+.tm-navigation .tm-nav-collapse { flex: none; width: 22px; height: 22px; padding: 2px; box-shadow: none; opacity: 0; }
+.tm-navigation .tm-nav-item:hover > .tm-nav-collapse, .tm-navigation .tm-nav-collapse:focus-visible { opacity: 1; }
+.tm-navigation .tm-nav-collapse svg { width: 14px; height: 14px; }
+.tm-navigation .tm-nav-children { margin: 2px 0 0; padding: 0; border: 0; }
+.tm-navigation .tm-nav-children button.tm-nav-label { font-weight: var(--font-medium); }
+/* Subprojects step in under their parent. */
+.tm-navigation .tm-nav-children .tm-nav-item { padding-inline-start: calc(8px + var(--tm-nav-depth, 0) * 16px); }
+/* A project's progress pie, in its colour, stands where a list's icon does. */
+.tm-nav-progress .tm-project-progress { min-height: 0; font-size: 14px; }
+@media (hover: none) { .tm-navigation .tm-nav-collapse { opacity: 1; } }
+.tm-nav-empty { padding: 4px 8px 4px 36px; font-size: var(--font-ui-small); color: var(--text-faint); }
 .tm-tag-search { width: 100%; margin-bottom: var(--size-4-4); }
 
 .tm-project-icon {
@@ -1456,7 +1485,6 @@ button.tm-gantt-handle::before {
 /* Project colors */
 /* --tm-project-color is set inline from a validated colour; Obsidian's --color-* adapt to light and dark themes. */
 .tm-project-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tm-project-color); flex: none; }
-.tm-navigation .tm-nav-item > .tm-project-dot { margin-inline-end: 2px; }
 .tm-project-progress-circle { color: var(--tm-project-color, var(--interactive-accent)); }
 /* Tints keep text-normal readable on every colour; the border and grips carry the hue. */
 button.tm-gantt-bar { background: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 12%, var(--background-primary)); border-color: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 40%, transparent); }
@@ -1498,7 +1526,7 @@ button.tm-project-color-swatch:focus-visible { outline: 2px solid var(--interact
 .tm-density-compact .tm-calendar .tm-calendar-task:not(.is-timed) { margin: 1px 0; padding: 0 3px; }
 .tm-density-compact.tm-navigation { padding-block: var(--size-4-2); }
 .tm-density-compact.tm-navigation .tm-nav-item { min-height: 24px; }
-.tm-density-compact.tm-navigation button.tm-nav-label { padding: 2px 4px; }
+.tm-density-compact.tm-navigation button.tm-nav-label { padding: 2px 0; }
 @media (max-width: 700px) {
   .tm-density-compact .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { height: 32px; min-height: 32px; }
   .tm-density-compact.tm-navigation button.tm-nav-label { min-height: 32px; }

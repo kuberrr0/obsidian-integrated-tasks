@@ -26,7 +26,7 @@ beforeAll(() => installObsidianDom());
 
 it("marks the navigation container compact only in compact density", () => {
   const settings = { ...DEFAULT_SETTINGS };
-  const plugin = { settings, index: { projects: () => [], tagSummaries: () => [] } } as unknown as TaskManagerPlugin;
+  const plugin = { settings, index: { projects: () => [], tagSummaries: () => [], query: () => [] } } as unknown as TaskManagerPlugin;
   const view = new TaskNavigationView({} as WorkspaceLeaf, plugin);
   const container = view.containerEl.children[1] as HTMLElement;
   view.refresh();

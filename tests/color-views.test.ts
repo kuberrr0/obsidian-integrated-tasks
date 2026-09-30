@@ -145,9 +145,9 @@ it("colours Gantt bars and their grips with the project colour", () => {
   expect(plain.classList.contains("tm-project-colored")).toBe(false);
 });
 
-it("shows a colour dot beside coloured projects in the navigation", () => {
+it("shows each project's progress pie, in its colour, in place of an icon in the navigation", () => {
   const plugin = {
-    index: { subscribe: () => () => {}, projects: () => [project({ color: "var(--color-blue)" }), project({ name: "Plain", path: "Plain.md" })], tagSummaries: () => [] },
+    index: { subscribe: () => () => {}, projects: () => [project({ color: "var(--color-blue)" }), project({ name: "Plain", path: "Plain.md" })], tagSummaries: () => [], query: () => [] },
     settings: { smartLists: [], taskMode: false }
   } as unknown as TaskManagerPlugin;
   const view = new TaskNavigationView({} as WorkspaceLeaf, plugin);
@@ -155,10 +155,59 @@ it("shows a colour dot beside coloured projects in the navigation", () => {
   view.setActive("projects", undefined, "Launch.md");
   const rows = Array.from(view.containerEl.querySelectorAll<HTMLElement>(".tm-nav-children .tm-nav-item"));
   expect(rows).toHaveLength(2);
-  const dots = rows.map(row => row.querySelector<HTMLElement>(".tm-project-dot"));
-  expect(dots[0]!.style.getPropertyValue("--tm-project-color")).toBe("var(--color-blue)");
-  expect(dots[0]!.getAttribute("aria-hidden")).toBe("true");
-  expect(rows[0].firstElementChild).toBe(dots[0]);
+  const pies = rows.map(row => row.querySelector<HTMLElement>(".tm-nav-progress .tm-project-progress"));
+  expect(pies[0]!.style.getPropertyValue("--tm-project-color")).toBe("var(--color-blue)");
+  expect(rows[0].firstElementChild!.classList.contains("tm-nav-progress")).toBe(true);
+  expect(rows[0].firstElementChild!.getAttribute("aria-hidden")).toBe("true");
   expect(rows[0].querySelector(".tm-nav-label")!.textContent).toBe("Launch");
-  expect(dots[1]).toBeNull();
+  // A project without a colour shows its pie in the accent colour.
+  expect(pies[1]!.style.getPropertyValue("--tm-project-color")).toBe("");
+});
+
+it("lays the navigation out like Things: coloured lists in groups, counts for Inbox and Today, smart lists under All Tasks, then its sections", () => {
+  const plugin = {
+    index: { subscribe: () => () => {}, projects: () => [], tagSummaries: () => [{ name: "home", openTasks: 2, completedTasks: 1 }],
+      query: ({ mode }: { mode: string }) => mode === "inbox" ? [{}] : mode === "today" ? [{}, {}, {}] : [] },
+    settings: { smartLists: [{ id: "calls", name: "Calls" }], taskMode: false }
+  } as unknown as TaskManagerPlugin;
+  const view = new TaskNavigationView({} as WorkspaceLeaf, plugin);
+  view.app = { workspace: { getActiveViewOfType: () => null } } as unknown as App;
+  view.setActive("tags", "home");
+  const groups = Array.from(view.containerEl.querySelectorAll<HTMLElement>(".tm-nav-list > .tm-nav-group"));
+  const rows = (group: HTMLElement) => (Array.from(group.children) as HTMLElement[]).filter(row => row.classList.contains("tm-nav-item")).map(row =>
+    [row.querySelector(".tm-nav-label")!.textContent, row.className.match(/is-(blue|yellow|red|cyan|green|purple|section)/)?.[1], row.querySelector(".tm-nav-count")?.textContent]);
+  expect(groups.map(rows)).toEqual([
+    [["Inbox", "blue", "1"]],
+    [["Today", "yellow", "3"], ["Upcoming", "red", undefined], ["All Tasks", "cyan", undefined]],
+    [["Weekly Review", "green", undefined], ["Dashboard", "purple", undefined]],
+    [["Projects", "section", undefined]], [["Tags", "section", undefined]]
+  ]);
+  // All Tasks folds its smart lists away from its chevron; they start open.
+  const all = groups[1].querySelector<HTMLElement>("[data-tm-nav-key='mode:all']")!.closest<HTMLElement>(".tm-nav-item")!;
+  expect(all.querySelector(".tm-nav-collapse")!.getAttribute("aria-expanded")).toBe("true");
+  expect(Array.from(groups[1].querySelectorAll(".tm-nav-children .tm-nav-label")).map(label => label.textContent)).toEqual(["Calls"]);
+  // The open tag's section unfolds, its tags counting their open tasks.
+  const tag = view.containerEl.querySelector<HTMLElement>(".tm-nav-section .tm-nav-children .tm-nav-item.is-active")!;
+  expect([tag.querySelector(".tm-nav-label")!.textContent, tag.querySelector(".tm-nav-count")!.textContent]).toEqual(["home", "2"]);
+});
+
+it("indents subprojects under their parent, which folds them away, and unfolds for an open subproject", () => {
+  const plugin = {
+    index: { subscribe: () => () => {}, tagSummaries: () => [], query: () => [], projects: () => [
+      project({ name: "Launch", path: "Launch.md" }), project({ name: "Site", path: "Site.md", parentPath: "Launch.md" }),
+      project({ name: "Copy", path: "Copy.md", parentPath: "Site.md" }), project({ name: "Plain", path: "Plain.md" })
+    ] },
+    settings: { smartLists: [], taskMode: false }
+  } as unknown as TaskManagerPlugin;
+  const view = new TaskNavigationView({} as WorkspaceLeaf, plugin);
+  view.app = { workspace: { getActiveViewOfType: () => null } } as unknown as App;
+  view.refresh();
+  const shown = () => Array.from(view.containerEl.querySelectorAll<HTMLElement>(".tm-nav-section .tm-nav-children .tm-nav-item")).map(row =>
+    [row.querySelector(".tm-nav-label")!.textContent, row.style.getPropertyValue("--tm-nav-depth"), Boolean(row.querySelector(".tm-nav-collapse"))]);
+  expect(shown()).toEqual([["Launch", "0", true], ["Site", "1", true], ["Copy", "2", false], ["Plain", "0", false]]);
+  view.containerEl.querySelector<HTMLElement>("[data-tm-nav-key='collapse:project:Launch.md']")!.click();
+  expect(shown()).toEqual([["Launch", "0", true], ["Plain", "0", false]]);
+  // Opening a subproject unfolds its parents.
+  view.setActive("projects", undefined, "Copy.md");
+  expect(shown().map(([name]) => name)).toEqual(["Launch", "Site", "Copy", "Plain"]);
 });
