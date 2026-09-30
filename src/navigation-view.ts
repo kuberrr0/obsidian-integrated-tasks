@@ -1,6 +1,6 @@
 import { ItemView, Keymap, Menu, Notice, setIcon, TFile, TFolder, type TAbstractFile, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
-import type { TaskViewMode } from "./types";
+import type { FileSortOrder, TaskViewMode } from "./types";
 import { renderProjectProgress } from "./project-progress";
 import { projectHierarchy } from "./project-hierarchy";
 
@@ -36,6 +36,26 @@ const FILE_ICONS: Record<string, string> = {
   png: "file-image", jpg: "file-image", jpeg: "file-image", gif: "file-image", svg: "file-image", webp: "file-image", bmp: "file-image", avif: "file-image",
   mp3: "file-audio", wav: "file-audio", m4a: "file-audio", ogg: "file-audio", flac: "file-audio", webm: "file-video", mp4: "file-video", mov: "file-video", mkv: "file-video"
 };
+/** The file tree's orders, with the names and groups the file explorer gives them. */
+const FILE_SORT_ORDERS: Array<[FileSortOrder, string, string]> = [
+  ["alphabetical", "File name (A to Z)", "name"], ["alphabeticalReverse", "File name (Z to A)", "name"],
+  ["byModifiedTime", "Modified time (new to old)", "modified"], ["byModifiedTimeReverse", "Modified time (old to new)", "modified"],
+  ["byCreatedTime", "Created time (new to old)", "created"], ["byCreatedTimeReverse", "Created time (old to new)", "created"]
+];
+
+/** `files` in `order`, folders first. Folders have no times, so they go by name, backwards only in Z to A. */
+export function sortFiles(files: TAbstractFile[], order: FileSortOrder): TAbstractFile[] {
+  const byName = (a: TAbstractFile, b: TAbstractFile): number => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  const time = (file: TAbstractFile): number => file instanceof TFile ? order.startsWith("byCreated") ? file.stat.ctime : file.stat.mtime : 0;
+  return [...files].sort((a, b) => {
+    const folders = Number(b instanceof TFolder) - Number(a instanceof TFolder);
+    if (folders) return folders;
+    if (order === "alphabetical") return byName(a, b);
+    if (order === "alphabeticalReverse") return byName(b, a);
+    if (a instanceof TFolder) return byName(a, b);
+    return (order.endsWith("Reverse") ? time(a) - time(b) : time(b) - time(a)) || byName(a, b);
+  });
+}
 const NAV_MODES = new Set<TaskViewMode>([...NAV_GROUPS.flat().map(entry => entry.mode), "projects", "tags"]);
 
 export class TaskNavigationView extends ItemView {
@@ -150,8 +170,8 @@ export class TaskNavigationView extends ItemView {
       rove(next);
       buttons[next].focus();
     });
-    action("Create task", "square-pen", () => this.plugin.newTask());
-    action("Create project", "target", () => this.plugin.openProjectCreator());
+    action("New task", "circle-plus", () => this.plugin.newTask());
+    action("New note", "square-pen", () => this.newNote());
     const toggle = action("Task mode", "list-checks", async () => {
       toggle.disabled = true;
       try { await this.plugin.setTaskMode(!this.plugin.settings.taskMode); }
@@ -160,6 +180,11 @@ export class TaskNavigationView extends ItemView {
     toggle.setAttribute("aria-pressed", String(this.plugin.settings.taskMode));
     toggle.setAttribute("title", `Task mode: ${this.plugin.settings.taskMode ? "On" : "Off"}`);
     toggle.classList.toggle("is-active", this.plugin.settings.taskMode);
+    // Folders and their order belong to the file tree, so they show with it.
+    if (this.plugin.settings.showFiles) {
+      action("New folder", "folder-plus", () => this.newFolder(this.app.vault.getRoot()));
+      const sort = action("Change sort order", "arrow-up-narrow-wide", () => this.openSortMenu(sort));
+    }
     rove(Math.min(this.toolbarFocus, buttons.length - 1));
 
     const nav = container.createDiv({ cls: "nav-files-container tm-nav-list", attr: { "aria-label": "Task navigation" } });
@@ -298,8 +323,7 @@ export class TaskNavigationView extends ItemView {
   private renderFolder(parent: HTMLElement, folder: TFolder, depth: number,
     item: (parent: HTMLElement, key: string, label: string, active: boolean, open: (event: MouseEvent) => Promise<void>, icon?: string, color?: string) => HTMLElement): void {
     const active = this.app.workspace.getActiveFile()?.path;
-    const children = [...folder.children].sort((a, b) => Number(b instanceof TFolder) - Number(a instanceof TFolder)
-      || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+    const children = sortFiles(folder.children, this.plugin.settings.fileSortOrder);
     for (const child of children) {
       const isFolder = child instanceof TFolder;
       if (!isFolder && !(child instanceof TFile)) continue;
@@ -335,17 +359,8 @@ export class TaskNavigationView extends ItemView {
       menu.addItem(entry => entry.setSection("open").setTitle("Open in new tab").setIcon("file-plus").onClick(() => run(() => this.app.workspace.getLeaf("tab").openFile(file))));
       menu.addItem(entry => entry.setSection("open").setTitle("Open to the right").setIcon("separator-vertical").onClick(() => run(() => this.app.workspace.getLeaf("split").openFile(file))));
     } else if (file instanceof TFolder) {
-      menu.addItem(entry => entry.setSection("action-primary").setTitle("New note").setIcon("square-pen").onClick(() => run(async () => {
-        const note = await this.app.vault.create(this.availablePath(file, "Untitled", ".md"), "");
-        this.showFolder(file);
-        await this.app.workspace.getLeaf(false).openFile(note);
-      })));
-      menu.addItem(entry => entry.setSection("action-primary").setTitle("New folder").setIcon("folder-plus").onClick(() => run(async () => {
-        const created = await this.app.vault.createFolder(this.availablePath(file, "Untitled", ""));
-        this.showFolder(file);
-        this.renaming = { path: created.path, value: created.name, selected: false };
-        this.render();
-      })));
+      menu.addItem(entry => entry.setSection("action-primary").setTitle("New note").setIcon("square-pen").onClick(() => run(() => this.newNote(file))));
+      menu.addItem(entry => entry.setSection("action-primary").setTitle("New folder").setIcon("folder-plus").onClick(() => run(() => this.newFolder(file))));
     }
     if (!(file instanceof TFolder && file.isRoot())) {
       menu.addItem(entry => entry.setSection("action").setTitle("Rename…").setIcon("pencil").onClick(() => {
@@ -357,6 +372,36 @@ export class TaskNavigationView extends ItemView {
     }
     this.app.workspace.trigger("file-menu", menu, file, "file-explorer-context-menu", this.leaf);
     menu.showAtMouseEvent(event);
+  }
+
+  /** Makes an untitled note, in `folder` or where Obsidian puts new notes, and opens it with its title ready to type. */
+  private async newNote(folder?: TFolder): Promise<void> {
+    const parent = folder ?? this.app.fileManager.getNewFileParent(this.app.workspace.getActiveFile()?.path ?? "");
+    const note = await this.app.vault.create(this.availablePath(parent, "Untitled", ".md"), "");
+    if (this.plugin.settings.showFiles) this.showFolder(parent);
+    await this.app.workspace.getLeaf(false).openFile(note, { active: true, state: { mode: "source" }, eState: { rename: "all" } });
+  }
+
+  /** Makes an untitled folder in `folder` and names it in place. */
+  private async newFolder(folder: TFolder): Promise<void> {
+    const created = await this.app.vault.createFolder(this.availablePath(folder, "Untitled", ""));
+    this.showFolder(folder);
+    this.renaming = { path: created.path, value: created.name, selected: false };
+    this.render();
+  }
+
+  /** The file tree's orders, as the file explorer offers them, the one in use checked. */
+  private openSortMenu(button: HTMLElement): void {
+    const menu = new Menu();
+    for (const [order, title, section] of FILE_SORT_ORDERS) {
+      menu.addItem(entry => entry.setSection(section).setTitle(title).setChecked(this.plugin.settings.fileSortOrder === order).onClick(async () => {
+        this.plugin.settings.fileSortOrder = order;
+        await this.plugin.saveSettings();
+        this.render();
+      }));
+    }
+    const rect = button.getBoundingClientRect();
+    menu.showAtPosition({ x: rect.left, y: rect.bottom });
   }
 
   /** Opens `folder` and the folders around it, so what was just made in it shows. */

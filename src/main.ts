@@ -278,6 +278,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings.showUndoNotices = this.settings.showUndoNotices === true;
     this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
     this.settings.showFiles = this.settings.showFiles === true;
+    if (!["alphabetical", "alphabeticalReverse", "byModifiedTime", "byModifiedTimeReverse", "byCreatedTime", "byCreatedTimeReverse"].includes(this.settings.fileSortOrder)) this.settings.fileSortOrder = "alphabetical";
     // Things is the default; only an explicit Griply choice keeps Griply.
     this.settings.style = this.settings.style === "griply" ? "griply" : "things";
     this.settings.completionDates = this.settings.completionDates === true;

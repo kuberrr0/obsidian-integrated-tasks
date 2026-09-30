@@ -122,6 +122,8 @@ export interface SmartList {
   showProjects?: boolean;
 }
 
+export type FileSortOrder = "alphabetical" | "alphabeticalReverse" | "byModifiedTime" | "byModifiedTimeReverse" | "byCreatedTime" | "byCreatedTimeReverse";
+
 export interface TaskManagerSettings {
   smartLists: SmartList[];
   taskMode: boolean;
@@ -144,6 +146,8 @@ export interface TaskManagerSettings {
   density: "comfortable" | "compact";
   /** List the vault's files and folders in the task sidebar, below its lists. */
   showFiles: boolean;
+  /** How the sidebar's file tree orders files, named as the file explorer names its orders. */
+  fileSortOrder: FileSortOrder;
   /** How task lists and task properties look, after the app each style is modelled on. */
   style: "griply" | "things";
   /** Stamp tasks with the date they were completed. */
@@ -171,6 +175,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   showUndoNotices: false,
   density: "comfortable",
   showFiles: false,
+  fileSortOrder: "alphabetical",
   style: "things",
   completionDates: false,
   weeklyReview: { week: "", reviewed: [] },

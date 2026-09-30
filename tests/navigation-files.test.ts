@@ -36,7 +36,7 @@ vi.mock("obsidian", async importOriginal => {
 });
 
 import { TFile, TFolder, type WorkspaceLeaf } from "obsidian";
-import { TaskNavigationView } from "../src/navigation-view";
+import { sortFiles, TaskNavigationView } from "../src/navigation-view";
 import { DEFAULT_SETTINGS } from "../src/types";
 import type TaskManagerPlugin from "../src/main";
 
@@ -139,4 +139,25 @@ it("renames in place from the menu, and makes new notes in a folder", async () =
   expect(menus[menus.length - 1].titles.slice(0, 2)).toEqual(["New note", "New folder"]);
   menus[menus.length - 1].click("New note");
   await vi.waitFor(() => expect(create).toHaveBeenCalledWith("Work/Untitled.md", ""));
+});
+
+it("adds folder and sort buttons to the toolbar with the files, and sorts files as the file explorer does", () => {
+  const { view, settings, container, root } = setup();
+  const actions = () => Array.from(container.querySelectorAll(".nav-action-button")).map(button => button.getAttribute("aria-label"));
+  view.refresh();
+  expect(actions()).toEqual(["New task", "New note", "Task mode"]);
+  settings.showFiles = true;
+  view.refresh();
+  expect(actions()).toEqual(["New task", "New note", "Task mode", "New folder", "Change sort order"]);
+  const [work, notes10, notes2] = [root.children[0], root.children[1], root.children[2]] as [TFolder, TFile, TFile];
+  Object.assign(notes10, { stat: { mtime: 1, ctime: 3 } });
+  Object.assign(notes2, { stat: { mtime: 2, ctime: 1 } });
+  const names = (order: Parameters<typeof sortFiles>[1]) => sortFiles(root.children, order).map(file => file.name);
+  expect(work).toBeInstanceOf(TFolder);
+  expect(names("alphabetical")).toEqual(["Work", "Notes 2.md", "Notes 10.md"]);
+  expect(names("alphabeticalReverse")).toEqual(["Work", "Notes 10.md", "Notes 2.md"]);
+  expect(names("byModifiedTime")).toEqual(["Work", "Notes 2.md", "Notes 10.md"]);
+  expect(names("byModifiedTimeReverse")).toEqual(["Work", "Notes 10.md", "Notes 2.md"]);
+  expect(names("byCreatedTime")).toEqual(["Work", "Notes 10.md", "Notes 2.md"]);
+  expect(names("byCreatedTimeReverse")).toEqual(["Work", "Notes 2.md", "Notes 10.md"]);
 });
