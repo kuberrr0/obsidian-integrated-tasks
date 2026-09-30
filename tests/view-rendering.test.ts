@@ -888,31 +888,50 @@ describe("opening a card on the desktop", () => {
 });
 
 describe("opening a card on a phone", () => {
-  it("scrolls the card to the middle of the visible list once it has opened", async () => {
+  it("scrolls a card the keyboard covers until its bottom sits just above the keyboard, and leaves one in view alone", async () => {
     const platform = Platform as { isMobile?: boolean };
     platform.isMobile = true;
     try {
       const { view, content, plugin } = await setup([note("A.md", 3)]);
       plugin.settings.style = "things";
       await view.setState({ mode: "all" });
-      // The list scrolls within 0–800px; the opened card sits at 700–800px, its middle 350px below the list's.
+      // The list spans 0–800px. As in Obsidian's iOS app, the page stays full height under the keyboard, whose height
+      // arrives as --keyboard-height with a keyboardDidShow event once it has opened.
       const list = content().parentElement!;
       list.style.overflowY = "auto";
       Object.defineProperty(list, "scrollHeight", { configurable: true, value: 2000 });
       Object.defineProperty(list, "clientHeight", { configurable: true, value: 800 });
-      vi.spyOn(list, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 800, height: 800 } as DOMRect);
       const scrollBy = vi.fn();
       list.scrollBy = scrollBy as never;
-      vi.stubGlobal("visualViewport", undefined);
+      vi.stubGlobal("visualViewport", Object.assign(new EventTarget(), { offsetTop: 0, height: 800 }));
       vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+      let card = { top: 450, bottom: 650, height: 200 };
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-        return (this === list ? { top: 0, bottom: 800, height: 800 } : this.classList.contains("tm-things-card") ? { top: 700, bottom: 800, height: 100 } : { top: 0, bottom: 40, height: 40 }) as DOMRect;
+        return (this === list ? { top: 0, bottom: 800, height: 800 } : this.classList.contains("tm-things-card") ? card : { top: 0, bottom: 40, height: 40 }) as DOMRect;
       });
       rows(content())[2].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
-      await vi.waitFor(() => expect(scrollBy).toHaveBeenCalledWith({ top: 350, behavior: "smooth" }));
-    } finally { platform.isMobile = false; vi.restoreAllMocks(); }
+      await new Promise(resolve => setTimeout(resolve, 300));
+      // Before the keyboard, the card is in view.
+      expect(scrollBy).not.toHaveBeenCalled();
+      document.documentElement.style.setProperty("--keyboard-height", "300px");
+      window.dispatchEvent(new Event("keyboardDidShow"));
+      // Its bottom (650px) goes to just above the keyboard (800 − 300 = 500px, less an 8px gap).
+      expect(scrollBy).toHaveBeenCalledWith({ top: 158, behavior: "smooth" });
+      await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
+      scrollBy.mockClear();
+      card = { top: 100, bottom: 300, height: 200 };
+      rows(content())[1].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(scrollBy).not.toHaveBeenCalled();
+    } finally {
+      platform.isMobile = false;
+      document.documentElement.style.removeProperty("--keyboard-height");
+      vi.restoreAllMocks(); vi.unstubAllGlobals();
+    }
   });
 });
+
+
 
 describe("recurring tasks in the Things style", () => {
   it("shows the repeat icon as the checkbox, toggling the task, with no repeat mark in the line", async () => {

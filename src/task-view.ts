@@ -1909,39 +1909,52 @@ export class TaskMainView extends ItemView {
     const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
     card?.querySelector<HTMLTextAreaElement>(".tm-things-card-title")?.focus({ preventScroll: true });
     const opened = card && from ? animateCardOpen(card, from) : Promise.resolve();
-    // Once it has grown: on phones the card moves to the middle of the screen; elsewhere, only when it is not all in
+    // Once it has grown: on phones the card moves to just above the keyboard; elsewhere, only when it is not all in
     // view, just far enough to show it.
     if (card) void opened.then(() => {
-      if (Platform.isMobile) this.centerCard(card);
+      if (Platform.isMobile) this.revealCardAboveKeyboard(card);
       else if (card.isConnected) card.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
   }
 
   /**
-   * On phones, scrolls an open card to the middle of the part of the screen it can be seen in (above the keyboard),
-   * and again if the keyboard then opens for its title.
+   * On phones, scrolls an open card the keyboard covers until its bottom sits just above the keyboard (the bottom of
+   * the part of the list that can be seen), as far as the list scrolls; a card taller than that shows from its top,
+   * and one above the visible part scrolls down into it. A card in full view stays put. Again if the keyboard then
+   * opens for its title.
    */
-  private centerCard(card: HTMLElement): void {
+  private revealCardAboveKeyboard(card: HTMLElement): void {
     const win = card.ownerDocument.defaultView;
     let scroller = card.parentElement;
     while (scroller && !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(win?.getComputedStyle(scroller).overflowY ?? ""))) scroller = scroller.parentElement;
     if (!win || !scroller) return;
     const list = scroller;
-    const center = (): void => {
+    // Obsidian's mobile app keeps the page full height under the keyboard and publishes the keyboard's height (and,
+    // with a toolbar above the keyboard, the toolbar's) as CSS variables; a browser shrinks its visual viewport instead.
+    const pixels = (element: Element, name: string): number => parseFloat(win.getComputedStyle(element).getPropertyValue(name)) || 0;
+    const reveal = (): void => {
       if (!card.isConnected) return;
       const area = list.getBoundingClientRect();
       const viewport = win.visualViewport;
+      const doc = card.ownerDocument;
+      const toolbar = doc.body.hasClass("mod-toolbar-open") ? pixels(doc.body, "--mobile-toolbar-height") : 0;
       const top = Math.max(area.top, viewport?.offsetTop ?? 0);
-      const bottom = Math.min(area.bottom, viewport ? viewport.offsetTop + viewport.height : win.innerHeight);
+      const bottom = Math.min(area.bottom, viewport ? viewport.offsetTop + viewport.height : win.innerHeight,
+        win.innerHeight - pixels(doc.documentElement, "--keyboard-height") - toolbar);
       const rect = card.getBoundingClientRect();
-      list.scrollBy({ top: rect.top + rect.height / 2 - (top + bottom) / 2, behavior: "smooth" });
+      const gap = 8;
+      const fits = rect.height + 2 * gap <= bottom - top;
+      const by = fits && rect.bottom > bottom - gap ? rect.bottom - (bottom - gap) : !fits || rect.top < top + gap ? rect.top - (top + gap) : 0;
+      if (by) list.scrollBy({ top: by, behavior: "smooth" });
     };
-    center();
-    const viewport = win.visualViewport;
-    if (!viewport) return;
-    const again = (): void => { viewport.removeEventListener("resize", again); win.clearTimeout(stop); center(); };
-    const stop = win.setTimeout(() => viewport.removeEventListener("resize", again), 1000);
-    viewport.addEventListener("resize", again);
+    reveal();
+    // The keyboard opens for the card's title a moment later: check again when it has (Obsidian's app announces it;
+    // a browser resizes its visual viewport), for a second and a half.
+    const targets: EventTarget[] = [win, ...(win.visualViewport ? [win.visualViewport] : [])];
+    const events = ["keyboardDidShow", "resize"];
+    const again = (): void => reveal();
+    for (const target of targets) for (const event of events) target.addEventListener(event, again);
+    win.setTimeout(() => { for (const target of targets) for (const event of events) target.removeEventListener(event, again); }, 1500);
   }
 
   /**
