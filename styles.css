@@ -126,11 +126,21 @@
   gap: var(--size-4-2);
 }
 
-.tm-title-group h1 {
+/* Page titles look as a note's inline title does: the theme's inline title size, weight, font and colour (which
+   follow Heading 1 unless the theme sets them apart, as it may the colour). */
+.tm-main-view h1.tm-page-title {
   margin: 0;
-  font-size: clamp(26px, 3vw, 34px);
-  line-height: 1.18;
-  letter-spacing: -0.025em;
+  font-size: var(--font-text-size);
+  font-weight: var(--inline-title-weight, var(--h1-weight, 700));
+  line-height: var(--inline-title-line-height, var(--h1-line-height, 1.2));
+}
+.tm-page-title > span {
+  font-family: var(--inline-title-font, var(--h1-font, inherit));
+  font-size: var(--inline-title-size, var(--h1-size, 1.618em));
+  font-style: var(--inline-title-style, var(--h1-style, normal));
+  font-variant: var(--inline-title-variant, var(--h1-variant, normal));
+  letter-spacing: var(--h1-letter-spacing, -0.015em);
+  color: var(--inline-title-color, var(--h1-color, inherit));
 }
 
 /* The title with a project's "…" button for its actions. */
@@ -478,7 +488,7 @@ button.tm-task-title {
   }
   .tm-view-header { gap: 12px; margin-bottom: 24px; }
   .tm-title-group, .tm-title-group > div { min-width: 0; max-width: 100%; }
-  .tm-title-group h1 { font-size: 26px; overflow-wrap: anywhere; }
+  .tm-main-view h1.tm-page-title { overflow-wrap: anywhere; }
   .tm-header-actions { gap: 8px; flex-wrap: wrap; }
 
    .tm-title-group .clickable-icon { min-height: 44px; min-width: 44px; }

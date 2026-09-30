@@ -70,6 +70,16 @@ const TITLES: Record<TaskViewMode, string> = {
   review: "Weekly Review"
 };
 
+/**
+ * A page's title, looking as a note's inline title does in the theme: the heading sits at the note text size, so
+ * the theme's inline title size (usually in em) comes out as it does in a note, whatever size the view's text is.
+ */
+function pageTitle(parent: HTMLElement, text: string): HTMLElement {
+  const heading = parent.createEl("h1", { cls: "tm-page-title" });
+  heading.createSpan({ text });
+  return heading;
+}
+
 export class TaskMainView extends ItemView {
   private state: TaskViewState = { mode: "today" };
   /** Whether `setState` has run, so the title names the view's list rather than its starting one. */
@@ -487,7 +497,7 @@ export class TaskMainView extends ItemView {
 
     const header = container.createDiv({ cls: "tm-view-header" });
     const title = header.createDiv({ cls: "tm-title-group" }).createDiv();
-    title.createEl("h1", { text: "Weekly Review" });
+    pageTitle(title, "Weekly Review");
     const progress = title.createDiv({ cls: "tm-task-metadata tm-review-progress" });
     progress.createSpan({ text: `Week of ${formatDate(week, this.plugin.dateFormat())}` });
     progress.createSpan({ text: `${sections.filter(section => reviewed.has(section.id)).length} of ${sections.length} reviewed` });
@@ -688,7 +698,7 @@ export class TaskMainView extends ItemView {
     }
     const heading = titleGroup.createDiv();
     const titleRow = heading.createDiv({ cls: "tm-title-row" });
-    titleRow.createEl("h1", { text: this.getDisplayText() });
+    pageTitle(titleRow, this.getDisplayText());
     const project = this.taskSourcePath ? this.plugin.index.projects().find(project => project.path === this.taskSourcePath) : undefined;
     if (project) {
       const more = titleRow.createEl("button", { cls: "clickable-icon tm-title-more", attr: { type: "button", "aria-label": "Project actions", title: "Project actions", "aria-haspopup": "menu", "data-tm-focus-key": "project-actions" } });
@@ -959,7 +969,7 @@ export class TaskMainView extends ItemView {
 
   private renderSmartLists(container: HTMLElement): void {
     const header = container.createDiv({ cls: "tm-view-header" });
-    header.createEl("h1", { text: "Smart Lists" });
+    pageTitle(header, "Smart Lists");
     header.createEl("button", { text: "Create new smart list", cls: "mod-cta" })
       .addEventListener("click", () => this.plugin.openSmartListEditor());
     const lists = this.plugin.settings.smartLists;
@@ -977,7 +987,7 @@ export class TaskMainView extends ItemView {
   }
 
   private renderTagList(container: HTMLElement): void {
-    container.createEl("h1", { text: "Tags" });
+    pageTitle(container, "Tags");
     const search = container.createEl("input", { type: "search", cls: "tm-tag-search", attr: { placeholder: "Search tags…", "aria-label": "Search tags", "data-tm-focus-key": "tag-search" } });
     search.value = this.search;
     const list = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
@@ -1010,7 +1020,7 @@ export class TaskMainView extends ItemView {
   private renderProjectList(container: HTMLElement): void {
     const header = container.createDiv({ cls: "tm-view-header" });
     const title = header.createDiv({ cls: "tm-title-group" }).createDiv();
-    title.createEl("h1", { text: "Projects" });
+    pageTitle(title, "Projects");
     const actions = header.createDiv({ cls: "tm-header-actions" });
     const layouts = actions.createDiv({ cls: "tm-layout-controls", attr: { "aria-label": "Projects layout" } });
     for (const [layout, icon] of [["list", "list"], ["gantt", "chart-gantt"]] as const) {
