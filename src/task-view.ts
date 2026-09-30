@@ -72,6 +72,8 @@ const TITLES: Record<TaskViewMode, string> = {
 
 export class TaskMainView extends ItemView {
   private state: TaskViewState = { mode: "today" };
+  /** Whether `setState` has run, so the title names the view's list rather than its starting one. */
+  private stateSet = false;
   private layout: "list" | "calendar" | "kanban" = "list";
   private projectLayout: "list" | "gantt" = "list";
   private ganttAnchor = addDays(todayIso(), -2);
@@ -149,6 +151,8 @@ export class TaskMainView extends ItemView {
 
   getViewType(): string { return TASK_MAIN_VIEW; }
   getDisplayText(): string {
+    // Before its state arrives the view is no particular list yet (it starts as Today).
+    if (!this.stateSet) return "Tasks";
     if (this.state.mode === "smartLists" && this.state.smartListId) return this.plugin.settings.smartLists.find(list => list.id === this.state.smartListId)?.name ?? "Smart list not found";
     if (this.state.mode === "tags" && this.state.tag) return this.state.tag;
     if (this.pagePath) return this.pagePath.replace(/\.md$/i, "").split("/").pop() ?? "Project";
@@ -188,7 +192,20 @@ export class TaskMainView extends ItemView {
     this.state.projectPath = typeof state.projectPath === "string" ? state.projectPath : undefined;
     // File-backed task views must participate in normal same-tab navigation.
     this.navigation = Boolean(this.pagePath);
+    this.stateSet = true;
     this.render();
+    this.refreshTitle();
+  }
+
+  /**
+   * Obsidian reads a view's title once, while loading it, before its state arrives: refresh the view header's title,
+   * the tab's label and the window title from the state just set. All three are Obsidian's own (internal) parts,
+   * skipped if they are ever gone.
+   */
+  private refreshTitle(): void {
+    (this as { titleEl?: HTMLElement }).titleEl?.setText(this.getDisplayText());
+    (this.leaf as { updateHeader?: () => void } | undefined)?.updateHeader?.();
+    (this.app?.workspace as { updateTitle?: () => void } | undefined)?.updateTitle?.();
   }
 
   async onOpen(): Promise<void> {

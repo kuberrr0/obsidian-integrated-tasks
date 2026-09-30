@@ -845,6 +845,32 @@ describe("Create new task in the Things style", () => {
   });
 });
 
+describe("tab title", () => {
+  it("names the tab after its list once its state arrives, refreshing the view header, tab and window titles", async () => {
+    const { view } = await setup([note("Project.md", 1)]);
+    const updateHeader = vi.fn(), updateTitle = vi.fn();
+    const internals = view as unknown as { leaf: object; app: { workspace: object }; titleEl: HTMLElement };
+    internals.leaf = { updateHeader };
+    internals.titleEl = document.createElement("div");
+    internals.titleEl.setText("Tasks");
+    Object.assign(internals.app.workspace, { updateTitle });
+    // Obsidian reads the title while opening the view, before its state: not "Today".
+    expect(view.getDisplayText()).toBe("Tasks");
+    await view.setState({ mode: "all", pagePath: "Project.md" });
+    expect(view.getDisplayText()).toBe("Project");
+    // The view header's title (set once as the view loaded), the tab and the window follow.
+    expect(internals.titleEl.textContent).toBe("Project");
+    expect(updateHeader).toHaveBeenCalled();
+    expect(updateTitle).toHaveBeenCalled();
+    // Every list names its tab as its page does.
+    for (const [state, title] of [[{ mode: "projects" }, "Projects"], [{ mode: "tags" }, "Tags"], [{ mode: "tags", tag: "home" }, "home"], [{ mode: "all" }, "All Tasks"],
+      [{ mode: "inbox" }, "Inbox"], [{ mode: "today" }, "Today"], [{ mode: "upcoming" }, "Upcoming"]] as const) {
+      await view.setState(state);
+      expect(internals.titleEl.textContent).toBe(title);
+    }
+  });
+});
+
 describe("opening a card on the desktop", () => {
   it("scrolls the opened card just far enough to show it", async () => {
     const { view, content, plugin } = await setup([note("A.md", 3)]);
