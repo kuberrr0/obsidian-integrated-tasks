@@ -898,7 +898,7 @@ button.tm-gantt-handle.is-end::after { content: ""; position: absolute; left: 5p
 button.tm-gantt-handle:hover { opacity: 1; outline: none; box-shadow: none; }
 button.tm-gantt-handle:focus-visible { opacity: 1; outline: 2px solid var(--text-accent); }
 .tm-gantt-row.is-resizing .tm-gantt-bar { opacity: .8; }
-.tm-gantt-row.is-archived .tm-gantt-label { color: var(--text-muted); }
+.tm-gantt-row.is-archived .tm-gantt-label, .tm-gantt-row.is-completed .tm-gantt-label { color: var(--text-muted); }
 
 /* Edge grips stay unobtrusive until the project row is hovered or focused. */
 button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { opacity: 0; }

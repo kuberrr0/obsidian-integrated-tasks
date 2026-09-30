@@ -522,8 +522,9 @@ describe("weekly review", () => {
       ["Work.md", [`- [ ] Late ${plus(-3)}`, `- [ ] Due soon {${plus(3)}}`, `- [ ] Due later {${plus(30)}}`, "- [ ] Maybe >someday", `- [ ] Hidden late ${plus(-3)} >someday`,
         "- [?] Hear back from Sam", `- [-] Dropped late ${plus(-3)}`].join("\n")],
       ["Old.md", "- [ ] Forgotten idea"],
-      ["Done project.md", "- [x] Shipped"]
-    ], { "Done project.md": { tags: ["project"] }, "Work.md": { tags: ["project"] } });
+      ["Done project.md", "- [x] Shipped"],
+      ["New project.md", "Notes, no tasks yet"]
+    ], { "Done project.md": { tags: ["project"] }, "New project.md": { tags: ["project"] }, "Work.md": { tags: ["project"] } });
     Object.assign(setupResult.files.get("Old.md")!, { stat: { mtime: Date.now() - 60 * 86_400_000 } });
     Object.assign(setupResult.files.get("Work.md")!, { stat: { mtime: Date.now() } });
     await setupResult.view.setState({ mode: "review" });
@@ -541,7 +542,9 @@ describe("weekly review", () => {
     expect(titles("Deadlines in the next 7 days")).toEqual(["Due soon"]);
     expect(titles("Untouched for a month")).toEqual(["Forgotten idea"]);
     expect(titles("Someday").sort()).toEqual(["Hidden late", "Maybe"]);
-    expect(section(content(), "Projects without a next action").textContent).toContain("Done project");
+    expect(section(content(), "Projects without a next action").textContent).toContain("New project");
+    // A project whose tasks are all done is completed, so it needs no next action.
+    expect(section(content(), "Projects without a next action").textContent).not.toContain("Done project");
     expect(section(content(), "Projects without a next action").textContent).not.toContain("Work");
     expect(section(content(), "Completed this week").textContent).toContain("Turn on Record completion dates");
   });

@@ -1,5 +1,5 @@
 import { taskTitleLabel } from "./task-title";
-import { renderProjectProgress } from "./project-progress";
+import { activeProjects, projectStatuses, renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { editable, renderTaskDetails } from "./task-row-details";
 import { renderThingsProjectDetails, renderThingsTaskDetails } from "./things-row-details";
@@ -75,9 +75,9 @@ const TITLES: Record<TaskViewMode, string> = {
  * A project as a stand-in task, so it sorts, groups and filters with a view's tasks (View options › Projects): its
  * start while still ahead (once started, it is no longer waiting on a date), its deadline, priority and tags.
  */
-function projectAsTask(project: Project, tags: string[], today: string): Task {
+function projectAsTask(project: Project, tags: string[], today: string, completed = false): Task {
   return {
-    id: `project:${project.path}`, path: project.path, title: project.name, status: "todo", completed: false,
+    id: `project:${project.path}`, path: project.path, title: project.name, status: completed ? "done" : "todo", completed,
     line: 0, endLine: 0, raw: "", indent: 0, childIds: [],
     scheduledDate: project.scheduledDate && project.scheduledDate >= today ? project.scheduledDate : undefined,
     deadline: project.deadline, deadlineTime: project.deadlineTime, priority: project.priority,
@@ -438,7 +438,7 @@ export class TaskMainView extends ItemView {
         else card.createDiv({ cls: "tm-empty", text: "No upcoming tasks" });
       },
       projects: card => {
-        const projects = this.plugin.index.projects().filter(project => !project.archived);
+        const projects = activeProjects(this.plugin.index.projects());
         if (projects.length) this.renderProjectGroup(card, "Active", projects);
         else card.createDiv({ cls: "tm-empty", text: "No projects yet" });
       },
@@ -517,7 +517,7 @@ export class TaskMainView extends ItemView {
       { id: "stale", title: "Untouched for a month", hint: `Undated tasks in notes nobody has edited for ${STALE_DAYS} days.`, empty: "No stale tasks.",
         tasks: open.filter(task => !actionDate(task) && !task.someday && !task.deferDate && noteModified(task.path) < staleBefore) },
       { id: "projects", title: "Projects without a next action", hint: "Add a next step, or archive the project.", empty: "Every active project has a next action.",
-        projects: this.plugin.index.projects().filter(project => !project.archived && !hasNextAction.has(project.path)) },
+        projects: activeProjects(this.plugin.index.projects()).filter(project => !hasNextAction.has(project.path)) },
       { id: "someday", title: "Someday", hint: "Anything here ready to schedule or delete?", empty: "No someday tasks.",
         tasks: open.filter(task => task.someday) }
     ];
@@ -606,10 +606,14 @@ export class TaskMainView extends ItemView {
     const page = this.taskSourcePath;
     const scope: TaskQuery = page ? { ...query, mode: "all", projectPath: undefined, sourcePath: undefined } : query;
     const items: Task[] = [];
-    for (const project of this.plugin.index.projects()) {
-      if (project.archived || project.path === page || (page !== undefined && project.parentPath !== page)) continue;
+    const projects = this.plugin.index.projects();
+    const statuses = projectStatuses(projects);
+    for (const project of projects) {
+      // Completed projects show as completed tasks do, only with Show completed on.
+      const status = statuses.get(project.path);
+      if (status === "archived" || (status === "completed" && !query.showCompleted) || project.path === page || (page !== undefined && project.parentPath !== page)) continue;
       const tags = this.plugin.projectDraft(project).tags.split(/,\s*/).filter(Boolean);
-      const item = projectAsTask(project, tags, today);
+      const item = projectAsTask(project, tags, today, status === "completed");
       if (scope.tagPath && !this.plugin.index.taskHasTagPath(item, scope.tagPath)) continue;
       if (!taskMatchesQuery(item, scope, this.plugin.settings.inboxPath)) continue;
       this.shownProjects.set(item.id, project);
@@ -981,7 +985,7 @@ export class TaskMainView extends ItemView {
         }
         return false;
       };
-      const choices: Choice[] = projects.filter(item => !item.archived && !inside(item)).sort((a, b) => a.name.localeCompare(b.name))
+      const choices: Choice[] = activeProjects(projects).filter(item => !inside(item)).sort((a, b) => a.name.localeCompare(b.name))
         .map(item => ({ value: item.path, label: item.name, icon: "circle", color: item.color }));
       choices.push({ value: "", label: "No parent", separated: true });
       openChoicePopover({ anchor, beside, label: "Parent project", choices, selected: current.parent, input: { placeholder: "Find a project", filter: true },
@@ -1136,8 +1140,8 @@ export class TaskMainView extends ItemView {
     setIcon(create, "plus");
     create.addEventListener("click", () => this.plugin.openProjectCreator());
     const projects = this.plugin.index.projects();
-    const active = projects.filter((project) => !project.archived);
-    const archived = projects.filter((project) => project.archived);
+    const statuses = projectStatuses(projects);
+    const withStatus = (status: string): Project[] => projects.filter(project => statuses.get(project.path) === status);
     if (!projects.length) {
       const empty = container.createDiv({ cls: "tm-empty" });
       const icon = empty.createDiv({ cls: "tm-empty-icon" });
@@ -1163,8 +1167,9 @@ export class TaskMainView extends ItemView {
       });
       return;
     }
-    this.renderProjectGroup(container, "Active", active);
-    this.renderProjectGroup(container, "Archived", archived);
+    this.renderProjectGroup(container, "Active", withStatus("active"));
+    this.renderProjectGroup(container, "Completed", withStatus("completed"));
+    this.renderProjectGroup(container, "Archived", withStatus("archived"));
   }
 
   private renderProjectGroup(container: HTMLElement, title: string, projects: Project[], heading = true): void {

@@ -139,6 +139,8 @@ Give a project a colour from its **…** menu, or with a `color` property such a
 
 Add the `archived` tag to a project note to hide it from the default Projects list. **Show archived projects** brings it back; its tasks remain available in other task views.
 
+A project whose tasks are all done (100%) is completed, as in Things: it leaves the sidebar, the dashboard, the weekly review and the lists you move tasks to, and the Projects list and Gantt chart show it under **Completed**. In task views that show projects among tasks, it appears only with completed tasks shown. A project with no tasks yet, or with a subproject still in progress, stays active, and adding an open task makes a completed project active again.
+
 ### See the bigger picture with Gantt
 
 Switch Projects to **Gantt** to see your projects on a timeline. Choose month, quarter, year, or five-year views to plan at different scales.

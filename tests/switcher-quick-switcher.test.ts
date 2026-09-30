@@ -61,7 +61,7 @@ function host(taskCount = 2) {
   const tasks = scanTasks("Notes/Work.md", Array.from({ length: taskCount }, (_, i) => `- [ ] Task ${i}`).join("\n"));
   const query = vi.fn(() => tasks);
   return {
-    index: { projects: () => [project("Old", true), project("Launch")], tagSummaries: () => [{ name: "#work", openTasks: 1, completedTasks: 0 }], query },
+    index: { projects: () => [project("Old", true), project("Launch"), { ...project("Shipped"), completedTasks: 2 }], tagSummaries: () => [{ name: "#work", openTasks: 1, completedTasks: 0 }], query },
     settings: { smartLists: [{ id: "focus", name: "Focus", filters: [], sort: "date", descending: false, grouping: "none" }] },
     openTaskView: vi.fn().mockResolvedValue(undefined),
     openProject: vi.fn().mockResolvedValue(undefined),
@@ -79,9 +79,9 @@ describe("quick switcher items", () => {
     const items = switcherItems(plugin as unknown as TaskManagerPlugin);
     expect(items.map(item => `${item.kind}:${item.label}`)).toEqual([
       "view:Task dashboard", "view:Inbox", "view:Today", "view:Upcoming", "view:All tasks", "view:Projects", "view:Tags", "view:Smart lists", "view:Weekly review",
-      "project:Launch", "project:Old", "tag:#work", "smartList:Focus", "task:Task 0", "task:Task 1"
+      "project:Launch", "project:Shipped", "project:Old", "tag:#work", "smartList:Focus", "task:Task 0", "task:Task 1"
     ]);
-    expect(items.find(item => item.label === "Old")).toMatchObject({ archived: true });
+    expect(items.find(item => item.label === "Old")).toMatchObject({ status: "archived" });
     expect(items.at(-1)).toMatchObject({ kind: "task", note: "Work" });
     expect(plugin.index.query).toHaveBeenCalledWith({ mode: "all", showCompleted: false });
   });
@@ -117,6 +117,7 @@ describe("quick switcher items", () => {
     expect(task.querySelector(".suggestion-note")?.textContent).toBe("Work");
     expect(task.querySelector(".suggestion-aux")?.textContent).toBe("Task");
     expect(render(items.find(item => item.label === "Old")!).querySelector(".suggestion-aux")?.textContent).toBe("Archived project");
+    expect(render(items.find(item => item.label === "Shipped")!).querySelector(".suggestion-aux")?.textContent).toBe("Completed project");
     expect(render(items[0]).querySelector(".suggestion-note")).toBeNull();
   });
 });

@@ -5,7 +5,7 @@ import { projectHierarchy } from "./project-hierarchy";
 import { ganttSegments, daysBetween, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate, GANTT_ZOOMS, type GanttZoom, type GanttHandle, type ProjectDateField } from "./gantt";
 import type { Project } from "./types";
 import type { ProjectDraft } from "./project-creator";
-import { renderProjectProgress } from "./project-progress";
+import { projectStatuses, renderProjectProgress, type ProjectStatus } from "./project-progress";
 import { renderProjectDeadline } from "./project-header-details";
 import { renderThingsProjectDeadline } from "./things-row-details";
 
@@ -109,8 +109,10 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       new Notice(cause instanceof Error ? cause.message : "Could not update project dates.");
     } finally { busy = false; root.removeAttribute("aria-busy"); }
   };
-  const grouped = [false, true].flatMap(archived => projectHierarchy(options.projects.filter(project => project.archived === archived))
-    .map(entry => ({ ...entry, group: archived ? "Archived" : "Active" })));
+  const statuses = projectStatuses(options.projects);
+  const groups: Array<[ProjectStatus, string]> = [["active", "Active"], ["completed", "Completed"], ["archived", "Archived"]];
+  const grouped = groups.flatMap(([status, group]) => projectHierarchy(options.projects.filter(project => statuses.get(project.path) === status))
+    .map(entry => ({ ...entry, group })));
   let previousGroup = "";
   for (const { project, depth, group } of grouped) {
     if (group !== previousGroup) {
@@ -119,7 +121,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       heading.createDiv({ cls: "tm-gantt-track", attr: { "aria-hidden": "true" } });
       previousGroup = group;
     }
-    const row = scroll.createDiv({ cls: `tm-gantt-row${project.archived ? " is-archived" : ""}` });
+    const row = scroll.createDiv({ cls: `tm-gantt-row${project.archived ? " is-archived" : statuses.get(project.path) === "completed" ? " is-completed" : ""}` });
     const label = row.createDiv({ cls: "tm-gantt-label tm-gantt-project" });
     label.style.paddingLeft = `${12 + depth * 16}px`;
     const icon = label.createSpan({ cls: "tm-project-icon" });

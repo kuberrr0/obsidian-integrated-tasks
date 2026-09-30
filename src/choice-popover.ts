@@ -1,6 +1,7 @@
 import { Platform, setIcon } from "obsidian";
 import { parseRepeatInput, repeatLabel } from "./parser";
 import type { Project } from "./types";
+import { activeProjects } from "./project-progress";
 
 export interface Choice {
   value: string;
@@ -221,7 +222,7 @@ export const PRIORITY_CHOICES: Choice[] = [
 
 /** Inbox, the given note when it is not a project, then the active projects by name (with their parent). */
 export function projectChoices(projects: Project[], inboxPath: string, current?: string): Choice[] {
-  const active = projects.filter(project => !project.archived).sort((a, b) => a.name.localeCompare(b.name));
+  const active = activeProjects(projects).sort((a, b) => a.name.localeCompare(b.name));
   const name = (path: string): string => path.replace(/\.md$/i, "").split("/").pop() ?? path;
   const choices: Choice[] = [{ value: inboxPath, label: "Inbox", icon: "inbox" }];
   if (current && current !== inboxPath && !active.some(project => project.path === current)) choices.push({ value: current, label: name(current), icon: "file-text" });

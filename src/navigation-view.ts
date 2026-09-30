@@ -1,7 +1,7 @@
 import { ItemView, Keymap, Menu, Notice, setIcon, TFile, TFolder, type TAbstractFile, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
 import type { FileSortOrder, TaskViewMode } from "./types";
-import { renderProjectProgress } from "./project-progress";
+import { activeProjects, renderProjectProgress } from "./project-progress";
 import { projectHierarchy } from "./project-hierarchy";
 import { activeTaskDrag, highlightDropTarget, markDropTarget, TASK_DRAG_TYPE, type SidebarDrop } from "./sidebar-drop";
 
@@ -248,7 +248,7 @@ export class TaskNavigationView extends ItemView {
       if (!folder(heading, section, label)) continue;
       const children = group.createDiv({ cls: "tree-item-children nav-folder-children tm-nav-children" });
       if (section === "projects") {
-        const projects = this.plugin.index.projects().filter(project => !project.archived);
+        const projects = activeProjects(this.plugin.index.projects());
         // The open project's parents stay unfolded, so it shows.
         const byPath = new Map(projects.map(project => [project.path, project]));
         for (let path = byPath.get(this.activeProject ?? "")?.parentPath; path; path = byPath.get(path)?.parentPath) this.foldedProjects.delete(path);
