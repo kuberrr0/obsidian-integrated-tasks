@@ -845,6 +845,22 @@ describe("Create new task in the Things style", () => {
   });
 });
 
+describe("opening a card on the desktop", () => {
+  it("scrolls the opened card just far enough to show it", async () => {
+    const { view, content, plugin } = await setup([note("A.md", 3)]);
+    plugin.settings.style = "things";
+    await view.setState({ mode: "all" });
+    const scrollIntoView = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      rows(content())[2].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" }));
+      expect(scrollIntoView.mock.contexts[0]).toBe(content().querySelector(".tm-things-card"));
+    } finally { HTMLElement.prototype.scrollIntoView = original; }
+  });
+});
+
 describe("opening a card on a phone", () => {
   it("scrolls the card to the middle of the visible list once it has opened", async () => {
     const platform = Platform as { isMobile?: boolean };

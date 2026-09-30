@@ -1892,7 +1892,12 @@ export class TaskMainView extends ItemView {
     const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
     card?.querySelector<HTMLTextAreaElement>(".tm-things-card-title")?.focus({ preventScroll: true });
     const opened = card && from ? animateCardOpen(card, from) : Promise.resolve();
-    if (card && Platform.isMobile) void opened.then(() => this.centerCard(card));
+    // Once it has grown: on phones the card moves to the middle of the screen; elsewhere, only when it is not all in
+    // view, just far enough to show it.
+    if (card) void opened.then(() => {
+      if (Platform.isMobile) this.centerCard(card);
+      else if (card.isConnected) card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
   }
 
   /**
