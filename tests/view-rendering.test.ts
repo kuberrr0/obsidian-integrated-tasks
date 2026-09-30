@@ -954,6 +954,25 @@ describe("Create new task in the Things style", () => {
   });
 });
 
+describe("Back and Forward", () => {
+  it("records the page left when the view moves to another project, tag or list, not when it refreshes the same one", async () => {
+    const { view } = await setup([note("A.md", 1)]);
+    const result = () => ({ history: false });
+    // Opening with its first page: the tab records the view it replaced itself.
+    const first = result();
+    await view.setState({ mode: "all", pagePath: "A.md" }, first);
+    expect(first.history).toBe(false);
+    const same = result();
+    await view.setState({ mode: "all", pagePath: "A.md", layout: "kanban" }, same);
+    expect(same.history).toBe(false);
+    for (const next of [{ mode: "all", pagePath: "B.md" }, { mode: "today" }, { mode: "tags", tag: "home" }, { mode: "smartLists", smartListId: "calls" }]) {
+      const moved = result();
+      await view.setState(next, moved);
+      expect(moved.history).toBe(true);
+    }
+  });
+});
+
 describe("tab title", () => {
   it("names the tab after its list once its state arrives, refreshing the view header, tab and window titles", async () => {
     const { view } = await setup([note("Project.md", 1)]);

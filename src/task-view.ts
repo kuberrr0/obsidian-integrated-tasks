@@ -29,7 +29,7 @@ import { draftForGroup, isStructuralGroup, taskGroupTarget, type ListDropGroup, 
 import { renderCalendar } from "./calendar-view";
 import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, checkboxLabel, statusClass } from "./task-status";
-import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, Platform, setIcon, TFile, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { groupTasks, isDeferred, orderTaskTree, sortTasks, taskMatchesQuery } from "./query";
 import type TaskManagerPlugin from "./main";
@@ -188,7 +188,12 @@ export class TaskMainView extends ItemView {
   getIcon(): string { return this.state.mode === "projects" ? "target" : "circle-check-big"; }
   getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor, showProjects: this.showProjects }; }
 
-  async setState(state: Record<string, unknown>): Promise<void> {
+  /**
+   * `result`: Obsidian's; moving to another page (a project, tag, list or smart list) records the page left in the
+   * tab's history, as a note does when its file changes, so Back and Forward step through task pages too. Obsidian
+   * itself leaves Back, Forward and linked panes out.
+   */
+  async setState(state: Record<string, unknown>, result?: ViewStateResult): Promise<void> {
     const mode = state.mode;
     if (state.projectLayout === "list" || state.projectLayout === "gantt") this.projectLayout = state.projectLayout;
     if (state.ganttZoom === "month" || state.ganttZoom === "quarter" || state.ganttZoom === "year" || state.ganttZoom === "five-year") this.ganttZoom = state.ganttZoom;
@@ -199,6 +204,8 @@ export class TaskMainView extends ItemView {
     if (["day", "four-day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId) {
+      // A new page, not the first one this view opens with (a new view is recorded as it replaces the last).
+      if (this.stateSet && result) result.history = true;
       this.smartListVersion = undefined;
       this.showProjects = true;
       this.selection.clear();
