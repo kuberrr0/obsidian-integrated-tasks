@@ -37,6 +37,12 @@ const FILE_ICONS: Record<string, string> = {
   png: "file-image", jpg: "file-image", jpeg: "file-image", gif: "file-image", svg: "file-image", webp: "file-image", bmp: "file-image", avif: "file-image",
   mp3: "file-audio", wav: "file-audio", m4a: "file-audio", ogg: "file-audio", flac: "file-audio", webm: "file-video", mp4: "file-video", mov: "file-video", mkv: "file-video"
 };
+/** Whether `file` can move into `folder`: not where it already is, and a folder not into itself or a folder inside it. */
+export function canMoveInto(file: TAbstractFile, folder: TFolder): boolean {
+  if (file.parent === folder) return false;
+  return !(file instanceof TFolder && (file === folder || folder.path.startsWith(`${file.path}/`)));
+}
+
 /** The file tree's orders, with the names and groups the file explorer gives them. */
 const FILE_SORT_ORDERS: Array<[FileSortOrder, string, string]> = [
   ["alphabetical", "File name (A to Z)", "name"], ["alphabeticalReverse", "File name (Z to A)", "name"],
@@ -56,6 +62,17 @@ export function sortFiles(files: TAbstractFile[], order: FileSortOrder): TAbstra
     if (a instanceof TFolder) return byName(a, b);
     return (order.endsWith("Reverse") ? time(a) - time(b) : time(b) - time(a)) || byName(a, b);
   });
+}
+/** What Obsidian's drag manager carries: a file or folder, or several from the file explorer. */
+interface Draggable { type: string; file?: TAbstractFile; files?: TAbstractFile[] }
+interface DropResult { action: string; dropEffect: "move" | "none"; hoverEl?: HTMLElement; hoverClass?: string }
+/** Obsidian's drag manager, which its file explorer drags files with, so a file dragged from here links in a note, opens
+ * in a tab, or moves in the file explorer. It is not in the plugin API, so files drag only while it is there. */
+interface DragManager {
+  handleDrag(element: HTMLElement, start: (event: DragEvent) => Draggable | null): void;
+  handleDrop(element: HTMLElement, drop: (event: DragEvent, draggable: Draggable | null, hovering: boolean) => DropResult | undefined): void;
+  dragFile(event: DragEvent, file: TFile, source?: string): Draggable;
+  dragFolder(event: DragEvent, folder: TFolder, source?: string): Draggable;
 }
 const NAV_MODES = new Set<TaskViewMode>([...NAV_GROUPS.flat().map(entry => entry.mode), "projects", "tags"]);
 
@@ -276,6 +293,7 @@ export class TaskNavigationView extends ItemView {
       }, "folder-tree", "section");
       heading.querySelector(".tm-nav-label")?.setAttribute("aria-expanded", String(this.expanded.has("files")));
       heading.addEventListener("contextmenu", event => this.openFileMenu(event, root));
+      this.fileDrop(heading, root);
       if (folder(heading, "files", "files")) {
         const children = group.createDiv({ cls: "tree-item-children nav-folder-children tm-nav-children" });
         this.renderFolder(children, root, 0, item);
@@ -369,6 +387,9 @@ export class TaskNavigationView extends ItemView {
       row.addClass(isFolder ? "tm-nav-folder" : "tm-nav-file");
       row.style.setProperty("--tm-nav-depth", String(depth));
       row.addEventListener("contextmenu", event => this.openFileMenu(event, child));
+      this.fileDrag(row, child);
+      if (child instanceof TFolder) this.fileDrop(row, child);
+      else if (child.extension === "md") this.dropTarget(row, { kind: "note", path: child.path });
       if (isFolder) row.querySelector(".tm-nav-label")?.setAttribute("aria-expanded", String(open));
       // Notes show their name alone; other files add their kind, as the file explorer does.
       if (child instanceof TFile && child.extension !== "md") row.createDiv({ cls: "nav-file-tag tm-nav-file-tag", text: child.extension });
@@ -431,6 +452,43 @@ export class TaskNavigationView extends ItemView {
     }
     const rect = button.getBoundingClientRect();
     menu.showAtPosition({ x: rect.left, y: rect.bottom });
+  }
+
+  private get dragManager(): DragManager | undefined {
+    const manager = (this.app as unknown as { dragManager?: Partial<DragManager> }).dragManager;
+    return manager && typeof manager.handleDrag === "function" && typeof manager.handleDrop === "function" ? manager as DragManager : undefined;
+  }
+
+  /** Lets `file` be dragged as the file explorer's files are: into a note as a link, onto a tab to open it, or into a folder. */
+  private fileDrag(row: HTMLElement, file: TAbstractFile): void {
+    const manager = this.dragManager;
+    if (!manager || this.renaming?.path === file.path) return;
+    manager.handleDrag(row, event => file instanceof TFile ? manager.dragFile(event, file, "tm-files")
+      : file instanceof TFolder ? manager.dragFolder(event, file, "tm-files") : null);
+  }
+
+  /** Lets files and folders, from here or the file explorer, be dropped into `folder` to move them there. */
+  private fileDrop(row: HTMLElement, folder: TFolder): void {
+    this.dragManager?.handleDrop(row, (_event, draggable, hovering) => {
+      const files = (draggable?.type === "files" ? draggable.files ?? [] : draggable?.type === "file" || draggable?.type === "folder" ? [draggable.file] : [])
+        .filter((file): file is TAbstractFile => file instanceof TFile || file instanceof TFolder);
+      const moving = files.filter(file => canMoveInto(file, folder));
+      if (!moving.length) return files.length ? { action: "", dropEffect: "none" } : undefined;
+      if (!hovering) void this.moveInto(moving, folder);
+      return { action: `Move into ${folder.isRoot() ? "the vault" : folder.name}`, dropEffect: "move", hoverEl: row, hoverClass: "is-drop-target" };
+    });
+  }
+
+  /** Moves files and folders into `folder`, keeping their names; a name already taken there stays put. */
+  private async moveInto(files: TAbstractFile[], folder: TFolder): Promise<void> {
+    for (const file of files) {
+      const path = `${folder.isRoot() ? "" : `${folder.path}/`}${file.name}`;
+      if (this.app.vault.getAbstractFileByPath(path)) { new Notice(`“${file.name}” already exists in ${folder.isRoot() ? "the vault" : folder.name}`); continue; }
+      try { await this.app.fileManager.renameFile(file, path); }
+      catch (error) { new Notice(String(error)); }
+    }
+    this.showFolder(folder);
+    this.render();
   }
 
   /** Opens `folder` and the folders around it, so what was just made in it shows. */

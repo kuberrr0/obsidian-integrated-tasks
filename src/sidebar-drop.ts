@@ -1,8 +1,8 @@
 import type { Task } from "./types";
 
-/** A list in the task sidebar that takes dropped tasks, as Things' lists do: Inbox and a project take them in,
- * Today schedules them for today, and a tag is added to them. */
-export type SidebarDrop = { kind: "inbox" } | { kind: "today" } | { kind: "project"; path: string } | { kind: "tag"; tag: string };
+/** A list in the task sidebar that takes dropped tasks, as Things' lists do: Inbox, a project and a note in the file
+ * tree take them in, Today schedules them for today, and a tag is added to them. */
+export type SidebarDrop = { kind: "inbox" } | { kind: "today" } | { kind: "project"; path: string } | { kind: "note"; path: string } | { kind: "tag"; tag: string };
 
 /** The tasks being dragged in a task view, and what dropping them on a sidebar list does. */
 export interface TaskDrag { tasks: Task[]; drop(target: SidebarDrop): Promise<void> }

@@ -306,6 +306,8 @@ it("drops dragged tasks on the sidebar's lists: Inbox or a project moves them, T
   expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0]], { scheduledDate: todayIso() });
   await drop([tasks[0], tasks[1]], { kind: "project", path: "Home.md" });
   expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0], tasks[1]], { destination: "Home.md" });
+  await drop([tasks[0]], { kind: "note", path: "Notes/Ideas.md" });
+  expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0]], { destination: "Notes/Ideas.md" });
   await drop([tasks[0]], { kind: "inbox" });
   expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0]], { destination: "Inbox.md" });
   // Nothing to change writes nothing: the task is already in the project.

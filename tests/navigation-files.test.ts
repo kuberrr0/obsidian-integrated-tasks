@@ -37,6 +37,7 @@ vi.mock("obsidian", async importOriginal => {
 
 import { TFile, TFolder, type WorkspaceLeaf } from "obsidian";
 import { sortFiles, TaskNavigationView } from "../src/navigation-view";
+import { dropTargetOf } from "../src/sidebar-drop";
 import { DEFAULT_SETTINGS } from "../src/types";
 import type TaskManagerPlugin from "../src/main";
 
@@ -70,7 +71,16 @@ function setup() {
   const app = {
     vault: { getRoot: () => root, getAbstractFileByPath: (path: string) => byPath.get(path) ?? null, on: () => ({}), create, createFolder: vi.fn() },
     workspace: { getActiveFile: () => note, getLeaf, on: () => ({}), trigger: vi.fn(), requestSaveLayout: vi.fn() },
-    fileManager: { renameFile, promptForDeletion: vi.fn() }
+    fileManager: { renameFile, promptForDeletion: vi.fn() },
+    // Records what the tree hands Obsidian's drag manager: what each row drags, and what each drops.
+    dragManager: {
+      drags: new Map<HTMLElement, (event: DragEvent) => unknown>(),
+      drops: new Map<HTMLElement, (event: DragEvent, draggable: unknown, hovering: boolean) => unknown>(),
+      handleDrag(element: HTMLElement, start: (event: DragEvent) => unknown) { this.drags.set(element, start); },
+      handleDrop(element: HTMLElement, drop: (event: DragEvent, draggable: unknown, hovering: boolean) => unknown) { this.drops.set(element, drop); },
+      dragFile: (_event: DragEvent, file: TFile) => ({ type: "file", file }),
+      dragFolder: (_event: DragEvent, folder: TFolder) => ({ type: "folder", file: folder })
+    }
   };
   const settings = { ...DEFAULT_SETTINGS };
   const plugin = { settings, index: { projects: () => [], tagSummaries: () => [], query: () => [] } } as unknown as TaskManagerPlugin;
@@ -160,4 +170,31 @@ it("adds folder and sort buttons to the toolbar with the files, and sorts files 
   expect(names("byModifiedTimeReverse")).toEqual(["Work", "Notes 10.md", "Notes 2.md"]);
   expect(names("byCreatedTime")).toEqual(["Work", "Notes 10.md", "Notes 2.md"]);
   expect(names("byCreatedTimeReverse")).toEqual(["Work", "Notes 2.md", "Notes 10.md"]);
+});
+
+it("drags files as the file explorer does, and moves files and folders dropped on a folder", async () => {
+  const { view, settings, row, app, renameFile, root, work } = setup();
+  settings.showFiles = true;
+  view.refresh();
+  const { drags, drops } = app.dragManager;
+  const notes = row("file:Notes 2.md");
+  const folder = row("folder:Work");
+  const heading = row("files");
+  expect(drags.get(notes)!({} as DragEvent)).toEqual({ type: "file", file: root.children[2] });
+  expect(drags.get(folder)!({} as DragEvent)).toEqual({ type: "folder", file: work });
+  // Folders and the Files heading (the vault's top) take files; a note takes tasks instead.
+  expect(drops.has(folder) && drops.has(heading) && !drops.has(notes)).toBe(true);
+  expect(dropTargetOf(notes)?.drop).toEqual({ kind: "note", path: "Notes 2.md" });
+  expect(dropTargetOf(folder)).toBeUndefined();
+  const note = root.children[2];
+  // Hovering says where the file goes and lights the folder up, without moving it.
+  expect(drops.get(folder)!({} as DragEvent, { type: "file", file: note }, true)).toMatchObject({ action: "Move into Work", dropEffect: "move", hoverEl: folder });
+  expect(renameFile).not.toHaveBeenCalled();
+  drops.get(folder)!({} as DragEvent, { type: "file", file: note }, false);
+  await vi.waitFor(() => expect(renameFile).toHaveBeenCalledWith(note, "Work/Notes 2.md"));
+  // A file already in the folder, or a folder dropped into itself, goes nowhere.
+  expect(drops.get(heading)!({} as DragEvent, { type: "file", file: note }, true)).toMatchObject({ dropEffect: "none" });
+  expect(drops.get(folder)!({} as DragEvent, { type: "folder", file: work }, true)).toMatchObject({ dropEffect: "none" });
+  // Something that is not a file, such as a task, is left to other targets.
+  expect(drops.get(folder)!({} as DragEvent, null, true)).toBeUndefined();
 });
