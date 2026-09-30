@@ -7,7 +7,7 @@ import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardPropertie
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
-import { cloneTaskFilters } from "./task-filters";
+import { cloneTaskFilters, smartListDraft, type SmartListDraft } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
 import type { ProjectDraft } from "./project-creator";
@@ -31,10 +31,10 @@ import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, checkboxLabel, statusClass } from "./task-status";
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
-import { groupTasks, isDeferred, orderTaskTree, sortTasks } from "./query";
+import { groupTasks, isDeferred, orderTaskTree, sortTasks, taskMatchesQuery } from "./query";
 import type TaskManagerPlugin from "./main";
 import type { OpenEditorState } from "./main";
-import type { TaskFilter, Project, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
+import type { TaskFilter, Project, SmartList, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 /** What a new task's card is called in its note until a title is typed, as Things names a new to-do. */
@@ -71,6 +71,20 @@ const TITLES: Record<TaskViewMode, string> = {
 };
 
 /**
+ * A project as a stand-in task, so it sorts, groups and filters with a view's tasks (View options › Projects): its
+ * start while still ahead (once started, it is no longer waiting on a date), its deadline, priority and tags.
+ */
+function projectAsTask(project: Project, tags: string[], today: string): Task {
+  return {
+    id: `project:${project.path}`, path: project.path, title: project.name, status: "todo", completed: false,
+    line: 0, endLine: 0, raw: "", indent: 0, childIds: [],
+    scheduledDate: project.scheduledDate && project.scheduledDate >= today ? project.scheduledDate : undefined,
+    deadline: project.deadline, deadlineTime: project.deadlineTime, priority: project.priority,
+    tags: tags.filter(tag => tag !== "project")
+  };
+}
+
+/**
  * A page's title, looking as a note's inline title does in the theme: the heading sits at the note text size, so
  * the theme's inline title size (usually in em) comes out as it does in a note, whatever size the view's text is.
  */
@@ -94,6 +108,10 @@ export class TaskMainView extends ItemView {
   private showCompleted = false;
   private search = "";
   private smartListVersion?: string;
+  /** View options › Projects (on by default): the view lists the projects it matches among its tasks. */
+  private showProjects = true;
+  /** The projects the list now shows, by their stand-in task's id. */
+  private shownProjects = new Map<string, Project>();
   private propertyFilters: TaskFilter[] = [];
   private sort: TaskSort = "date";
   private descending = false;
@@ -138,7 +156,6 @@ export class TaskMainView extends ItemView {
   private newCardId?: string;
   private rovingRow?: HTMLElement;
   private moveTargets = new Map<string, { title: string; target: ListDropGroup }>();
-  private summaryTimer?: number;
   private viewOptions?: ViewOptionsPanel;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
@@ -169,7 +186,7 @@ export class TaskMainView extends ItemView {
     return TITLES[this.state.mode];
   }
   getIcon(): string { return this.state.mode === "projects" ? "target" : "circle-check-big"; }
-  getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor }; }
+  getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor, showProjects: this.showProjects }; }
 
   async setState(state: Record<string, unknown>): Promise<void> {
     const mode = state.mode;
@@ -183,6 +200,7 @@ export class TaskMainView extends ItemView {
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId) {
       this.smartListVersion = undefined;
+      this.showProjects = true;
       this.selection.clear();
       this.search = "";
       this.propertyFilters = [];
@@ -194,6 +212,7 @@ export class TaskMainView extends ItemView {
       this.folded.clear();
     }
     if (Array.isArray(state.folded)) this.folded = new Set(state.folded.filter((key): key is string => typeof key === "string"));
+    if (typeof state.showProjects === "boolean") this.showProjects = state.showProjects;
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode as TaskViewMode;
     this.state.smartListId = typeof state.smartListId === "string" ? state.smartListId : undefined;
     this.state.tag = typeof state.tag === "string" && state.tag ? state.tag : undefined;
@@ -253,7 +272,6 @@ export class TaskMainView extends ItemView {
     this.expanded = undefined;
     this.closed = true;
     this.unsubscribe?.();
-    this.stopSummaryTimer();
     if (this.renderFrame !== undefined) this.containerEl.win.cancelAnimationFrame(this.renderFrame);
     this.renderFrame = undefined;
     this.disconnectRowObservers();
@@ -344,6 +362,7 @@ export class TaskMainView extends ItemView {
         this.smartListVersion = version;
         this.propertyFilters = cloneTaskFilters(list.filters);
         this.sort = list.sort; this.descending = list.descending; this.grouping = list.grouping;
+        this.showProjects = list.showProjects !== false;
         this.selection.clear();
       }
     }
@@ -559,12 +578,36 @@ export class TaskMainView extends ItemView {
       tagPath: this.state.mode === "tags" ? this.pagePath : undefined,
       filters: this.propertyFilters,
     };
-    const tasks = sortTasks(this.plugin.index.query(query), this.sort, this.descending);
+    const tasks = sortTasks([...this.plugin.index.query(query), ...this.projectItems(query)], this.sort, this.descending);
     this.selection.retain(tasks);
     this.renderTaskLayouts(container, tasks);
     this.selection.retain(this.visibleTasks);
     this.updateSelection();
     this.updateRoving();
+  }
+
+  /**
+   * With View options › Projects on, the projects the view's own query takes, as stand-in tasks: on a project's page
+   * its subprojects, elsewhere every active project (Today: starting or due today or overdue, Upcoming: later, a tag's
+   * view: tagged with it; filters apply to its dates, priority and tags). The calendar has no room for them.
+   */
+  private projectItems(query: TaskQuery): Task[] {
+    this.shownProjects.clear();
+    if (!this.showProjects || this.layout === "calendar") return [];
+    const today = todayIso();
+    const page = this.taskSourcePath;
+    const scope: TaskQuery = page ? { ...query, mode: "all", projectPath: undefined, sourcePath: undefined } : query;
+    const items: Task[] = [];
+    for (const project of this.plugin.index.projects()) {
+      if (project.archived || project.path === page || (page !== undefined && project.parentPath !== page)) continue;
+      const tags = this.plugin.projectDraft(project).tags.split(/,\s*/).filter(Boolean);
+      const item = projectAsTask(project, tags, today);
+      if (scope.tagPath && !this.plugin.index.taskHasTagPath(item, scope.tagPath)) continue;
+      if (!taskMatchesQuery(item, scope, this.plugin.settings.inboxPath)) continue;
+      this.shownProjects.set(item.id, project);
+      items.push(item);
+    }
+    return items;
   }
 
   private renderTaskLayouts(container: HTMLElement, tasks: Task[]): void {
@@ -705,6 +748,13 @@ export class TaskMainView extends ItemView {
       setIcon(more, "more-horizontal");
       more.addEventListener("click", event => { event.stopPropagation(); this.openProjectMenu(project, more); });
     }
+    // A smart list's title has its actions too: rename it, save the view's options into it, or delete it.
+    const smartList = this.state.mode === "smartLists" ? this.plugin.settings.smartLists.find(list => list.id === this.state.smartListId) : undefined;
+    if (smartList) {
+      const more = titleRow.createEl("button", { cls: "clickable-icon tm-title-more", attr: { type: "button", "aria-label": "Smart list actions", title: "Smart list actions", "aria-haspopup": "menu", "data-tm-focus-key": "smart-list-actions" } });
+      setIcon(more, "more-horizontal");
+      more.addEventListener("click", event => { event.stopPropagation(); this.openSmartListMenu(smartList, more); });
+    }
     this.headerMetadata = heading.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
     this.renderHeaderMetadata();
 
@@ -827,6 +877,47 @@ export class TaskMainView extends ItemView {
     });
   }
 
+  /**
+   * A smart list's actions, from the "…" beside its title: rename it in a popover beside the menu, update it with the
+   * filters, sorting and grouping the view now has, or delete it (after asking).
+   */
+  private openSmartListMenu(list: SmartList, anchor: HTMLElement): void {
+    const rect = anchor.getBoundingClientRect();
+    const save = (draft: SmartListDraft, done: string): void => {
+      void this.plugin.saveSmartList(draft, list.id).then(() => new Notice(done))
+        .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not save the smart list."); });
+    };
+    anchor.setAttribute("aria-expanded", "true");
+    const menu = openActionMenu({
+      doc: anchor.ownerDocument, at: { x: rect.left, y: rect.bottom + 4 }, label: "Smart list actions", returnFocus: anchor,
+      onClose: () => anchor.setAttribute("aria-expanded", "false"),
+      entries: [
+        { kind: "submenu", label: "Rename", icon: "pencil", key: "n", open: target => {
+          openChoicePopover({
+            anchor: target, beside: true, label: "Rename smart list", choices: [],
+            input: { placeholder: list.name, invalid: "", parse: text => text && text !== list.name ? { value: text, label: `Rename to “${text}”` } : undefined },
+            choose: name => { menu.close(); save({ ...smartListDraft(list), name }, `Renamed to “${name}”`); }
+          });
+        } },
+        { kind: "item", label: "Update View Options", icon: "refresh-cw", key: "u", run: () => {
+          const draft: SmartListDraft = { name: list.name, filters: cloneTaskFilters(this.propertyFilters), sort: this.sort, descending: this.descending, grouping: this.grouping,
+            ...(this.showProjects ? {} : { showProjects: false }) };
+          if (JSON.stringify(draft) === JSON.stringify(smartListDraft(list))) { new Notice(`“${list.name}” already has these view options`); return; }
+          save(draft, `Updated “${list.name}” with the current view options`);
+        } },
+        { kind: "separator" },
+        { kind: "item", label: "Delete smart list", icon: "trash-2", danger: true, run: () => this.confirmDeleteSmartList(list) }
+      ]
+    });
+  }
+
+  private confirmDeleteSmartList(list: SmartList): void {
+    openConfirm(this.app, {
+      title: `Delete “${list.name}”?`, message: "Its filters, sorting and grouping are removed. Your tasks are not changed.", confirm: "Delete smart list", danger: true,
+      run: () => void this.plugin.deleteSmartList(list.id).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not delete the smart list."); })
+    });
+  }
+
   private confirmDeleteProject(project: Project): void {
     const tasks = project.openTasks + project.completedTasks;
     openConfirm(this.app, {
@@ -902,13 +993,8 @@ export class TaskMainView extends ItemView {
     const metadata = this.headerMetadata;
     if (!metadata) return;
     metadata.empty();
-    const today = this.state.mode === "today" && !this.taskSourcePath;
     const project = this.taskSourcePath ? this.plugin.index.projects().find(project => project.path === this.taskSourcePath) : undefined;
-    metadata.hidden = !project && !today;
-    if (today) {
-      renderTodaySummary(metadata, todaySummary(this.plugin.index.query({ mode: "today", showCompleted: true })));
-      this.startSummaryTimer();
-    } else this.stopSummaryTimer();
+    metadata.hidden = !project;
     if (!project) return;
     // The header's source label names the parent project, so it takes the parent's colour.
     const parentColor = project.parentPath ? this.plugin.index.projectColor(project.parentPath) : undefined;
@@ -916,18 +1002,6 @@ export class TaskMainView extends ItemView {
     else metadata.style.removeProperty("--tm-project-color");
     renderProjectHeaderDetails(metadata, project, property => this.openProjectProperty(project, property), this.plugin.dateFormat(), undefined, undefined, this.plugin.settings.style === "things");
     renderProjectProgress(metadata, project);
-  }
-
-  /** Keeps the Today header's "next task" countdown current between task changes. */
-  private startSummaryTimer(): void {
-    const win = this.containerEl?.win;
-    if (this.summaryTimer !== undefined || !win) return;
-    this.summaryTimer = win.setInterval(() => { if (this.headerMetadata?.isConnected) this.renderHeaderMetadata(); else this.stopSummaryTimer(); }, 30_000);
-  }
-
-  private stopSummaryTimer(): void {
-    if (this.summaryTimer !== undefined) this.containerEl?.win?.clearInterval(this.summaryTimer);
-    this.summaryTimer = undefined;
   }
 
   /** What the View default grouping groups this view's tasks by (see renderTaskLayouts and kanbanColumns). */
@@ -946,18 +1020,21 @@ export class TaskMainView extends ItemView {
       state: () => ({
         sort: this.sort, descending: this.descending, grouping: this.grouping, filters: this.propertyFilters,
         // Completed tasks are left out unless shown (boards show them in their own columns) or a status filter asks.
-        openOnly: !(this.showCompleted || this.layout === "kanban"), defaultGroup: this.defaultGroupLabel()
+        openOnly: !(this.showCompleted || this.layout === "kanban"), defaultGroup: this.defaultGroupLabel(),
+        // The calendar has no room for projects.
+        showProjects: this.layout === "calendar" ? undefined : this.showProjects
       }),
       update: change => {
         if (change.sort !== undefined) this.sort = change.sort;
         if (change.descending !== undefined) this.descending = change.descending;
         if (change.grouping !== undefined) this.grouping = change.grouping;
         if (change.filters !== undefined) this.propertyFilters = change.filters;
+        if (change.showProjects !== undefined) this.showProjects = change.showProjects;
         this.renderTaskResults();
       },
       clear: () => {
         this.propertyFilters = [];
-        this.sort = "date"; this.descending = false; this.grouping = "default";
+        this.sort = "date"; this.descending = false; this.grouping = "default"; this.showProjects = true;
         this.renderTaskResults();
       },
       // Read lazily: the panel outlives task changes, so choices must reflect the current tasks.
@@ -1068,33 +1145,37 @@ export class TaskMainView extends ItemView {
     const section = heading ? container.createEl("section", { cls: "tm-section" }) : container;
     if (heading) section.createEl("h2", { text: title }).createSpan({ cls: "tm-section-count", text: String(projects.length) });
     const list = section.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
-    for (const { project, depth } of projectHierarchy(projects)) {
-      const things = this.plugin.settings.style === "things";
-      const row = list.createDiv({ cls: `tm-task-row tm-project-row${things ? " tm-things-project-row" : ""}`, attr: { role: "listitem" } });
-      row.style.setProperty("--tm-depth", String(depth));
-      const icon = row.createSpan({ cls: "tm-project-icon" });
-      renderProjectProgress(icon, project, false);
-      const content = row.createDiv({ cls: "tm-task-content" });
-      const primary = content.createDiv({ cls: "tm-task-primary" });
-      const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
-      const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
-      button.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
-      // Right-click opens the project's actions, as it does a task's.
-      row.addEventListener("contextmenu", event => {
-        event.preventDefault();
-        this.openProjectMenu(project, button, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined);
-      });
-      if (lead) {
-        const secondary = content.createDiv({ cls: "tm-things-secondary" });
-        renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field), datesBelow: Platform.isMobile });
-        if (!lead.childElementCount) lead.remove();
-        if (!secondary.childElementCount) secondary.remove();
-        continue;
-      }
-      const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
-      renderProjectHeaderDetails(metadata, project, property => this.openProjectProperty(project, property), this.plugin.dateFormat(), undefined, primary, false, false);
-      if (!metadata.childElementCount) metadata.remove();
+    for (const { project, depth } of projectHierarchy(projects)) this.renderProjectRow(list, project, depth);
+  }
+
+  /** A project's row, as the Projects list shows it: its progress, name, dates and deadline; a click opens it. */
+  private renderProjectRow(list: HTMLElement, project: Project, depth: number): HTMLElement {
+    const things = this.plugin.settings.style === "things";
+    const row = list.createDiv({ cls: `tm-task-row tm-project-row${things ? " tm-things-project-row" : ""}`, attr: { role: "listitem" } });
+    row.style.setProperty("--tm-depth", String(depth));
+    const icon = row.createSpan({ cls: "tm-project-icon" });
+    renderProjectProgress(icon, project, false);
+    const content = row.createDiv({ cls: "tm-task-content" });
+    const primary = content.createDiv({ cls: "tm-task-primary" });
+    const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
+    const button = primary.createEl("button", { cls: "tm-task-title", text: project.name, attr: { title: project.path } });
+    button.addEventListener("click", () => void this.plugin.openProject(project.path).catch(error => new Notice(String(error))));
+    // Right-click opens the project's actions, as it does a task's.
+    row.addEventListener("contextmenu", event => {
+      event.preventDefault();
+      this.openProjectMenu(project, button, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined);
+    });
+    if (lead) {
+      const secondary = content.createDiv({ cls: "tm-things-secondary" });
+      renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field), datesBelow: Platform.isMobile });
+      if (!lead.childElementCount) lead.remove();
+      if (!secondary.childElementCount) secondary.remove();
+      return row;
     }
+    const metadata = content.createDiv({ cls: "tm-task-metadata tm-project-metadata tm-project-header-metadata" });
+    renderProjectHeaderDetails(metadata, project, property => this.openProjectProperty(project, property), this.plugin.dateFormat(), undefined, primary, false, false);
+    if (!metadata.childElementCount) metadata.remove();
+    return row;
   }
 
   private renderGroupAddButton(parent: HTMLElement, title: string, target?: ListDropGroup): void {
@@ -1789,6 +1870,9 @@ export class TaskMainView extends ItemView {
   }
 
   private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup, foldable = false): void {
+    // A project shown among the tasks: its progress in place of a checkbox, and a project's actions.
+    const project = this.shownProjects.get(task.id);
+    if (project) { this.renderProjectRow(list, project, depth); return; }
     if (this.expanded?.id === task.id && this.plugin.settings.style === "things") { this.renderTaskCard(list, task, depth); return; }
     const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
@@ -1897,8 +1981,9 @@ export class TaskMainView extends ItemView {
   }
 
   /** Double-click or Enter: a card in place in the Things style, the task editor otherwise. */
+  /** Opens a task: in the Things style as a card in place, except in the calendar, which has no room for one. */
   private openTask(task: Task): void {
-    if (this.plugin.settings.style === "things") void this.expandCard(task);
+    if (this.plugin.settings.style === "things" && this.layout !== "calendar") void this.expandCard(task);
     else this.plugin.openEditor({ ...this.state, task });
   }
 

@@ -563,7 +563,7 @@ it("keeps tags without notes accessible without creating a file", async () => {
 
 it("queries a file-backed tag across the vault instead of restricting results to the tag note", async () => {
   const query = vi.fn(() => []);
-  const view = new TaskMainView({} as WorkspaceLeaf, { index: { query } } as unknown as TaskManagerPlugin);
+  const view = new TaskMainView({} as WorkspaceLeaf, { index: { query, projects: () => [] } } as unknown as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   await view.setState({ mode: "tags", tag: "work", pagePath: "Tags/work.md" });
   const internals = view as unknown as {

@@ -437,17 +437,12 @@ describe("today header, density and gestures", () => {
     pointer(row, "pointerup", 100 + dx, 100 + dy, pointerType);
   };
 
-  it("summarises today in the Today header", async () => {
+  it("shows no summary under the Today title", async () => {
     const today = todayIso();
-    const { view, content } = await setup([["A.md", `- [x] Done ${today}\n- [ ] Write ${today} 1h30m\n- [ ] Late 2020-01-01\n- [ ] Later ${today} 23:59`]]);
+    const { view, content } = await setup([["A.md", `- [x] Done ${today}\n- [ ] Write ${today} 1h30m`]]);
     await view.setState({ mode: "today" });
-    const summary = content().querySelector<HTMLElement>(".tm-today-summary")!;
-    expect(summary.querySelector(".tm-project-progress[role=progressbar]")!.getAttribute("aria-label")).toBe("Today: 1 of 3 tasks completed");
-    expect(summary.textContent).toContain("1h30m planned");
-    expect(summary.textContent).toContain("1 overdue");
-    expect(summary.textContent).toMatch(/Next: Later at 11:59 PM · (in|now)/);
-    await view.setState({ mode: "all" });
     expect(content().querySelector(".tm-today-summary")).toBeNull();
+    expect(content().querySelector<HTMLElement>(".tm-project-header-metadata")!.hidden).toBe(true);
   });
 
   it("colours the source label of tasks from coloured projects, except on the project's own page", async () => {
@@ -748,6 +743,86 @@ describe("project actions", () => {
     menuButton("Delete project").click();
     expect(confirm).toHaveBeenCalledOnce();
     expect((confirm.mock.calls[0][0] as { path: string }).path).toBe("Site.md");
+  });
+});
+
+describe("the calendar in the Things style", () => {
+  it("opens a double-clicked task in the task editor, since it has no room for a card", async () => {
+    const { view, content, plugin } = await setup([["A.md", `- [ ] Dentist ${todayIso()}`]]);
+    plugin.settings.style = "things";
+    await view.setState({ mode: "all", layout: "calendar" } as never);
+    const task = content().querySelector<HTMLElement>(".tm-calendar-task")!;
+    task.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: expect.objectContaining({ title: "Dentist" }) }));
+    expect(content().querySelector(".tm-things-card")).toBeNull();
+  });
+});
+
+describe("View options › Projects", () => {
+  it("lists the projects a view matches among its tasks by default, with their progress, from a switch", async () => {
+    const today = todayIso();
+    const { view, content, plugin } = await setup(
+      [["Loose.md", `- [ ] Call ${today}`], note("Launch.md", 1), note("Site.md", 1), note("Old.md", 1)],
+      { "Launch.md": { tags: ["project"], deadline: today }, "Site.md": { tags: ["project"] }, "Old.md": { tags: ["project", "archived"] } }
+    );
+    Object.assign(plugin, { projectDraft: () => ({ tags: "" }) });
+    await view.setState({ mode: "all" });
+    const projectRows = () => Array.from(content().querySelectorAll<HTMLElement>(".tm-project-row .tm-task-title")).map(title => title.textContent);
+    // All Tasks lists every active project, each with its progress instead of a checkbox.
+    expect(projectRows().sort()).toEqual(["Launch", "Site"]);
+    expect(content().querySelector(".tm-project-row .tm-project-progress")).not.toBeNull();
+    expect(content().querySelector(".tm-project-row input[type=checkbox]")).toBeNull();
+    // Today lists the project due today; Upcoming none of these.
+    await view.setState({ mode: "today" });
+    expect(projectRows()).toEqual(["Launch"]);
+    await view.setState({ mode: "upcoming" });
+    expect(projectRows()).toEqual([]);
+    // The switch turns them off, and the tab keeps that.
+    await view.setState({ mode: "all" });
+    const toggle = content().querySelector<HTMLElement>("[data-tm-focus-key='option-projects']")!;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    toggle.click();
+    expect(projectRows()).toEqual([]);
+    expect((view.getState() as { showProjects?: boolean }).showProjects).toBe(false);
+  });
+});
+
+describe("smart list actions", () => {
+  it("renames, updates with the view's options, and deletes after asking, from the … beside its title", async () => {
+    const { view, content, plugin } = await setup([note("A.md", 2)]);
+    const list = { id: "calls", name: "Calls", filters: [], sort: "date", descending: false, grouping: "default" };
+    const saveSmartList = vi.fn().mockResolvedValue(list);
+    Object.assign(plugin, { saveSmartList });
+    Object.assign(plugin.settings, { smartLists: [list] });
+    const confirm = vi.spyOn(view as unknown as { confirmDeleteSmartList(list: unknown): void }, "confirmDeleteSmartList").mockImplementation(() => {});
+    await view.setState({ mode: "smartLists", smartListId: "calls" });
+    const more = () => content().querySelector<HTMLElement>("[data-tm-focus-key='smart-list-actions']")!;
+    const menuButton = (label: string) => Array.from(document.querySelectorAll<HTMLElement>(".tm-task-menu button"))
+      .find(button => button.querySelector(".tm-task-menu-label")?.textContent === label)!;
+    expect(more().getAttribute("aria-label")).toBe("Smart list actions");
+    // Nothing changed yet: updating saves nothing.
+    more().click();
+    menuButton("Update View Options").click();
+    expect(saveSmartList).not.toHaveBeenCalled();
+    // The view's sorting and grouping change, then go into the list.
+    Object.assign(view, { sort: "priority", descending: true, grouping: "priority" });
+    more().click();
+    menuButton("Update View Options").click();
+    expect(saveSmartList).toHaveBeenLastCalledWith({ name: "Calls", filters: [], sort: "priority", descending: true, grouping: "priority" }, "calls");
+    // Turning projects off goes in too (they show by default).
+    Object.assign(view, { showProjects: false });
+    more().click();
+    menuButton("Update View Options").click();
+    expect(saveSmartList).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "priority", showProjects: false }), "calls");
+    more().click();
+    menuButton("Rename").click();
+    const input = document.querySelector<HTMLInputElement>(".tm-choice-popover input")!;
+    input.value = "Phone calls"; input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(saveSmartList).toHaveBeenLastCalledWith(expect.objectContaining({ name: "Phone calls", sort: "date" }), "calls");
+    more().click();
+    menuButton("Delete smart list").click();
+    expect(confirm).toHaveBeenCalledWith(list);
   });
 });
 

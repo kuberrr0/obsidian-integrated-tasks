@@ -11,6 +11,8 @@ export interface ViewOptionsState {
   openOnly?: boolean;
   /** What View default groups by in this view, such as "Note" or "Action date". */
   defaultGroup?: string;
+  /** Whether the view lists the projects it matches among its tasks; undefined where it cannot (the calendar). */
+  showProjects?: boolean;
 }
 export interface ViewOptionsHost {
   state(): ViewOptionsState;
@@ -135,6 +137,9 @@ export class ViewOptionsPanel {
   private readonly body: HTMLElement;
   private readonly clearButton: HTMLButtonElement;
   private readonly directionButton: HTMLButtonElement;
+  /** The Show section's Projects switch, and the section (hidden where the view cannot show projects). */
+  private readonly projectsSwitch: HTMLElement;
+  private readonly showSection: HTMLElement;
   private readonly summaries = new Map<string, HTMLButtonElement>();
   private readonly editors = new Map<TaskProperty, HTMLElement>();
   private readonly badge: HTMLElement;
@@ -181,6 +186,18 @@ export class ViewOptionsPanel {
       choose: value => { this.host.update({ grouping: value as TaskGrouping }); this.sync(); this.closeDropdown(true); }
     }));
 
+    // Show: projects among the tasks, each with its progress in place of a checkbox.
+    this.showSection = this.section("Show");
+    const projectsRow = this.row(this.showSection, "square-chart-gantt", "Projects");
+    this.projectsSwitch = projectsRow.createDiv({ cls: "checkbox-container tm-options-switch", attr: { role: "switch", tabindex: "0", "aria-label": "Show projects", "data-tm-focus-key": "option-projects" } });
+    this.projectsSwitch.createEl("input", { type: "checkbox", attr: { tabindex: "-1", "aria-hidden": "true" } });
+    const switchProjects = (): void => { this.host.update({ showProjects: !this.host.state().showProjects }); this.sync(); };
+    this.projectsSwitch.addEventListener("click", event => { event.preventDefault(); switchProjects(); });
+    this.projectsSwitch.addEventListener("keydown", event => {
+      if (event.key !== " " && event.key !== "Enter") return;
+      event.preventDefault(); switchProjects();
+    });
+
     for (const [title, rows] of SECTIONS) {
       const section = this.section(title);
       for (const [key, label, icon] of rows) {
@@ -220,7 +237,10 @@ export class ViewOptionsPanel {
     this.badge.setText(filters.length ? String(filters.length) : "");
     this.badge.hidden = !filters.length;
     const state = this.host.state();
-    this.clearButton.disabled = !filters.length && state.sort === "date" && !state.descending && state.grouping === "default";
+    this.clearButton.disabled = !filters.length && state.sort === "date" && !state.descending && state.grouping === "default" && state.showProjects !== false;
+    this.showSection.hidden = state.showProjects === undefined;
+    this.projectsSwitch.toggleClass("is-enabled", state.showProjects === true);
+    this.projectsSwitch.setAttribute("aria-checked", String(state.showProjects === true));
     this.directionButton.empty();
     setIcon(this.directionButton, descending ? "arrow-down-wide-narrow" : "arrow-up-narrow-wide");
     this.directionButton.setAttribute("aria-label", descending ? "Descending" : "Ascending");

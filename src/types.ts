@@ -118,6 +118,8 @@ export interface SmartList {
   sort: TaskSort;
   descending: boolean;
   grouping: TaskGrouping;
+  /** View options › Projects: false when the list leaves out the projects it matches (they show by default). */
+  showProjects?: boolean;
 }
 
 export interface TaskManagerSettings {
