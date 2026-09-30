@@ -10,12 +10,12 @@ import { taskInputRanges, tokenHighlightClass } from "./task-input";
 export class TaskLineEditor {
   readonly view: EditorView;
   defaultValue: string;
-  /** `allNew`: dates written in words count anywhere, as in a new task; otherwise only where newly typed. */
-  constructor(parent: HTMLElement, value: string, dateFormat: string, onChange: () => void, prompt = "", allNew = false) {
+  /** `value`: the task's title as it starts (empty for a new task); dates written in words count only where newly typed. */
+  constructor(parent: HTMLElement, value: string, dateFormat: string, onChange: () => void, prompt = "") {
     this.defaultValue = value;
     const decorate = (view: EditorView): DecorationSet => {
       const firstLine = view.state.doc.line(1).text;
-      const ranges: Range<Decoration>[] = taskInputRanges(firstLine, allNew ? "" : this.defaultValue.split("\n")[0], new Date(), dateFormat)
+      const ranges: Range<Decoration>[] = taskInputRanges(firstLine, this.defaultValue.split("\n")[0], new Date(), dateFormat)
         .filter(range => range.to > range.from)
         .map(range => Decoration.mark({ class: tokenHighlightClass(range.kind, firstLine.slice(range.from, range.to)) }).range(range.from, range.to));
       return Decoration.set(ranges, true);

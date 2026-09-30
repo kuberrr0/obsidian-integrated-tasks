@@ -13,7 +13,7 @@ const marked = (root: HTMLElement) => Array.from(root.querySelectorAll(".tm-nlp-
 describe("highlighting what typed text sets", () => {
   it("shows the task editor's text as typed, highlighting what it sets in that property's colour", () => {
     const host = document.body.createDiv();
-    const editor = new TaskLineEditor(host, "", "YYYY-MM-DD", vi.fn(), "", true);
+    const editor = new TaskLineEditor(host, "", "YYYY-MM-DD", vi.fn(), "");
     editor.value = "Call mom about dinner tomorrow at 3pm {2026-10-09} p1 #[[home]] ~[[Work]]";
     expect(host.querySelector(".cm-line")!.textContent).toBe(editor.value);
     const marks = Array.from(host.querySelectorAll(".tm-nlp-token")).map(mark => [mark.textContent, mark.className.replace("tm-nlp-token ", "")]);

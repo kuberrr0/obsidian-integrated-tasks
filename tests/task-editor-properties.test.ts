@@ -73,30 +73,32 @@ describe("property buttons in the task editor", () => {
     expect(labels()[0]).toBe("Thu, 9:00-10:00 AM");
   });
 
-  it("rewrites the priority, repeat and project tokens from their popovers", () => {
-    const { raw, button, labels } = open();
+  it("sets the priority, repeat and project from their popovers, taking a typed token for the same property out", () => {
+    const { raw, button, labels, modal } = open();
     raw.value = "Call mom p3";
     button("Priority").click();
     document.querySelector<HTMLElement>(".tm-choice-popover [data-value='1']")!.click();
-    expect(raw.value).toBe("Call mom p1");
+    expect(raw.value).toBe("Call mom");
+    expect(labels()[2]).toBe("P1");
     button("Repeat").click();
     const repeat = document.querySelector<HTMLInputElement>(".tm-choice-popover input")!;
     repeat.value = "3 days"; repeat.dispatchEvent(new Event("input"));
     repeat.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-    expect(raw.value).toBe("Call mom p1 every 3 days");
+    expect(labels()[5]).toBe("Every 3 days");
     button("Project").click();
     document.querySelector<HTMLElement>(".tm-choice-popover [data-value='Work.md']")!.click();
-    expect(raw.value).toBe("Call mom p1 every 3 days ~[[Work]]");
     expect(labels()[3]).toBe("Work");
-    // Back to the Inbox takes the token off.
     expect(button("Project").getAttribute("aria-label")).toBe("Project: Work");
     button("Project").click();
     document.querySelector<HTMLElement>(".tm-choice-popover [data-value='Inbox.md']")!.click();
-    expect(raw.value).toBe("Call mom p1 every 3 days");
+    expect(labels()[3]).toBe("Inbox");
+    // The text stays the title alone.
+    expect(raw.value).toBe("Call mom");
+    expect((modal as unknown as { readRaw(): object }).readRaw()).toMatchObject({ title: "Call mom", priority: 1, repeat: "every 3 days", destination: "Inbox.md" });
   });
 
   it("creates a project named as typed in its search, and moves the task there", async () => {
-    const { raw, button, createProject } = open();
+    const { raw, button, createProject, labels } = open();
     raw.value = "Plan";
     expect(button("Project").getAttribute("aria-label")).toBe("Project: Inbox");
     button("Project").click();
@@ -104,31 +106,36 @@ describe("property buttons in the task editor", () => {
     search.value = "Garden"; search.dispatchEvent(new Event("input"));
     search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(createProject).toHaveBeenCalledExactlyOnceWith("Garden");
-    await vi.waitFor(() => expect(raw.value).toBe("Plan ~[[Garden]]"));
+    await vi.waitFor(() => expect(labels()[3]).toBe("Garden"));
+    expect(raw.value).toBe("Plan");
   });
 
-  it("sets the date from the date popover, replacing words read as a date, and toggles tags", () => {
-    const { raw, button } = open();
+  it("sets the date from the date popover, taking words read as a date out, and toggles tags", () => {
+    const { raw, button, labels } = open();
     raw.value = "Call mom about dinner tomorrow";
+    expect(labels()[0]).toBe("Tomorrow");
     button("When").click();
     document.querySelector<HTMLElement>(`.tm-date-popover [data-date="${todayIso()}"]`)!.click();
-    const date = DEFAULT_SETTINGS.linkDates ? `[[${todayIso()}]]` : todayIso();
-    expect(raw.value).toBe(`Call mom about dinner ${date}`);
+    expect(raw.value).toBe("Call mom about dinner");
+    expect(labels()[0]).toBe("Today");
     button("Tags").click();
     const option = (name: string) => Array.from(document.querySelectorAll<HTMLElement>(".tm-tags-popover [role=option]")).find(item => item.getAttribute("data-value") === name)!;
     option("open house").click();
     option("home").click();
-    expect(raw.value).toBe(`Call mom about dinner ${date} #[[open house]] #[[home]]`);
+    expect(labels()[4]).toBe("open house, home");
     option("open house").click();
-    expect(raw.value).toBe(`Call mom about dinner ${date} #[[home]]`);
+    expect(labels()[4]).toBe("home");
+    expect(raw.value).toBe("Call mom about dinner");
   });
 
-  it("keeps the leading space for a new task in a view's context", () => {
-    const { raw, button } = open({ mode: "tags", preset: { tags: ["home"] } });
-    expect(raw.value).toBe(" #[[home]]");
+  it("starts a new task in a view's context with an empty title, the context on the buttons", () => {
+    const { raw, button, labels } = open({ mode: "tags", preset: { tags: ["home"] } });
+    expect(raw.value).toBe("");
+    expect(labels()[4]).toBe("home");
     button("Priority").click();
     document.querySelector<HTMLElement>(".tm-choice-popover [data-value='2']")!.click();
-    expect(raw.value).toBe(" #[[home]] p2");
+    expect(raw.value).toBe("");
+    expect(labels()[2]).toBe("P2");
   });
 
   it("opens its popovers inside the modal, where Obsidian lets them keep focus", () => {

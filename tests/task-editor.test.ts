@@ -290,6 +290,7 @@ it.each([false, true])("omits modal headings and shortcut hints (editing: %s)", 
 });
 
 describe("a new task in a view's context", () => {
+  let lastOpened: { readRaw(): TaskDraft } | undefined;
   function opened(options: { mode: "inbox" | "today" | "tags" | "all"; preset?: Partial<TaskDraft>; projectPath?: string }) {
     vi.stubGlobal("window", { setTimeout: (run: () => void) => { run(); return 0; }, clearTimeout: vi.fn() });
     vi.stubGlobal("HTMLButtonElement", EditorButton);
@@ -298,17 +299,26 @@ describe("a new task in a view's context", () => {
     fields.modalEl = new EditorElement();
     fields.contentEl = new EditorElement();
     modal.onOpen();
+    lastOpened = modal as unknown as { readRaw(): TaskDraft };
     return fields.rawInput;
   }
 
   it.each([
-    ["a tag", { mode: "tags" as const, preset: { tags: ["open house"] } }, " #[[open house]]"],
-    ["Today", { mode: "today" as const }, ` ${todayIso()}`],
-    ["a project", { mode: "all" as const, projectPath: "Work.md" }, " ~[[Work]]"]
-  ])("starts after a space before %s, with the cursor at the start", (_name, options, start) => {
+    ["a tag", { mode: "tags" as const, preset: { tags: ["open house"] } }, { tags: ["open house"] }],
+    ["Today", { mode: "today" as const }, { scheduledDate: todayIso() }],
+    ["a project", { mode: "all" as const, projectPath: "Work.md" }, { destination: "Work.md" }]
+  ])("starts with an empty title and %s on the buttons, not in the text, with the cursor at the start", (_name, options, context) => {
     const input = opened(options);
-    expect(input.value).toBe(start);
+    expect(input.value).toBe("");
     expect(input.setSelectionRange).toHaveBeenLastCalledWith(0, 0);
+    input.value = "Call Sam";
+    expect(lastOpened!.readRaw()).toMatchObject({ title: "Call Sam", ...context });
+  });
+
+  it("keeps batch input for a new task: more lines become its subtasks and notes, the first line taking the context", () => {
+    const input = opened({ mode: "tags", preset: { tags: ["home"] } });
+    input.value = "Plan the party p1\n  - [ ] Book the hall\n  - Guests: 20";
+    expect(lastOpened!.readRaw()).toMatchObject({ title: "Plan the party", priority: 1, tags: ["home"], additionalLines: ["  - [ ] Book the hall", "  - Guests: 20"] });
   });
 
   it("stays empty without any context", () => {

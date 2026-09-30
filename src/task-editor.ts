@@ -1,5 +1,5 @@
 import { TaskLineEditor } from "./task-line-editor";
-import { parseEditedTaskInput, parseTaskTreeInput, replaceTaskTokens, taskTokenText, type InputTokenKind } from "./task-input";
+import { parseTaskTreeInput, replaceTaskTokens, type InputTokenKind } from "./task-input";
 import type { TaskEditorPreset } from "./types";
 import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
 import { draftFromTask, draftWithTitle } from "./task-draft";
@@ -12,7 +12,7 @@ import { openChoicePopover, PRIORITY_CHOICES, projectChoices, repeatChoices, REP
 import { openTagsPopover } from "./task-menu";
 import { thingsDateLabel } from "./things-row-details";
 import { taskTimeDurationLabel, taskTimeLabel } from "./task-row-details";
-import { STATUS_CHARS, STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, draftStatus, isClosedStatus, statusClass, statusFromChar } from "./task-status";
+import { STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, draftStatus, isClosedStatus, statusClass, statusFromChar } from "./task-status";
 import type { Project, Task, TaskDraft, TaskManagerSettings, TaskStatus, TaskViewMode } from "./types";
 
 export type TaskEditorProperty = "scheduledDate" | "deadline" | "defer" | "durationMinutes" | "priority" | "tags" | "repeat";
@@ -81,11 +81,9 @@ export class TaskEditorModal extends Modal {
     // The status is the last property button, below the text.
     this.chosenStatus = draftStatus(this.draft);
     this.taskIndent = " ".repeat(this.draft.indent);
-    // Editing, the field holds the title alone, as a card's does: the task's properties are on the buttons below,
-    // and a token typed into the title sets its property. A new task's field starts with its context as tokens
-    // (a tag, date or project), after a space so the title typed at the start stays apart.
-    const stripped = this.serializeDraft(this.draft).replace(/^([ \t]*)[-+*]\s+\[([ xX/?-])\][ \t]*/, "");
-    const source = this.options.task ? this.options.task.title : stripped.trim() && !this.draft.title ? ` ${stripped.trimStart()}` : stripped;
+    // The field holds the title alone, as a card's does (empty for a new task): the task's properties, a new one's
+    // from its view (a tag, date, project or group), are on the buttons below, and a token typed into the title sets
+    // its property.
     const editorHost = taskLine.createDiv({ cls: "tm-editor-inline" });
     const properties = contentEl.createDiv({ cls: "tm-editor-properties", attr: { role: "toolbar", "aria-label": "Task properties" } });
     const error = contentEl.createDiv({ cls: "tm-editor-error", attr: { role: "alert", "aria-live": "assertive" } });
@@ -94,7 +92,7 @@ export class TaskEditorModal extends Modal {
       error.empty();
       this.paintProperties?.();
     };
-    this.rawInput = new TaskLineEditor(editorHost, source, this.options.dateFormat, updatePriority, `Call the dentist next Tuesday 3pm 30m {next Friday 5pm} >Monday every month p2 ${formatTags(["Health"])} ~[[Errands]]`, !this.options.task);
+    this.rawInput = new TaskLineEditor(editorHost, this.originalTitle, this.options.dateFormat, updatePriority, `Call the dentist next Tuesday 3pm 30m {next Friday 5pm} >Monday every month p2 ${formatTags(["Health"])} ~[[Errands]]`);
     this.renderProperties(properties);
     updatePriority();
 
@@ -179,46 +177,39 @@ export class TaskEditorModal extends Modal {
     this.contentEl.empty();
   }
 
+  /** The title the field started with: the task's, or empty for a new task. */
+  private get originalTitle(): string { return this.options.task?.title ?? ""; }
+
   /**
-   * An edited task as it would now save: its values (the buttons change them) with what is typed into the title
-   * applied, as in a card: a typed date or priority replaces the value, typed tags join the task's, `~[[Note]]` moves it.
+   * The task as it would now save: its values (the buttons change them; a new task's start from its view) with what
+   * is typed into the title applied, as in a card: a typed date or priority replaces the value, typed tags join the
+   * task's, `~[[Note]]` moves it.
    */
   private preview(): TaskDraft {
-    const task = this.options.task!;
     const text = this.rawInput.value.split("\n")[0];
     // An untouched title is never read again, so its words stay words.
-    if (text.trim() === task.title) return { ...this.draft, title: task.title };
-    return draftWithTitle(this.draft, task.title, text, new Date(), this.options.dateFormat);
+    if (text.trim() === this.originalTitle) return { ...this.draft, title: this.originalTitle };
+    return draftWithTitle(this.draft, this.originalTitle, text, new Date(), this.options.dateFormat);
   }
 
-  /** What the task now has, for the property buttons: an edited task's preview, or a new task's typed tokens. */
-  private readLine(): Partial<TaskDraft> | undefined {
-    if (this.options.task) return this.preview();
-    return parseEditedTaskInput(this.rawInput.value.split("\n")[0], "", new Date(), this.options.dateFormat);
-  }
+  /** What the task now has, for the property buttons. */
+  private readLine(): Partial<TaskDraft> { return this.preview(); }
 
   /**
-   * Applies a property button's choice (`values`, the fields of `kinds`; undefined clears one). An edited task takes the
+   * Applies a property button's choice (`values`, the fields of `kinds`; undefined clears one): the task takes the
    * value directly, and a token typed into its title for the same property comes out, so it cannot override the choice.
-   * A new task's text gets the value's token in place of the old one.
    */
   private rewrite(kinds: InputTokenKind[], values: Partial<TaskDraft>): void {
     const text = this.rawInput.value;
-    let next: string;
-    if (this.options.task) {
-      Object.assign(this.draft, values, "destination" in values && !values.destination ? { destination: this.options.settings.inboxPath } : {});
-      next = replaceTaskTokens(text, kinds, "", this.options.task.title, new Date(), this.options.dateFormat);
-    } else {
-      const token = taskTokenText(values, this.options.dateFormat, this.options.settings.linkDates);
-      next = replaceTaskTokens(text, kinds, token, "", new Date(), this.options.dateFormat);
-    }
+    Object.assign(this.draft, values, "destination" in values && !values.destination ? { destination: this.options.settings.inboxPath } : {});
+    const next = replaceTaskTokens(text, kinds, "", this.originalTitle, new Date(), this.options.dateFormat);
     if (next !== text) this.rawInput.value = next;
     else this.paintProperties?.();
   }
 
   /**
    * Buttons below the text for the date (with time and duration), deadline, priority, project, tags and repeat.
-   * Each shows the value the text sets and opens its popover; a choice there rewrites that token in the text.
+   * Each shows the task's value (with what the title sets) and opens its popover, whose choice sets the value.
    */
   private renderProperties(parent: HTMLElement): void {
     /** `unset`: what the button reads without a value (the project's is "Inbox"). */
@@ -337,12 +328,14 @@ export class TaskEditorModal extends Modal {
   private readRaw(): TaskDraft {
     this.normalizeChecklist();
     const status = this.status();
-    const checkbox = `${this.taskIndent}- [${STATUS_CHARS[status]}] `;
-    if (!this.options.task) return parseTaskTreeInput(checkbox + this.rawInput.value, this.options.settings.inboxPath, new Date(), this.options.dateFormat, this.options.settings.linkDates);
-    if (/\n[^\n]*\S/.test(this.rawInput.value)) {
-      throw new Error("Edit one task at a time; use New task to add multiple tasks.");
-    }
-    if (!this.rawInput.value.trim()) throw new Error("Enter a task title.");
-    return { ...this.preview(), status, completed: isClosedStatus(status) };
+    const multiline = /\n[^\n]*\S/.test(this.rawInput.value);
+    if (multiline && this.options.task) throw new Error("Edit one task at a time; use New task to add multiple tasks.");
+    const task: TaskDraft = { ...this.preview(), status, completed: isClosedStatus(status) };
+    // An emptied field (or one holding only properties) has no title, even though reading it keeps the old one.
+    if (!this.rawInput.value.split("\n")[0].trim() || !task.title.trim()) throw new Error(multiline ? "Enter a title for the main task." : "Enter a task title.");
+    if (!multiline) return task;
+    // A new task typed or pasted with more lines: they become its subtasks and notes, read as a batch after it.
+    const rest = this.rawInput.value.slice(this.rawInput.value.indexOf("\n"));
+    return parseTaskTreeInput(this.taskIndent + this.serializeDraft(task) + rest, this.options.settings.inboxPath, new Date(), this.options.dateFormat, this.options.settings.linkDates);
   }
 }
