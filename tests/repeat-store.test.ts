@@ -35,6 +35,9 @@ describe("advancing inline repeats", () => {
   it("moves the schedule to the next occurrence and the deadline by the same days, keeping times", () => {
     expect(advanceInlineRepeat({ repeat: "every week", scheduledDate: "2026-09-28", deadline: "2026-09-30" })).toEqual({ scheduledDate: "2026-10-05", deadline: "2026-10-07" });
     expect(advanceInlineRepeat({ repeat: "every monday" }, "2026-09-27")).toEqual({ scheduledDate: "2026-09-28", deadline: undefined });
+    // With several rules, whichever comes first: Thursday Oct 1 moves to Friday, then Friday to Monday.
+    expect(advanceInlineRepeat({ repeat: "every monday every friday", scheduledDate: "2026-10-01" })).toEqual({ scheduledDate: "2026-10-02", deadline: undefined });
+    expect(advanceInlineRepeat({ repeat: "every monday every friday", scheduledDate: "2026-10-02" })).toEqual({ scheduledDate: "2026-10-05", deadline: undefined });
     expect(advanceInlineRepeat({ repeat: "every month", scheduledDate: "2026-01-31", deadline: "2026-02-02" })).toEqual({ scheduledDate: "2026-02-28", deadline: "2026-03-02" });
     // Only a deadline: repeat from it, without adding a schedule.
     expect(advanceInlineRepeat({ repeat: "every month", deadline: "2026-10-01" })).toEqual({ scheduledDate: undefined, deadline: "2026-11-01" });

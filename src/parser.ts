@@ -37,17 +37,27 @@ const REPEAT_WORDS: Record<string, string> = {
   monthly: "every month", yearly: "every year", annually: "every year"
 };
 
-/** A repeat typed loosely: "every 3 days", "weekly", "monday", "2 weeks"; undefined when not a rule. */
+/**
+ * A repeat typed loosely: "every 3 days", "weekly", "monday", "2 weeks"; several at once too, apart or joined by
+ * commas or "and" ("every monday every friday", "monday, friday"). Undefined when any part is not a rule.
+ */
 export function parseRepeatInput(value: string): string | undefined {
   const text = value.trim().toLowerCase().replace(/\s+/g, " ");
   if (!text) return undefined;
-  const rule = REPEAT_WORDS[text] ?? (text.startsWith("every ") ? text : `every ${text}`);
-  return parseRepeatRule(rule);
+  const parts = text.split(/\s*,\s*|\s+and\s+|\s+(?=every\s)/).filter(Boolean);
+  const rules = parts.map(part => parseRepeatRule(REPEAT_WORDS[part] ?? (part.startsWith("every ") ? part : `every ${part}`)));
+  return rules.length && rules.every(Boolean) ? [...new Set(rules)].join(" ") : undefined;
 }
 
-/** Display text for a repeat rule, e.g. "Every Monday". */
-export function repeatLabel(rule: string): string {
-  return rule.replace(/^every/, "Every").replace(/\b(sun|mon|tues|wednes|thurs|fri|satur)day/g, day => day[0].toUpperCase() + day.slice(1));
+/** A task's repeat as its rules: "every monday every friday" repeats on both days, whichever comes first. */
+export function repeatRuleList(repeat: string): string[] {
+  return repeat.split(/\s+(?=every\s)/i).map(rule => rule.trim()).filter(Boolean);
+}
+
+/** Display text for a repeat, e.g. "Every Monday", or "Every Monday, every Friday" for several rules. */
+export function repeatLabel(repeat: string): string {
+  return repeatRuleList(repeat).map((rule, index) => (index ? rule : rule.replace(/^every/, "Every"))
+    .replace(/\b(sun|mon|tues|wednes|thurs|fri|satur)day/g, day => day[0].toUpperCase() + day.slice(1))).join(", ");
 }
 
 interface PlainDateShape { wordCounts: Set<number>; needsDigit: boolean }
@@ -234,11 +244,11 @@ function parseLine(
         consumed.add("duration");
         changed = true;
       }
-    } else if (!consumed.has("repeat") && (match = REPEAT.exec(remainder)) && (text = parseRepeatRule(match[1]))) {
-      metadata.repeat = text;
+    } else if ((match = REPEAT.exec(remainder)) && (text = parseRepeatRule(match[1]))) {
+      // Several `every …` rules may follow one another; the task repeats on each (they are read from the end).
+      if (!repeatRuleList(metadata.repeat ?? "").includes(text)) metadata.repeat = metadata.repeat ? `${text} ${metadata.repeat}` : text;
       recordToken("repeat", match);
       remainder = remainder.slice(0, match.index).trimEnd();
-      consumed.add("repeat");
       changed = true;
     } else if (!consumed.has("scheduled") && (match = ((match = SCHEDULED.exec(remainder)) && parseDateTimeExpression(match[1], reference, dateFormats))
       ? match : plainScheduled(remainder, reference, dateFormats))) {

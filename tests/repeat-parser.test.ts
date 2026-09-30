@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseRepeatRule, parseTaskInput, parseTaskLine, rewriteTaskLine, serializeTask, type ParsedTokenRange } from "../src/parser";
+import { parseRepeatInput, parseRepeatRule, parseTaskInput, parseTaskLine, repeatLabel, repeatRuleList, rewriteTaskLine, serializeTask, type ParsedTokenRange } from "../src/parser";
 import { noteDateChanges } from "../src/note-date-input";
+import { parseEditedTaskInput } from "../src/task-input";
 import type { TaskDraft } from "../src/types";
 
 const reference = new Date(2026, 8, 27, 12);
@@ -38,8 +39,36 @@ describe("inline repeat parsing", () => {
     }
   });
 
-  it("is consumed once", () => {
-    expect(parse("- [ ] Task every week every day")).toMatchObject({ title: "Task every week", repeat: "every day" });
+  it("reads several rules, in the order written, each a token of its own", () => {
+    const ranges: ParsedTokenRange[] = [];
+    const line = "- [ ] do this [[2026-10-01]] 21:00 every monday every friday p1";
+    expect(parseTaskLine(line, reference, "YYYY-MM-DD", false, ranges)).toMatchObject({ title: "do this", repeat: "every monday every friday", scheduledTime: "21:00", priority: 1 });
+    expect(ranges.filter(range => range.kind === "repeat").map(range => line.slice(range.from, range.to))).toEqual(["every friday", "every monday"]);
+    // A rule written twice counts once.
+    expect(parse("- [ ] Task every week every week")).toMatchObject({ title: "Task", repeat: "every week" });
+  });
+
+  it("labels several rules, and reads them typed loosely", () => {
+    expect(repeatLabel("every monday every friday")).toBe("Every Monday, every Friday");
+    expect(repeatRuleList("every monday every 2 weeks")).toEqual(["every monday", "every 2 weeks"]);
+    expect(parseRepeatInput("monday, friday")).toBe("every monday every friday");
+    expect(parseRepeatInput("every monday and every friday")).toBe("every monday every friday");
+    expect(parseRepeatInput("monday, banana")).toBeUndefined();
+  });
+
+  it("reads the date and both rules in the task editor and a card, too", () => {
+    const typed = "do this every monday every friday today 9pm";
+    expect(serializeTask({ ...parseTaskInput(typed, reference)!, destination: "Inbox.md", indent: 0 }, "YYYY-MM-DD", true))
+      .toBe("- [ ] do this [[2026-09-27]] 21:00 every monday every friday");
+    expect(parseEditedTaskInput(typed, "do this", reference)).toMatchObject({ title: "do this", scheduledDate: "2026-09-27", scheduledTime: "21:00", repeat: "every monday every friday" });
+  });
+
+  it("converts the user's line in a note: the date, with both rules kept", () => {
+    const line = "- [ ] do this every monday every friday today 9pm";
+    let result = line;
+    for (const change of noteDateChanges(line, "YYYY-MM-DD", reference).reverse()) result = result.slice(0, change.from) + change.insert + result.slice(change.to);
+    expect(result).toBe("- [ ] do this every monday every friday [[2026-09-27]] 21:00");
+    expect(parse(result)).toMatchObject({ title: "do this", scheduledDate: "2026-09-27", scheduledTime: "21:00", repeat: "every monday every friday" });
   });
 
   it("never reads 'every friday' as a schedule in typed input or note dates", () => {

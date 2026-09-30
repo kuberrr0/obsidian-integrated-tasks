@@ -1,7 +1,7 @@
 import { parseYaml, type App, TFile } from "obsidian";
 import { formatDate, formatLocalDate, todayIso } from "./date";
 import { findLiveLine } from "./markdown";
-import { parseTaskLine, type ParsedTokenRange } from "./parser";
+import { parseTaskLine, repeatRuleList, type ParsedTokenRange } from "./parser";
 import type { Task } from "./types";
 
 export type RecurringOutcome = "COMPLETED" | "SKIPPED" | "FAILED";
@@ -51,7 +51,7 @@ const dayDistance = (from: string, to: string): number => {
  */
 export function advanceInlineRepeat(task: Pick<Task, "repeat" | "scheduledDate" | "deadline">, today = todayIso()): Pick<Task, "scheduledDate" | "deadline"> {
     if (!task.repeat) throw new Error("Task has no repeat rule.");
-    const rules = [task.repeat];
+    const rules = repeatRuleList(task.repeat);
     if (!task.scheduledDate && task.deadline) return { scheduledDate: undefined, deadline: nextRepeatDate(rules, task.deadline) };
     const from = task.scheduledDate ?? today;
     const next = nextRepeatDate(rules, from);

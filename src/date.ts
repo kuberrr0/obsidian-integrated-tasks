@@ -101,8 +101,12 @@ export interface InputDate { date: string; time?: string; parts: Array<{ index: 
  * nor joins a date and a time across (spaces would let "3pm {friday} tomorrow" read as one date).
  */
 function inputProse(value: string, within?: InputRange): string {
-  return onlyWithin(value.replace(/\{[^}]*\}?|\[\[[\s\S]*?\]\]|`[^`]*`|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\b(?:\d+h(?:\d+m)?|\d+m)\b/g, match => "\u00a6".repeat(match.length)), within);
+  return onlyWithin(value.replace(/\{[^}]*\}?|\[\[[\s\S]*?\]\]|`[^`]*`|\[[^\]]*\]\([^)]*\)|https?:\/\/\S+|\b(?:\d+h(?:\d+m)?|\d+m)\b/g, match => "\u00a6".repeat(match.length))
+    // `every …` repeats too: "every friday today 9pm" would otherwise read as one (repeat's) date.
+    .replace(REPEAT_TEXT, match => "\u00a6".repeat(match.length)), within);
 }
+
+const REPEAT_TEXT = /\bevery\s+(?:(?:other|second|third|fourth|\d+(?:st|nd|rd|th)?)\s+)?(?:day|week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?\b/gi;
 
 /** A bare weekday abbreviation is far more often a word ("sun cream") than a date; "5/10" is a fraction. */
 const NOT_A_DATE = /^(?:sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat|\d{1,2}\/\d{1,2})$/i;
@@ -116,8 +120,12 @@ function inputResults(value: string, reference: Date, within?: InputRange): chro
   return chrono.parse(prose, reference, { forwardDate: true }).filter(match =>
     !match.end && (!within || boundedMatch(value, match.index, match.text.length, /[\p{L}\p{N}]/u))
     && !/(?:^|\s)(?:every|each|last|past|previous)\s*$/i.test(prose.slice(0, match.index))
-    && !/^(?:last|past|previous)\b/i.test(match.text) && !NOT_A_DATE.test(match.text.trim()));
+    && !/^(?:last|past|previous)\b/i.test(match.text) && !NOT_A_DATE.test(match.text.trim())
+    // A time right after a repeat is the repeat's ("every friday at 5pm"), not today's.
+    && (certainDay(match) || !REPEAT_BEFORE.test(value.slice(0, match.index))));
 }
+
+const REPEAT_BEFORE = /\bevery\s+(?:(?:other|second|third|fourth|\d+(?:st|nd|rd|th)?)\s+)?(?:day|week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?\s*$/i;
 
 /** A task's properties as typed after its title: tags, a project, a duration, a priority, a repeat, dates, times. */
 const PROPERTY_TEXT = new RegExp([

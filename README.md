@@ -278,7 +278,7 @@ For a simple repeat, end the task with a rule such as `every week`, `every 2 wee
 - [ ] Water plants Sep 28, 2026 every week
 ```
 
-Completing it moves its date to the next occurrence instead of checking it off; a deadline moves by the same number of days. A repeat with only a deadline repeats from the deadline. Note that a title ending in a rule, such as “Clean every day”, becomes a repeating task.
+Completing it moves its date to the next occurrence instead of checking it off; a deadline moves by the same number of days. A repeat with only a deadline repeats from the deadline. A task can have several rules, such as `every monday every friday`; it moves to whichever occurrence comes first. In the repeat picker, type them apart or with commas (`monday, friday`). Note that a title ending in a rule, such as “Clean every day”, becomes a repeating task.
 
 For habits you want a history of, use a routine note instead:
 
