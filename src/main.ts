@@ -16,7 +16,7 @@ import { noteDateInput } from "./note-date-input";
 import { noteTokenEditor } from "./note-token-editor";
 import { noteTaskEditEditor, registerNoteTaskEdit } from "./note-task-edit";
 import { renderNoteTokens } from "./note-token-reading";
-import { MarkdownView, Notice, Plugin, TFile, TFolder, type Editor, type TAbstractFile, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, Notice, Plugin, TFile, TFolder, WorkspaceLeaf, type Editor, type TAbstractFile, type ViewState } from "obsidian";
 import { TaskEditorModal, initialDraft, type TaskEditorOptions } from "./task-editor";
 import { TaskIndex, type RefreshOptions } from "./task-index";
 import { IndexedDbCache } from "./index-cache";
@@ -204,6 +204,7 @@ export default class TaskManagerPlugin extends Plugin {
   /** Task mode decides tabs from project and tag membership, so it waits for the full index. */
   private startTaskMode(): void {
     this.taskModeController = new TaskModeController(this.app, () => this.settings.taskMode, path => this.index.isProject(path), path => this.index.tagForPath(path));
+    this.redirectProjectNotes(this.taskModeController);
     const syncTaskMode = (): void => { void this.taskModeController?.sync().catch(error => new Notice(String(error))); };
     // Metadata and index updates arrive in bursts; navigation events stay immediate to avoid a flash of Markdown.
     let syncTimer: number | undefined;
@@ -565,6 +566,26 @@ export default class TaskManagerPlugin extends Plugin {
     } catch (error) {
       new Notice(error instanceof Error ? error.message : "Could not convert the note to a project.");
     }
+  }
+
+  /**
+   * With task mode on, a project's or tag's note opens straight as its task view, however it is opened (a link,
+   * the file list, Back and Forward), instead of flashing as a note first. Obsidian has no hook for this, so every
+   * tab's view change passes through the controller; the wrapper is removed on unload, or left inert when another
+   * plugin has wrapped it since.
+   */
+  private redirectProjectNotes(controller: TaskModeController): void {
+    const prototype = WorkspaceLeaf.prototype;
+    const original = prototype.setViewState;
+    let active = true;
+    const wrapper = function (this: WorkspaceLeaf, viewState: ViewState, eState?: unknown): Promise<void> {
+      return original.call(this, active ? controller.redirect(this, viewState) : viewState, eState);
+    };
+    prototype.setViewState = wrapper;
+    this.register(() => {
+      active = false;
+      if (prototype.setViewState === wrapper) prototype.setViewState = original;
+    });
   }
 
   /**

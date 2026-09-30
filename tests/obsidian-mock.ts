@@ -3,6 +3,8 @@ export { default as moment } from "moment";
 // Obsidian ships declarations only; these stand-ins exercise vault writes in Node.
 export class TFile { path = ""; }
 export class TFolder {}
+/** Task mode wraps setViewState on the prototype, so the prototype must exist. */
+export class WorkspaceLeaf { async setViewState(_viewState: unknown, _eState?: unknown): Promise<void> {} }
 export const normalizePath = (path: string): string => path;
 export const getAllTags = (cache: { tags?: Array<{ tag: string }>; frontmatter?: { tags?: string[] } }): string[] => [
   ...(cache.tags ?? []).map((entry) => entry.tag),

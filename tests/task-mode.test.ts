@@ -145,3 +145,23 @@ it("updates open tag views when their linked tag name changes", async () => {
   tags.set("Tags/work.md", "Tags/work"); await controller.sync();
   expect(leaf.view.getState()).toMatchObject({ mode: "tags", tag: "Tags/work", pagePath: "Tags/work.md" });
 });
+
+describe("opening a project's note with task mode on", () => {
+  it("opens it straight as its task view, keeping how it was opened and the note's own state", async () => {
+    const { controller, tags, setEnabled } = await setup();
+    const leaf = {} as WorkspaceLeaf;
+    const opening = { type: "markdown", state: { file: "Project.md", mode: "source" }, active: true, popstate: true };
+    // Task mode off: the note opens as asked.
+    expect(controller.redirect(leaf, opening)).toBe(opening);
+    setEnabled(true);
+    expect(controller.redirect(leaf, opening)).toEqual({ type: TASK_MAIN_VIEW, active: true, popstate: true,
+      state: { mode: "all", pagePath: "Project.md", markdownState: { file: "Project.md", mode: "source" } } });
+    tags.set("Tags/Home.md", "home");
+    expect(controller.redirect(leaf, { type: "markdown", state: { file: "Tags/Home.md" } })).toMatchObject({ type: TASK_MAIN_VIEW, state: { mode: "tags", tag: "home", pagePath: "Tags/Home.md" } });
+    // Ordinary notes and other views open as asked.
+    const note = { type: "markdown", state: { file: "Notes.md" } };
+    expect(controller.redirect(leaf, note)).toBe(note);
+    const graph = { type: "graph", state: {} };
+    expect(controller.redirect(leaf, graph)).toBe(graph);
+  });
+});

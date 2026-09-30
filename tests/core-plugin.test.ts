@@ -46,12 +46,14 @@ vi.mock("obsidian", async importOriginal => {
 });
 vi.mock("../src/note-token-editor", () => ({ noteTokenEditor: vi.fn() }));
 
-import { Setting, TFile, TFolder } from "obsidian";
+import { Setting, TFile, TFolder, WorkspaceLeaf } from "obsidian";
 import TaskManagerPlugin from "../src/main";
 import * as parser from "../src/parser";
 import { TaskManagerSettingTab } from "../src/settings";
 import { TASK_MAIN_VIEW } from "../src/task-view";
 import { FakeEvents, flush } from "./core-events";
+
+const originalSetViewState = WorkspaceLeaf.prototype.setViewState;
 
 interface FakeLeaf {
   type: string;
@@ -153,10 +155,13 @@ describe("plugin lifecycle", () => {
     env.release();
     await flush();
     expect(controller(plugin)).toBeDefined();
+    // Project notes open straight as task views: every tab's view change passes through task mode until unload.
+    expect(WorkspaceLeaf.prototype.setViewState).not.toBe(originalSetViewState);
     expect(env.vault.listenerCount()).toBe(6);
     expect(env.metadataCache.listenerCount()).toBe(2);
     expect(env.workspace.listenerCount()).toBe(3);
     plugin.unload();
+    expect(WorkspaceLeaf.prototype.setViewState).toBe(originalSetViewState);
     expect(env.vault.listenerCount()).toBe(0);
     expect(env.metadataCache.listenerCount()).toBe(0);
     expect(env.workspace.listenerCount()).toBe(0);
