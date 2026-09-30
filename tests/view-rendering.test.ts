@@ -895,20 +895,18 @@ describe("recurring tasks in the Things style", () => {
 });
 
 describe("row marks", () => {
-  it("marks a task's subtasks only while they are not listed as rows, and never on a board", async () => {
-    const { view, content, plugin } = await setup([["A.md", "- [ ] Plan\n  - [ ] Step\n  - Notes"]]);
+  it("marks subtasks, notes or both after the title (subtasks only while not listed as rows), never on a board", async () => {
+    const { view, content, plugin } = await setup([["A.md", "- [ ] Plan\n  - [ ] Step\n  - Notes\n- [ ] Pack\n  - [ ] Bag\n- [ ] Read\n  - Chapter 3"]]);
     plugin.settings.style = "things";
     const marks = async (showSubtasks: boolean, layout: string) => {
       plugin.settings.showSubtasks = showSubtasks;
       await view.setState({ mode: "all", layout } as never);
-      const row = rows(content()).find(item => item.textContent!.includes("Plan"))!;
-      return row.querySelector(".tm-things-checklist") !== null;
+      return ["Plan", "Pack", "Read"].map(title => rows(content()).find(item => item.querySelector(".tm-task-title")?.textContent === title)
+        ?.querySelector(".tm-things-checklist")?.getAttribute("aria-label") ?? null);
     };
-    expect(await marks(false, "list")).toBe(true);
-    expect(await marks(true, "list")).toBe(false);
-    expect(await marks(false, "kanban")).toBe(false);
-    // Notes never get a mark, anywhere.
-    expect(content().querySelector(".tm-description-indicator")).toBeNull();
+    expect(await marks(false, "list")).toEqual(["Has subtasks and notes", "Has subtasks", "Has notes"]);
+    expect(await marks(true, "list")).toEqual(["Has notes", null, "Has notes"]);
+    expect(await marks(false, "kanban")).toEqual([null, null, null]);
   });
 });
 

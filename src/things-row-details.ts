@@ -65,12 +65,18 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
         editScheduled(star);
     }
 
-    // After the title: a checklist mark for subtasks (right beside it), then tags. (A recurring task's checkbox is
-    // its repeat icon, so the line has no repeat mark.)
-    if (task.childIds.length && options.subtaskMark !== false) {
-        const checklist = parts.inline.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": "Has subtasks", title: `${task.childIds.length} subtask${task.childIds.length === 1 ? "" : "s"}` } });
-        setIcon(checklist, "list-checks");
-        Array.from(parts.inline.children).find(child => child.classList.contains("tm-task-title"))?.after(checklist);
+    // After the title: a mark for what the task holds (right beside it), then tags: list-checks for subtasks,
+    // layout-list for notes, list-todo for both. (A recurring task's checkbox is its repeat icon, so the line has no
+    // repeat mark.)
+    const subtasks = options.subtaskMark !== false ? task.childIds.length : 0;
+    const notes = Boolean(task.description?.trim());
+    if (subtasks || notes) {
+        const count = `${subtasks} subtask${subtasks === 1 ? "" : "s"}`;
+        const [icon, label, title] = subtasks && notes ? ["list-todo", "Has subtasks and notes", `${count} and notes`]
+            : subtasks ? ["list-checks", "Has subtasks", count] : ["layout-list", "Has notes", "Notes"];
+        const mark = parts.inline.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": label, title } });
+        setIcon(mark, icon);
+        Array.from(parts.inline.children).find(child => child.classList.contains("tm-task-title"))?.after(mark);
     }
     if (show("tags") && !byTag) for (const tag of options.tags) {
         // A long tag may shrink to a few letters when the line is full; a short one is already that small.

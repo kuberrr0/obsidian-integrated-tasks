@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
+import { setIcon } from "obsidian";
 import { installObsidianDom } from "./helpers/obsidian-dom";
 import { renderThingsProjectDetails, renderThingsTaskDetails, thingsDateLabel, thingsDeadlineLabel } from "../src/things-row-details";
 import { scanTasks } from "../src/parser";
@@ -69,6 +70,21 @@ describe("Things task row", () => {
       return inline.querySelector(".tm-things-checklist") !== null;
     };
     expect([render(), render(true), render(false)]).toEqual([true, true, false]);
+  });
+
+  it("marks subtasks with list-checks, notes with layout-list, and both with list-todo", () => {
+    const icon = (markdown: string) => {
+      const [task] = scanTasks("Note.md", markdown, now);
+      const inline = document.createElement("div");
+      vi.mocked(setIcon).mockClear();
+      renderThingsTaskDetails({ lead: document.createElement("span"), inline, secondary: document.createElement("div") }, task, { now, grouping: "none", dateFormat: "MMM D, YYYY", tags: [], edit: vi.fn(), openSource: vi.fn() });
+      const mark = inline.querySelector(".tm-things-checklist");
+      return mark && vi.mocked(setIcon).mock.calls.find(([element]) => element === mark)?.[1];
+    };
+    expect(icon("- [ ] Plan\n  - [ ] Step")).toBe("list-checks");
+    expect(icon("- [ ] Plan\n  - Notes")).toBe("layout-list");
+    expect(icon("- [ ] Plan\n  - [ ] Step\n  - Notes")).toBe("list-todo");
+    expect(icon("- [ ] Plan")).toBeNull();
   });
 
   it("lets only a tag longer than a few letters shrink when the line is full", () => {
