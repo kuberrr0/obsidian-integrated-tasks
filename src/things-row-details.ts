@@ -1,6 +1,5 @@
 import { setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
-import { repeatLabel } from "./parser";
 import { deadlineIsOverdue, editable, taskDayDistance, taskDoneDateLabel, taskTimeDurationLabel, taskTimeLabel, type TaskDetailsOptions } from "./task-row-details";
 import type { ProjectDraft } from "./project-creator";
 import type { Project, Task } from "./types";
@@ -66,17 +65,12 @@ export function renderThingsTaskDetails(parts: ThingsRowParts, task: Task, optio
         editScheduled(star);
     }
 
-    // After the title: a checklist mark for subtasks (right beside it), repeat and tags.
+    // After the title: a checklist mark for subtasks (right beside it), then tags. (A recurring task's checkbox is
+    // its repeat icon, so the line has no repeat mark.)
     if (task.childIds.length && options.subtaskMark !== false) {
         const checklist = parts.inline.createSpan({ cls: "tm-things-checklist", attr: { role: "img", "aria-label": "Has subtasks", title: `${task.childIds.length} subtask${task.childIds.length === 1 ? "" : "s"}` } });
         setIcon(checklist, "list-checks");
         Array.from(parts.inline.children).find(child => child.classList.contains("tm-task-title"))?.after(checklist);
-    }
-    if (task.repeat && show("repeat")) {
-        const label = repeatLabel(task.repeat);
-        const repeat = parts.inline.createSpan({ cls: "tm-things-repeat", attr: { title: `Repeats ${task.repeat}` } });
-        setIcon(repeat, "repeat");
-        editable(repeat, `Edit repeat: ${label}`, "repeat", () => options.edit("repeat"));
     }
     if (show("tags") && !byTag) for (const tag of options.tags) {
         // A long tag may shrink to a few letters when the line is full; a short one is already that small.

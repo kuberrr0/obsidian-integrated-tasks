@@ -3,7 +3,7 @@ import { renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { editable, renderTaskDetails } from "./task-row-details";
 import { renderThingsProjectDetails, renderThingsTaskDetails } from "./things-row-details";
-import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardProperties, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
+import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardProperties, renderThingsTaskCard, repeatIcon, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { renderDashboard } from "./dashboard-view";
 import { renderTodaySummary, todaySummary } from "./today-summary";
@@ -1766,8 +1766,12 @@ export class TaskMainView extends ItemView {
     const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
     this.bindSelection(row, task);
-    const checkboxTarget = row.createEl("label", { cls: "tm-checkbox-target" });
+    const things = this.plugin.settings.style === "things";
+    // In the Things style a recurring task's checkbox is its repeat icon (the checkbox stays, unseen, beneath it).
+    const repeating = things && isRepeatingTask(this.app, task);
+    const checkboxTarget = row.createEl("label", { cls: `tm-checkbox-target${repeating ? ` tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` : ""}` });
     const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "checkbox" } });
+    if (repeating) repeatIcon(checkboxTarget);
     // A cancelled task shows checked, so clicking it reopens it (to do).
     checkbox.checked = task.completed;
     // Not `disabled`: disabling the focused checkbox would drop keyboard focus before the re-render restores it.
@@ -1793,7 +1797,6 @@ export class TaskMainView extends ItemView {
       row.addClass("has-project-color");
       row.style.setProperty("--tm-project-color", color);
     }
-    const things = this.plugin.settings.style === "things";
     // Things board cards read like an open task card; list rows are one line.
     const board = things && this.layout === "kanban";
     if (board) row.addClass("tm-things-board-card");
@@ -1802,7 +1805,8 @@ export class TaskMainView extends ItemView {
     title.addEventListener("click", () => this.editTask(task));
     try {
       // Routine-note repeats get an icon; inline `every …` repeats show a Repeat pill in the details instead.
-      if (recurringFile(this.app, task)) {
+      // (In the Things style the repeat icon is the task's checkbox.)
+      if (!things && recurringFile(this.app, task)) {
         const icon = primary.createSpan({ cls: "tm-task-recurring", attr: { role: "img", "aria-label": "Recurring task", title: "Recurring task" } });
         setIcon(icon, "repeat-2");
       }
@@ -1981,7 +1985,7 @@ export class TaskMainView extends ItemView {
     const focus = this.cardFocus;
     this.cardFocus = undefined;
     renderThingsTaskCard(list, {
-      task, depth, draft: expanded, tags: this.rowTags(task), focus, dateFormat: this.plugin.dateFormat(),
+      task, depth, draft: expanded, tags: this.rowTags(task), focus, dateFormat: this.plugin.dateFormat(), repeating: isRepeatingTask(this.app, task),
       childDetails: child => ({
         grouping: "none", dateFormat: this.plugin.dateFormat(), show: property => property !== "defer", tags: this.rowTags(child),
         todayMarker: this.state.mode !== "today", edit: property => void this.editFromCard(child.id, property), openSource: () => {},

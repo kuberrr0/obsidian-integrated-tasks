@@ -872,6 +872,28 @@ describe("opening a card on a phone", () => {
   });
 });
 
+describe("recurring tasks in the Things style", () => {
+  it("shows the repeat icon as the checkbox, toggling the task, with no repeat mark in the line", async () => {
+    const { view, content, plugin, store, index } = await setup([["A.md", "- [ ] Water every week p2\n- [ ] Call"]]);
+    plugin.settings.style = "things";
+    await view.setState({ mode: "all" });
+    const [water, call] = rows(content());
+    const target = water.querySelector<HTMLElement>(".tm-checkbox-target")!;
+    expect(target.classList.contains("tm-repeat-target")).toBe(true);
+    expect(target.classList.contains("is-p2")).toBe(true);
+    expect(target.querySelector(".tm-repeat-icon")).not.toBeNull();
+    expect(water.querySelector(".tm-things-repeat, .tm-task-recurring")).toBeNull();
+    const checkbox = target.querySelector<HTMLInputElement>("input.tm-task-checkbox")!;
+    checkbox.click();
+    expect(store.toggle).toHaveBeenCalledWith(index.allTasks().find(task => task.title === "Water"), true);
+    // Other tasks keep the checkbox; so does a recurring task in the Griply style.
+    expect(call.querySelector(".tm-repeat-target")).toBeNull();
+    plugin.settings.style = "griply";
+    await view.setState({ mode: "all" });
+    expect(rows(content())[0].querySelector(".tm-repeat-target")).toBeNull();
+  });
+});
+
 describe("row marks", () => {
   it("marks a task's subtasks only while they are not listed as rows, and never on a board", async () => {
     const { view, content, plugin } = await setup([["A.md", "- [ ] Plan\n  - [ ] Step\n  - Notes"]]);

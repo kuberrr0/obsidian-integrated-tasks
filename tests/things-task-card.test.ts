@@ -333,3 +333,15 @@ describe("#tag tags in the card title", () => {
     expect(Array.from(element.querySelectorAll(".tm-things-card-tags .tm-things-card-tag:not(.tm-things-add-tag)")).map(tag => tag.textContent)).toEqual(["family"]);
   });
 });
+
+describe("a recurring task's card", () => {
+  it("shows the repeat icon as the checkbox, which still toggles the task", () => {
+    const { element, options, task } = card("- [ ] Water every week p1", { repeating: true });
+    const target = element.querySelector<HTMLElement>(".tm-things-card-head > .tm-repeat-target")!;
+    expect(target.classList.contains("is-p1")).toBe(true);
+    expect(target.querySelector(".tm-repeat-icon")).not.toBeNull();
+    target.querySelector<HTMLInputElement>("input.tm-task-checkbox")!.click();
+    expect(options.toggle).toHaveBeenCalledWith(task, true);
+    expect(card("- [ ] Call").element.querySelector(".tm-repeat-target")).toBeNull();
+  });
+});

@@ -258,7 +258,7 @@ Change a status by pressing **S** on selected tasks (or **C** to complete them),
 
 In task views, in-progress checkboxes are half filled, waiting ones are dashed with a dot, and cancelled tasks are muted and struck through. Notes show the same marks, unless your theme styles these checkboxes itself.
 
-Cancelled tasks are hidden with completed ones and count toward neither side of a project's progress. In task views, clicking the checkbox of an in-progress or waiting task completes it, and clicking a cancelled task's checkbox reopens it. Completing a repeating task from any status advances it to its next occurrence as to do; marking it as cancelled skips that occurrence.
+Cancelled tasks are hidden with completed ones and count toward neither side of a project's progress. In task views, clicking the checkbox of an in-progress or waiting task completes it, and clicking a cancelled task's checkbox reopens it. Completing a repeating task from any status advances it to its next occurrence as to do; marking it as cancelled skips that occurrence. In the Things style, a repeating task shows a repeat icon in place of its checkbox; click it to complete the task, as you would the checkbox.
 
 In a note, a click on an in-progress or waiting checkbox is usually handled by Obsidian itself, which resets it to `[ ]` instead of completing it (repeating tasks are completed as usual). To complete it, type `x` in the checkbox or use a task view.
 

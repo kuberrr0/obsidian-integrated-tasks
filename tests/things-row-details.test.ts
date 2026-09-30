@@ -49,10 +49,10 @@ describe("Things task row", () => {
     expect(secondary.querySelector(".tm-things-trailing")!.textContent).toBe("Oct 8, 10:00 AM11 days left");
   });
 
-  it("puts repeat and tags after the title, then the date with its time and the deadline, as text, at the end", () => {
+  it("puts tags after the title (no repeat mark), then the date with its time and the deadline, as text, at the end", () => {
     const { lead, inline } = row("- [ ] Plan 2026-10-08 10:00 30m {2026-09-30} every week #[[Errand]] #[[Office]]");
     expect(lead.childElementCount).toBe(0);
-    expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag is-long", "tm-things-tag is-long", "tm-things-trailing"]);
+    expect(classes(inline)).toEqual(["tm-things-tag is-long", "tm-things-tag is-long", "tm-things-trailing"]);
     const trailing = inline.querySelector<HTMLElement>(".tm-things-trailing")!;
     expect(Array.from(trailing.children).map(child => [child.className, child.textContent])).toEqual([
       ["tm-things-date tm-things-when", "Oct 8, 10:00-10:30 AM"], ["tm-things-deadline", "11 days left"]
@@ -114,7 +114,7 @@ describe("Things task row", () => {
     const line = "- [ ] Plan 2026-10-08 10:00 {2026-09-30} every week #[[Errand]]";
     for (const grouping of ["date", "scheduledDate", "deadline", "scheduledTime", "repeat", "priority"] as const) {
       const { inline } = row(line, { grouping, source: "Work.md" });
-      expect(classes(inline)).toEqual(["tm-things-repeat", "tm-things-tag is-long", "tm-things-trailing"]);
+      expect(classes(inline)).toEqual(["tm-things-tag is-long", "tm-things-trailing"]);
       expect(inline.querySelectorAll(".tm-things-trailing > *")).toHaveLength(2);
     }
     expect(row(line, { grouping: "tags" }).inline.querySelector(".tm-things-tag")).toBeNull();

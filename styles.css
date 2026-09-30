@@ -1799,8 +1799,18 @@ body.is-mobile .tm-options-panel { position: fixed; top: calc(8px + env(safe-are
 .tm-things-date.tm-things-when.is-overdue { color: var(--text-error); }
 .tm-things-today { display: inline-flex; align-items: center; color: var(--color-yellow); cursor: pointer; }
 .tm-things-today svg { width: 13px; height: 13px; fill: currentColor; }
-.tm-things-repeat { display: inline-flex; align-items: center; color: var(--text-faint); cursor: pointer; }
-.tm-things-repeat svg { width: 12px; height: 12px; }
+/* A recurring task's checkbox is its repeat icon: the checkbox covers it, unseen, so clicks, keys and screen readers
+   still reach it; the icon takes the priority's colour, and fades once the task is done. */
+.tm-repeat-target { position: relative; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.tm-repeat-target > input.tm-task-checkbox { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.tm-repeat-icon { display: inline-flex; color: var(--text-muted); pointer-events: none; }
+.tm-repeat-icon svg { width: 15px; height: 15px; }
+.tm-repeat-target.is-p1 .tm-repeat-icon { color: var(--text-error); }
+.tm-repeat-target.is-p2 .tm-repeat-icon { color: var(--color-orange); }
+.tm-repeat-target.is-p3 .tm-repeat-icon { color: var(--color-blue); }
+.tm-repeat-target:hover .tm-repeat-icon { color: var(--text-normal); }
+.tm-repeat-target > input:checked + .tm-repeat-icon { color: var(--text-faint); }
+.tm-repeat-target > input:focus-visible + .tm-repeat-icon { border-radius: 3px; box-shadow: 0 0 0 2px var(--background-modifier-border-focus); }
 .tm-things-tag {
   display: inline-flex;
   align-items: center;
@@ -1841,7 +1851,7 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
 .tm-things-deadline .tm-task-detail-icon svg { fill: currentColor; }
 .tm-things-secondary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .tm-things-source { overflow: hidden; color: var(--text-muted); font-size: var(--font-ui-smaller); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-:is(.tm-things-date, .tm-things-tag, .tm-things-source, .tm-things-repeat):not(.tm-things-done, .is-overdue, .tm-things-range):hover,
+:is(.tm-things-date, .tm-things-tag, .tm-things-source):not(.tm-things-done, .is-overdue, .tm-things-range):hover,
 .tm-things-range [role="button"]:hover,
 .tm-things-deadline:not(.is-urgent):hover { color: var(--text-normal); }
 .tm-task-row.is-completed :is(.tm-things-lead, .tm-things-tag, .tm-things-deadline, .tm-things-secondary) { opacity: 0.7; }

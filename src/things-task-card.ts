@@ -20,6 +20,8 @@ export interface TaskCardDraft {
 
 export interface TaskCardOptions {
     task: Task;
+    /** A recurring task, whose checkbox is its repeat icon. */
+    repeating?: boolean;
     /** How a subtask's properties render in the checklist, as on its own row. */
     childDetails?: (child: Task) => ThingsDetailsOptions;
     /** Subtasks, shown as the card's checklist. */
@@ -85,9 +87,12 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     card.style.setProperty("--tm-depth", String(options.depth));
 
     const head = card.createDiv({ cls: "tm-things-card-head" });
-    const checkbox = head.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "card-checkbox" } });
+    // A recurring task's checkbox is its repeat icon, as in its row.
+    const checkboxTarget = options.repeating ? head.createEl("label", { cls: `tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` }) : head;
+    const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "card-checkbox" } });
     checkbox.checked = task.completed;
     checkbox.addEventListener("change", () => options.toggle(task, checkbox.checked));
+    if (options.repeating) repeatIcon(checkboxTarget);
     // A text area so long titles wrap, as in Things; it stays one logical line. Behind it, the same text marks
     // what saving reads as a property (dates, p1, #[[tags]]…); the text area's own text is transparent.
     const titleBox = head.createDiv({ cls: "tm-things-card-title-box" });
@@ -398,6 +403,14 @@ export function paintTokens(target: HTMLElement, text: string, ranges: InputToke
     }
     // A trailing space keeps a final line break's height, as the text area has it.
     target.appendText(`${text.slice(at)} `);
+}
+
+/**
+ * The repeat icon a recurring task shows in place of its checkbox (Things style), after the checkbox in `target`:
+ * the checkbox, unseen, still takes clicks, keys and screen readers, and the icon shows its state.
+ */
+export function repeatIcon(target: HTMLElement): void {
+    setIcon(target.createSpan({ cls: "tm-repeat-icon", attr: { "aria-hidden": "true" } }), "repeat");
 }
 
 /** How long a card takes to open or close. */
