@@ -277,6 +277,7 @@ export default class TaskManagerPlugin extends Plugin {
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
     this.settings.showUndoNotices = this.settings.showUndoNotices === true;
     this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
+    this.settings.showFiles = this.settings.showFiles === true;
     // Things is the default; only an explicit Griply choice keeps Griply.
     this.settings.style = this.settings.style === "griply" ? "griply" : "things";
     this.settings.completionDates = this.settings.completionDates === true;

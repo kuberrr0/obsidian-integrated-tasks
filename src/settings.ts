@@ -188,6 +188,16 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       },
       {
         section: "Appearance",
+        name: "Show files in sidebar",
+        desc: "List the vault's files and folders in the task sidebar, below projects and tags, so you can open notes without switching to the file explorer.",
+        render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showFiles).onChange(async value => {
+          this.plugin.settings.showFiles = value;
+          await this.plugin.saveSettings();
+          this.plugin.refreshNavigation();
+        })); }
+      },
+      {
+        section: "Appearance",
         name: "Show subtasks in task views",
         desc: "List subtasks as their own rows under their task. When off, they appear in the task's card, and a subtask shows on its own only in views its task is not in.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showSubtasks).onChange(async value => {

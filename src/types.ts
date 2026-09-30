@@ -142,6 +142,8 @@ export interface TaskManagerSettings {
   newTaskPosition: "top" | "bottom";
   showUndoNotices: boolean;
   density: "comfortable" | "compact";
+  /** List the vault's files and folders in the task sidebar, below its lists. */
+  showFiles: boolean;
   /** How task lists and task properties look, after the app each style is modelled on. */
   style: "griply" | "things";
   /** Stamp tasks with the date they were completed. */
@@ -168,6 +170,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   newTaskPosition: "top",
   showUndoNotices: false,
   density: "comfortable",
+  showFiles: false,
   style: "things",
   completionDates: false,
   weeklyReview: { week: "", reviewed: [] },

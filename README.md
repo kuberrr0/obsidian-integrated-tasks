@@ -300,6 +300,8 @@ Turn on **Record completion dates** in the settings to stamp each task with the 
 
 In the plugin settings, you can choose your inbox, decide whether new tasks go at the top or bottom, and select which heading level organizes project sections. Show subtasks as their own rows, and choose **Comfortable** or **Compact** density to fit more tasks on screen.
 
+Turn on **Show files in sidebar** to keep your vault's files and folders in the task sidebar, below projects and tags, so one sidebar does both jobs. Click a note to open it (hold Ctrl or Cmd for a new tab), and click a folder to open or close it; the sidebar remembers which folders are open. Right-click a file or folder to open it in a new tab or to the right, make a note or folder inside it, rename it in place, or delete it. Other plugins' file menu items appear there too.
+
 To keep some checklists out of the plugin, list them under **Ignored folders and notes**, such as `Templates/` or `Journal/Private.md`: a folder covers everything inside it. Under **Ignored tags**, list tags such as `template` or `someday`: notes with one of them in their properties are left out entirely, and single tasks tagged with one (as `#someday` or `#[[someday]]`) are hidden along with their subtasks. Ignoring a tag also ignores its nested tags, such as `archive/2025`. Ignored tasks stay in your notes; they just don't appear in task views, query blocks, counts, or the weekly review, and an ignored note isn't treated as a project. Changes apply straight away.
 
 Choose your preferred date format and whether dates link to notes. These choices apply to new edits; use **Update dates** to apply them to existing tasks and recurring-task history.
