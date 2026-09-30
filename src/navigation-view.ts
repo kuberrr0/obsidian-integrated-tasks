@@ -3,6 +3,7 @@ import type TaskManagerPlugin from "./main";
 import type { FileSortOrder, TaskViewMode } from "./types";
 import { renderProjectProgress } from "./project-progress";
 import { projectHierarchy } from "./project-hierarchy";
+import { activeTaskDrag, highlightDropTarget, markDropTarget, TASK_DRAG_TYPE, type SidebarDrop } from "./sidebar-drop";
 
 export const TASK_NAV_VIEW = "task-manager-navigation";
 
@@ -214,6 +215,7 @@ export class TaskNavigationView extends ItemView {
       for (const entry of group) {
         const count = entry.count ? this.plugin.index.query({ mode: entry.mode, showCompleted: false }).length : undefined;
         const row = item(lists, `mode:${entry.mode}`, entry.label, listActive(entry.mode), () => this.plugin.openTaskView({ mode: entry.mode }), entry.icon, entry.color, count);
+        if (entry.mode === "inbox" || entry.mode === "today") this.dropTarget(row, { kind: entry.mode });
         // Smart lists, being saved views of all tasks, sit under All Tasks.
         if (entry.mode !== "all" || !folder(row, "smartLists", "smart lists")) continue;
         const children = lists.createDiv({ cls: "tree-item-children nav-folder-children tm-nav-children" });
@@ -240,6 +242,7 @@ export class TaskNavigationView extends ItemView {
           if (hiddenBelow !== undefined && depth > hiddenBelow) return;
           hiddenBelow = undefined;
           const row = item(children, `project:${project.path}`, project.name, this.activeProject === project.path, () => this.plugin.openProject(project.path));
+          this.dropTarget(row, { kind: "project", path: project.path });
           row.style.setProperty("--tm-nav-depth", String(depth));
           // Its progress, as a pie in its colour, stands where a list's icon does.
           const icon = row.createDiv({ cls: "tm-nav-icon tm-nav-progress", attr: { "aria-hidden": "true" } });
@@ -255,7 +258,10 @@ export class TaskNavigationView extends ItemView {
         if (!projects.length) children.createDiv({ cls: "tm-nav-empty", text: "No projects yet" });
       } else {
         const tags = this.plugin.index.tagSummaries();
-        for (const tag of tags) item(children, `tag:${tag.name}`, tag.name, this.activeTag === tag.name, () => this.plugin.openTag(tag.name), "hash", "muted", tag.openTasks);
+        for (const tag of tags) {
+          const row = item(children, `tag:${tag.name}`, tag.name, this.activeTag === tag.name, () => this.plugin.openTag(tag.name), "hash", "muted", tag.openTasks);
+          this.dropTarget(row, { kind: "tag", tag: tag.name });
+        }
         if (!tags.length) children.createDiv({ cls: "tm-nav-empty", text: "No tags yet" });
       }
     }
@@ -286,6 +292,29 @@ export class TaskNavigationView extends ItemView {
       const target = Array.from(container.querySelectorAll<HTMLElement>("[data-tm-nav-key]")).find(element => element.getAttribute("data-tm-nav-key") === focusKey);
       target?.focus({ preventScroll: true });
     }
+  }
+
+  /**
+   * Lets tasks dragged in a task view drop on `row`. A list's drag follows the pointer and finds the row by its mark;
+   * a calendar card drags natively, and the row takes that drop here.
+   */
+  private dropTarget(row: HTMLElement, drop: SidebarDrop): void {
+    markDropTarget(row, drop);
+    const dragging = (event: DragEvent): boolean => Boolean(activeTaskDrag() && event.dataTransfer?.types.includes(TASK_DRAG_TYPE));
+    row.addEventListener("dragover", event => {
+      if (!dragging(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      highlightDropTarget(row, true);
+    });
+    row.addEventListener("dragleave", event => { if (!row.contains(event.relatedTarget as Node | null)) highlightDropTarget(row, false); });
+    row.addEventListener("drop", event => {
+      highlightDropTarget(row, false);
+      const drag = activeTaskDrag();
+      if (!drag || !dragging(event)) return;
+      event.preventDefault();
+      void drag.drop(drop);
+    });
   }
 
   /** A chevron at the end of `row` that folds what is under it; `toggle` flips it, and the list is redrawn. */

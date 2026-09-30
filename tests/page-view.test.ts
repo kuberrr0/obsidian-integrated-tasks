@@ -25,6 +25,8 @@ import { TaskMainView } from "../src/task-view";
 import { scanTasks } from "../src/parser";
 import { setTagFormat } from "../src/task-tags";
 import type { Task, TaskViewState } from "../src/types";
+import { activeTaskDrag, type SidebarDrop } from "../src/sidebar-drop";
+import { todayIso } from "../src/date";
 
 describe("page task view", () => {
   it.each(["navigation", "tasks"])("waits for %s reveal and propagates reveal failures", async (target) => {
@@ -288,6 +290,37 @@ it("drags the selected set together, keeping it selected, and drags an unselecte
   await internals.dropListTask(tasks[1], undefined, tasks[2], "before");
   expect(bulkDrop).toHaveBeenLastCalledWith([tasks[1]], undefined, tasks[2], "before");
   expect(view.getSelectedTasks()).toEqual([tasks[0], tasks[2]]);
+});
+
+it("drops dragged tasks on the sidebar's lists: Inbox or a project moves them, Today schedules them, a tag is added", async () => {
+  const { view, internals, rows, tasks, plugin } = selectionView();
+  const bulkUpdate = vi.fn().mockResolvedValue([]);
+  Object.assign(plugin.store, { bulkUpdate });
+  Object.assign(plugin.settings, { inboxPath: "Inbox.md" });
+  const drop = (view as unknown as { dropOnSidebar(tasks: Task[], target: SidebarDrop): Promise<void> }).dropOnSidebar.bind(view);
+  const tagged = { ...tasks[1], tags: ["work"] };
+  await drop([tasks[0], tagged], { kind: "tag", tag: "work" });
+  expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0]], expect.any(Function));
+  expect((bulkUpdate.mock.lastCall![1] as (task: Task) => Partial<Task>)({ ...tasks[0], tags: ["home"] })).toEqual({ tags: ["home", "work"] });
+  await drop([tasks[0]], { kind: "today" });
+  expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0]], { scheduledDate: todayIso() });
+  await drop([tasks[0], tasks[1]], { kind: "project", path: "Home.md" });
+  expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0], tasks[1]], { destination: "Home.md" });
+  await drop([tasks[0]], { kind: "inbox" });
+  expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0]], { destination: "Inbox.md" });
+  // Nothing to change writes nothing: the task is already in the project.
+  bulkUpdate.mockClear();
+  await drop([tasks[0]], { kind: "project", path: "Work.md" });
+  expect(bulkUpdate).not.toHaveBeenCalled();
+  // Starting a drag of the selection hands the sidebar the selected tasks until the pointer is let go.
+  const listeners = new Map<string, () => void>();
+  const doc = { addEventListener: (type: string, listener: () => void) => listeners.set(type, listener), removeEventListener: (type: string) => listeners.delete(type) };
+  for (const { row } of rows) Object.assign(row, { ownerDocument: doc });
+  rows[0].contextmenu(); rows[2].contextmenu(undefined, { metaKey: true });
+  internals.prepareDrag(tasks[2]);
+  expect(activeTaskDrag()?.tasks).toEqual([tasks[0], tasks[2]]);
+  listeners.get("pointerup")!();
+  expect(activeTaskDrag()).toBeUndefined();
 });
 
 it("selects moved tasks again by their note and title, the nearest one when titles repeat", () => {

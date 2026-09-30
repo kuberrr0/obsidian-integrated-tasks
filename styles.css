@@ -82,6 +82,10 @@
 /* Hover and the open item look as the file explorer's do, in the theme's own colours. */
 .tm-navigation .tm-nav-item:hover { background: var(--nav-item-background-hover, var(--background-modifier-hover)); }
 .tm-navigation .tm-nav-item.is-active { background: var(--nav-item-background-active, var(--background-modifier-hover)); color: var(--nav-item-color-active, var(--text-normal)); }
+/* A task dragged over a list that takes it, as in Things: the list lights up in the accent colour. */
+.tm-navigation .tm-nav-item.is-drop-target { background: var(--interactive-accent); color: var(--text-on-accent); }
+.tm-navigation .tm-nav-item.is-drop-target .tm-nav-icon, .tm-navigation .tm-nav-item.is-drop-target .tm-nav-count,
+.tm-navigation .tm-nav-section > .tm-nav-item.is-drop-target .tm-nav-label { color: var(--text-on-accent); }
 /* A section's heading (and All Tasks, over its smart lists): the chevron that folds it shows on hover (or focus),
    at the right. */
 .tm-navigation .tm-nav-section > .tm-nav-item .tm-nav-label { color: var(--text-muted); }
@@ -721,6 +725,23 @@ button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var
 }
 .tm-main-view .tm-task-row.tm-drag-preview,
 .tm-main-view .tm-task-row.tm-drag-preview * { pointer-events: none; }
+/* Outside the task view, which clips the lifted row, a label with the task's name follows the pointer instead. */
+.tm-main-view .tm-task-row.tm-drag-preview.is-outside { visibility: hidden; }
+.tm-drag-chip {
+  position: fixed;
+  z-index: var(--layer-dragged-item, 10000);
+  max-width: 240px;
+  padding: 4px 10px;
+  overflow: hidden;
+  border-radius: var(--radius-m, 6px);
+  background: var(--background-primary);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 24%), 0 1px 3px rgb(0 0 0 / 18%);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
 /* On touch screens a long press lifts the row, ready to drag; it holds no text selection or callout. */
 .tm-main-view .tm-task-item.is-drag-armed { background: var(--background-modifier-hover); box-shadow: 0 4px 14px rgb(0 0 0 / 22%); }
 body.is-mobile .tm-main-view .tm-task-item { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }

@@ -1,6 +1,8 @@
 import { Platform, setIcon } from "obsidian";
 import type { Task } from "./types";
 import { isStructuralGroup, type ListDropGroup, type ListPlacement } from "./list-drag";
+import { taskTitleLabel } from "./task-title";
+import { activeTaskDrag, dropTargetAt, highlightDropTarget, TASK_DRAG_TYPE, type SidebarDrop, type TaskDrag } from "./sidebar-drop";
 
 interface DropIntent {
   group?: ListDropGroup;
@@ -290,7 +292,11 @@ export class ListDragController {
       this.taskId = task.id;
       this.original = task;
       event.stopPropagation();
-      if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); }
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", task.id);
+        event.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
+      }
       row.addClass("is-dragging");
     });
     row.addEventListener("dragend", () => { suppressClickUntil = Date.now() + 250; this.taskId = undefined; row.removeClass("is-dragging"); this.clear(); });
@@ -325,6 +331,12 @@ export class ListDragController {
     let preview: HTMLElement | undefined;
     let previewOffset = { x: 0, y: 0 };
     let sourceRect: DOMRect | undefined;
+    // Dropping on a list in the task sidebar: the drag it reads, the list under the pointer, and, once the pointer
+    // leaves the view (which clips the lifted row), a label with the task's name that follows it instead.
+    let sidebar: TaskDrag | undefined;
+    let over: { element: HTMLElement; drop: SidebarDrop } | undefined;
+    let chip: HTMLElement | undefined;
+    let label = taskTitleLabel(task.title);
     const hit = (event: PointerEvent): { element: HTMLElement; target: DropIntent } | undefined => {
       let element = row.ownerDocument.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
       while (element) {
@@ -401,6 +413,8 @@ export class ListDragController {
         // Keep their original target unless this gesture becomes a drag.
         row.setPointerCapture(event.pointerId);
         const moving = this.dragStart(task) || [task];
+        sidebar = activeTaskDrag();
+        label = moving.length > 1 ? `${moving.length} tasks` : taskTitleLabel(task.title);
         const rect = row.getBoundingClientRect();
         sourceRect = rect;
         previewOffset = { x: origin.x - rect.left, y: origin.y - rect.top };
@@ -449,6 +463,23 @@ export class ListDragController {
       this.taskId = task.id;
       this.original = task;
       row.addClass("is-dragging");
+      const side = sidebar ? dropTargetAt(doc, event.clientX, event.clientY) : undefined;
+      if (side?.element !== over?.element) {
+        highlightDropTarget(over?.element, false);
+        over = side;
+        highlightDropTarget(over?.element, true);
+      }
+      const bounds = (row.closest(".tm-main-view") ?? row.parentElement)?.getBoundingClientRect();
+      const outside = Boolean(bounds && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom));
+      if (outside) {
+        chip ??= doc.body.createDiv({ cls: "tm-drag-chip", text: label, attr: { "aria-hidden": "true" } });
+        chip.style.left = `${event.clientX + 12}px`;
+        chip.style.top = `${event.clientY + 8}px`;
+      } else {
+        chip?.remove();
+        chip = undefined;
+      }
+      preview?.toggleClass("is-outside", outside);
       const found = hit(event);
       // The gap marks the drop. Hovering the gap keeps it where it is, except that moving left over
       // the grabbed row's own slot (or where earlier left moves took it) outdents it.
@@ -459,6 +490,11 @@ export class ListDragController {
     const reset = (): void => {
       preview?.remove();
       preview = undefined;
+      chip?.remove();
+      chip = undefined;
+      highlightDropTarget(over?.element, false);
+      over = undefined;
+      sidebar = undefined;
       stopEscape?.();
       cancelPress();
       armed = false;
@@ -473,6 +509,8 @@ export class ListDragController {
     /** No drop: the row flies back and its slot reopens. */
     const flyBack = (): void => {
       stopEscape?.();
+      chip?.remove();
+      chip = undefined;
       this.removeGap(true);
       this.restoreSources(true);
       void glide(sourceRect ?? row.getBoundingClientRect()).then(reset);
@@ -505,6 +543,17 @@ export class ListDragController {
       pointer = undefined;
       if (captured) row.releasePointerCapture(event.pointerId);
       if (!captured) { reset(); return; }
+      // Dropped on a sidebar list: the rows come back at once, and the list's change redraws them.
+      const onSidebar = over && sidebar;
+      if (onSidebar) {
+        const drop = over!.drop;
+        this.removeGap(false);
+        this.restoreSources(false);
+        reset();
+        this.original = undefined;
+        void onSidebar.drop(drop);
+        return;
+      }
       const gap = this.gap;
       if (target?.gap && gap?.isConnected) {
         // Drop: the floating row settles into the gap, then the move is written and the list redraws.

@@ -1,5 +1,6 @@
 import { taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
 import { taskTitleLabel } from "./task-title";
+import { TASK_DRAG_TYPE } from "./sidebar-drop";
 import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
@@ -164,7 +165,11 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         ? Math.max(0, (event.clientY - card.getBoundingClientRect().top) / parent.getBoundingClientRect().height * 1440)
         : 0;
       event.stopPropagation();
-      if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); }
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", task.id);
+        event.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
+      }
     });
     card.addEventListener("dragend", () => { dragged = undefined; root.querySelectorAll(".is-drop-target").forEach(el => el.removeClass("is-drop-target")); });
     return card;

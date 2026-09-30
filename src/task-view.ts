@@ -32,6 +32,7 @@ import { STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, checkboxLabel, statusClass 
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { groupTasks, isDeferred, orderTaskTree, sortTasks, taskMatchesQuery } from "./query";
+import { startTaskDrag, type SidebarDrop } from "./sidebar-drop";
 import type TaskManagerPlugin from "./main";
 import type { OpenEditorState } from "./main";
 import type { TaskFilter, Project, SmartList, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
@@ -1624,8 +1625,29 @@ export class TaskMainView extends ItemView {
 
   /** A selected task drags the whole selection along; returns what moves. */
   private prepareDrag(task: Task): Task[] {
-    this.draggedTasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
-    return this.draggedTasks;
+    const tasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
+    this.draggedTasks = tasks;
+    const doc = this.selectionRows.get(task.id)?.[0]?.ownerDocument;
+    if (doc) startTaskDrag(doc, { tasks, drop: target => this.dropOnSidebar(tasks, target) });
+    return tasks;
+  }
+
+  /** Dragged tasks dropped on a list in the sidebar: Inbox or a project takes them in, Today schedules them for today,
+   * and a tag is added to them. */
+  private async dropOnSidebar(tasks: Task[], target: SidebarDrop): Promise<void> {
+    this.draggedTasks = [];
+    if (target.kind === "today") {
+      const today = todayIso();
+      const changing = tasks.filter(task => task.scheduledDate !== today);
+      if (changing.length) await this.commit(() => this.plugin.store.bulkUpdate(changing, { scheduledDate: today }));
+    } else if (target.kind === "tag") {
+      const changing = tasks.filter(task => !(task.tags ?? []).includes(target.tag));
+      if (changing.length) await this.commit(() => this.plugin.store.bulkUpdate(changing, task => ({ tags: [...task.tags ?? [], target.tag] })));
+    } else {
+      const path = target.kind === "inbox" ? this.plugin.settings.inboxPath : target.path;
+      const moving = tasks.filter(task => task.path !== path);
+      if (moving.length) await this.commit(() => this.plugin.store.bulkUpdate(moving, { destination: path }), "Could not move the task.", { moveTo: path });
+    }
   }
 
   private bindSelection(row: HTMLElement, task: Task): void {
