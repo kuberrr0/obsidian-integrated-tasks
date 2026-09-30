@@ -1,5 +1,13 @@
-import { MarkdownView, TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, TFile, type App, type ViewState, type WorkspaceLeaf } from "obsidian";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
+
+/**
+ * Swap a tab's view in place, as Back and Forward do (Obsidian's internal `popstate` flag): no navigation history is
+ * recorded, so the note's own view never becomes a history entry that swaps again on arrival, and Forward survives.
+ */
+function replaceView(leaf: WorkspaceLeaf, viewState: ViewState): Promise<void> {
+  return leaf.setViewState({ ...viewState, popstate: true } as ViewState);
+}
 
 /** Reconcile every open note without changing focus or reusing another tab. */
 export class TaskModeController {
@@ -46,7 +54,7 @@ export class TaskModeController {
           const tag = this.tagForPath(path);
           const next: Record<string, unknown> = { ...previous, mode: tag ? "tags" : "all", pagePath: path, markdownState };
           if (tag) next.tag = tag; else delete next.tag;
-          await leaf.setViewState({ type: TASK_MAIN_VIEW, state: next });
+          await replaceView(leaf, { type: TASK_MAIN_VIEW, state: next });
         } else if (view instanceof TaskMainView) {
           const state = view.getState();
           // Dashboards have no file path. Accept projectPath as well so tabs
@@ -56,7 +64,7 @@ export class TaskModeController {
           const tag = this.tagForPath(path);
           if (this.enabled() && (tag || this.isProject(path))) {
             if ((tag && (state.mode !== "tags" || state.tag !== tag)) || (!tag && state.mode === "tags")) {
-              await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { ...state, mode: tag ? "tags" : "all", tag } });
+              await replaceView(leaf, { type: TASK_MAIN_VIEW, state: { ...state, mode: tag ? "tags" : "all", tag } });
             }
             continue;
           }
@@ -64,7 +72,7 @@ export class TaskModeController {
           if (!(file instanceof TFile)) continue;
           const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState as Record<string, unknown> : {};
           this.savedViews.set(leaf, { ...state, pagePath: path, projectPath: undefined });
-          await leaf.setViewState({ type: "markdown", state: { ...markdownState, file: file.path } });
+          await replaceView(leaf, { type: "markdown", state: { ...markdownState, file: file.path } });
         }
       }
     }

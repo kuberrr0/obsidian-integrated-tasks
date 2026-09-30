@@ -42,7 +42,7 @@ describe("global task mode", () => {
     const first = add("Project.md"); const second = add("Project2.md"); const ordinary = add("Notes.md");
     setEnabled(true); await controller.sync();
     for (const { leaf, state } of [first, second]) {
-      expect(leaf.setViewState).toHaveBeenCalledExactlyOnceWith({ type: TASK_MAIN_VIEW, state: { mode: "all", pagePath: state.file, markdownState: state } });
+      expect(leaf.setViewState).toHaveBeenCalledExactlyOnceWith({ type: TASK_MAIN_VIEW, state: { mode: "all", pagePath: state.file, markdownState: state }, popstate: true });
     }
     expect(ordinary.leaf.setViewState).not.toHaveBeenCalled();
   });
@@ -50,7 +50,7 @@ describe("global task mode", () => {
     const { controller, add, setEnabled } = await setup();
     const { leaf, state } = add("Project.md");
     setEnabled(true); await controller.sync(); setEnabled(false); await controller.sync();
-    expect(leaf.setViewState).toHaveBeenLastCalledWith({ type: "markdown", state });
+    expect(leaf.setViewState).toHaveBeenLastCalledWith({ type: "markdown", state, popstate: true });
     expect(leaf.view).toBeInstanceOf(MarkdownView);
   });
   it.each(["kanban", "calendar", "list"])("remembers %s layout and calendar position across repeated toggles", async layout => {
