@@ -23,7 +23,7 @@ import { PROJECT_COLORS, projectColorValue, updateProjectDates } from "./project
 import { renderGantt } from "./gantt-view";
 import type { GanttZoom } from "./gantt";
 import { projectHierarchy } from "./project-hierarchy";
-import { kanbanColumns } from "./kanban";
+import { kanbanColumns, type KanbanColumn } from "./kanban";
 import { ListDragController } from "./list-drag-view";
 import { draftForGroup, isStructuralGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
 import { renderCalendar } from "./calendar-view";
@@ -683,15 +683,35 @@ export class TaskMainView extends ItemView {
     }
   }
 
+  /**
+   * The board's columns: its grouping's, or with View default the groups a list of this view shows: a project page's
+   * sections, Today's overdue and today, Upcoming's dates, All Tasks' notes, and elsewhere one column.
+   */
+  private kanbanColumns(tasks: Task[]): KanbanColumn[] {
+    if (this.grouping !== "default") return kanbanColumns(tasks, this.grouping);
+    if (this.taskSourcePath) return kanbanColumns(tasks, "section");
+    if (this.state.mode === "today") {
+      const today = todayIso();
+      return [
+        { title: "Overdue", tasks: tasks.filter(task => (actionDate(task) ?? today) < today), target: { property: "date", value: addDays(today, -1) } },
+        { title: "Today", tasks: tasks.filter(task => actionDate(task) === today), target: { property: "date", value: today } }
+      ];
+    }
+    if (this.state.mode === "upcoming") return kanbanColumns(tasks, "date");
+    if (this.state.mode === "all") return kanbanColumns(tasks, "source");
+    return kanbanColumns(tasks, "none");
+  }
+
   private renderKanban(container: HTMLElement, tasks: Task[]): void {
-    const columns = kanbanColumns(tasks, this.grouping === "default" && this.state.mode === "all" && !this.taskSourcePath ? "source" : this.grouping);
+    const columns = this.kanbanColumns(tasks);
     if (!columns.length) { this.renderEmpty(container); return; }
     const board = container.createDiv({ cls: "tm-kanban", attr: { "aria-label": "Task board", "data-tm-scroll-key": "kanban" } });
     for (const column of columns) {
       const section = board.createEl("section", { cls: "tm-kanban-column", attr: { "data-tm-scroll-key": `kanban:${column.title}` } });
       const header = section.createDiv({ cls: "tm-kanban-column-header" });
-      const title = column.target?.property && ["date", "scheduledDate", "deadline", "defer"].includes(column.target.property) && typeof column.target.value === "string"
-        ? formatDate(column.target.value, this.plugin.dateFormat()) : column.target?.property === "source" ? column.title.replace(/\.md$/i, "") : column.title;
+      // Date columns are keyed by ISO date; show them in the user's format (Overdue and Today keep their names).
+      const title = column.target?.property && ["date", "scheduledDate", "deadline", "defer"].includes(column.target.property) && /^\d{4}-\d{2}-\d{2}$/.test(column.title)
+        ? formatDate(column.title, this.plugin.dateFormat()) : column.target?.property === "source" ? column.title.replace(/\.md$/i, "") : column.title;
       header.createEl("h2", { text: title });
       this.renderGroupAddButton(header, title, column.target);
       if (column.target) { this.listDrag?.group(section, column.target); this.addMoveTarget(title, column.target); }
@@ -1007,7 +1027,6 @@ export class TaskMainView extends ItemView {
   /** What the View default grouping groups this view's tasks by (see renderTaskLayouts and kanbanColumns). */
   private defaultGroupLabel(): string {
     if (this.layout === "calendar") return "None";
-    if (this.layout === "kanban") return this.state.mode === "all" && !this.taskSourcePath ? "Note" : "Section";
     if (this.taskSourcePath) return "Section";
     if (this.state.mode === "today") return "Overdue and today";
     if (this.state.mode === "upcoming") return "Action date";
@@ -1148,8 +1167,11 @@ export class TaskMainView extends ItemView {
     for (const { project, depth } of projectHierarchy(projects)) this.renderProjectRow(list, project, depth);
   }
 
-  /** A project's row, as the Projects list shows it: its progress, name, dates and deadline; a click opens it. */
-  private renderProjectRow(list: HTMLElement, project: Project, depth: number): HTMLElement {
+  /**
+   * A project's row, as the Projects list shows it: its progress, name, dates and deadline; a click opens it. `board`:
+   * a board's card, in a column too narrow for the dates beside the name.
+   */
+  private renderProjectRow(list: HTMLElement, project: Project, depth: number, board = false): HTMLElement {
     const things = this.plugin.settings.style === "things";
     const row = list.createDiv({ cls: `tm-task-row tm-project-row${things ? " tm-things-project-row" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
@@ -1167,7 +1189,8 @@ export class TaskMainView extends ItemView {
     });
     if (lead) {
       const secondary = content.createDiv({ cls: "tm-things-secondary" });
-      renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field), datesBelow: Platform.isMobile });
+      // On phones, and in a board's narrow columns, the dates go below the name, which would otherwise have no room.
+      renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field), datesBelow: Platform.isMobile || board });
       if (!lead.childElementCount) lead.remove();
       if (!secondary.childElementCount) secondary.remove();
       return row;
@@ -1862,7 +1885,6 @@ export class TaskMainView extends ItemView {
   private get metadataGrouping(): TaskGrouping {
     if (this.layout === "calendar") return "none";
     if (this.grouping !== "default") return this.grouping;
-    if (this.layout === "kanban" && !(this.state.mode === "all" && !this.taskSourcePath)) return "section";
     if (this.taskSourcePath) return "section";
     if (this.state.mode === "all") return "source";
     if (this.state.mode === "upcoming") return "date";
@@ -1872,7 +1894,7 @@ export class TaskMainView extends ItemView {
   private renderTaskRow(list: HTMLElement, task: Task, depth: number, target?: ListDropGroup, foldable = false): void {
     // A project shown among the tasks: its progress in place of a checkbox, and a project's actions.
     const project = this.shownProjects.get(task.id);
-    if (project) { this.renderProjectRow(list, project, depth); return; }
+    if (project) { this.renderProjectRow(list, project, depth, this.layout === "kanban"); return; }
     if (this.expanded?.id === task.id && this.plugin.settings.style === "things") { this.renderTaskCard(list, task, depth); return; }
     const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));

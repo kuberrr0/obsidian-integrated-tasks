@@ -758,6 +758,25 @@ describe("the calendar in the Things style", () => {
   });
 });
 
+describe("a board's default grouping", () => {
+  it("follows the view's, as a list does: one column, Overdue and Today, dates, notes", async () => {
+    const plus = (days: number) => { const date = new Date(); date.setDate(date.getDate() + days); return todayIso(date); };
+    const { view, content, plugin } = await setup([
+      [DEFAULT_SETTINGS.inboxPath, "- [ ] Loose"],
+      ["A.md", `- [ ] Late ${plus(-2)}\n- [ ] Now ${plus(0)}\n- [ ] Soon ${plus(3)}`]
+    ]);
+    plugin.settings.showSubtasks = true;
+    const columns = async (mode: string) => {
+      await view.setState({ mode, layout: "kanban", showProjects: false } as never);
+      return Array.from(content().querySelectorAll(".tm-kanban-column-header h2")).map(title => title.textContent);
+    };
+    expect(await columns("inbox")).toEqual(["Tasks"]);
+    expect(await columns("today")).toEqual(["Overdue", "Today"]);
+    expect((await columns("upcoming")).length).toBe(1);
+    expect(await columns("all")).toEqual(expect.arrayContaining(["A"]));
+  });
+});
+
 describe("View options › Projects", () => {
   it("lists the projects a view matches among its tasks by default, with their progress, from a switch", async () => {
     const today = todayIso();
@@ -784,6 +803,21 @@ describe("View options › Projects", () => {
     toggle.click();
     expect(projectRows()).toEqual([]);
     expect((view.getState() as { showProjects?: boolean }).showProjects).toBe(false);
+  });
+});
+
+describe("projects on a board in the Things style", () => {
+  it("put their dates below the name, which a narrow column would otherwise squeeze away", async () => {
+    const today = todayIso();
+    const { view, content, plugin } = await setup([note("Launch.md", 1)], { "Launch.md": { tags: ["project"], deadline: today } });
+    Object.assign(plugin, { projectDraft: () => ({ tags: "" }) });
+    plugin.settings.style = "things";
+    await view.setState({ mode: "all", layout: "kanban" } as never);
+    const row = content().querySelector<HTMLElement>(".tm-kanban .tm-project-row")!;
+    expect(row.querySelector(".tm-task-primary .tm-things-trailing")).toBeNull();
+    expect(row.querySelector(".tm-things-secondary .tm-things-trailing .tm-things-deadline")).not.toBeNull();
+    await view.setState({ mode: "all", layout: "list" } as never);
+    expect(content().querySelector(".tm-project-row .tm-task-primary .tm-things-trailing")).not.toBeNull();
   });
 });
 
