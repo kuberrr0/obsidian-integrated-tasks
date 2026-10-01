@@ -103,8 +103,9 @@
 .tm-nav-progress .tm-project-progress { min-height: 0; font-size: 14px; }
 @media (hover: none) { .tm-navigation .tm-nav-collapse { opacity: 1; } }
 .tm-nav-empty { padding: 4px 8px 4px 36px; font-size: var(--font-ui-small); color: var(--text-faint); }
-/* The file tree reads like the file explorer: names in the normal weight, a file's kind after its name, and renaming in place. */
+/* The file tree reads like the file explorer: names in the normal weight with folders in bold, a file's kind after its name, and renaming in place. */
 .tm-navigation .tm-nav-files .tm-nav-children button.tm-nav-label { font-weight: var(--font-normal); }
+.tm-navigation .tm-nav-files .tm-nav-folder button.tm-nav-label { font-weight: var(--font-bold); }
 .tm-navigation .tm-nav-file.is-active button.tm-nav-label { font-weight: var(--font-medium); }
 .tm-navigation .tm-nav-file-tag { flex: none; margin: 0; }
 .tm-navigation input.tm-nav-rename { flex: 1; min-width: 0; height: auto; padding: 2px 4px; font-size: var(--nav-item-size, var(--font-ui-small)); }
