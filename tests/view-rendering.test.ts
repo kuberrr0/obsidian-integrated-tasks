@@ -568,7 +568,8 @@ describe("weekly review", () => {
     expect(new Date(`${week.week}T12:00`).getDay()).toBe(1);
     await vi.waitFor(() => expect(section(content(), "Overdue").classList.contains("is-reviewed")).toBe(true));
     expect(rows(content(), section(content(), "Overdue"))).toHaveLength(0);
-    expect(content().querySelector(".tm-review-progress")!.textContent).toContain("1 of 8 reviewed");
+    // Nothing sits under the title: no week or count of sections reviewed.
+    expect(content().querySelector(".tm-review-progress")).toBeNull();
     plugin.settings.weeklyReview = { week: "2020-01-06", reviewed: ["overdue"] };
     await view.setState({ mode: "review" });
     view.render();
@@ -806,6 +807,19 @@ describe("View options › Projects", () => {
     toggle.click();
     expect(projectRows()).toEqual([]);
     expect((view.getState() as { showProjects?: boolean }).showProjects).toBe(false);
+  });
+});
+
+describe("the Tags list", () => {
+  it("lists the tags, with no search box, and says there are none only when there are none", async () => {
+    const { view, content } = await setup([["A.md", "- [ ] Call #[[work]]\n- [ ] Plan #[[home]]"]]);
+    await view.setState({ mode: "tags" });
+    expect(Array.from(content().querySelectorAll(".tm-project-row .tm-task-title")).map(title => title.textContent).sort()).toEqual(["home", "work"]);
+    expect(content().querySelector("input[type=search]")).toBeNull();
+    expect(content().querySelector(".tm-empty")).toBeNull();
+    const empty = await setup([["A.md", "- [ ] Call"]]);
+    await empty.view.setState({ mode: "tags" });
+    expect(empty.content().querySelector(".tm-empty")?.textContent).toBe("No tags yet. Add a tag to a task to see it here.");
   });
 });
 

@@ -108,7 +108,6 @@ export class TaskMainView extends ItemView {
   private calendarScope: CalendarScope = "month";
   private calendarAnchor = todayIso();
   private showCompleted = false;
-  private search = "";
   private smartListVersion?: string;
   /** View options › Projects (on by default): the view lists the projects it matches among its tasks. */
   private showProjects = true;
@@ -211,7 +210,6 @@ export class TaskMainView extends ItemView {
       this.smartListVersion = undefined;
       this.showProjects = true;
       this.selection.clear();
-      this.search = "";
       this.propertyFilters = [];
       this.sort = "date";
       this.descending = false;
@@ -526,9 +524,6 @@ export class TaskMainView extends ItemView {
     const header = container.createDiv({ cls: "tm-view-header" });
     const title = header.createDiv({ cls: "tm-title-group" }).createDiv();
     pageTitle(title, "Weekly Review");
-    const progress = title.createDiv({ cls: "tm-task-metadata tm-review-progress" });
-    progress.createSpan({ text: `Week of ${formatDate(week, this.plugin.dateFormat())}` });
-    progress.createSpan({ text: `${sections.filter(section => reviewed.has(section.id)).length} of ${sections.length} reviewed` });
     const actions = header.createDiv({ cls: "tm-header-actions" });
     const restart = actions.createEl("button", { text: "Start over", attr: { "data-tm-focus-key": "review-restart" } });
     restart.disabled = !reviewed.size;
@@ -1104,33 +1099,26 @@ export class TaskMainView extends ItemView {
 
   private renderTagList(container: HTMLElement): void {
     pageTitle(container, "Tags");
-    const search = container.createEl("input", { type: "search", cls: "tm-tag-search", attr: { placeholder: "Search tags…", "aria-label": "Search tags", "data-tm-focus-key": "tag-search" } });
-    search.value = this.search;
+    const tags = this.plugin.index.tagSummaries();
+    if (!tags.length) {
+      container.createDiv({ cls: "tm-empty", text: "No tags yet. Add a tag to a task to see it here." });
+      return;
+    }
     const list = container.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
-    // Outside the list: a list may only contain list items.
-    const empty = container.createDiv({ cls: "tm-empty" });
-    const render = (): void => {
-      list.empty();
-      const tags = this.plugin.index.tagSummaries().filter(tag => tag.name.toLocaleLowerCase().includes(this.search.toLocaleLowerCase()));
-      empty.hidden = tags.length > 0;
-      empty.setText(this.search ? "No matching tags" : "No tags yet. Add a tag to a task to see it here.");
-      const things = this.plugin.settings.style === "things";
-      for (const tag of tags) {
-        const row = list.createDiv({ cls: `tm-task-row tm-project-row${things ? " tm-things-project-row tm-things-tag-row" : ""}`, attr: { role: "listitem" } });
-        const icon = row.createSpan({ cls: "tm-project-icon" });
-        setIcon(icon, "tag");
-        const content = row.createDiv({ cls: "tm-task-content" });
-        // Things: one line, with the open count boxed after the name and the completed count at the end.
-        const line = things ? content.createDiv({ cls: "tm-task-primary" }) : content;
-        const title = line.createEl("button", { cls: "tm-task-title", text: tag.name, attr: { "data-tm-focus-key": `tag:${tag.name}` } });
-        title.addEventListener("click", () => void this.plugin.openTag(tag.name).catch(error => new Notice(String(error))));
-        if (!things) { content.createDiv({ cls: "tm-task-metadata", text: `${tag.openTasks} open · ${tag.completedTasks} completed` }); continue; }
-        if (tag.openTasks) line.createSpan({ cls: "tm-things-count", text: String(tag.openTasks), attr: { title: `${tag.openTasks} open` } });
-        if (tag.completedTasks) line.createSpan({ cls: "tm-things-trailing tm-things-tag-done", text: `${tag.completedTasks} completed` });
-      }
-    };
-    search.addEventListener("input", () => { this.search = search.value; render(); });
-    render();
+    const things = this.plugin.settings.style === "things";
+    for (const tag of tags) {
+      const row = list.createDiv({ cls: `tm-task-row tm-project-row${things ? " tm-things-project-row tm-things-tag-row" : ""}`, attr: { role: "listitem" } });
+      const icon = row.createSpan({ cls: "tm-project-icon" });
+      setIcon(icon, "tag");
+      const content = row.createDiv({ cls: "tm-task-content" });
+      // Things: one line, with the open count boxed after the name and the completed count at the end.
+      const line = things ? content.createDiv({ cls: "tm-task-primary" }) : content;
+      const title = line.createEl("button", { cls: "tm-task-title", text: tag.name, attr: { "data-tm-focus-key": `tag:${tag.name}` } });
+      title.addEventListener("click", () => void this.plugin.openTag(tag.name).catch(error => new Notice(String(error))));
+      if (!things) { content.createDiv({ cls: "tm-task-metadata", text: `${tag.openTasks} open · ${tag.completedTasks} completed` }); continue; }
+      if (tag.openTasks) line.createSpan({ cls: "tm-things-count", text: String(tag.openTasks), attr: { title: `${tag.openTasks} open` } });
+      if (tag.completedTasks) line.createSpan({ cls: "tm-things-trailing tm-things-tag-done", text: `${tag.completedTasks} completed` });
+    }
   }
 
   private renderProjectList(container: HTMLElement): void {

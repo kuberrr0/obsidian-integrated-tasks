@@ -108,7 +108,6 @@
 .tm-navigation .tm-nav-file.is-active button.tm-nav-label { font-weight: var(--font-medium); }
 .tm-navigation .tm-nav-file-tag { flex: none; margin: 0; }
 .tm-navigation input.tm-nav-rename { flex: 1; min-width: 0; height: auto; padding: 2px 4px; font-size: var(--nav-item-size, var(--font-ui-small)); }
-.tm-tag-search { width: 100%; margin-bottom: var(--size-4-4); }
 
 .tm-project-icon {
   display: inline-flex;
@@ -1690,7 +1689,6 @@ body .modal-container .modal.tm-bottom-sheet.is-top::before { top: auto; bottom:
 .tm-main-view .tm-task-item :is(.tm-task-repeat, .tm-task-done), .tm-main-view .tm-task-item .tm-task-repeat > span { font-size: inherit; }
 
 /* Weekly review */
-.tm-review-progress { display: flex; flex-wrap: wrap; gap: var(--size-4-3); }
 .tm-review-section > h2 { display: flex; align-items: center; gap: var(--size-4-2); }
 .tm-review-check { display: inline-flex; align-items: center; gap: var(--size-2-2); margin-inline-start: auto; color: var(--text-muted); font-size: var(--font-ui-small); font-weight: normal; cursor: pointer; }
 .tm-review-section.is-reviewed > h2 { color: var(--text-faint); }
