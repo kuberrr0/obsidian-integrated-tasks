@@ -6,7 +6,7 @@ import { newTaskLines } from "./task-description";
 import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
 import { copiedTaskText, duplicateTaskBlocks, insertAfterTask, liveTaskBlock, pastedTaskLines } from "./task-block";
-import { serializeTask } from "./parser";
+import { parseTaskLine, serializeTask } from "./parser";
 import { TASK_INDENT } from "./task-indentation";
 import type { ListPlacement } from "./list-drag";
 import { splitDestination } from "./structure";
@@ -140,7 +140,9 @@ export class TaskStore {
     const advanced = advanceRecurringTask(source, task, next, this.getDateFormat(), this.getSectionHeadingLevel());
     contents.set(task.path, advanced);
     contents.set(recurring.path, appendRecurringLog(contents.get(recurring.path)!, outcome, task.scheduledDate, this.getDateFormat(), this.getLinkDates()));
-    return { task: { ...task, line, raw: advanced.split(/\r?\n/)[line], scheduledDate: next, status: "todo" }, anchor };
+    const raw = advanced.split(/\r?\n/)[line];
+    const deadline = parseTaskLine(raw, new Date(), this.getDateFormat(), false)?.deadline ?? task.deadline;
+    return { task: { ...task, line, raw, scheduledDate: next, deadline, status: "todo" }, anchor };
   }
 
   /** Persist month/year anchors after the task writes commit; a lost anchor only resets to the next scheduled date. */
@@ -438,7 +440,8 @@ export class TaskStore {
       anchors.set(file, advanced.anchor);
       change.task = advanced.task;
       change.draft = { ...change.draft!, status: "todo", completed: false,
-        scheduledDate: change.draft!.scheduledDate === original.scheduledDate ? advanced.task.scheduledDate : change.draft!.scheduledDate };
+        scheduledDate: change.draft!.scheduledDate === original.scheduledDate ? advanced.task.scheduledDate : change.draft!.scheduledDate,
+        deadline: change.draft!.deadline === original.deadline ? advanced.task.deadline : change.draft!.deadline };
     }
     for (const change of changes) if (change.draft) change.draft = this.stampCompletion(change.task, change.draft);
     const planned = planBulkTasks(contents, changes, { ...options, dateFormat: this.getDateFormat(), position: this.getNewTaskPosition(), linkDates: this.getLinkDates(), sectionHeadingLevel: this.getSectionHeadingLevel() });

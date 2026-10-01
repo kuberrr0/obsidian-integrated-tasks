@@ -46,11 +46,20 @@ it("rejects invalid rules rather than silently ignoring them", () => {
     expect(repeatRules("---\nrepeat: every week\n---\n")).toEqual(["every week"]);
 });
 
-it.each(["2026-09-19", "[[2026-09-19]]", "19/09/2026", "[[19/09/2026]]"])("preserves everything except the date: %s", date => {
+it.each(["2026-09-19", "[[2026-09-19]]", "19/09/2026", "[[19/09/2026]]"])("preserves everything except the dates: %s", date => {
     const content = `# Plan\r\n    - [ ] [[Habit|Alias]]  ${date} 09:30  30m {2026-09-30} p1 #[[work]]\r\n        - Description\r\n        - [ ] Child\r\n`;
     const task = scanTasks("Project.md", content, new Date(), "DD/MM/YYYY")[0];
     const replacement = date.replace("2026-09-19", "2026-09-22").replace("19/09/2026", "22/09/2026");
-    expect(advanceRecurringTask(content, task, "2026-09-22", "DD/MM/YYYY")).toBe(content.replace(date, replacement));
+    expect(advanceRecurringTask(content, task, "2026-09-22", "DD/MM/YYYY")).toBe(content.replace(date, replacement).replace("{2026-09-30}", "{2026-10-03}"));
+});
+
+it.each([
+    ["- [ ] [[Habit]] do this Oct 1, 2026 {Oct 5, 2026}", "- [ ] [[Habit]] do this Oct 2, 2026 {Oct 6, 2026}"],
+    ["- [ ] [[Habit]] [[Oct 1, 2026]] 09:00 {[[Oct 5, 2026]] 18:00} p1", "- [ ] [[Habit]] [[Oct 2, 2026]] 09:00 {[[Oct 6, 2026]] 18:00} p1"],
+    ["- [ ] [[Habit]] {2026-10-05} 2026-10-01", "- [ ] [[Habit]] {2026-10-06} 2026-10-02"]
+])("moves the deadline by as many days as the schedule: %s", (line, expected) => {
+    const task = scanTasks("Project.md", line, new Date(), "MMM D, YYYY")[0];
+    expect(advanceRecurringTask(line, task, "2026-10-02", "MMM D, YYYY")).toBe(expected);
 });
 
 function setup(source = "- [ ] [[Habit]] 2026-09-19\n", sameFile = false, dateFormat = "YYYY-MM-DD", linkDates = false) {
@@ -78,6 +87,14 @@ describe("recurring task transactions", () => {
         const { store, task, texts } = setup(undefined, true);
         await store.resolveRecurring(task, "CANCELED");
         expect(texts.get("Habit.md")).toContain("- [ ] [[Habit]] 2026-09-22\nCANCELED: 2026-09-19\n");
+    });
+    it("moves the deadline with the schedule, from a task view or a bulk completion", async () => {
+        const { store, task, texts } = setup("- [ ] [[Habit]] 2026-09-19 {2026-09-20}\n");
+        await store.resolveRecurring(task, "COMPLETED");
+        expect(texts.get("Project.md")).toBe("- [ ] [[Habit]] 2026-09-22 {2026-09-23}\n");
+        const [next] = scanTasks("Project.md", texts.get("Project.md")!);
+        await store.bulkUpdate([next], { completed: true, priority: 1 });
+        expect(texts.get("Project.md")).toBe("- [ ] [[Habit]] 2026-09-26 {2026-09-27} p1\n");
     });
     it("treats checking the task in a task view as completion", async () => {
         const { store, task, texts } = setup();

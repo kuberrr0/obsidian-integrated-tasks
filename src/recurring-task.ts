@@ -133,22 +133,35 @@ export function nextRepeatDate(rules: string[], scheduled: string, anchor?: stri
     return dates.sort()[0];
 }
 
+/** A date token's date rewritten to `next`, keeping its link brackets, ISO or display format, and any trailing time. */
+function redate(token: string, next: string, dateFormat: string, hasTime: boolean): string {
+    const linked = token.startsWith("[[");
+    const original = linked ? /^\[\[([^\]]+)\]\]/.exec(token)![1] : token.slice(0, hasTime ? token.search(/\s+\d{1,2}:\d{2}\s*$/) : token.length);
+    const label = formatDate(next, isIsoDate(original) ? "YYYY-MM-DD" : dateFormat);
+    return (linked ? `[[${label}]]` : label) + token.slice(linked ? original.length + 4 : original.length);
+}
+
+/** Move a routine-note task to its next instance: the scheduled date becomes `next` and a deadline moves by the same number of days. */
 export function advanceRecurringTask(content: string, task: Task, next: string, dateFormat: string, sectionHeadingLevel = 1): string {
     const lines = content.split(/(\r?\n)/);
     const line = findLiveLine(content.split(/\r?\n/), task, sectionHeadingLevel);
     const raw = lines[line * 2];
     const ranges: ParsedTokenRange[] = [];
     const parsed = parseTaskLine(raw, new Date(), dateFormat, false, ranges);
-    const range = ranges.find(range => range.kind === "scheduledDate");
-    if (!parsed || parsed.completed || !range) throw new Error("Select an open recurring task with a scheduled date.");
-    const token = raw.slice(range.from, range.to);
-    const linked = token.startsWith("[[");
-    const originalDate = linked ? /^\[\[([^\]]+)\]\]/.exec(token)![1] : token.slice(0, parsed.scheduledTime ? token.search(/\s+\d{1,2}:\d{2}\s*$/) : token.length);
-    const label = formatDate(next, /^\d{4}-\d{2}-\d{2}$/.test(originalDate) ? "YYYY-MM-DD" : dateFormat);
-    const dateLength = linked ? originalDate.length + 4 : originalDate.length;
-    const replacement = (linked ? `[[${label}]]` : label) + token.slice(dateLength);
+    const scheduled = ranges.find(range => range.kind === "scheduledDate");
+    if (!parsed || parsed.completed || !scheduled || !parsed.scheduledDate) throw new Error("Select an open recurring task with a scheduled date.");
+    const edits = [{ range: scheduled, text: redate(raw.slice(scheduled.from, scheduled.to), next, dateFormat, Boolean(parsed.scheduledTime)) }];
+    const deadline = ranges.find(range => range.kind === "deadline");
+    if (deadline && parsed.deadline) {
+        const inner = raw.slice(deadline.from + 1, deadline.to - 1);
+        const lead = inner.length - inner.trimStart().length;
+        const moved = addDays(parsed.deadline, dayDistance(parsed.scheduledDate, next));
+        edits.push({ range: deadline, text: `{${inner.slice(0, lead)}${redate(inner.slice(lead), moved, dateFormat, Boolean(parsed.deadlineTime))}}` });
+    }
+    let text = raw;
+    for (const { range, text: replacement } of edits.sort((a, b) => b.range.from - a.range.from)) text = text.slice(0, range.from) + replacement + text.slice(range.to);
     // The next instance starts afresh, so an in-progress or waiting status resets to `[ ]`.
-    lines[line * 2] = (raw.slice(0, range.from) + replacement + raw.slice(range.to)).replace(/^(\s*-\s+\[)[/?](\])/, "$1 $2");
+    lines[line * 2] = text.replace(/^(\s*-\s+\[)[/?](\])/, "$1 $2");
     return lines.join("");
 }
 
