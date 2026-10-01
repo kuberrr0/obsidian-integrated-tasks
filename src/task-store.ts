@@ -272,7 +272,7 @@ export class TaskStore {
     });
   }
 
-  /** Done completes a repeating task (advancing it) and cancelled skips its occurrence, as Complete and Skip do. */
+  /** Done completes a repeating task and cancelled cancels its occurrence: either advances it, logging COMPLETED or CANCELED. */
   setStatus(tasks: Task[], status: TaskStatus): Promise<string[]> {
     return this.bulkChange(tasks, task => ({ ...draftForGroup(task), status, completed: isClosedStatus(status) }), {},
       `Marked ${tasksName(tasks)} as ${STATUS_LABELS[status].toLowerCase()}`);

@@ -57,8 +57,9 @@ describe("note highlights", () => {
   it("highlights a recurring task's log entries as dates", () => {
     expect(highlighted("COMPLETED: [[2026-09-20]]")).toEqual([["COMPLETED: [[2026-09-20]]", "tm-nlp-token is-log-completed"]]);
     expect(highlighted("CANCELED: 2026-09-21")).toEqual([["CANCELED: 2026-09-21", "tm-nlp-token is-log-canceled"]]);
-    // Entries older versions wrote still read, as cancelled ones.
-    expect(highlighted("SKIPPED: 2026-09-13")).toEqual([["SKIPPED: 2026-09-13", "tm-nlp-token is-log-canceled"]]);
+    // Only COMPLETED and CANCELED are log entries.
+    expect(highlighted("SKIPPED: 2026-09-13")).toEqual([]);
+    expect(highlighted("FAILED: 2026-09-13")).toEqual([]);
   });
 
   it("places marks on the line, and a priority class on its start", () => {

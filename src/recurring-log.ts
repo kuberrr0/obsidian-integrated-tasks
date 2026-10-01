@@ -2,12 +2,13 @@ import { moment as obsidianMoment } from "obsidian";
 import type momentFactory from "moment";
 import { formatDate } from "./date";
 import { bodyLines } from "./structure";
+import type { RecurringOutcome } from "./recurring-task";
 
 const moment = obsidianMoment as unknown as typeof momentFactory;
 
-/** A log entry: COMPLETED or CANCELED and the date. SKIPPED and FAILED, which older versions wrote, still read, as cancelled. */
+/** A log entry: COMPLETED or CANCELED and the date. */
 export function parseRecurringLog(line: string, formats: string[] = ["YYYY-MM-DD"]) {
-    const match = /^([ \t]*)(COMPLETED|CANCELED|SKIPPED|FAILED):([ \t]+)(\[\[[^\]\r\n]+\]\]|\S(?:.*?\S)?)([ \t]*)$/.exec(line);
+    const match = /^([ \t]*)(COMPLETED|CANCELED):([ \t]+)(\[\[[^\]\r\n]+\]\]|\S(?:.*?\S)?)([ \t]*)$/.exec(line);
     if (!match) return undefined;
     const linked = match[4].startsWith("[[");
     const value = linked ? match[4].slice(2, -2) : match[4];
@@ -18,7 +19,7 @@ export function parseRecurringLog(line: string, formats: string[] = ["YYYY-MM-DD
         if (parsed.isValid()) { date = parsed.format("YYYY-MM-DD"); break; }
     }
     if (!date) return undefined;
-    return { outcome: match[2] === "COMPLETED" ? "COMPLETED" as const : "CANCELED" as const, date, linked,
+    return { outcome: match[2] as RecurringOutcome, date, linked,
         linkText: linked ? value : undefined, from: match[1].length, to: line.length - match[5].length,
         dateFrom: match[1].length + match[2].length + 1 + match[3].length, dateTo: line.length - match[5].length };
 }

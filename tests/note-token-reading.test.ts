@@ -33,10 +33,12 @@ describe("Reading view highlights", () => {
     expect(root.querySelectorAll(".tm-nlp-token")).toHaveLength(1);
   });
 
-  it("highlights a recurring task's log entries", () => {
+  it("highlights a recurring task's log entries: completed green, cancelled red", () => {
     const root = document.createElement("div");
-    root.innerHTML = "<p>COMPLETED: 2026-09-20<br>SKIPPED: 2026-09-13</p>";
+    root.innerHTML = "<p>COMPLETED: 2026-09-20<br>CANCELED: 2026-09-13<br>SKIPPED: 2026-09-06</p>";
     renderNoteTokens(root, "YYYY-MM-DD");
-    expect(Array.from(root.querySelectorAll(".tm-nlp-token")).map(token => token.textContent)).toEqual(["COMPLETED: 2026-09-20", "SKIPPED: 2026-09-13"]);
+    expect(Array.from(root.querySelectorAll(".tm-nlp-token")).map(token => [token.textContent, token.className])).toEqual([
+      ["COMPLETED: 2026-09-20", "tm-nlp-token is-log-completed"], ["CANCELED: 2026-09-13", "tm-nlp-token is-log-canceled"]
+    ]);
   });
 });

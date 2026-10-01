@@ -116,7 +116,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       {
         section: "How tasks are written",
         name: "Update dates",
-        desc: "Rewrite task dates, and the completed, skipped and failed dates in recurring-task notes, to follow Date format and Link dates.",
+        desc: "Rewrite task dates, and the completed and canceled dates in recurring-task notes, to follow Date format and Link dates.",
         render: (setting: Setting) => { setting.addButton(button => button
           .setButtonText("Update dates")
           .onClick(async () => {
