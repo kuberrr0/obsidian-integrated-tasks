@@ -36,6 +36,9 @@
 .tm-nav-header .nav-buttons-container { display: flex; gap: var(--size-4-2); justify-content: center; }
 .tm-nav-list { padding: 0 var(--size-4-2) var(--size-4-4); }
 .tm-nav-group + .tm-nav-group { margin-top: var(--size-4-4); }
+/* Folded Projects and Tags sit one under the other as a group's lists do; an open one keeps the gap after its items.
+   Files, the vault rather than tasks, always stands apart. */
+.tm-nav-section:not(:has(> .tm-nav-children)) + .tm-nav-section:not(.tm-nav-files) { margin-top: 0; }
 .tm-navigation .tm-nav-item {
   --tm-nav-color: var(--text-muted);
   display: flex;
