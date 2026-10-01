@@ -121,7 +121,7 @@ The calendar places a task on its scheduled date, or on its deadline if it has n
 
 ### Kanban: organize work into columns
 
-A board's columns follow the view's grouping, as a list's groups do: by default a project's sections, Today's overdue and today, Upcoming's dates, All Tasks' notes, or one column elsewhere; or group by a property such as priority or status. Drag between supported columns to update the task's section or property. Grouping by **Status** gives you To do, In progress, Waiting, Done, and Cancelled columns; drop a task on a column to give it that status.
+A board's columns follow the view's grouping, as a list's groups do: by default a project's sections, Today's overdue and today, Upcoming's dates, All Tasks' notes, or one column elsewhere; or group by a property such as priority or status. Drag between supported columns to update the task's section or property. Grouping by **Status** gives you To do, In progress, Waiting, Done, and Cancelled columns; drop a task on a column to give it that status. As in a list, completed and cancelled tasks are hidden until a status filter includes them.
 
 ![Kanban board with tasks organized into note sections](resources/images/All%20tasks%20kanban.png)
 

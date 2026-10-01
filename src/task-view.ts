@@ -576,7 +576,7 @@ export class TaskMainView extends ItemView {
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", task => this.prepareDrag(task));
     const query: TaskQuery = {
       mode: this.taskSourcePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
-      showCompleted: this.showCompleted || this.layout === "kanban",
+      showCompleted: this.showCompleted,
       projectPath: this.taskSourcePath,
       tag: this.state.mode === "tags" && !this.pagePath ? this.state.tag : undefined,
       tagPath: this.state.mode === "tags" ? this.pagePath : undefined,
@@ -1053,8 +1053,8 @@ export class TaskMainView extends ItemView {
     this.viewOptions = new ViewOptionsPanel(toggle.closest<HTMLElement>(".tm-view-header") ?? container, toggle, {
       state: () => ({
         sort: this.sort, descending: this.descending, grouping: this.grouping, filters: this.propertyFilters,
-        // Completed tasks are left out unless shown (boards show them in their own columns) or a status filter asks.
-        openOnly: !(this.showCompleted || this.layout === "kanban"), defaultGroup: this.defaultGroupLabel(),
+        // Completed tasks are left out unless shown or a status filter asks, on boards too.
+        openOnly: !this.showCompleted, defaultGroup: this.defaultGroupLabel(),
         // The calendar has no room for projects.
         showProjects: this.showProjects
       }),
