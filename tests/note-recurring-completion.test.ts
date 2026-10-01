@@ -16,7 +16,20 @@ it("intercepts the native toggle, retaining an unchecked instance until recurren
     expect(transaction.effects).toHaveLength(1);
     for (const listener of transaction.state.facet(EditorView.updateListener)) listener({ transactions: [transaction] } as never);
     await Promise.resolve();
-    expect(complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ completed: false, scheduledDate: "2026-09-19", priority: 1 }));
+    expect(complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ completed: false, scheduledDate: "2026-09-19", priority: 1 }), "COMPLETED");
+});
+
+it("cancels a recurring task typed `[-]`, keeping its open status until the cancellation is saved", async () => {
+    const { state, complete } = setup("- [/] [[Habit]] 2026-09-19\n- [ ] Ordinary");
+    const transaction = state.update({ changes: [{ from: 3, to: 4, insert: "-" }, { from: state.doc.line(2).from + 3, to: state.doc.line(2).from + 4, insert: "-" }] });
+    // The recurring task stays open (it advances once cancelled); an ordinary task is simply cancelled.
+    expect(transaction.newDoc.toString()).toBe("- [/] [[Habit]] 2026-09-19\n- [-] Ordinary");
+    for (const listener of transaction.state.facet(EditorView.updateListener)) listener({ transactions: [transaction] } as never);
+    await Promise.resolve();
+    expect(complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: "doing", scheduledDate: "2026-09-19" }), "CANCELED");
+    // Done to cancelled closes nothing new.
+    const closed = setup("- [x] [[Habit]] 2026-09-19");
+    expect(closed.state.update({ changes: { from: 3, to: 4, insert: "-" } }).effects).toHaveLength(0);
 });
 
 it("handles several toggled tasks while keeping ordinary checkbox changes", async () => {

@@ -4,7 +4,8 @@ import { findLiveLine } from "./markdown";
 import { parseTaskLine, repeatRuleList, type ParsedTokenRange } from "./parser";
 import type { Task } from "./types";
 
-export type RecurringOutcome = "COMPLETED" | "SKIPPED" | "FAILED";
+/** How an instance of a recurring task ended, as its note's log records it: done (`[x]`) or cancelled (`[-]`). */
+export type RecurringOutcome = "COMPLETED" | "CANCELED";
 const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 const isIsoDate = (value: string | undefined): value is string => /^\d{4}-\d{2}-\d{2}$/.test(value ?? "");
 

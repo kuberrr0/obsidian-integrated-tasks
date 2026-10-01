@@ -103,7 +103,7 @@ export class TaskStore {
   }
 
   resolveRecurring(task: Task, outcome: RecurringOutcome): Promise<string[]> {
-    const verb = outcome === "COMPLETED" ? "Completed" : outcome === "SKIPPED" ? "Skipped" : "Marked as failed";
+    const verb = outcome === "COMPLETED" ? "Completed" : "Cancelled";
     return this.run(`${verb} ${taskName(task.title)}`, () => this.resolveRecurringNow(task, outcome));
   }
 
@@ -400,7 +400,7 @@ export class TaskStore {
 
   /**
    * Plan and commit every change together. A recurring task whose draft completes (or cancels) it is
-   * advanced and logged (as resolveRecurring does, cancelling as a skip) instead of being checked; its other
+   * advanced and logged as completed (or cancelled), as resolveRecurring does, instead of being checked; its other
    * property changes still apply, and an explicitly changed scheduled date wins over the next instance.
    */
   bulkChange(tasks: Task[], draft: (task: Task) => TaskDraft | undefined, options: BulkTaskOptions = {}, label = `Updated ${tasksName(tasks)}`): Promise<string[]> {
@@ -434,7 +434,7 @@ export class TaskStore {
           deadline: draft.deadline === original.deadline ? next.deadline : draft.deadline };
         continue;
       }
-      const advanced = this.advanceRecurring(contents, original, file, draftStatus(draft) === "cancelled" ? "SKIPPED" : "COMPLETED");
+      const advanced = this.advanceRecurring(contents, original, file, draftStatus(draft) === "cancelled" ? "CANCELED" : "COMPLETED");
       anchors.set(file, advanced.anchor);
       change.task = advanced.task;
       change.draft = { ...change.draft!, status: "todo", completed: false,

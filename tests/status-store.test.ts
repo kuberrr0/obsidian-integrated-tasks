@@ -47,14 +47,14 @@ describe("setting a task's status", () => {
     expect(text()).toBe("- [?] Draft p1 ^d\n- [ ] Review\n");
   });
 
-  it("completes a repeating task by advancing it, and cancels one by skipping the occurrence", async () => {
+  it("completes a repeating task by advancing it, and cancels one by logging the occurrence cancelled", async () => {
     const { store, text, log, tasks } = setup("- [/] [[Habit]] 2026-09-19\n- [?] Water plants 2026-09-20 every week\n");
     await store.setStatus([tasks()[0]], "done");
     expect(text()).toBe("- [ ] [[Habit]] 2026-09-22\n- [?] Water plants 2026-09-20 every week\n");
     expect(log()).toContain("COMPLETED: 2026-09-19\n");
     await store.setStatus([tasks()[0]], "cancelled");
     expect(text()).toBe("- [ ] [[Habit]] 2026-09-29\n- [?] Water plants 2026-09-20 every week\n");
-    expect(log()).toContain("SKIPPED: 2026-09-22\n");
+    expect(log()).toContain("CANCELED: 2026-09-22\n");
     await store.setStatus([tasks()[1]], "cancelled");
     expect(text()).toBe("- [ ] [[Habit]] 2026-09-29\n- [ ] Water plants 2026-09-27 every week\n");
     await store.undo();

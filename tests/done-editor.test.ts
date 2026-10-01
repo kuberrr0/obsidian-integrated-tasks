@@ -51,5 +51,5 @@ it("reverts and advances an inline repeat instead of checking or stamping it", a
     const { EditorView } = await import("@codemirror/view");
     for (const listener of transaction.state.facet(EditorView.updateListener)) listener({ transactions: [transaction] } as never);
     await Promise.resolve();
-    expect(complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Water", repeat: "every week", scheduledDate: "2026-09-28", completed: false }));
+    expect(complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Water", repeat: "every week", scheduledDate: "2026-09-28", completed: false }), "COMPLETED");
 });

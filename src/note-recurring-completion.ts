@@ -5,17 +5,23 @@ import { todayIso } from "./date";
 import { parseTaskLine, scanTasks, withCompletedDate } from "./parser";
 import { nonBodyLines } from "./structure";
 import { STATUS_CHARS } from "./task-status";
+import type { RecurringOutcome } from "./recurring-task";
 import type { Task } from "./types";
 
-const recurringCompletion = StateEffect.define<Task[]>();
+interface ClosedRecurring { task: Task; outcome: RecurringOutcome }
+const recurringCompletion = StateEffect.define<ClosedRecurring[]>();
 
 /** Record completion dates on checkbox flips; off unless `enabled` says so. */
 export interface NoteCompletionDates { enabled: () => boolean; linkDates: () => boolean }
 
-/** Cheap line-level precheck: old task lines whose checkbox alone an edit changed into done (checked) or out of it. */
-function flippedLines(transaction: Transaction): Array<{ line: Line; checked: boolean }> {
+interface Flip { line: Line; before: string; after: string }
+const isDone = (status: string): boolean => /[xX]/.test(status);
+const isClosed = (status: string): boolean => /[xX-]/.test(status);
+
+/** Cheap line-level precheck: old task lines whose checkbox status alone an edit changed. */
+function flippedLines(transaction: Transaction): Flip[] {
     const oldDoc = transaction.startState.doc;
-    const lines: Array<{ line: Line; checked: boolean }> = [];
+    const lines: Flip[] = [];
     const box = /^(\s*-\s+\[)([ xX/?-])(\])/;
     const unmarked = (text: string): string => text.replace(box, "$1 $3");
     transaction.changes.iterChangedRanges((fromA, toA) => {
@@ -26,9 +32,7 @@ function flippedLines(transaction: Transaction): Array<{ line: Line; checked: bo
             if (before === undefined || lines.some(entry => entry.line.number === number)) continue;
             const newText = transaction.newDoc.lineAt(transaction.changes.mapPos(oldLine.from)).text;
             const after = box.exec(newText)?.[2];
-            // Moves between open statuses (Obsidian's own click on `[/]` writes `[ ]`) neither complete nor reopen.
-            const checked = !/[xX]/.test(before);
-            if (after !== undefined && /[xX]/.test(after) === checked && unmarked(newText) === unmarked(oldLine.text)) lines.push({ line: oldLine, checked });
+            if (after !== undefined && after !== before && unmarked(newText) === unmarked(oldLine.text)) lines.push({ line: oldLine, before, after });
         }
     });
     return lines;
@@ -52,13 +56,14 @@ function lineChange(from: number, before: string, after: string): ChangeSpec {
 }
 
 /**
- * Catch native checkbox commands (and typed checks) without persisting a checked instance of a
- * repeating task; with completion dates on, stamp other checked tasks and unstamp reopened ones.
+ * Catch native checkbox commands (and typed checks or `-`) without persisting a closed instance of a
+ * repeating task: it is completed (`[x]`) or cancelled (`[-]`) instead; with completion dates on, stamp other
+ * checked tasks and unstamp reopened ones.
  */
 export function noteRecurringCompletion(
     getDateFormat: () => string,
     isRecurring: (task: Task) => boolean,
-    complete: (task: Task) => void,
+    complete: (task: Task, outcome: RecurringOutcome) => void,
     getPath: (state: EditorState) => string | undefined = state => state.field(editorInfoField, false)?.file?.path,
     completionDates?: NoteCompletionDates
 ): Extension {
@@ -69,21 +74,24 @@ export function noteRecurringCompletion(
             if (!path) return transaction;
             const flipped = flippedLines(transaction);
             if (!flipped.length) return transaction;
-            const checked = flipped.filter(entry => entry.checked).map(entry => entry.line);
-            // Parse only the checked lines first; ordinary (non-recurring) checks never scan the whole note.
+            // An open task closed: checked done, or cancelled. Moves between open statuses (Obsidian's own click on `[/]`
+            // writes `[ ]`), and from one closed status to the other, close nothing.
+            const closing = flipped.filter(entry => !isClosed(entry.before) && isClosed(entry.after));
+            const outcomes = new Map(closing.map(entry => [entry.line.number - 1, isDone(entry.after) ? "COMPLETED" as const : "CANCELED" as const]));
+            // Parse only the closed lines first; ordinary (non-recurring) checks never scan the whole note.
             const reference = new Date();
-            const recurringLines = new Set(checked.filter(line => {
+            const recurringLines = new Set(closing.map(entry => entry.line).filter(line => {
                 const task = lineTask(path, line, getDateFormat(), reference);
                 return task !== undefined && isRecurring(task);
             }).map(line => line.number - 1));
-            const tasks: Task[] = [];
+            const tasks: ClosedRecurring[] = [];
             const changes: ChangeSpec[] = [];
             const reverted = new Set<number>();
             const previous = recurringLines.size ? scanTasks(path, transaction.startState.doc.toString(), reference, getDateFormat())
                 .filter(task => recurringLines.has(task.line)) : [];
             if (previous.length) {
                 const current = new Map(scanTasks(path, transaction.newDoc.toString(), reference, getDateFormat())
-                    .filter(candidate => candidate.status === "done").map(candidate => [candidate.line, candidate]));
+                    .filter(candidate => candidate.completed).map(candidate => [candidate.line, candidate]));
                 for (const task of previous) {
                     if (task.completed) continue;
                     const oldLine = transaction.startState.doc.line(task.line + 1);
@@ -92,18 +100,21 @@ export function noteRecurringCompletion(
                     if (!checkedTask) continue;
                     // Put the open status back (`[/]` stays in progress if completing fails); advancing resets it to `[ ]`.
                     const status = STATUS_CHARS[task.status];
-                    const raw = checkedTask.raw.replace(/^(\s*-\s+\[)[xX](\])/, `$1${status}$2`);
+                    const raw = checkedTask.raw.replace(/^(\s*-\s+\[)[xX-](\])/, `$1${status}$2`);
                     // Only checkbox transitions; pasted/replaced task content is not completion.
                     if (raw !== task.raw) continue;
                     const marker = /^\s*-\s+\[/.exec(checkedTask.raw)!;
                     changes.push({ from: mapped.from + marker[0].length, to: mapped.from + marker[0].length + 1, insert: status });
-                    tasks.push({ ...checkedTask, status: task.status, completed: false, raw });
+                    tasks.push({ task: { ...checkedTask, status: task.status, completed: false, raw }, outcome: outcomes.get(task.line) ?? "COMPLETED" });
                     reverted.add(task.line);
                 }
             }
             // Repeating tasks are never checked, so they are never stamped; remote changes are not the user's.
             if (completionDates?.enabled() && !transaction.annotation(Transaction.remote)) {
-                const candidates = flipped.filter(entry => !reverted.has(entry.line.number - 1) && !recurringLines.has(entry.line.number - 1));
+                // Only checking (into done) stamps and unchecking (out of it) unstamps.
+                const candidates = flipped.filter(entry => isDone(entry.before) !== isDone(entry.after)
+                    && !reverted.has(entry.line.number - 1) && !recurringLines.has(entry.line.number - 1))
+                    .map(entry => ({ line: entry.line, checked: isDone(entry.after) }));
                 const nonBody = candidates.length ? nonBodyLines(transaction.newDoc.iterLines()) : new Set<number>();
                 const today = todayIso(reference);
                 for (const { line, checked: completing } of candidates) {
@@ -121,7 +132,7 @@ export function noteRecurringCompletion(
         EditorView.updateListener.of(update => {
             const tasks = update.transactions.flatMap(transaction => transaction.effects
                 .filter(effect => effect.is(recurringCompletion)).flatMap(effect => effect.value));
-            if (tasks.length) void Promise.resolve().then(() => tasks.forEach(task => complete(task)));
+            if (tasks.length) void Promise.resolve().then(() => tasks.forEach(({ task, outcome }) => complete(task, outcome)));
         })
     ];
 }

@@ -36,8 +36,8 @@ export function noteLineHighlights(line: string, dateFormat?: string): NoteLineH
   return log.length ? { highlights: log } : undefined;
 }
 
-/** A recurring task's log entries on a line ("Completed: [[2026-09-20]]"), highlighted as dates. */
+/** A recurring task's log entry on a line ("COMPLETED: [[2026-09-20]]"): green when completed, red when cancelled. */
 export function logHighlights(line: string, dateFormat?: string): NoteHighlight[] {
   const entry = parseRecurringLog(line, [dateFormat ?? "YYYY-MM-DD"]);
-  return entry ? [{ from: entry.from, to: entry.to, cls: "tm-nlp-token is-date" }] : [];
+  return entry ? [{ from: entry.from, to: entry.to, cls: `tm-nlp-token ${entry.outcome === "COMPLETED" ? "is-log-completed" : "is-log-canceled"}` }] : [];
 }

@@ -57,7 +57,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
     this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
     this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => !this.settings.taskMode && isRepeatingTask(this.app, task),
-      task => { this.completeRecurringTaskFromNote(task); }, undefined,
+      (task, outcome) => { this.completeRecurringTaskFromNote(task, outcome); }, undefined,
       { enabled: () => this.settings.completionDates, linkDates: () => this.settings.linkDates }));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel, task => this.completeRecurringTaskFromNote(task)));
@@ -145,10 +145,6 @@ export default class TaskManagerPlugin extends Plugin {
       if (!checking) view.openProjectActions();
       return true;
     } });
-    for (const [action, outcome] of [["complete", "COMPLETED"], ["skip", "SKIPPED"], ["fail", "FAILED"]] as const) {
-      this.addCommand({ id: `${action}-recurring-task`, name: `${action[0].toUpperCase()}${action.slice(1)} recurring task`,
-        checkCallback: checking => this.recurringTaskCommand(checking, outcome) });
-    }
     this.addCommand({ id: "edit-task", name: "Edit task", editorCheckCallback: (checking, editor, view) =>
       this.editCurrentLineTask(checking, editor, view.file) });
     this.addCommand({ id: "edit-task-properties", name: "Open task menu", checkCallback: checking => this.editSelectedTaskProperties(checking) });
@@ -456,7 +452,8 @@ export default class TaskManagerPlugin extends Plugin {
   private pendingRecurringNotes = new Set<string>();
   private recurringNoteQueue: Promise<void> = Promise.resolve();
 
-  private completeRecurringTaskFromNote(task: Task): boolean {
+  /** A recurring task checked (`[x]`) or cancelled (`[-]`) in a note: advance it there and log the outcome in its routine note. */
+  private completeRecurringTaskFromNote(task: Task, outcome: RecurringOutcome = "COMPLETED"): boolean {
     if (this.settings.taskMode || task.completed) return false;
     try { if (!recurringFile(this.app, task) && !task.repeat) return false; }
     catch (error) { new Notice(String(error)); return true; }
@@ -466,9 +463,9 @@ export default class TaskManagerPlugin extends Plugin {
     this.recurringNoteQueue = this.recurringNoteQueue.then(async () => {
       const markdown = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (markdown?.file?.path === task.path) await markdown.save();
-      const paths = await this.store.resolveRecurring(task, "COMPLETED");
+      const paths = await this.store.resolveRecurring(task, outcome);
       for (const path of paths) await this.index.refreshPath(path);
-    }).catch(error => { new Notice(error instanceof Error ? error.message : "Could not complete recurring task."); })
+    }).catch(error => { new Notice(error instanceof Error ? error.message : `Could not ${outcome === "COMPLETED" ? "complete" : "cancel"} recurring task.`); })
       .finally(() => this.pendingRecurringNotes.delete(key));
     return true;
   }
@@ -483,35 +480,6 @@ export default class TaskManagerPlugin extends Plugin {
       await this.store.toggle(task, completed);
       await this.index.refreshPath(task.path);
     }).catch(error => { new Notice(error instanceof Error ? error.message : "Could not update the task."); });
-    return true;
-  }
-
-  private recurringTaskCommand(checking: boolean, outcome: RecurringOutcome): boolean {
-    const view = this.app.workspace.getActiveViewOfType(TaskMainView);
-    const markdown = this.app.workspace.getActiveViewOfType(MarkdownView);
-    let task: Task | undefined;
-    if (this.settings.taskMode) {
-      const selected = view?.getSelectedTasks() ?? [];
-      if (selected.length === 1) task = selected[0];
-    } else if (markdown?.file) {
-      task = scanTasks(markdown.file.path, markdown.editor.getValue(), new Date(), this.dateFormat(), this.settings.sectionHeadingLevel)
-        .find(candidate => candidate.line === markdown.editor.getCursor().line);
-    }
-    if (!task || task.completed) return false;
-    // A routine note needs a scheduled date; an inline repeat advances from today when unscheduled.
-    try {
-      const routine = recurringFile(this.app, task);
-      if (routine ? !task.scheduledDate : !task.repeat) return false;
-    } catch (error) { if (!checking) new Notice(String(error)); return false; }
-    if (!checking) {
-      const selected = task;
-      void (async () => {
-        if (!this.settings.taskMode && markdown) await markdown.save();
-        const paths = await this.store.resolveRecurring(selected, outcome);
-        view?.clearSelection();
-        for (const path of paths) await this.index.refreshPath(path);
-      })().catch(error => new Notice(error instanceof Error ? error.message : "Could not resolve recurring task."));
-    }
     return true;
   }
 

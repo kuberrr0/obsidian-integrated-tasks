@@ -2014,6 +2014,9 @@ button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-bl
 .tm-nlp-token.is-p3 { --tm-nlp-color: var(--color-blue); }
 .tm-nlp-token.is-tag { --tm-nlp-color: var(--text-muted); }
 .tm-nlp-token.is-project { --tm-nlp-color: var(--color-green); }
+/* A recurring task's log: completed instances green, cancelled ones red. */
+.tm-nlp-token.is-log-completed { --tm-nlp-color: var(--color-green); }
+.tm-nlp-token.is-log-canceled { --tm-nlp-color: var(--color-red); }
 .tm-main-view textarea.tm-things-card-notes {
   display: block;
   min-height: 0;

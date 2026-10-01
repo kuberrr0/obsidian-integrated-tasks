@@ -113,7 +113,7 @@ describe("month and year anchors", () => {
 
   it("replaces a stale anchor after a manual reschedule", async () => {
     const { store, texts, tasks } = setup("- [ ] [[Habit]] 2026-03-15\n", "every month", "2026-01-31");
-    await store.resolveRecurring(tasks()[0], "SKIPPED");
+    await store.resolveRecurring(tasks()[0], "CANCELED");
     expect(texts.get("Project.md")).toBe("- [ ] [[Habit]] 2026-04-15\n");
     expect(texts.get("Habit.md")).toContain("repeat-anchor: 2026-03-15");
   });

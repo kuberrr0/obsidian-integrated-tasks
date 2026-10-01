@@ -68,7 +68,7 @@ function setup(source = "- [ ] [[Habit]] 2026-09-19\n", sameFile = false, dateFo
 }
 
 describe("recurring task transactions", () => {
-    it.each(["COMPLETED", "SKIPPED", "FAILED"] as const)("logs %s and keeps the next instance unchecked", async outcome => {
+    it.each(["COMPLETED", "CANCELED"] as const)("logs %s and keeps the next instance unchecked", async outcome => {
         const { store, task, texts } = setup();
         await store.resolveRecurring(task, outcome);
         expect(texts.get("Project.md")).toBe("- [ ] [[Habit]] 2026-09-22\n");
@@ -76,8 +76,8 @@ describe("recurring task transactions", () => {
     });
     it("handles the checklist and definition in the same file", async () => {
         const { store, task, texts } = setup(undefined, true);
-        await store.resolveRecurring(task, "SKIPPED");
-        expect(texts.get("Habit.md")).toContain("- [ ] [[Habit]] 2026-09-22\nSKIPPED: 2026-09-19\n");
+        await store.resolveRecurring(task, "CANCELED");
+        expect(texts.get("Habit.md")).toContain("- [ ] [[Habit]] 2026-09-22\nCANCELED: 2026-09-19\n");
     });
     it("treats checking the task in a task view as completion", async () => {
         const { store, task, texts } = setup();
@@ -90,7 +90,7 @@ describe("recurring task transactions", () => {
         const before = new Map(texts);
         process.mockImplementationOnce(async (file, update) => { texts.set(file.path, update(texts.get(file.path)!)); })
             .mockImplementationOnce(async () => { throw new Error("write failed"); });
-        await expect(store.resolveRecurring(task, "FAILED")).rejects.toThrow("write failed");
+        await expect(store.resolveRecurring(task, "CANCELED")).rejects.toThrow("write failed");
         expect(texts).toEqual(before);
     });
     it("refuses stale tasks and repeated actions without logging", async () => {
@@ -103,7 +103,7 @@ describe("recurring task transactions", () => {
 });
 
 
-it.each(["COMPLETED", "SKIPPED", "FAILED"] as const)("writes %s using the configured format and link setting", async outcome => {
+it.each(["COMPLETED", "CANCELED"] as const)("writes %s using the configured format and link setting", async outcome => {
     for (const linked of [false, true]) {
         const { store, task, texts } = setup(undefined, false, "MMM D, YYYY", linked);
         await store.resolveRecurring(task, outcome);

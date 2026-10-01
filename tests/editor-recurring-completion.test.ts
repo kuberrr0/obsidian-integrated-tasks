@@ -34,7 +34,7 @@ it("scans the note only when a checked task is recurring", () => {
   expect(transaction.newDoc.toString()).toBe(state.doc.toString());
   expect(transaction.effects).toHaveLength(1);
   expect(scanTasks).toHaveBeenCalledTimes(2);
-  expect(transaction.effects[0].value).toEqual([expect.objectContaining({ title: "[[Habit]]", section: "Tasks", completed: false })]);
+  expect(transaction.effects[0].value).toEqual([{ task: expect.objectContaining({ title: "[[Habit]]", section: "Tasks", completed: false }), outcome: "COMPLETED" }]);
 });
 
 it("does not parse lines that were not checked", () => {

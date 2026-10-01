@@ -62,13 +62,11 @@ describe("completing an inline repeat from the store", () => {
     expect(texts.get("Project.md")).toBe("- [ ] Stretch 2026-09-28 every day\n");
   });
 
-  it("advances on Skip and Fail too, with no log", async () => {
+  it("advances when cancelled too, with no log", async () => {
     const { store, texts, tasks } = setup("- [ ] Review every 2 weeks 2026-09-20\n- [ ] Review 2026-09-20 every 2 weeks\n");
-    await store.resolveRecurring(tasks()[1], "SKIPPED");
+    await store.resolveRecurring(tasks()[1], "CANCELED");
     expect(texts.get("Project.md")).toBe("- [ ] Review every 2 weeks 2026-09-20\n- [ ] Review 2026-10-04 every 2 weeks\n");
-    await store.resolveRecurring(tasks()[1], "FAILED");
-    expect(texts.get("Project.md")).toContain("- [ ] Review 2026-10-18 every 2 weeks\n");
-    expect(texts.get("Habit.md")).not.toMatch(/SKIPPED|FAILED/);
+    expect(texts.get("Habit.md")).not.toMatch(/CANCELED/);
   });
 
   it("advances on a status drop and a bulk completion, and checks ordinary tasks", async () => {
