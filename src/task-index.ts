@@ -177,8 +177,10 @@ export class TaskIndex {
     const { ignoredPaths = [], ignoredTags = [] } = this.getSettings();
     if (isIgnoredPath(file.path, ignoredPaths)) return true;
     if (!ignoredTags.length) return false;
-    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    return frontmatterTags(frontmatter).some(tag => isIgnoredTag(tag, ignoredTags));
+    const cache = this.app.metadataCache.getFileCache(file);
+    // No metadata yet (see updateProjectStatus): the note stays as it was until it arrives.
+    if (!cache) return this.ignoredNotes.has(file.path);
+    return frontmatterTags(cache.frontmatter).some(tag => isIgnoredTag(tag, ignoredTags));
   }
 
   /** Returns whether the note's ignored state changed. */
@@ -515,6 +517,9 @@ export class TaskIndex {
     const path = file.path;
     this.projectColors = undefined;
     const cache = this.app.metadataCache.getFileCache(file);
+    // Right after a write Obsidian has no metadata for the note until it reads it again, and then reports
+    // "changed". Until then keep what is known, or a project would drop out of views for a moment.
+    if (!cache && !this.ignoredNotes.has(path)) return false;
     const tags = cache ? getAllTags(cache) : null;
     const wasArchived = this.archivedPaths.has(path);
     const archived = Boolean(tags?.includes("#archived"));

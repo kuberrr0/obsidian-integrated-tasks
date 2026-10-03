@@ -16,15 +16,17 @@ function setup(paths: string[], contents: Record<string, string> = {}) {
     getAbstractFileByPath: (path: string) => files.find(file => file.path === path) ?? null,
     cachedRead: vi.fn(async (file: TFile) => text.get(file.path) ?? "")
   });
+  // Paths whose metadata Obsidian is still reading after a write: it has none for them yet.
+  const reading = new Set<string>();
   const metadataCache = Object.assign(new FakeEvents(), {
-    getFileCache: (file: TFile) => frontmatter.has(file.path) ? { frontmatter: frontmatter.get(file.path) } : {},
+    getFileCache: (file: TFile) => reading.has(file.path) ? null : frontmatter.has(file.path) ? { frontmatter: frontmatter.get(file.path) } : {},
     getFirstLinkpathDest: () => null
   });
   const app = { vault, metadataCache } as unknown as App;
   const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
   const listener = vi.fn();
   index.subscribe(listener);
-  return { index, files, text, frontmatter, vault, metadataCache, listener };
+  return { index, files, text, frontmatter, reading, vault, metadataCache, listener };
 }
 
 describe("TaskIndex listeners", () => {
@@ -129,6 +131,25 @@ describe("duplicate rescans", () => {
     metadataCache.trigger("changed", files[0]);
     expect(listener).toHaveBeenCalledTimes(3);
     expect(index.projects()[0].archived).toBe(true);
+  });
+
+  it("keeps a project while Obsidian rereads its metadata after a write", async () => {
+    const { index, files, text, frontmatter, reading, vault, metadataCache, listener } = setup(["P.md"]);
+    frontmatter.set("P.md", { tags: ["project"], priority: "p1" });
+    await index.initialize();
+    listener.mockClear();
+    reading.add("P.md");
+    text.set("P.md", "");
+    vault.trigger("modify", files[0]);
+    await flush();
+    // The deleted task updates the view once; the project stays, with its properties.
+    expect(listener).toHaveBeenCalledOnce();
+    expect(index.isProject("P.md")).toBe(true);
+    expect(index.projects()[0].priority).toBe(1);
+    reading.delete("P.md");
+    metadataCache.trigger("changed", files[0]);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(index.isProject("P.md")).toBe(true);
   });
 
   it("rescans every note in batches with one notification", async () => {
