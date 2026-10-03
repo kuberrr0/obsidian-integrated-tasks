@@ -1,7 +1,7 @@
 import { setIcon } from "obsidian";
 import { addDays } from "./calendar";
 import { nextWeek } from "./date-popover";
-import { pinPopoverToTop, placePopover, popoverHost } from "./choice-popover";
+import { pinPopoverToTop, placePopover, popoverHost, registerDismiss } from "./choice-popover";
 
 type Priority = 1 | 2 | 3;
 
@@ -304,6 +304,7 @@ export function openTagsPopover(options: TagsPopoverOptions): { element: HTMLEle
     element.remove();
     if (options.anchor.isConnected) options.anchor.focus({ preventScroll: true });
   }
+  registerDismiss(element, close);
   input.focus();
   return { element, close };
 }

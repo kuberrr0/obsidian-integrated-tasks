@@ -158,6 +158,34 @@ describe("property buttons in the task editor", () => {
     modal.close();
     expect(modal.containerEl.isConnected).toBe(false);
   });
+
+  it("closes each popover without sending a key that Obsidian's keymap would turn into another close", () => {
+    const { modal, button } = open();
+    // Obsidian's keymap: Escape anywhere closes the open modal.
+    const keymap = vi.fn((event: KeyboardEvent) => { if (event.key === "Escape") modal.close(); });
+    document.addEventListener("keydown", keymap, true);
+    try {
+      for (const [name, selector] of [["Priority", ".tm-choice-popover"], ["When", ".tm-date-popover"], ["Tags", ".tm-tags-popover"]]) {
+        button(name).click();
+        expect(document.querySelector(selector)).not.toBeNull();
+        modal.close();
+        expect(document.querySelector(selector)).toBeNull();
+        expect(modal.containerEl.isConnected).toBe(true);
+      }
+      expect(keymap).not.toHaveBeenCalled();
+      modal.close();
+      expect(modal.containerEl.isConnected).toBe(false);
+    } finally { document.removeEventListener("keydown", keymap, true); }
+  });
+
+  it("drops what was typed in the date popover, as its Escape does", () => {
+    const { modal, button } = open();
+    button("When").click();
+    const input = document.querySelector<HTMLInputElement>(".tm-date-popover input")!;
+    input.value = "tomorrow";
+    modal.close();
+    expect(button("When").textContent).not.toMatch(/tomorrow/i);
+  });
 });
 
 describe("editing a task: the title alone, like a card's", () => {

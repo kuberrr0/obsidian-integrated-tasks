@@ -160,9 +160,26 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
   }
   const handle = { element, close };
   open = handle;
+  registerDismiss(element, close);
   if (input) input.focus();
   else (items.find(item => item.getAttribute("aria-selected") === "true") ?? items[0])?.focus();
   return handle;
+}
+
+/** How each open popover closes on Escape, so a modal can close it the same way without sending a key. */
+const dismissers = new WeakMap<HTMLElement, () => void>();
+
+export function registerDismiss(element: HTMLElement, dismiss: () => void): void {
+  dismissers.set(element, dismiss);
+}
+
+/** Close `element` as its Escape would; false when it is not an open popover. */
+export function dismissPopover(element: HTMLElement): boolean {
+  const dismiss = dismissers.get(element);
+  if (!dismiss) return false;
+  dismissers.delete(element);
+  dismiss();
+  return true;
 }
 
 /**

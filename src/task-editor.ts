@@ -8,7 +8,7 @@ import { Modal, Notice, Platform, setIcon, type App } from "obsidian";
 import { todayIso, tomorrowIso } from "./date";
 import { repeatLabel, serializeTask, serializeTaskInput } from "./parser";
 import { openDatePopover } from "./date-popover";
-import { openChoicePopover, PRIORITY_CHOICES, projectChoices, repeatChoices, REPEAT_INPUT } from "./choice-popover";
+import { dismissPopover, openChoicePopover, PRIORITY_CHOICES, projectChoices, repeatChoices, REPEAT_INPUT } from "./choice-popover";
 import { openTagsPopover } from "./task-menu";
 import { thingsDateLabel } from "./things-row-details";
 import { taskTimeDurationLabel, taskTimeLabel } from "./task-row-details";
@@ -160,10 +160,13 @@ export class TaskEditorModal extends Modal {
     }, 0);
   }
 
-  /** Escape (or a click outside) first closes a property popover the modal opened, then the modal. */
+  /**
+   * Escape (or a click outside) first closes a property popover the modal opened, then the modal. The popover
+   * is closed directly: a synthetic Escape would reach Obsidian's keymap, which calls close() again, endlessly.
+   */
   close(): void {
-    const popover = this.contentEl.ownerDocument?.querySelector?.<HTMLElement>(".tm-date-popover, .tm-choice-popover, .tm-tags-popover");
-    if (popover) { popover.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); return; }
+    const popover = this.containerEl.querySelector?.<HTMLElement>(".tm-date-popover, .tm-choice-popover, .tm-tags-popover");
+    if (popover && dismissPopover(popover)) return;
     super.close();
   }
 

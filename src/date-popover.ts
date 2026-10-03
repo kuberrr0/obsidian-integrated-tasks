@@ -1,5 +1,5 @@
 import { setIcon } from "obsidian";
-import { placePopover, popoverHost } from "./choice-popover";
+import { placePopover, popoverHost, registerDismiss } from "./choice-popover";
 import { addDays } from "./calendar";
 import { formatDate, parseDateExpression, parseDateTimeExpression, parseTimeExpression, todayIso } from "./date";
 import { durationToMinutes, formatDuration } from "./parser";
@@ -235,6 +235,7 @@ export function openDatePopover(options: DatePopoverOptions): DatePopover {
 
   const popover: DatePopover = { element, close: commit => close(commit) };
   open = popover;
+  registerDismiss(element, () => close(false));
   input.focus();
   return popover;
 }
