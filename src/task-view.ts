@@ -247,13 +247,20 @@ export class TaskMainView extends ItemView {
   async onOpen(): Promise<void> {
     this.registerDomEvent(this.containerEl.ownerDocument, "click", event => { this.clearSelectionOutside(event); this.collapseCardOutside(event); }, true);
     this.registerDomEvent(this.containerEl.ownerDocument, "pointerdown", event => this.viewOptions?.handleOutside(event));
-    // Obsidian's own undo only covers the editor; in task views Cmd/Ctrl+Z undoes the last task change.
+    // Obsidian's own undo only covers the editor; in task views Cmd/Ctrl+Z undoes the last task change,
+    // and Cmd/Ctrl+Shift+Z (or Ctrl+Y off macOS) redoes it.
     this.registerDomEvent(this.containerEl, "keydown", event => {
       const key = event.key.toLowerCase();
-      if (event.shiftKey || event.altKey || event.defaultPrevented) return;
+      if (event.altKey || event.defaultPrevented) return;
       // Typing in a field (a card's title or notes, a search) keeps its own keys.
       if ((event.target as HTMLElement | null)?.closest?.("input:not([type=checkbox]), textarea, select, [contenteditable=true]")) return;
       const mod = Platform.isMacOS ? event.metaKey : event.ctrlKey;
+      if (mod && ((event.shiftKey && key === "z") || (!Platform.isMacOS && !event.shiftKey && key === "y"))) {
+        event.preventDefault();
+        void this.plugin.redoTaskChange();
+        return;
+      }
+      if (event.shiftKey) return;
       const selected = this.getSelectedTasks();
       // Delete or Backspace deletes the selected tasks (with their subtasks); Cmd/Ctrl+Z brings them back.
       if ((key === "delete" || key === "backspace") && selected.length && (mod || (!event.metaKey && !event.ctrlKey))) {

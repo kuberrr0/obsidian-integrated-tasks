@@ -21,7 +21,7 @@ import {
 import { STATUS_LABELS, draftStatus, isClosedStatus, statusFromLabel } from "./task-status";
 import type { ParsedTaskMetadata, Task, TaskDraft, TaskManagerSettings, TaskStatus } from "./types";
 
-/** One user action's effect on notes, kept so the action can be undone as a unit. */
+/** One user action's effect on notes, kept so the action can be undone (and redone) as a unit. */
 export interface TaskChange {
   label: string;
   /** `before` is undefined for a note the action created. */
@@ -52,6 +52,8 @@ export class TaskStore {
   /** Called after each recorded action, e.g. to offer an Undo notice. */
   onChange?: (change: TaskChange) => void;
   private history: TaskChange[] = [];
+  /** Undone actions, most recent last; a new action clears them. */
+  private redoHistory: TaskChange[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private journal?: Map<string, { file: TFile; before?: string }>;
 
@@ -319,29 +321,49 @@ export class TaskStore {
     return this.history[this.history.length - 1];
   }
 
+  lastUndone(): TaskChange | undefined {
+    return this.redoHistory[this.redoHistory.length - 1];
+  }
+
   /**
    * Put every note an action touched back as it was. Refuses, before writing anything,
    * if any of those notes changed since, so an undo never discards later edits.
    */
   undo(change: TaskChange | undefined = this.lastChange()): Promise<string[]> {
+    return this.replay(change, "undo");
+  }
+
+  /** Apply an undone action again, under the same rule: only if its notes are still as the undo left them. */
+  redo(change: TaskChange | undefined = this.lastUndone()): Promise<string[]> {
+    return this.replay(change, "redo");
+  }
+
+  private replay(change: TaskChange | undefined, direction: "undo" | "redo"): Promise<string[]> {
+    const undoing = direction === "undo";
     const result = this.queue.then(async () => {
-      if (!change || !this.history.includes(change)) throw new Error("Nothing to undo.");
-      const targets: { entry: TaskChange["files"][number]; file: TFile }[] = [];
+      const [from, to] = undoing ? [this.history, this.redoHistory] : [this.redoHistory, this.history];
+      if (!change || !from.includes(change)) throw new Error(`Nothing to ${direction}.`);
+      const changed = (path: string): Error => new Error(`Can't ${direction}: ${path.replace(/\.md$/i, "")} has changed since.`);
+      const targets: { path: string; file?: TFile; expected?: string; next?: string }[] = [];
       for (const entry of change.files) {
+        const [expected, next] = undoing ? [entry.after, entry.before] : [entry.before, entry.after];
         const file = this.app.vault.getAbstractFileByPath(entry.path);
-        if (!(file instanceof TFile) || await this.app.vault.read(file) !== entry.after) {
-          throw new Error(`Can't undo: ${entry.path.replace(/\.md$/i, "")} has changed since.`);
-        }
-        targets.push({ entry, file });
+        // A note the action created is absent before it: redoing creates it again, so nothing may be there.
+        if (expected === undefined ? file : !(file instanceof TFile) || await this.app.vault.read(file) !== expected) throw changed(entry.path);
+        targets.push({ path: entry.path, file: file instanceof TFile ? file : undefined, expected, next });
       }
-      for (const { entry, file } of targets.reverse()) {
-        if (entry.before === undefined) await this.app.fileManager.trashFile(file);
+      // Undo goes back in reverse order; redo replays in the original order.
+      for (const { path, file, expected, next } of undoing ? targets.reverse() : targets) {
+        if (!file) await this.createNote(path, next!);
+        else if (next === undefined) await this.app.fileManager.trashFile(file);
         else await this.app.vault.process(file, current => {
-          if (current !== entry.after) throw new Error(`Can't undo: ${entry.path.replace(/\.md$/i, "")} has changed since.`);
-          return entry.before!;
+          if (current !== expected) throw changed(path);
+          return next;
         });
       }
-      this.history = this.history.filter(item => item !== change);
+      from.splice(from.indexOf(change), 1);
+      to.push(change);
+      if (to.length > UNDO_HISTORY) to.shift();
       return change.files.map(entry => entry.path);
     });
     this.queue = result.catch(() => undefined);
@@ -372,6 +394,7 @@ export class TaskStore {
     if (!files.length) return;
     const change = { label, files };
     this.history.push(change);
+    this.redoHistory = [];
     if (this.history.length > UNDO_HISTORY) this.history.shift();
     this.onChange?.(change);
   }
@@ -492,8 +515,14 @@ export class TaskStore {
     const existing = this.app.vault.getAbstractFileByPath(normalized);
     if (existing instanceof TFile) return existing;
     if (existing) throw new Error(`${normalized} is not a Markdown file.`);
+    const created = await this.createNote(normalized, "");
+    await this.remember(created, true);
+    return created;
+  }
 
-    const parts = normalized.split("/");
+  /** Create a note with its missing folders. */
+  private async createNote(path: string, content: string): Promise<TFile> {
+    const parts = path.split("/");
     parts.pop();
     let current = "";
     for (const part of parts) {
@@ -502,9 +531,7 @@ export class TaskStore {
       if (!folder) await this.app.vault.createFolder(current);
       else if (!(folder instanceof TFolder)) throw new Error(`${current} is not a folder.`);
     }
-    const created = await this.app.vault.create(normalized, "");
-    await this.remember(created, true);
-    return created;
+    return this.app.vault.create(path, content);
   }
 }
 

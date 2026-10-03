@@ -161,6 +161,11 @@ export default class TaskManagerPlugin extends Plugin {
       if (!checking) void this.undoTaskChange();
       return true;
     } });
+    this.addCommand({ id: "redo-task-change", name: "Redo last undone task change", checkCallback: checking => {
+      if (!this.store.lastUndone()) return false;
+      if (!checking) void this.redoTaskChange();
+      return true;
+    } });
     this.addRibbonIcon("plus", "Create new task", () => this.newTask());
 
     this.addCommand({ id: "toggle-task-mode", name: "Toggle task mode", callback: () => {
@@ -243,9 +248,30 @@ export default class TaskManagerPlugin extends Plugin {
     try {
       const paths = await this.store.undo(target);
       for (const path of paths) await this.index.refreshPath(path);
-      new Notice(`Undone: ${target.label}`);
+      const fragment = createFragment();
+      fragment.appendText(`Undone: ${target.label}. `);
+      const button = fragment.createEl("button", { cls: "tm-undo-button", text: "Redo" });
+      const notice = new Notice(fragment, 6000);
+      button.addEventListener("click", event => {
+        event.stopPropagation();
+        notice.hide();
+        void this.redoTaskChange(target);
+      });
     } catch (error) {
       new Notice(error instanceof Error ? error.message : "Could not undo the change.");
+    }
+  }
+
+  /** Redo the given undone action, or the most recent one. */
+  async redoTaskChange(change?: TaskChange): Promise<void> {
+    const target = change ?? this.store.lastUndone();
+    if (!target) { new Notice("Nothing to redo."); return; }
+    try {
+      const paths = await this.store.redo(target);
+      for (const path of paths) await this.index.refreshPath(path);
+      new Notice(`Redone: ${target.label}`);
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : "Could not redo the change.");
     }
   }
 

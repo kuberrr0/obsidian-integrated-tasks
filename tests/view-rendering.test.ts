@@ -79,7 +79,7 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
   const store = { toggle: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]), bulkChange: vi.fn().mockResolvedValue([]), setStatus: vi.fn().mockResolvedValue([]) };
   const plugin = {
     settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
-    openEditor: vi.fn(), openTaskView: vi.fn(), undoTaskChange: vi.fn(), openQuickSwitcher: vi.fn(), saveSettings: vi.fn(),
+    openEditor: vi.fn(), openTaskView: vi.fn(), undoTaskChange: vi.fn(), redoTaskChange: vi.fn(), openQuickSwitcher: vi.fn(), saveSettings: vi.fn(),
     projectDraft: vi.fn(() => ({ name: "Site", date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "work", archived: false, color: "" })),
     updateProject: vi.fn().mockResolvedValue("Site.md"), deleteProject: vi.fn().mockResolvedValue(undefined)
   };
@@ -386,16 +386,20 @@ describe("keyboard", () => {
 });
 
 describe("undo and snooze", () => {
-  it("undoes the last task change on Cmd+Z, but not while typing in a field", async () => {
+  it("undoes on Cmd+Z and redoes on Cmd+Shift+Z, but not while typing in a field", async () => {
     const { view, content, plugin } = await setup([note("A.md", 2)]);
     await view.onOpen();
     await view.setState({ mode: "all" });
     key(rows(content())[0], "z", { metaKey: true });
     expect(plugin.undoTaskChange).toHaveBeenCalledOnce();
     key(rows(content())[0], "z", { metaKey: true, shiftKey: true });
+    expect(plugin.undoTaskChange).toHaveBeenCalledOnce();
+    expect(plugin.redoTaskChange).toHaveBeenCalledOnce();
     const search = content().appendChild(document.createElement("input"));
     key(search, "z", { metaKey: true });
+    key(search, "z", { metaKey: true, shiftKey: true });
     expect(plugin.undoTaskChange).toHaveBeenCalledOnce();
+    expect(plugin.redoTaskChange).toHaveBeenCalledOnce();
   });
 
   it("selects every task on Cmd+A, but not while typing in a field", async () => {

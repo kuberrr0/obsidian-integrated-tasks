@@ -129,3 +129,63 @@ describe("undo", () => {
     expect(contents.get("A.md")).toBe("- [ ] Task\n");
   });
 });
+
+describe("redo", () => {
+  it("applies an undone action again, and undo and redo alternate", async () => {
+    const { store, contents, tasks } = vault({ "A.md": "- [ ] Pay rent\n" });
+    await store.toggle(tasks("A.md")[0], true);
+    const change = store.lastChange()!;
+    await store.undo();
+    expect(store.lastUndone()).toBe(change);
+    expect(await store.redo()).toEqual(["A.md"]);
+    expect(contents.get("A.md")).toBe("- [x] Pay rent\n");
+    expect(store.lastChange()).toBe(change);
+    expect(store.lastUndone()).toBeUndefined();
+    await expect(store.redo()).rejects.toThrow("Nothing to redo.");
+    await store.undo();
+    await store.redo();
+    expect(contents.get("A.md")).toBe("- [x] Pay rent\n");
+  });
+
+  it("redoes several undos in reverse order of undoing", async () => {
+    const { store, contents, tasks } = vault({ "A.md": "- [ ] One\n- [ ] Two\n" });
+    await store.toggle(tasks("A.md")[0], true);
+    await store.toggle(tasks("A.md")[1], true);
+    await store.undo();
+    await store.undo();
+    expect(contents.get("A.md")).toBe("- [ ] One\n- [ ] Two\n");
+    await store.redo();
+    expect(contents.get("A.md")).toBe("- [x] One\n- [ ] Two\n");
+    await store.redo();
+    expect(contents.get("A.md")).toBe("- [x] One\n- [x] Two\n");
+  });
+
+  it("creates again a note the undo trashed", async () => {
+    const { store, contents } = vault({});
+    await store.create({ title: "New idea", completed: false, destination: "Inbox.md", indent: 0 });
+    await store.undo();
+    expect(contents.has("Inbox.md")).toBe(false);
+    await store.redo();
+    expect(contents.get("Inbox.md")).toBe("- [ ] New idea\n");
+    await store.undo();
+    expect(contents.has("Inbox.md")).toBe(false);
+  });
+
+  it("refuses without writing anything when a note changed since the undo", async () => {
+    const { store, contents, tasks } = vault({ "A.md": "- [ ] One\n", "B.md": "- [ ] Two\n" });
+    await store.bulkDrop([tasks("A.md")[0]], { destination: "B.md" });
+    await store.undo();
+    contents.set("A.md", "- [ ] One\n- [ ] Typed later\n");
+    await expect(store.redo()).rejects.toThrow("Can't redo: A has changed since.");
+    expect(contents.get("B.md")).toBe("- [ ] Two\n");
+    expect(store.lastUndone()?.label).toBe("Moved “One”");
+  });
+
+  it("forgets undone actions once a new action is made", async () => {
+    const { store, tasks } = vault({ "A.md": "- [ ] One\n- [ ] Two\n" });
+    await store.toggle(tasks("A.md")[0], true);
+    await store.undo();
+    await store.toggle(tasks("A.md")[1], true);
+    expect(store.lastUndone()).toBeUndefined();
+  });
+});

@@ -85,6 +85,7 @@ Everything you can do by dragging also works from the keyboard. Long lists show 
 | Alt + → / ← | Make it a subtask of the task above, or move it out of its parent |
 | M | Move to another section, column, or note |
 | Cmd/Ctrl + Z | Undo the last task change |
+| Cmd/Ctrl + Shift + Z (or Ctrl + Y) | Redo the last undone change |
 | Cmd/Ctrl + K | Jump to a view, project, tag, smart list, or task |
 
 With tasks selected, these keys change all of them; the lists open just below the task:
@@ -238,11 +239,13 @@ Swipe a task to the right to select or deselect it, or to the left to open its a
 
 On phones, the task editor opens as a sheet from the top of the screen; drag its handle up to close it. The project editor opens from the bottom; drag its handle down. Popovers and menus open at the top of the screen.
 
-## Undo a change
+## Undo and redo a change
 
 Press **Cmd/Ctrl+Z** in a task view or run **Undo last task change** from the command palette to undo a change you made from a task view (completing, moving, editing, snoozing or deleting tasks). Turn on **Show undo notices** in settings for a notice after each change, with an **Undo** button. The last 20 changes can be undone.
 
 Undo puts your notes back exactly as they were, so it only runs if those notes haven't changed since; otherwise it tells you which note changed.
+
+Changed your mind? Press **Cmd/Ctrl+Shift+Z** (or **Ctrl+Y** on Windows and Linux) in a task view, click **Redo** on the notice that confirms an undo, or run **Redo last undone task change** to apply the change again. Redo follows the same rule, running only if the notes are still as the undo left them. Making a new change clears what you can redo.
 
 ## Track progress with statuses
 
