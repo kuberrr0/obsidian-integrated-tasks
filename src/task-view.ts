@@ -390,6 +390,7 @@ export class TaskMainView extends ItemView {
     container.classList.toggle("is-dashboard-view", this.state.mode === "dashboard");
     container.classList.toggle("tm-density-compact", this.plugin.settings.density === "compact");
     container.classList.toggle("tm-style-things", this.plugin.settings.style === "things");
+    container.classList.toggle("tm-style-griply", this.plugin.settings.style === "griply");
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     if (this.state.mode === "dashboard") {

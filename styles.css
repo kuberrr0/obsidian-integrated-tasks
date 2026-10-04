@@ -1162,6 +1162,13 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-main-view .tm-task-item :is(.tm-task-due, .tm-task-schedule, .tm-task-source, .tm-task-tag),
 .tm-main-view .tm-task-item :is(.tm-task-due, .tm-task-schedule, .tm-task-source, .tm-task-tag) > span { font-size: inherit; }
 .tm-task-schedule:hover, .tm-task-source:hover, .tm-task-tag:hover { color: var(--text-normal); }
+
+/* Griply style: group headings over a divider. */
+.tm-main-view.tm-style-griply .tm-section h2 {
+  padding-bottom: var(--size-4-2);
+  margin-bottom: var(--size-4-1);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
 .tm-task-checkbox.is-p1 { --tm-priority-color: var(--text-error); }
 .tm-task-checkbox.is-p2 { --tm-priority-color: var(--color-orange); }
 .tm-task-checkbox.is-p3 { --tm-priority-color: var(--color-blue); }
