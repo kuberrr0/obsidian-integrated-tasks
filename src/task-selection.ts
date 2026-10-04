@@ -12,6 +12,15 @@ export class TaskSelection {
   }
   has(task: Task): boolean { return this.selected.get(task.id)?.raw === task.raw; }
   tasks(visible: Task[]): Task[] { return visible.filter(task => this.has(task)); }
+  /** The selected tasks among `visible` (matched by id), as they were selected or last replaced. */
+  chosen(visible: Task[]): Task[] { return visible.flatMap(task => this.selected.get(task.id) ?? []); }
+  /** Puts `next`, the same task rewritten, in the place of `task` when it is selected. */
+  replace(task: Task, next: Task): void {
+    if (!this.has(task)) return;
+    this.selected.delete(task.id);
+    this.selected.set(next.id, next);
+    if (this.anchor === task.id) this.anchor = next.id;
+  }
   retain(visible: Task[]): void {
     const current = new Map(visible.map(task => [task.id, task]));
     for (const [id, task] of this.selected) if (current.get(id)?.raw !== task.raw) this.selected.delete(id);

@@ -31,6 +31,12 @@ Quick-created tasks go to `Inbox.md` by default. You can choose another inbox no
 
 Today and Upcoming consider both the scheduled date and the deadline, using whichever comes first. Tasks without either date remain available in All Tasks and their source notes.
 
+The **task sidebar** opens in Obsidian's right sidebar (drag its tab to move it, or run **Open task sidebar** to bring it back). What it shows follows the task view in front:
+
+- With **Today** open, a calendar of the day. Drag a task to another time, or click a time to add a task there.
+- With **Upcoming** open, your tasks with no date (no scheduled date and no deadline) below a calendar of the month. Drag one onto a day to schedule it.
+- Anywhere else, the selected task's details, which you can edit in place: its title, notes, subtasks, and properties. In the Things style it's the task's card; in the Griply style, a list of its properties. What you type is saved when you leave the field or select another task.
+
 Press **Cmd/Ctrl+K** in a task view, or run **Quick switch to view, project, tag, or task**, to jump anywhere by typing: a view, a project, a tag, a smart list, or an open task by its title.
 
 Open **View options** with the filter button at the top of a task view to sort, group, and filter. Each property has a quick list: pick several statuses, priorities, tags, or notes at once, or choose a date range such as **Overdue**, **Today**, or **Next 7 days**. Date ranges stay relative, so a smart list for “Next 7 days” always means the coming week. **More conditions…** opens the full editor for anything else, such as “is not”, a range between two dates, or several conditions joined with AND and OR. Views list the projects they match among their tasks, each with its progress in place of a checkbox (turn this off with **Projects** under **Show**): Today lists projects starting or due today (or overdue), Upcoming those starting or due later, All Tasks every active project, a tag's view the projects tagged with it, and a project's page its subprojects; filters apply to their dates, priority and tags. Click one to open it, or right-click it for its actions. The calendar shows each project on its start date (or its deadline, without one); drag it to another day to move its dates, the end date keeping its distance from the start. The button shows how many filters are active, and **Clear all** starts over.

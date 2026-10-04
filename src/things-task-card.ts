@@ -64,7 +64,7 @@ export function cardNotes(description: string | undefined): string {
 }
 
 /** Matches the project editor's P1 — High, P2 — Medium, P3 — Low. */
-const PRIORITY_NAMES: Record<number, string> = { 1: "High", 2: "Medium", 3: "Low" };
+export const PRIORITY_NAMES: Record<number, string> = { 1: "High", 2: "Medium", 3: "Low" };
 
 /** "Thu, Oct 8", with the year outside the current one. */
 export function longDate(date: string, now: Date): string {

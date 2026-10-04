@@ -640,13 +640,13 @@ it("edits the task on the current editor line only when task mode is off", () =>
 });
 
  it.each(["day", "week", "month", "year"] as const)("switches an open calendar to %s without changing its date", async scope => {
-   const plugin = new TaskManagerPlugin({} as App, {} as never);
+   const plugin = Object.assign(new TaskManagerPlugin({} as App, {} as never), { app: { workspace: { getLeavesOfType: () => [] } } as unknown as App });
    const view = new TaskMainView({} as WorkspaceLeaf, plugin);
    vi.spyOn(view, "render").mockImplementation(() => {});
    await view.setState({ mode: "all", layout: "calendar", calendarAnchor: "2026-09-19" });
    const save = vi.fn();
    const active = vi.fn(() => view as TaskMainView | null);
-   plugin.app = { workspace: { getActiveViewOfType: active, requestSaveLayout: save } } as unknown as App;
+   plugin.app = { workspace: { getActiveViewOfType: active, requestSaveLayout: save, getLeavesOfType: () => [] } } as unknown as App;
    const command = plugin as unknown as { switchCalendarScope(scope: string, checking: boolean): boolean };
    const change = vi.spyOn(view, "setState");
    expect(command.switchCalendarScope(scope, true)).toBe(true);
@@ -668,7 +668,7 @@ it("edits the task on the current editor line only when task mode is off", () =>
    [{ mode: "smartLists", layout: "calendar" }, false],
    [{ mode: "smartLists", smartListId: "missing", layout: "calendar" }, false]
  ] as const)("enables calendar commands only for a rendered calendar: %j", async (state, expected) => {
-   const plugin = new TaskManagerPlugin({} as App, {} as never);
+   const plugin = Object.assign(new TaskManagerPlugin({} as App, {} as never), { app: { workspace: { getLeavesOfType: () => [] } } as unknown as App });
    const view = new TaskMainView({} as WorkspaceLeaf, plugin);
    vi.spyOn(view, "render").mockImplementation(() => {});
    await view.setState(state);

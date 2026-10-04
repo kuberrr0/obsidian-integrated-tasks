@@ -2523,3 +2523,108 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
 .tm-things-card-project-icon svg { width: 14px; height: 14px; }
 .tm-things-card-project-chevron svg { width: 12px; height: 12px; color: var(--text-faint); }
 .tm-things-card-project-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Task sidebar (the right sidebar by default): Today's calendar, Upcoming's tasks with no date on a calendar, or the
+   selected task's details. It shares the task views' styles through .tm-main-view. */
+.workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3) var(--size-4-3) var(--size-4-6);
+}
+.tm-sidebar-header { flex-shrink: 0; }
+.tm-task-sidebar h4.tm-sidebar-title { margin: 0; font-size: var(--font-ui-large); font-weight: var(--font-bold); }
+.tm-sidebar-subtitle { margin-top: 2px; color: var(--text-muted); font-size: var(--font-ui-small); }
+
+/* A calendar fills the sidebar's height: the day's hours scroll, and so do the unscheduled tasks below the month. */
+.workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar:is(.is-today, .is-upcoming) { overflow: hidden; }
+.tm-sidebar-calendar, .tm-sidebar-calendar .tm-calendar { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+/* Too narrow for the centred controls: the month, then the controls, wrapping below it when they do not fit. */
+.tm-task-sidebar .tm-calendar .tm-calendar-toolbar { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: var(--size-4-2); padding: 0; margin-bottom: var(--size-4-2); }
+.tm-task-sidebar .tm-calendar .tm-calendar-toolbar h2 { flex: 1 0 auto; font-size: var(--font-ui-medium); }
+.tm-task-sidebar .tm-calendar-controls { flex-wrap: wrap; }
+.tm-task-sidebar .tm-calendar-scopes { margin-right: 0; }
+/* Today's calendar is one day, named by the header. */
+.tm-task-sidebar.is-today :is(.tm-calendar-scopes, .tm-calendar-toolbar h2) { display: none; }
+.tm-task-sidebar .tm-calendar-day-scroll { flex: 1; min-height: 0; max-height: none; border-radius: var(--radius-m); }
+.tm-task-sidebar .tm-calendar-allday { flex-shrink: 0; max-height: 30%; overflow-y: auto; }
+.tm-task-sidebar .tm-calendar.is-month-scope .tm-calendar-surface > .tm-calendar-grid { flex: 0 1 auto; grid-template-rows: auto repeat(6, minmax(34px, 1fr)); }
+.tm-task-sidebar .tm-calendar.is-month-scope .tm-calendar-cell > .tm-calendar-date { font-size: var(--font-ui-small); }
+.tm-task-sidebar .tm-calendar-unscheduled { flex: 1 1 auto; min-height: 0; margin-top: var(--size-4-3); overflow-y: auto; }
+/* The header names the list and says what to do with it; its tasks stack one per line. */
+.tm-task-sidebar .tm-calendar-unscheduled :is(h3, .tm-calendar-plan-hint) { display: none; }
+.tm-task-sidebar .tm-calendar-unscheduled .tm-calendar-task { width: 100%; margin: 0 0 4px; }
+
+/* The selected task. */
+.tm-task-sidebar .tm-things-card { margin: 0; }
+.tm-task-sidebar .tm-sidebar-empty { flex: 1; min-height: 240px; padding: 0 var(--size-4-4); }
+.tm-sidebar-footer { display: flex; }
+button.tm-sidebar-open-note {
+  display: inline-flex; align-items: center; gap: 6px; height: auto; padding: 4px 8px;
+  border: 0; border-radius: var(--radius-s); box-shadow: none; background: transparent;
+  color: var(--text-muted); font-size: var(--font-ui-small); cursor: pointer;
+}
+button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { background: var(--background-modifier-hover); color: var(--text-normal); }
+.tm-sidebar-open-note-icon { display: inline-flex; }
+.tm-sidebar-open-note-icon svg { width: 14px; height: 14px; }
+
+/* Griply: the title over rows of properties (a name at the left, its value at the right), then notes and subtasks. */
+.tm-sidebar-details { display: flex; flex-direction: column; }
+.tm-sidebar-head {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; align-items: start;
+  padding-bottom: var(--size-4-3); border-bottom: 1px solid var(--background-modifier-border);
+}
+.tm-sidebar-head .tm-checkbox-target { display: flex; margin-top: 4px; }
+.tm-task-sidebar .tm-sidebar-head :is(.tm-things-card-title-backdrop, textarea.tm-things-card-title) { font-size: var(--font-ui-large); font-weight: var(--font-semibold); line-height: 1.35; }
+.tm-sidebar-properties { display: flex; flex-direction: column; padding: var(--size-4-2) 0; border-bottom: 1px solid var(--background-modifier-border); }
+.tm-sidebar-property {
+  display: grid; grid-template-columns: minmax(88px, 38%) minmax(0, 1fr); align-items: center; gap: var(--size-4-2);
+  min-height: 30px; padding: 3px 6px; border-radius: var(--radius-s); font-size: var(--font-ui-small); cursor: pointer;
+}
+.tm-sidebar-property:hover, .tm-sidebar-property:focus-visible { background: var(--background-modifier-hover); }
+.tm-sidebar-property-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-muted); }
+.tm-sidebar-property-icon { display: inline-flex; flex: none; color: var(--text-faint); }
+.tm-sidebar-property-icon svg { width: 14px; height: 14px; }
+.tm-sidebar-property-value { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; color: var(--text-normal); overflow-wrap: anywhere; }
+.tm-sidebar-property-value.is-empty { color: var(--text-faint); }
+.tm-sidebar-property-value.is-overdue { color: var(--text-error); }
+.tm-sidebar-property-extra { color: var(--text-muted); }
+.tm-sidebar-property .tm-task-tag, .tm-sidebar-property .tm-task-source { color: var(--text-normal); }
+.tm-task-sidebar .tm-sidebar-property .tm-task-due {
+  padding: 1px 8px 1px 7px;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+.tm-sidebar-property .tm-task-due .tm-task-detail-icon svg { fill: currentColor; }
+.tm-sidebar-property.is-p1 :is(.tm-sidebar-property-icon, .tm-sidebar-property-value) { color: var(--text-error); }
+.tm-sidebar-property.is-p2 :is(.tm-sidebar-property-icon, .tm-sidebar-property-value) { color: var(--color-orange); }
+.tm-sidebar-property.is-p3 :is(.tm-sidebar-property-icon, .tm-sidebar-property-value) { color: var(--color-blue); }
+.tm-sidebar-property.is-status.is-doing .tm-sidebar-property-icon { color: var(--text-accent); }
+.tm-sidebar-property.is-status.is-waiting .tm-sidebar-property-icon { color: var(--color-orange); }
+.tm-task-sidebar h5.tm-sidebar-section-title {
+  display: flex; align-items: center; gap: 6px; margin: var(--size-4-4) 0 var(--size-4-1); padding: 0 6px;
+  color: var(--text-muted); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); letter-spacing: 0.02em;
+}
+.tm-sidebar-section-count { color: var(--text-faint); font-weight: var(--font-normal); font-variant-numeric: tabular-nums; }
+.tm-task-sidebar textarea.tm-sidebar-notes {
+  display: block; width: 100%; min-height: 0; padding: 4px 6px;
+  border: 1px solid transparent; border-radius: var(--radius-s); box-shadow: none; background: transparent;
+  color: var(--text-normal); font-family: inherit; font-size: var(--font-ui-small); line-height: 1.5; resize: none; overflow: hidden;
+}
+.tm-task-sidebar textarea.tm-sidebar-notes:hover { background: var(--background-modifier-hover); }
+.tm-task-sidebar textarea.tm-sidebar-notes:focus { border-color: var(--background-modifier-border-focus); background: transparent; box-shadow: none; }
+.tm-task-sidebar textarea.tm-sidebar-notes::placeholder { color: var(--text-faint); }
+.tm-sidebar-subtasks { display: flex; flex-direction: column; }
+.tm-sidebar-subtask { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 6px; border-radius: var(--radius-s); font-size: var(--font-ui-small); }
+.tm-sidebar-subtask:hover { background: var(--background-modifier-hover); }
+.tm-sidebar-subtask .tm-task-checkbox { flex: none; margin: 0; }
+.tm-task-sidebar input.tm-sidebar-subtask-title {
+  flex: 1; min-width: 0; height: auto; padding: 2px 0;
+  border: 0; border-radius: 0; box-shadow: none; background: transparent; color: inherit; font: inherit;
+}
+.tm-task-sidebar input.tm-sidebar-subtask-title:focus { border: 0; box-shadow: none; }
+.tm-sidebar-subtask.is-completed .tm-sidebar-subtask-title { color: var(--text-faint); text-decoration: line-through; }
+.tm-sidebar-subtask-add { display: inline-flex; flex: none; justify-content: center; width: var(--checkbox-size, 16px); color: var(--text-faint); }
+.tm-sidebar-subtask-add svg { width: 14px; height: 14px; }
+.tm-sidebar-subtask.is-new input::placeholder { color: var(--text-faint); }
+@media (pointer: coarse) { .tm-sidebar-property, .tm-sidebar-subtask { min-height: 40px; } }

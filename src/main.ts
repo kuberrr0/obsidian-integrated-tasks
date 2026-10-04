@@ -30,6 +30,7 @@ import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
 import { TaskQuickSwitcher } from "./quick-switcher";
+import { TaskSidebarView, TASK_SIDEBAR_VIEW } from "./task-sidebar";
 
 const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay", "linkTags", "taskHoverHighlight", "wrapTaskTitles", "wrapCalendarTaskTitles", "wrapKanbanTaskTitles", "showSubtaskCounts", "showGroupTaskCounts", "weeklyReview"];
 
@@ -55,6 +56,7 @@ export default class TaskManagerPlugin extends Plugin {
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
     this.registerView(TASK_MAIN_VIEW, (leaf) => new TaskMainView(leaf, this));
+    this.registerView(TASK_SIDEBAR_VIEW, (leaf) => new TaskSidebarView(leaf, this));
     this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
     this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => !this.settings.taskMode && isRepeatingTask(this.app, task),
       (task, outcome) => { this.completeRecurringTaskFromNote(task, outcome); }, undefined,
@@ -123,6 +125,7 @@ export default class TaskManagerPlugin extends Plugin {
         return true;
       } });
     }
+    this.addCommand({ id: "open-task-sidebar", name: "Open task sidebar", callback: () => void this.activateTaskSidebar().catch((error) => new Notice(String(error))) });
     this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
     this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: checking => {
       const list = this.activeSmartList();
@@ -191,6 +194,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       if (this.unloaded) return;
       void this.activateNavigation(false).catch(error => new Notice(String(error)));
+      void this.activateTaskSidebar(false).catch(error => new Notice(String(error)));
       // Index after the workspace loads, so a large vault does not delay startup. Views
       // restored meanwhile show what is indexed so far and refresh when it finishes.
       void this.index.initialize()
@@ -319,6 +323,24 @@ export default class TaskManagerPlugin extends Plugin {
       await leaf.setViewState({ type: TASK_NAV_VIEW, active: true });
     }
     if (reveal) await this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** The task sidebar, in the right sidebar unless it has been moved; created there when missing. */
+  async activateTaskSidebar(reveal = true): Promise<void> {
+    let leaf: WorkspaceLeaf | undefined = this.app.workspace.getLeavesOfType(TASK_SIDEBAR_VIEW)[0];
+    if (!leaf) {
+      leaf = this.app.workspace.getRightLeaf(false) ?? undefined;
+      if (!leaf) return;
+      await leaf.setViewState({ type: TASK_SIDEBAR_VIEW, active: false });
+    }
+    if (reveal) await this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** The task sidebar follows the task view in front and its selection; it redraws on the next frame. */
+  refreshTaskSidebar(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_SIDEBAR_VIEW)) {
+      if (leaf.view instanceof TaskSidebarView) leaf.view.scheduleRender();
+    }
   }
 
   async openTaskView(state: TaskViewState): Promise<void> {
@@ -682,6 +704,7 @@ export default class TaskManagerPlugin extends Plugin {
       const view = leaf.view;
       if (view instanceof TaskMainView) view.render();
     }
+    this.refreshTaskSidebar();
   }
 
   async setSectionHeadingLevel(level: number): Promise<void> {

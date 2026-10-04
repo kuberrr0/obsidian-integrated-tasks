@@ -218,6 +218,7 @@ export class TaskMainView extends ItemView {
     this.stateSet = true;
     this.render();
     this.refreshTitle();
+    this.plugin.refreshTaskSidebar?.();
   }
 
   /**
@@ -276,6 +277,7 @@ export class TaskMainView extends ItemView {
     if (this.renderFrame !== undefined) this.containerEl.win.cancelAnimationFrame(this.renderFrame);
     this.renderFrame = undefined;
     this.disconnectRowObservers();
+    this.plugin.refreshTaskSidebar?.();
   }
 
   private get content(): HTMLElement { return this.containerEl?.children[1] as HTMLElement; }
@@ -1247,8 +1249,9 @@ export class TaskMainView extends ItemView {
     if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || !this.getSelectedTasks().length) return;
     // Clicking any task row changes the selection itself, so only clicks elsewhere clear it.
     const target = event.target as HTMLElement | null;
-    // Working in the task menu or a popover edits the selection; it does not end it.
-    if (target?.closest?.(".tm-task-menu, .tm-date-popover, .tm-choice-popover, .tm-tags-popover")) return;
+    // Working in the task menu, a popover or the task sidebar (which shows the selected task) edits the selection; it
+    // does not end it.
+    if (target?.closest?.(".tm-task-menu, .tm-date-popover, .tm-choice-popover, .tm-tags-popover, .tm-task-sidebar, .workspace-leaf-content[data-type='task-manager-sidebar']")) return;
     const onRow = Array.from(this.selectionRows.values()).some(rows => rows.some(row => target && row.contains(target)));
     if (!onRow) this.clearSelection();
   }
@@ -1276,6 +1279,46 @@ export class TaskMainView extends ItemView {
     const rect = row.getBoundingClientRect();
     this.openTaskMenu(task, row, { x: rect.left + 24, y: rect.bottom });
   }
+
+  /**
+   * For the task sidebar: a property of `task` (one of the selected tasks) in a popover beside `anchor`, as its row
+   * edits it; the task stays selected. Status and project have their lists; anything else opens the task editor.
+   */
+  editTaskProperty(task: Task, property: TaskEditorProperty | "status" | "project", anchor: HTMLElement): void {
+    if (property === "project") this.openProjectChoice([task], anchor);
+    else if (property === "status") {
+      openChoicePopover({
+        anchor, label: "Status", selected: task.status, cycleKey: "s",
+        choices: TASK_STATUSES.map(status => ({ value: status, label: STATUS_LABELS[status], icon: STATUS_ICONS[status] })),
+        choose: value => this.setTaskStatus(task, value as TaskStatus)
+      });
+    } else if (!this.openPropertyEditor([task], property, anchor)) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
+  }
+
+  /** For the task sidebar: completes, reopens or otherwise sets a task's status; the selection stays (focus does not move here). */
+  setTaskStatus(task: Task, status: TaskStatus): void {
+    if (task.status !== status) void this.commit(() => this.plugin.store.setStatus([task], status));
+  }
+
+  /**
+   * For the task sidebar: writes a change to one task (its title or notes) and keeps it selected when it was. Changed
+   * in place it keeps its line, and so its id; moved to `moveTo`, it is found there by its title.
+   */
+  async changeTask(task: Task, write: () => Promise<string[]>, moveTo?: string): Promise<void> {
+    // Asked of the selection itself: the rows are redrawn a frame after each write, so they can be behind.
+    const selected = this.selection.has(task);
+    for (const path of await write()) await this.plugin.index.refreshPath(path);
+    if (!selected) return;
+    const latest = moveTo ? undefined : this.plugin.index.taskById(task.id);
+    if (latest) { this.selection.replace(task, latest); this.updateSelection(); }
+    else this.reselect([task], moveTo);
+  }
+
+  /**
+   * For the task sidebar: the selected tasks, as last selected or rewritten (see changeTask), so a task the sidebar
+   * just saved stays shown while the rows catch up.
+   */
+  sidebarSelection(): Task[] { return this.selection.chosen(this.visibleTasks); }
 
   /**
    * The right-click menu, for the selection when the task is selected: complete, dates and priority at once,
@@ -1614,6 +1657,8 @@ export class TaskMainView extends ItemView {
       const marker = row.querySelector?.(".tm-selected-marker");
       if (marker) marker.textContent = selected ? "Selected" : "";
     }
+    // The task sidebar shows the selected task.
+    this.plugin.refreshTaskSidebar?.();
   }
 
   /** One row per view is in the tab order; arrow keys move between rows. */
@@ -2169,10 +2214,7 @@ export class TaskMainView extends ItemView {
       choose: value => {
         const priority = value ? Number(value) as Task["priority"] : undefined;
         const changed = tasks.filter(task => task.priority !== priority);
-        if (!changed.length) return;
-        void this.plugin.store.bulkUpdate(changed, { priority }).then(async paths => {
-          for (const path of paths) await this.plugin.index.refreshPath(path);
-        }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); });
+        if (changed.length) void this.commit(() => this.plugin.store.bulkUpdate(changed, { priority }));
       }
     });
     return true;
@@ -2210,9 +2252,7 @@ export class TaskMainView extends ItemView {
           if (value.time !== first.scheduledTime) patch.scheduledTime = value.time;
           if (value.duration !== first.durationMinutes) patch.durationMinutes = value.duration;
         }
-        void this.plugin.store.bulkUpdate(tasks, patch).then(async paths => {
-          for (const path of paths) await this.plugin.index.refreshPath(path);
-        }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); });
+        void this.commit(() => this.plugin.store.bulkUpdate(tasks, patch));
       }
     });
     return true;
