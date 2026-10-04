@@ -216,7 +216,7 @@ You can also drag a selection to move tasks together, drop it onto the calendar 
 
 ## Use it on your phone
 
-Swipe a task to the right to select or deselect it, or to the left to open its actions. Double-tap a task to open it. To move a task, press and hold it until it lifts, then drag it.
+Swipe a task to the right to select or deselect it, or to the left to open its actions. Tap a task to open it. To move a task, press and hold it until it lifts, then drag it.
 
 On phones, the task editor opens as a sheet from the top of the screen; drag its handle up to close it. The project editor opens from the bottom; drag its handle down. Popovers and menus open at the top of the screen.
 

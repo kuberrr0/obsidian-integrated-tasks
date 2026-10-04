@@ -49,8 +49,6 @@ const MIN_ROW_LISTS = 10;
 const SWIPE_START = 12;
 const SWIPE_COMMIT = 80;
 const SWIPE_MAX = 120;
-/** Two taps on a task this close together open it. */
-const DOUBLE_TAP_MS = 350;
 
 /** What had focus before a re-render, so the same control can be focused afterwards. */
 interface FocusKey { taskId?: string; index?: number; part?: string; key?: string }
@@ -125,10 +123,6 @@ export class TaskMainView extends ItemView {
   /** Set while the card plays its closing animation. */
   private cardClosing?: Promise<void>;
   private contextSelectionOnPress = false;
-  // Double taps, recognised from clicks: the pointer that pressed last, the last tap, and when a double tap opened a task.
-  private lastPointer = "";
-  private lastTap?: { id: string; at: number };
-  private tapOpenedAt = 0;
   private visibleTasks: Task[] = [];
   private selectionRows = new Map<string, HTMLElement[]>();
   private draggedTasks: Task[] = [];
@@ -1553,7 +1547,6 @@ export class TaskMainView extends ItemView {
     };
     // Select on press: contextmenu may wait for release or the native menu gesture.
     row.addEventListener("pointerdown", event => {
-      this.lastPointer = event.pointerType;
       this.contextSelectionOnPress = event.button === 2 || (Platform.isMacOS && event.button === 0 && event.ctrlKey);
       if (this.contextSelectionOnPress) selectForContextMenu(event);
     });
@@ -1575,32 +1568,23 @@ export class TaskMainView extends ItemView {
       this.updateSelection();
       this.openTask(task);
     };
-    // A click selects: alone, or with Cmd/Ctrl to toggle and Shift for a range.
+    // A click selects: alone, or with Cmd/Ctrl to toggle and Shift for a range. On mobile, where a swipe right
+    // selects (see bindSwipe), a tap opens the task instead.
     row.addEventListener("click", event => {
       if (Platform.isMacOS && event.ctrlKey) return;
       const additive = Platform.isMacOS ? event.metaKey : event.ctrlKey;
       if (!additive && !event.shiftKey && control(event.target)) return;
       event.preventDefault(); event.stopPropagation();
-      // Touch screens do not always send dblclick for a double tap, so a second tap soon after opens the task.
-      if (this.lastPointer === "touch" && !additive && !event.shiftKey) {
-        const now = Date.now();
-        if (this.lastTap?.id === task.id && now - this.lastTap.at < DOUBLE_TAP_MS) {
-          this.lastTap = undefined;
-          this.tapOpenedAt = now;
-          open();
-          return;
-        }
-        this.lastTap = { id: task.id, at: now };
-      }
+      if (Platform.isMobile && !additive && !event.shiftKey) { open(); return; }
       this.selection.click(task, this.visibleTasks, event.shiftKey, additive);
       row.focus({ preventScroll: true });
       this.updateSelection();
     }, true);
-    // A double-click opens the task's editor (unless a double tap already has).
+    // A double-click opens the task (on mobile its first tap already has).
     row.addEventListener("dblclick", event => {
       if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey || control(event.target)) return;
       event.preventDefault(); event.stopPropagation();
-      if (Date.now() - this.tapOpenedAt < DOUBLE_TAP_MS) return;
+      if (Platform.isMobile) return;
       open();
     }, true);
     row.addEventListener("keydown", event => {
@@ -1805,7 +1789,6 @@ export class TaskMainView extends ItemView {
     if (this.expanded?.id === task.id && this.plugin.settings.style === "things") { this.renderTaskCard(list, task, depth); return; }
     const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem" } });
     row.style.setProperty("--tm-depth", String(depth));
-    this.bindSelection(row, task);
     const things = this.plugin.settings.style === "things";
     // In the Things style a recurring task's checkbox is its repeat icon (the checkbox stays, unseen, beneath it).
     const repeating = things && isRepeatingTask(this.app, task);
@@ -1880,8 +1863,11 @@ export class TaskMainView extends ItemView {
       fold.addEventListener("click", event => { event.stopPropagation(); this.toggleFold(key); });
     }
     row.createSpan({ cls: "tm-sr-only tm-selected-marker" });
-    this.bindRowKeyboard(row, task, target, foldable);
     this.bindSwipe(row, task);
+    // After the drag and swipe handlers, so a click that ends a swipe or a long press is dropped before it selects
+    // or opens the task.
+    this.bindSelection(row, task);
+    this.bindRowKeyboard(row, task, target, foldable);
   }
 
   /**
@@ -1909,7 +1895,6 @@ export class TaskMainView extends ItemView {
     });
   }
 
-  /** Double-click or Enter: a card in place in the Things style, the task editor otherwise. */
   /** Opens a task: in the Things style as a card in place, except in the calendar, which has no room for one. */
   private openTask(task: Task): void {
     if (this.plugin.settings.style === "things" && this.layout !== "calendar") void this.expandCard(task);

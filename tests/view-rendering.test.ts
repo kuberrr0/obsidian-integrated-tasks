@@ -507,20 +507,43 @@ describe("today header, density and gestures", () => {
     expect(rows(content()).map(row => row.querySelector(".tm-task-title")?.textContent)).toEqual(["Parent", "B.md task 0"]);
   });
 
-  it("opens a task on a double tap, once even when the browser also sends dblclick", async () => {
+  it("opens a task on a single tap on mobile, where a right swipe selects; on desktop a click selects", async () => {
+    const platform = Platform as { isMobile?: boolean };
+    platform.isMobile = true;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { view, content, plugin } = await setup([note("A.md", 2)]);
+      plugin.settings.style = "griply";
+      await view.setState({ mode: "all" });
+      const tap = (row: HTMLElement) => { pointer(row, "pointerdown", 10, 10); pointer(row, "pointerup", 10, 10); row.click(); };
+      tap(rows(content())[0]);
+      expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: expect.objectContaining({ line: 0 }) }));
+      // The dblclick a browser may send after two taps opens nothing more.
+      tap(rows(content())[0]);
+      rows(content())[0].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      expect(plugin.openEditor).toHaveBeenCalledTimes(2);
+      // A click that ends a swipe, or a long press let go without moving, opens nothing.
+      plugin.openEditor.mockClear();
+      view.clearSelection();
+      swipe(rows(content())[1], 100);
+      rows(content())[1].click();
+      expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
+      pointer(rows(content())[0], "pointerdown", 10, 10);
+      vi.advanceTimersByTime(400);
+      pointer(rows(content())[0], "pointerup", 10, 10);
+      rows(content())[0].click();
+      expect(plugin.openEditor).not.toHaveBeenCalled();
+      expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
+    } finally { platform.isMobile = false; vi.useRealTimers(); }
+    // On desktop a click selects; a double-click opens.
     const { view, content, plugin } = await setup([note("A.md", 2)]);
     plugin.settings.style = "griply";
     await view.setState({ mode: "all" });
-    const tap = (row: HTMLElement) => { pointer(row, "pointerdown", 10, 10); row.click(); };
-    tap(rows(content())[0]);
+    rows(content())[1].click();
     expect(plugin.openEditor).not.toHaveBeenCalled();
-    tap(rows(content())[0]);
-    rows(content())[0].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
-    expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: expect.objectContaining({ line: 0 }) }));
-    // Taps on two different tasks only select.
-    tap(rows(content())[0]); tap(rows(content())[1]);
-    expect(plugin.openEditor).toHaveBeenCalledOnce();
     expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
+    rows(content())[1].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: expect.objectContaining({ line: 1 }) }));
   });
 
   it("opens the quick switcher on Cmd+K", async () => {
@@ -1058,7 +1081,7 @@ describe("opening a card on a phone", () => {
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
         return (this === list ? { top: 0, bottom: 800, height: 800 } : this.classList.contains("tm-things-card") ? card : { top: 0, bottom: 40, height: 40 }) as DOMRect;
       });
-      rows(content())[2].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      rows(content())[2].click();
       await new Promise(resolve => setTimeout(resolve, 300));
       // Before the keyboard, the card is in view.
       expect(scrollBy).not.toHaveBeenCalled();
@@ -1069,7 +1092,7 @@ describe("opening a card on a phone", () => {
       await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
       scrollBy.mockClear();
       card = { top: 100, bottom: 300, height: 200 };
-      rows(content())[1].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      rows(content())[1].click();
       await new Promise(resolve => setTimeout(resolve, 300));
       expect(scrollBy).not.toHaveBeenCalled();
     } finally {
