@@ -83,6 +83,15 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
     projectDraft: vi.fn(() => ({ name: "Site", date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "work", archived: false, color: "" })),
     updateProject: vi.fn().mockResolvedValue("Site.md"), deleteProject: vi.fn().mockResolvedValue(undefined)
   };
+  // As the plugin writes a new task: “New To-Do”, where the view would start it (tests give newTaskDraft and create).
+  const writer = plugin as unknown as { newTaskDraft(state: unknown): { destination: string }; store: { create(draft: object): Promise<number> } };
+  Object.assign(plugin, { createBlankTask: async (state: unknown) => {
+    const draft = { ...writer.newTaskDraft(state), title: "New To-Do" };
+    const path = draft.destination.split("#")[0];
+    const line = await writer.store.create(draft);
+    await index.refreshPath(path);
+    return index.tasksForPath(path).find(task => task.line === line);
+  } });
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const internals = view as unknown as { refresh(): void; content: HTMLElement };
   const edit = async (path: string, content: string) => { contents.set(path, content); emitModify(files.get(path)!); await new Promise(resolve => setTimeout(resolve, 0)); };

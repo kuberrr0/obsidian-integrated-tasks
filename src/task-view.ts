@@ -33,11 +33,9 @@ import { groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "./query"
 import { markDropZone, startTaskDrag, type SidebarDrop } from "./sidebar-drop";
 import type TaskManagerPlugin from "./main";
 import type { OpenEditorState } from "./main";
-import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
+import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
-/** What a new task's card is called in its note until a title is typed, as Things names a new to-do. */
-const NEW_TASK_TITLE = "New To-Do";
 
 // Large lists render in pages; more rows load as the "Show more" button scrolls into view.
 const ROW_PAGE = 200;
@@ -581,7 +579,7 @@ export class TaskMainView extends ItemView {
         color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
         priorityColors: this.plugin.settings.calendarPriorityColors,
         navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.renderTaskResults(); },
-        create: preset => this.plugin.openEditor({ ...this.state, preset }),
+        create: preset => this.newTask(preset),
         edit: task => this.editTask(task),
         toggle: (task, completed) => this.plugin.store.toggle(task, completed),
         bind: (card, task) => this.bindSelection(card, task),
@@ -765,10 +763,12 @@ export class TaskMainView extends ItemView {
   /**
    * A new task in this view's context: its tag, its project, or today's (or tomorrow's) date, and a group's value
    * when added from the group's heading (`preset`). In the Things style a list or board opens it as a blank card
-   * in place, in its group or column, as Things does; otherwise the task editor opens.
+   * in place, in its group or column, as Things does; otherwise the task editor opens. With three panes (Task
+   * details › Three panes), it opens in the task sidebar instead, its title empty to type.
    */
   newTask(preset?: TaskEditorPreset): void {
     const state = preset ? { ...this.state, preset } : this.state;
+    if (this.detailsInSidebar) { void this.newTaskInSidebar(state); return; }
     // Lists and boards show a card in place; the calendar has no room for one.
     const list = this.layout !== "calendar" && !this.propertyFilters.length && (Boolean(this.taskSourcePath) || ["inbox", "today", "upcoming", "all", "tags"].includes(this.state.mode));
     if (this.plugin.settings.style === "things" && list) void this.newTaskCard(state);
@@ -778,12 +778,8 @@ export class TaskMainView extends ItemView {
   /** Writes the new task at once (titled "New To-Do" in its note) and opens its card with the title empty to type. */
   private async newTaskCard(state: OpenEditorState): Promise<void> {
     await this.collapseCard();
-    const draft: TaskDraft = { ...this.plugin.newTaskDraft(state), title: NEW_TASK_TITLE };
-    const path = draft.destination.split("#")[0];
     try {
-      const line = await this.plugin.store.create(draft);
-      await this.plugin.index.refreshPath(path);
-      const task = this.plugin.index.tasksForPath(path).find(item => item.line === line);
+      const task = await this.plugin.createBlankTask(state);
       if (!task) return;
       this.newCardId = task.id;
       await this.expandCard(task, true);
@@ -796,6 +792,42 @@ export class TaskMainView extends ItemView {
     } catch (cause) {
       new Notice(cause instanceof Error ? cause.message : "Could not add the task.");
     }
+  }
+
+  /** Three panes: writes the new task at once and shows it in the task sidebar, its title empty to type. */
+  private async newTaskInSidebar(state: OpenEditorState): Promise<void> {
+    try {
+      await this.plugin.settleTaskSidebar();
+      const task = await this.plugin.createBlankTask(state);
+      if (task) this.revealInSidebar(task, { focus: true, blank: true });
+    } catch (cause) {
+      new Notice(cause instanceof Error ? cause.message : "Could not add the task.");
+    }
+  }
+
+  /** Task details › Three panes: an opened task shows only in the task sidebar. */
+  private get detailsInSidebar(): boolean { return this.plugin.settings.taskDetails === "sidebar"; }
+
+  /**
+   * Three panes: selects the task (when the view lists it) and shows it in the task sidebar, which opens if it is
+   * closed (on phones and tablets, its drawer slides in). `focus` puts the caret in its title; `blank` (a task just
+   * added) empties the title to type.
+   */
+  revealInSidebar(task: Task, options: { focus?: boolean; blank?: boolean } = {}): void {
+    // A task just added (or just changed) is listed as it reads once the view redraws; its line's last task may have its id.
+    const listed = (): Task | undefined => this.visibleTasks.find(item => item.id === task.id && item.raw === task.raw);
+    if (!listed()) this.renderTaskResults();
+    const shown = listed();
+    this.selection.clear();
+    if (shown) this.selection.click(shown, this.visibleTasks);
+    this.updateSelection();
+    void this.plugin.showInTaskSidebar(task.id, options).catch((error: unknown) => new Notice(String(error)));
+  }
+
+  /** A task's editor: with three panes the task sidebar (see revealInSidebar), else the task editor. */
+  private openTaskEditor(task: Task, focusProperty?: TaskEditorProperty): void {
+    if (this.detailsInSidebar) this.revealInSidebar(task, { focus: !Platform.isMobile });
+    else this.plugin.openEditor({ ...this.state, task, ...(focusProperty ? { focusProperty } : {}) });
   }
 
   /** Closing a new task's card with nothing typed (no title, notes or subtasks) removes the task again. */
@@ -1394,8 +1426,7 @@ export class TaskMainView extends ItemView {
       const rect = row?.getBoundingClientRect();
       if (row && rect) this.openTaskMenu(task, row, { x: rect.left + 24, y: rect.bottom });
     }
-    else if (focusProperty) this.plugin.openEditor({ ...this.state, task, focusProperty });
-    else this.plugin.openEditor({ ...this.state, task });
+    else this.openTaskEditor(task, focusProperty);
   }
 
   /** The Edit task properties command: the selection's menu, below its first row. */
@@ -1419,7 +1450,7 @@ export class TaskMainView extends ItemView {
         choices: TASK_STATUSES.map(status => ({ value: status, label: STATUS_LABELS[status], icon: STATUS_ICONS[status] })),
         choose: value => this.setTaskStatus(task, value as TaskStatus)
       });
-    } else if (!this.openPropertyEditor([task], property, anchor)) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
+    } else if (!this.openPropertyEditor([task], property, anchor)) this.openTaskEditor(task, property);
   }
 
   /** For the task sidebar: completes, reopens or otherwise sets a task's status; the selection stays (focus does not move here). */
@@ -2086,10 +2117,13 @@ export class TaskMainView extends ItemView {
     });
   }
 
-  /** Opens a task: in the Things style as a card in place, except in the calendar, which has no room for one. */
+  /**
+   * Opens a task: in the Things style as a card in place, except in the calendar, which has no room for one; with
+   * three panes, in the task sidebar (with the caret in its title, but on phones and tablets, where it only shows).
+   */
   private openTask(task: Task): void {
-    if (this.plugin.settings.style === "things" && this.layout !== "calendar") void this.expandCard(task);
-    else this.plugin.openEditor({ ...this.state, task });
+    if (this.plugin.settings.style === "things" && this.layout !== "calendar" && !this.detailsInSidebar) void this.expandCard(task);
+    else this.openTaskEditor(task);
   }
 
   /** `blank`: a new task's card, its title empty to type (its note keeps the placeholder until then). */

@@ -168,6 +168,11 @@ export interface TaskManagerSettings {
   fileSortOrder: FileSortOrder;
   /** How task lists and task properties look, after the app each style is modelled on. */
   style: "griply" | "things";
+  /**
+   * Where an opened task shows its details: "view" (two panes) as a card in its list (Things) or in the task editor
+   * (Griply); "sidebar" (three panes) only in the task sidebar.
+   */
+  taskDetails: "view" | "sidebar";
   /** Stamp tasks with the date they were completed. */
   completionDates: boolean;
   /** Each view's View options, by view: "today", "project:Projects/Site.md", "tag:errand" or "tag:Errands.md". */
@@ -197,6 +202,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   showFiles: false,
   fileSortOrder: "alphabetical",
   style: "things",
+  taskDetails: "view",
   completionDates: false,
   viewOptions: {},
   viewLayouts: {},

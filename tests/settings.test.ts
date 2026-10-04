@@ -69,7 +69,7 @@ describe("settings compatibility", () => {
       ["General", ["Inbox note", "New task position", "Section heading level", "Task mode", "Show undo notices"]],
       ["How tasks are written", ["Date format", "Link dates", "Update dates", "Tag format", "Record completion dates"]],
       ["Ignored tasks", ["Ignored folders and notes", "Ignored tags"]],
-      ["Appearance", ["Style", "Density", "Show files in sidebar", "Show subtasks in task views"]],
+      ["Appearance", ["Style", "Task details", "Density", "Show files in sidebar", "Show subtasks in task views"]],
       ["Calendar", ["Color calendar tasks by project", "Color calendar checkboxes by priority"]],
       ["Import", ["Import from the Tasks plugin"]]
     ]);

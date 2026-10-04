@@ -31,6 +31,7 @@ import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
 import { TaskQuickSwitcher } from "./quick-switcher";
 import { TaskSidebarView, TASK_SIDEBAR_VIEW } from "./task-sidebar";
+import { NEW_TASK_TITLE } from "./task-title";
 
 const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay", "linkTags", "taskHoverHighlight", "wrapTaskTitles", "wrapCalendarTaskTitles", "wrapKanbanTaskTitles", "showSubtaskCounts", "showGroupTaskCounts", "weeklyReview"];
 
@@ -306,6 +307,7 @@ export default class TaskManagerPlugin extends Plugin {
     if (!["alphabetical", "alphabeticalReverse", "byModifiedTime", "byModifiedTimeReverse", "byCreatedTime", "byCreatedTimeReverse"].includes(this.settings.fileSortOrder)) this.settings.fileSortOrder = "alphabetical";
     // Things is the default; only an explicit Griply choice keeps Griply.
     this.settings.style = this.settings.style === "griply" ? "griply" : "things";
+    this.settings.taskDetails = this.settings.taskDetails === "sidebar" ? "sidebar" : "view";
     this.settings.completionDates = this.settings.completionDates === true;
     const options: unknown = this.settings.viewOptions;
     // A fresh object, never the defaults' own: views write into it.
@@ -368,6 +370,23 @@ export default class TaskManagerPlugin extends Plugin {
       await leaf.setViewState({ type: TASK_SIDEBAR_VIEW, active: false });
     }
     if (reveal) await this.app.workspace.revealLeaf(leaf);
+  }
+
+  /**
+   * Shows a task in the task sidebar, opening the sidebar first (on phones and tablets, its drawer) when it is closed.
+   * `focus` puts the caret in the task's title; `blank`, for a task just added, empties the title to type.
+   */
+  async showInTaskSidebar(id: string, options: { focus?: boolean; blank?: boolean } = {}): Promise<void> {
+    await this.activateTaskSidebar(true);
+    const view = this.app.workspace.getLeavesOfType(TASK_SIDEBAR_VIEW)[0]?.view;
+    if (view instanceof TaskSidebarView) view.showTask(id, options);
+  }
+
+  /** Before a view adds a task: the task sidebar saves the task it shows (or removes one just added and left untitled). */
+  async settleTaskSidebar(): Promise<void> {
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_SIDEBAR_VIEW)) {
+      if (leaf.view instanceof TaskSidebarView) await leaf.view.settle();
+    }
   }
 
   /** The task sidebar follows the task view in front and its selection; it redraws on the next frame. */
@@ -652,6 +671,18 @@ export default class TaskManagerPlugin extends Plugin {
     if (path && this.index.isProject(path)) this.openEditor({ mode: "all", projectPath: path });
     else if (path && tag) this.openEditor({ mode: "tags", tag, pagePath: path });
     else this.openEditor({ mode: "inbox" });
+  }
+
+  /**
+   * Writes a new task at once, as a view would start it, titled “New To-Do” in its note until a title is typed in its
+   * card or the task sidebar (which remove it again if none is); returns it.
+   */
+  async createBlankTask(state: OpenEditorState): Promise<Task | undefined> {
+    const draft: TaskDraft = { ...this.newTaskDraft(state), title: NEW_TASK_TITLE };
+    const path = draft.destination.split("#")[0];
+    const line = await this.store.create(draft);
+    await this.index.refreshPath(path);
+    return this.index.tasksForPath(path).find(task => task.line === line);
   }
 
   /** A new task as a view would start it: its tag, its project, or today's (or tomorrow's) date. */

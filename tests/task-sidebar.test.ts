@@ -22,7 +22,7 @@ vi.mock("obsidian", async importOriginal => {
   return { ...original, ItemView, Menu: class {}, Notice: class {}, setIcon: vi.fn() };
 });
 
-import { TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { Platform, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { TaskSidebarView } from "../src/task-sidebar";
@@ -80,12 +80,25 @@ async function setup(notes: Array<[string, string]>) {
       return [...new Set(tasks.map(task => task.path))];
     }),
     setStatus: vi.fn().mockResolvedValue([]), addSubtask: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]),
-    bulkChange: vi.fn().mockResolvedValue([])
+    bulkChange: vi.fn().mockResolvedValue([]),
+    delete: vi.fn(async (task: Task) => {
+      const lines = contents.get(task.path)!.split("\n");
+      lines.splice(task.line, 1);
+      contents.set(task.path, lines.join("\n"));
+    })
   };
   const plugin = {
     settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
     openEditor: vi.fn(), openTag: vi.fn().mockResolvedValue(undefined), openQuickSwitcher: vi.fn(), undoTaskChange: vi.fn(), redoTaskChange: vi.fn(),
-    refreshTaskSidebar: () => sidebar.render()
+    refreshTaskSidebar: () => sidebar.render(),
+    showInTaskSidebar: vi.fn(async (id: string, options?: { focus?: boolean; blank?: boolean }) => sidebar.showTask(id, options)),
+    settleTaskSidebar: () => sidebar.settle(),
+    /** As the plugin adds a task in a view: “New To-Do”, here at the top of A.md. */
+    createBlankTask: vi.fn(async () => {
+      contents.set("A.md", `- [ ] New To-Do\n${contents.get("A.md")}`);
+      await index.refreshPath("A.md");
+      return index.tasksForPath("A.md")[0];
+    })
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const sidebar = new TaskSidebarView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
@@ -317,6 +330,83 @@ describe("editing in the task sidebar", () => {
     expect(view.getSelectedTasks().map(task => task.title)).toEqual(["Keep me"]);
     document.body.click();
     expect(view.getSelectedTasks()).toEqual([]);
+  });
+});
+
+describe("three panes (Task details › Three panes: in the sidebar)", () => {
+  it("opens a task in the sidebar, with the caret in its title, rather than as a card or in the task editor", async () => {
+    const { view, plugin, main, side } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
+    plugin.settings.taskDetails = "sidebar";
+    const title = () => side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field");
+    for (const style of ["things", "griply"] as const) {
+      plugin.settings.style = style;
+      await view.setState({ mode: "all" });
+      rows(main())[1].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(title()?.value).toBe("Second"));
+      expect(document.activeElement).toBe(title());
+      expect(main().querySelector(".tm-things-card")).toBeNull();
+      expect(view.getSelectedTasks().map(task => task.title)).toEqual(["Second"]);
+      // So does Enter on a selected task.
+      rows(main())[0].click();
+      rows(main())[0].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(document.activeElement).toBe(title()));
+      expect(title()!.value).toBe("First");
+    }
+    expect(plugin.openEditor).not.toHaveBeenCalled();
+    expect(plugin.showInTaskSidebar).toHaveBeenCalledWith(expect.any(String), { focus: true });
+  });
+
+  it("on phones and tablets, shows a tapped task in the sidebar (its drawer slides in), without the keyboard", async () => {
+    const platform = Platform as { isMobile?: boolean };
+    platform.isMobile = true;
+    onTestFinished(() => { platform.isMobile = false; });
+    const { view, plugin, main, side } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
+    plugin.settings.taskDetails = "sidebar";
+    await view.setState({ mode: "all" });
+    rows(main())[0].click();
+    await vi.waitFor(() => expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")?.value).toBe("First"));
+    expect(plugin.showInTaskSidebar).toHaveBeenCalledExactlyOnceWith(rows(main())[0].getAttribute("data-task-id"), { focus: false });
+    expect(document.activeElement).not.toBe(side().querySelector(".tm-sidebar-title-field"));
+    expect(main().querySelector(".tm-things-card")).toBeNull();
+    expect(plugin.openEditor).not.toHaveBeenCalled();
+  });
+
+  it("adds a new task in the sidebar, its title empty to type: left untitled it is removed again, and a typed title is saved", async () => {
+    const { view, plugin, store, main, side, contents } = await setup([["A.md", "- [ ] Existing"]]);
+    plugin.settings.taskDetails = "sidebar";
+    await view.setState({ mode: "all" });
+    const title = () => side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
+    view.newTask();
+    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
+    expect(title().value).toBe("");
+    expect(document.activeElement).toBe(title());
+    expect(view.getSelectedTasks().map(task => task.title)).toEqual(["New To-Do"]);
+    expect(main().querySelector(".tm-things-card")).toBeNull();
+    // Another task selected with nothing typed: the new one goes.
+    rows(main()).find(row => row.textContent?.includes("Existing"))!.click();
+    await vi.waitFor(() => expect(store.delete).toHaveBeenCalledOnce());
+    expect(contents.get("A.md")).toBe("- [ ] Existing");
+    // As does one left for another new task, which takes its line.
+    view.newTask();
+    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
+    view.newTask();
+    await vi.waitFor(() => expect(store.delete).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(view.getSelectedTasks().map(task => task.title)).toEqual(["New To-Do"]));
+    expect(contents.get("A.md")).toBe("- [ ] New To-Do\n- [ ] Existing");
+    rows(main()).find(row => row.textContent?.includes("Existing"))!.click();
+    await vi.waitFor(() => expect(store.delete).toHaveBeenCalledTimes(3));
+
+    view.newTask();
+    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
+    title().value = "Buy milk";
+    title().dispatchEvent(new Event("input", { bubbles: true }));
+    title().blur();
+    await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Buy milk\n- [ ] Existing"));
+    await settle();
+    expect(title().value).toBe("Buy milk");
+    expect(title().placeholder).toBe("Title");
+    expect(store.delete).toHaveBeenCalledTimes(3);
+    expect(plugin.openEditor).not.toHaveBeenCalled();
   });
 });
 
