@@ -34,6 +34,10 @@ export interface CalendarOptions {
   move: (task: Task, date: string, time?: string) => Promise<void>;
   /** A restored time-grid scroll position; without one, day and week views open near the current time. */
   initialScrollTop?: number;
+  /** False draws no toolbar, and the period and scope then stay as given (no keys change them either). */
+  toolbar?: boolean;
+  /** Draws only the tasks without a date, without the days. */
+  unscheduledOnly?: boolean;
 }
 
 /** Unscheduled tasks render in pages so a large vault does not build every card at once. */
@@ -45,7 +49,7 @@ const KEY_SAVE_DELAY_MS = 500;
 /** Render inside the task view; all writes go through its existing task store. */
 export function renderCalendar(container: HTMLElement, options: CalendarOptions): void {
   const root = container.createDiv({ cls: `tm-calendar is-${options.scope}-scope`, attr: { tabindex: "0" } });
-  root.addEventListener("keydown", event => {
+  if (options.toolbar !== false) root.addEventListener("keydown", event => {
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) return;
     const target = event.target as HTMLElement;
     if (target.closest?.("input, textarea, select, [contenteditable=true], [role=slider]")) return;
@@ -77,29 +81,31 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   let dragged: Task | undefined;
   let grabOffsetMinutes = 0;
   let moving = false;
-  const toolbar = root.createDiv({ cls: "tm-calendar-toolbar" });
-  const controls = toolbar.createDiv({ cls: "tm-calendar-controls" });
-  for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]] as const) {
-    const button = controls.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
-    setIcon(button, icon);
-    button.addEventListener("click", () => options.navigate(shiftCalendar(options.anchor, options.scope, delta), options.scope));
-  }
-  const today = controls.createEl("button", { text: "Today" });
-  today.addEventListener("click", () => options.navigate(todayIso(), options.scope));
   const date = localDate(options.anchor);
   const days = options.scope === "four-day" ? Array.from({ length: 4 }, (_, i) => addDays(options.anchor, i)) : options.scope === "week" ? calendarDays(options.anchor, "week") : [];
-  const title = options.scope === "year" ? String(date.getFullYear()) : date.toLocaleDateString(undefined, { month: "long", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "numeric" as const } : {}) });
-  toolbar.createEl("h2", { text: title });
-  const scopes = controls.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Calendar scope" } });
-  for (const [scope, label] of [["four-day", "4D"], ["week", "W"], ["month", "M"]] as const) {
-    const button = scopes.createEl("button", { text: label, attr: { "aria-label": scope === "four-day" ? "4 days" : scope === "week" ? "Week" : "Month", "aria-pressed": String(options.scope === scope) } });
-    button.addEventListener("click", () => options.navigate(options.anchor, scope));
+  const toolbar = options.toolbar === false ? undefined : root.createDiv({ cls: "tm-calendar-toolbar" });
+  if (toolbar) {
+    const controls = toolbar.createDiv({ cls: "tm-calendar-controls" });
+    for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]] as const) {
+      const button = controls.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
+      setIcon(button, icon);
+      button.addEventListener("click", () => options.navigate(shiftCalendar(options.anchor, options.scope, delta), options.scope));
+    }
+    const today = controls.createEl("button", { text: "Today" });
+    today.addEventListener("click", () => options.navigate(todayIso(), options.scope));
+    const title = options.scope === "year" ? String(date.getFullYear()) : date.toLocaleDateString(undefined, { month: "long", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "numeric" as const } : {}) });
+    toolbar.createEl("h2", { text: title });
+    const scopes = controls.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Calendar scope" } });
+    for (const [scope, label] of [["four-day", "4D"], ["week", "W"], ["month", "M"]] as const) {
+      const button = scopes.createEl("button", { text: label, attr: { "aria-label": scope === "four-day" ? "4 days" : scope === "week" ? "Week" : "Month", "aria-pressed": String(options.scope === scope) } });
+      button.addEventListener("click", () => options.navigate(options.anchor, scope));
+    }
   }
   const body = root.createDiv({ cls: "tm-calendar-body" });
   // Stable scroll keys let the task view restore scroll positions across re-renders.
   const surface = body.createDiv({ cls: "tm-calendar-surface", attr: { "data-tm-scroll-key": "calendar-surface" } });
   const planner = options.planning ? body.createEl("aside", { cls: "tm-calendar-planner", attr: { "aria-label": "Plan tasks", "data-tm-scroll-key": "calendar-planner" } }) : undefined;
-  if (planner) {
+  if (planner && toolbar) {
     planner.hidden = !options.planningOpen;
     const plan = toolbar.createEl("button", { cls: "tm-calendar-plan-toggle", text: "Plan tasks", attr: { "aria-expanded": String(!planner.hidden) } });
     const icon = plan.createSpan(); setIcon(icon, "panel-right");
@@ -420,7 +426,9 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     const now = new Date();
     scroll.scrollTop = Math.max(0, (now.getHours() + now.getMinutes() / 60 - 1) * HOUR_HEIGHT);
   };
-  if (options.scope === "day" || options.scope === "week" || options.scope === "four-day") {
+  if (options.unscheduledOnly) {
+    // Only the tasks without a date, below.
+  } else if (options.scope === "day" || options.scope === "week" || options.scope === "four-day") {
     if (options.scope === "day") {
       const allDay = surface.createDiv({ cls: "tm-calendar-allday" });
       allDay.createSpan({ text: "all-day" });

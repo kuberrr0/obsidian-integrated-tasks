@@ -33,9 +33,9 @@ Today and Upcoming consider both the scheduled date and the deadline, using whic
 
 The **task sidebar** opens in Obsidian's right sidebar (drag its tab to move it, or run **Open task sidebar** to bring it back). What it shows follows the task view in front:
 
-- With **Today** open, a calendar of the day. Drag a task to another time, or click a time to add a task there.
-- With **Upcoming** open, your tasks with no date (no scheduled date and no deadline) below a calendar of the month. Drag one onto a day to schedule it.
-- Anywhere else, the selected task's details, which you can edit in place: its title, notes, subtasks, and properties. In the Things style it's the task's card; in the Griply style, a list of its properties. What you type is saved when you leave the field or select another task.
+- With **Today** open, today's calendar. Drag a task to another time, or click a time to add a task there.
+- With **Upcoming** open, your tasks with no date (no scheduled date and no deadline).
+- Anywhere else, the selected task's details, which you can edit in place: its title, a list of its properties, its notes, and its subtasks. What you type is saved when you leave the field or select another task.
 
 Press **Cmd/Ctrl+K** in a task view, or run **Quick switch to view, project, tag, or task**, to jump anywhere by typing: a view, a project, a tag, a smart list, or an open task by its title.
 

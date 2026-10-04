@@ -2,8 +2,8 @@ import { ItemView, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
 import { TaskMainView } from "./task-view";
 import { renderCalendar } from "./calendar-view";
-import { calendarDate, rescheduledDraft, type CalendarScope } from "./calendar";
-import { formatDate, todayIso } from "./date";
+import { calendarDate, rescheduledDraft } from "./calendar";
+import { todayIso } from "./date";
 import { parseTaskInput, repeatLabel } from "./parser";
 import { sortTasks } from "./query";
 import { isRepeatingTask } from "./recurring-task";
@@ -12,18 +12,18 @@ import type { TaskEditorProperty } from "./task-editor";
 import { taskInputRanges } from "./task-input";
 import { deadlineIsDistant, deadlineIsOverdue, editable, taskDeadlineCountdown, taskTimeDurationLabel, taskTimeLabel } from "./task-row-details";
 import { STATUS_ICONS, STATUS_LABELS, checkboxLabel, statusClass } from "./task-status";
-import { PRIORITY_NAMES, cardNotes, longDate, paintTokens, renderThingsTaskCard, repeatIcon, type TaskCardDraft } from "./things-task-card";
-import type { Task, TaskDraft, TaskFilter } from "./types";
+import { PRIORITY_NAMES, cardNotes, longDate, paintTokens, repeatIcon, type TaskCardDraft } from "./things-task-card";
+import type { Task, TaskFilter } from "./types";
 
 export const TASK_SIDEBAR_VIEW = "task-manager-sidebar";
 
-/** What the sidebar shows for the task view in front: a calendar for Today, Upcoming's tasks with no date to plan, or
- * the selected task. */
+/** What the sidebar shows for the task view in front: Today's calendar, Upcoming's tasks with no date, or the selected
+ * task. */
 type SidebarMode = "today" | "upcoming" | "details";
 /** A property the sidebar edits through the task view showing the task (see TaskMainView.editTaskProperty). */
 type SidebarProperty = TaskEditorProperty | "status" | "project";
 
-/** Upcoming's calendar is All Tasks with View options › No date for both the scheduled date and the deadline. */
+/** Upcoming's list is All Tasks with View options › No date for both the scheduled date and the deadline. */
 const UNDATED: TaskFilter[] = [
   { property: "scheduledDate", operator: "missing", values: [] },
   { property: "deadline", operator: "missing", values: [] }
@@ -39,14 +39,12 @@ function autosize(area: HTMLTextAreaElement): void {
 }
 
 /**
- * The task sidebar (in the right sidebar by default). Its content follows the task view in front: with Today open, a
- * calendar of the day; with Upcoming open, a calendar of the tasks with no date, to drag onto a day; anywhere else,
- * the selected task's details, editable in place and drawn in the chosen style.
+ * The task sidebar (in the right sidebar by default). Its content follows the task view in front: with Today open, the
+ * day's calendar; with Upcoming open, the tasks with no date; anywhere else, the selected task's details, editable in
+ * place. Only the tasks show: no headings or calendar controls.
  */
 export class TaskSidebarView extends ItemView {
   private mode?: SidebarMode;
-  private calendarAnchor = todayIso();
-  private calendarScope: CalendarScope = "day";
   /** The shown task's title and notes as typed (and a subtask being typed); `dirty` until they are saved. */
   private draft?: { id: string; dirty: boolean } & TaskCardDraft;
   /** Saves and writes, one after another, so each sees the task as the last one left it. */
@@ -104,18 +102,13 @@ export class TaskSidebarView extends ItemView {
     const view = this.taskView();
     const state = view?.getState();
     const mode: SidebarMode = view && !view.pagePath && (state?.mode === "today" || state?.mode === "upcoming") ? state.mode : "details";
-    // Each calendar opens on today: Today's as its day, Upcoming's as its month.
-    if (mode !== this.mode) {
-      this.calendarAnchor = todayIso();
-      this.calendarScope = mode === "upcoming" ? "month" : "day";
-    }
     const selected = mode === "details" ? view?.sidebarSelection() ?? [] : [];
     const task = selected.length === 1 ? selected[0] : undefined;
     this.followTask(task);
     const settings = this.plugin.settings;
     const drawn = JSON.stringify([mode, settings.style, settings.density, mode === "details"
       ? [Boolean(view), selected.length, task?.id, task?.raw, task?.description, task && this.children(task).map(child => child.raw)]
-      : [this.calendarAnchor, this.calendarScope, this.indexVersion, settings.calendarProjectColors, settings.calendarPriorityColors]]);
+      : [todayIso(), this.indexVersion, settings.calendarProjectColors, settings.calendarPriorityColors]]);
     if (!force && drawn === this.drawn) return;
     const modeChanged = mode !== this.mode;
     this.drawn = drawn;
@@ -123,7 +116,7 @@ export class TaskSidebarView extends ItemView {
     this.preserveView(!modeChanged, () => {
       const container = this.content;
       container.empty();
-      // It shares the task views' styles (checkboxes, cards, the calendar), which hang off .tm-main-view.
+      // It shares the task views' styles (checkboxes, pills, the calendar), which hang off .tm-main-view.
       container.addClass("tm-main-view", "tm-task-sidebar");
       container.toggleClass("tm-style-things", settings.style === "things");
       container.toggleClass("tm-style-griply", settings.style === "griply");
@@ -153,26 +146,24 @@ export class TaskSidebarView extends ItemView {
     if (range && isTextField(target)) target.setSelectionRange(range[0], range[1]);
   }
 
-  // Today and Upcoming: a calendar.
+  // Today and Upcoming: their tasks on a calendar, without its toolbar.
 
   private renderPlanner(container: HTMLElement, mode: "today" | "upcoming"): void {
-    const anchor = this.calendarAnchor;
+    const today = todayIso();
     const tasks = sortTasks(this.plugin.index.query({ mode: "all", showCompleted: false, filters: mode === "upcoming" ? UNDATED : [] })
       .filter(task => mode === "upcoming" || calendarDate(task)));
-    const header = container.createDiv({ cls: "tm-sidebar-header" });
-    if (mode === "today") {
-      header.createEl("h4", { cls: "tm-sidebar-title", text: anchor === todayIso() ? "Today" : formatDate(anchor, "dddd") });
-      header.createDiv({ cls: "tm-sidebar-subtitle", text: formatDate(anchor, "MMMM D, YYYY") });
-    } else {
-      header.createEl("h4", { cls: "tm-sidebar-title", text: "No date" });
-      header.createDiv({ cls: "tm-sidebar-subtitle", text: tasks.length ? `${tasks.length} task${tasks.length === 1 ? "" : "s"} to plan: drag one onto a day.` : "Every task has a date." });
+    if (mode === "upcoming" && !tasks.length) {
+      const empty = container.createDiv({ cls: "tm-empty tm-sidebar-empty" });
+      setIcon(empty.createDiv({ cls: "tm-empty-icon" }), "calendar-check");
+      empty.createEl("h3", { text: "Every task has a date" });
+      return;
     }
     renderCalendar(container.createDiv({ cls: "tm-sidebar-calendar" }), {
-      anchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
+      // Today's day, and for Upcoming only the tasks without a date; neither changes period.
+      anchor: today, scope: mode === "today" ? "day" : "month", toolbar: false, unscheduledOnly: mode === "upcoming",
+      tasks, dateFormat: this.plugin.dateFormat(), navigate: () => {},
       color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
       priorityColors: this.plugin.settings.calendarPriorityColors,
-      // Today's calendar stays a single day.
-      navigate: (next, scope) => { this.calendarAnchor = next; this.calendarScope = mode === "today" ? "day" : scope; this.render(true); },
       create: preset => this.plugin.openEditor({ mode: "all", preset }),
       edit: task => this.plugin.openEditor({ mode: "all", task }),
       toggle: (task, completed) => this.plugin.store.toggle(task, completed),
@@ -250,21 +241,6 @@ export class TaskSidebarView extends ItemView {
     else for (const path of await write()) await this.plugin.index.refreshPath(path);
   }
 
-  /** A change to the shown task's line, after any save before it. */
-  private update(id: string, patch: (task: Task) => Partial<TaskDraft> | undefined, failure: string): void {
-    void this.saveDraft();
-    this.saving = this.saving.then(async () => {
-      const task = this.plugin.index.taskById(id);
-      const changes = task && patch(task);
-      if (!task || !changes) return;
-      try {
-        await this.change(task, async () => { await this.plugin.store.update(task, { ...draftFromTask(task), ...changes }); return [task.path]; });
-      } catch (cause) {
-        new Notice(cause instanceof Error ? cause.message : failure);
-      }
-    });
-  }
-
   /** The property just clicked or focused, for a popover to open beside. */
   private popoverAnchor(): HTMLElement | undefined {
     const active = this.content.ownerDocument.activeElement as HTMLElement | null;
@@ -285,7 +261,11 @@ export class TaskSidebarView extends ItemView {
     const failed = (cause: unknown): void => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); };
     if (!shown) { void this.plugin.store.toggle(task, completed).catch(failed); return; }
     void this.saveDraft();
-    this.saving = this.saving.then(() => this.change(task, async () => { await this.plugin.store.toggle(task, completed); return [task.path]; }).catch(failed));
+    // As the task reads once any typing is saved.
+    this.saving = this.saving.then(() => {
+      const current = this.plugin.index.taskById(task.id) ?? task;
+      return this.change(current, async () => { await this.plugin.store.toggle(current, completed); return [current.path]; });
+    }).catch(failed);
   }
 
   private renameChild(child: Task, title: string): void {
@@ -297,8 +277,8 @@ export class TaskSidebarView extends ItemView {
       .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not rename the subtask."); });
   }
 
-  /** Writes a typed subtask; after Enter, the next one starts right below it. */
-  private async addSubtask(parentId: string, title: string, after: Task | undefined, next: boolean): Promise<void> {
+  /** Writes a typed subtask after `after` (the last one); its field stays focused for the next. */
+  private async addSubtask(parentId: string, title: string, after: Task | undefined): Promise<void> {
     const parent = this.plugin.index.taskById(parentId);
     if (!parent) return;
     try {
@@ -308,19 +288,7 @@ export class TaskSidebarView extends ItemView {
       await this.plugin.index.refreshPath(parent.path);
     } catch (cause) {
       new Notice(cause instanceof Error ? cause.message : "Could not add the subtask.");
-      return;
     }
-    if (!next || this.draft?.id !== parentId) return;
-    const children = this.plugin.index.taskById(parentId)?.childIds ?? [];
-    const added = after ? children[children.indexOf(after.id) + 1] : children[children.length - 1];
-    this.draft = { ...this.draft, subtask: { after: added, text: "" } };
-    this.render(true);
-    this.content.querySelector<HTMLElement>("[data-tm-focus-key='card-subtask-new'], [data-tm-focus-key='sidebar-subtask-new']")?.focus();
-  }
-
-  private async openTag(tag: string): Promise<void> {
-    await this.saveDraft();
-    await this.plugin.openTag(tag).catch((error: unknown) => { new Notice(String(error)); });
   }
 
   private async openSource(task: Task): Promise<void> {
@@ -338,42 +306,12 @@ export class TaskSidebarView extends ItemView {
         : view ? "Select a task to see its details here." : "Select a task in a task view to see its details here." });
       return;
     }
-    if (this.plugin.settings.style === "things") this.renderThingsDetails(container, view, task);
-    else this.renderGriplyDetails(container, view, task);
+    this.renderTaskDetails(container, view, task);
     const footer = container.createDiv({ cls: "tm-sidebar-footer" });
     const open = footer.createEl("button", { cls: "tm-sidebar-open-note", attr: { type: "button", title: task.path, "data-tm-focus-key": "sidebar-open-note" } });
     setIcon(open.createSpan({ cls: "tm-sidebar-open-note-icon", attr: { "aria-hidden": "true" } }), "file-text");
     open.createSpan({ text: "Open in note" });
     open.addEventListener("click", () => void this.openSource(task));
-  }
-
-  /** Things: the task's card, as it opens in a list. */
-  private renderThingsDetails(container: HTMLElement, view: TaskMainView, task: Task): void {
-    const dateFormat = this.plugin.dateFormat();
-    const card = renderThingsTaskCard(container, {
-      task, depth: 0, draft: this.draft!, tags: task.tags ?? [], dateFormat, repeating: isRepeatingTask(this.app, task),
-      children: this.children(task),
-      childDetails: child => ({
-        grouping: "none", dateFormat, show: property => property !== "defer", tags: child.tags ?? [], todayMarker: true,
-        edit: property => void this.edit(view, child, property), openSource: () => {}, openTag: tag => void this.openTag(tag)
-      }),
-      change: next => this.typed(task, next),
-      toggle: (item, completed) => this.toggle(item, completed, item.id === task.id),
-      edit: property => void this.edit(view, task, property),
-      // Escape (or Cmd/Ctrl+Enter) saves and leaves the card.
-      collapse: () => { void this.saveDraft(); this.popoverAnchor()?.blur(); },
-      renameChild: (child, title) => this.renameChild(child, title),
-      addChild: (title, after, next) => void this.addSubtask(task.id, title, after, next),
-      addTags: tags => this.update(task.id, current => {
-        const next = [...new Set([...(current.tags ?? []), ...tags])];
-        return next.length === (current.tags ?? []).length ? undefined : { tags: next };
-      }, "Could not add the tag."),
-      removeTag: tag => this.update(task.id, current => current.tags?.includes(tag) ? { tags: current.tags.filter(item => item !== tag) } : undefined, "Could not remove the tag."),
-      project: { label: noteName(task.path), choose: anchor => void this.edit(view, task, "project", anchor) },
-      openTag: tag => void this.openTag(tag),
-      tagSuggestions: this.plugin.index.tagSummaries().map(tag => tag.name)
-    });
-    this.saveOnLeave(card, ".tm-things-card-title, .tm-things-card-notes");
   }
 
   /** Typing is saved once focus leaves the title and notes (moving between the two keeps it). */
@@ -386,10 +324,10 @@ export class TaskSidebarView extends ItemView {
   }
 
   /**
-   * Griply: the title over a list of the task's properties, each a row that opens its editor, then its notes and its
-   * subtasks.
+   * The title over a list of the task's properties, each a row that opens its editor, then its notes and subtasks; in
+   * either style, drawn in its colours and checkboxes.
    */
-  private renderGriplyDetails(container: HTMLElement, view: TaskMainView, task: Task): void {
+  private renderTaskDetails(container: HTMLElement, view: TaskMainView, task: Task): void {
     const draft = this.draft!;
     const now = new Date();
     const today = todayIso(now);
@@ -397,7 +335,8 @@ export class TaskSidebarView extends ItemView {
     const panel = container.createDiv({ cls: "tm-sidebar-details" });
 
     const head = panel.createDiv({ cls: "tm-sidebar-head" });
-    const repeating = isRepeatingTask(this.app, task);
+    // As in its row: in the Things style a recurring task's checkbox is its repeat icon.
+    const repeating = this.plugin.settings.style === "things" && isRepeatingTask(this.app, task);
     const box = head.createEl("label", { cls: `tm-checkbox-target${repeating ? ` tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` : ""}` });
     const checkbox = box.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "sidebar-checkbox" } });
     checkbox.checked = task.completed;
@@ -472,11 +411,11 @@ export class TaskSidebarView extends ItemView {
     window.requestAnimationFrame(fit);
     this.saveOnLeave(panel, ".tm-sidebar-title-field, .tm-sidebar-notes");
 
-    this.renderGriplySubtasks(panel, task);
+    this.renderSubtasks(panel, task);
   }
 
   /** The subtasks: each checks off and renames in place; the last line adds one, and Enter starts the next. */
-  private renderGriplySubtasks(panel: HTMLElement, task: Task): void {
+  private renderSubtasks(panel: HTMLElement, task: Task): void {
     const children = this.children(task);
     const heading = panel.createEl("h5", { cls: "tm-sidebar-section-title", text: "Subtasks" });
     if (children.length) heading.createSpan({ cls: "tm-sidebar-section-count", text: `${children.filter(child => child.completed).length}/${children.length}` });
@@ -512,7 +451,7 @@ export class TaskSidebarView extends ItemView {
       if (!value) return;
       input.value = "";
       keep("");
-      void this.addSubtask(task.id, value, children[children.length - 1], false);
+      void this.addSubtask(task.id, value, children[children.length - 1]);
     });
   }
 }

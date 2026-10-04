@@ -98,22 +98,24 @@ const rows = (container: HTMLElement) => Array.from(container.querySelectorAll<H
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe("what the task sidebar shows", () => {
-  it("follows the task view in front: a day calendar for Today, the undated tasks on a month for Upcoming, else the selected task", async () => {
+  it("follows the task view in front: today's calendar for Today, the tasks with no date for Upcoming, else the selected task", async () => {
     const today = todayIso();
-    const { view, sidebar, side, setActive } = await setup([["A.md", [`- [ ] Due today ${today}`, "- [ ] No date", `- [ ] Only a deadline {${today}}`, "- [ ] Another undated"].join("\n")]]);
+    const { view, sidebar, side, setActive, contents } = await setup([["A.md", [`- [ ] Due today ${today}`, "- [ ] No date", `- [ ] Only a deadline {${today}}`, "- [ ] Another undated"].join("\n")]]);
     await view.setState({ mode: "today" });
     expect(side().classList.contains("is-today")).toBe(true);
-    expect(side().querySelector(".tm-sidebar-title")!.textContent).toBe("Today");
     expect(side().querySelector(".tm-calendar.is-day-scope")).not.toBeNull();
     expect(Array.from(side().querySelectorAll(".tm-calendar-allday .tm-calendar-task-title")).map(title => title.textContent)).toEqual(["Due today", "Only a deadline"]);
-    // A day calendar has no tray for tasks without a date.
-    expect(side().querySelector(".tm-calendar-unscheduled")).toBeNull();
+    // Only the tasks: no heading, no calendar controls, and no tray for tasks without a date.
+    expect(side().querySelector("h4, .tm-calendar-toolbar, .tm-calendar-unscheduled")).toBeNull();
 
     await view.setState({ mode: "upcoming" });
     expect(side().classList.contains("is-upcoming")).toBe(true);
-    expect(side().querySelector(".tm-calendar.is-month-scope")).not.toBeNull();
     expect(Array.from(side().querySelectorAll(".tm-calendar-unscheduled .tm-calendar-task-title")).map(title => title.textContent)).toEqual(["No date", "Another undated"]);
-    expect(side().querySelector(".tm-sidebar-subtitle")!.textContent).toBe("2 tasks to plan: drag one onto a day.");
+    expect(side().querySelector("h4, .tm-calendar-toolbar, .tm-calendar-grid, .tm-calendar-day-scroll")).toBeNull();
+    contents.set("A.md", `- [ ] Due today ${today}`);
+    await (view as unknown as { plugin: { index: { refreshPath(path: string): Promise<void> } } }).plugin.index.refreshPath("A.md");
+    sidebar.render();
+    expect(side().querySelector(".tm-sidebar-empty h3")!.textContent).toBe("Every task has a date");
 
     await view.setState({ mode: "all" });
     expect(side().classList.contains("is-details")).toBe(true);
@@ -124,23 +126,26 @@ describe("what the task sidebar shows", () => {
     expect(side().querySelector(".tm-sidebar-empty p")!.textContent).toBe("Select a task in a task view to see its details here.");
   });
 
-  it("shows the selected task's card in the Things style, a property list in the Griply style, and a count for several", async () => {
-    const { view, sidebar, plugin, main, side } = await setup([["A.md", "- [ ] Parent 2026-10-08 p2 #[[work]]\n  - [ ] Child\n- [ ] Other"]]);
+  it("shows the selected task as a list of its properties in either style, and a count for several", async () => {
+    const { view, sidebar, plugin, main, side } = await setup([["A.md", "- [ ] Parent 2026-10-08 p2 every week #[[work]]\n  - [ ] Child\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
     rows(main())[0].click();
-    expect(side().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!.value).toBe("Parent");
-    expect(Array.from(side().querySelectorAll<HTMLInputElement>(".tm-things-card-check-title")).map(input => input.value)).toEqual(["Child"]);
-    expect(side().querySelector(".tm-sidebar-open-note")).not.toBeNull();
-
-    plugin.settings.style = "griply";
-    sidebar.render(true);
-    expect(side().classList.contains("tm-style-griply")).toBe(true);
     const property = (name: string) => Array.from(side().querySelectorAll<HTMLElement>(".tm-sidebar-property"))
       .find(row => row.querySelector(".tm-sidebar-property-name")!.textContent === name)!.querySelector(".tm-sidebar-property-value")!;
-    expect(property("Priority").textContent).toBe("P2 · Medium");
-    expect(property("Tags").textContent).toBe("work");
-    expect(property("Deadline").classList.contains("is-empty")).toBe(true);
-    expect(Array.from(side().querySelectorAll<HTMLInputElement>(".tm-sidebar-subtask-title")).map(input => input.value)).toEqual(["Child", ""]);
+    for (const style of ["things", "griply"] as const) {
+      plugin.settings.style = style;
+      sidebar.render(true);
+      expect(side().classList.contains(`tm-style-${style}`)).toBe(true);
+      expect(side().querySelector(".tm-things-card")).toBeNull();
+      expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Parent");
+      expect(property("Priority").textContent).toBe("P2 · Medium");
+      expect(property("Tags").textContent).toBe("work");
+      expect(property("Repeat").textContent).toBe("Every week");
+      expect(property("Deadline").classList.contains("is-empty")).toBe(true);
+      expect(Array.from(side().querySelectorAll<HTMLInputElement>(".tm-sidebar-subtask-title")).map(input => input.value)).toEqual(["Child", ""]);
+      // A recurring task's checkbox is its repeat icon in the Things style, as in its row.
+      expect(Boolean(side().querySelector(".tm-sidebar-head .tm-repeat-icon"))).toBe(style === "things");
+    }
 
     rows(main()).find(row => row.textContent!.includes("Other"))!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
     expect(side().querySelector(".tm-sidebar-empty h3")!.textContent).toBe("2 tasks selected");
@@ -152,50 +157,54 @@ describe("editing in the task sidebar", () => {
     const { view, main, side, store, contents } = await setup([["A.md", "- [ ] Draft the brief\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
     rows(main())[0].click();
-    const title = side().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    const title = side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
     title.focus();
     title.value = "Draft the launch brief";
     title.dispatchEvent(new Event("input", { bubbles: true }));
     // Moving on to the notes keeps typing.
-    side().querySelector<HTMLTextAreaElement>(".tm-things-card-notes")!.focus();
+    side().querySelector<HTMLTextAreaElement>(".tm-sidebar-notes")!.focus();
     expect(store.update).not.toHaveBeenCalled();
     side().querySelector<HTMLElement>(".tm-sidebar-open-note")!.focus();
     await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Draft the launch brief\n- [ ] Other"));
     await settle();
     expect(view.getSelectedTasks().map(task => task.title)).toEqual(["Draft the launch brief"]);
-    expect(side().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!.value).toBe("Draft the launch brief");
+    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Draft the launch brief");
   });
 
   it("keeps the task selected through writes in quick succession, before its row is redrawn", async () => {
-    const { view, main, side, contents } = await setup([["A.md", "- [ ] Book flights #[[travel]] #[[work]]\n- [ ] Other"]]);
+    const { view, main, side, contents } = await setup([["A.md", "- [ ] Book flights\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
+    // Completed tasks stay listed, so the task can stay selected once checked off.
+    (view as unknown as { showCompleted: boolean }).showCompleted = true;
+    view.render();
     rows(main())[0].click();
-    const title = side().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    const title = side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
     title.value = "Book the flights";
     title.dispatchEvent(new Event("input", { bubbles: true }));
-    // Taking a tag off saves the title first, then writes again at once.
-    side().querySelector<HTMLElement>(".tm-things-card-tag .tm-things-tag-remove")!.click();
-    await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Book the flights #[[work]]\n- [ ] Other"));
+    // Checking it off saves the title first, then writes again at once.
+    const box = side().querySelector<HTMLInputElement>(".tm-sidebar-head .tm-task-checkbox")!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [x] Book the flights\n- [ ] Other"));
     await settle();
-    expect(view.sidebarSelection().map(task => task.raw)).toEqual(["- [ ] Book the flights #[[work]]"]);
-    expect(side().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!.value).toBe("Book the flights");
+    expect(view.sidebarSelection().map(task => task.raw)).toEqual(["- [x] Book the flights"]);
+    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Book the flights");
   });
 
   it("saves typing before the shown task changes", async () => {
     const { view, main, side, contents } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
     await view.setState({ mode: "all" });
     rows(main())[0].click();
-    const title = side().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    const title = side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
     title.value = "First, renamed";
     title.dispatchEvent(new Event("input", { bubbles: true }));
     rows(main())[1].click();
     await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] First, renamed\n- [ ] Second"));
-    expect(side().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!.value).toBe("Second");
+    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Second");
   });
 
   it("edits a property in its popover through the task view, which keeps the task selected", async () => {
-    const { view, plugin, sidebar, main, side, store } = await setup([["A.md", "- [ ] Plan the offsite\n- [ ] Other"]]);
-    plugin.settings.style = "griply";
+    const { view, sidebar, main, side, store } = await setup([["A.md", "- [ ] Plan the offsite\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
     rows(main())[0].click();
     const priority = Array.from(side().querySelectorAll<HTMLElement>(".tm-sidebar-property")).find(row => row.textContent!.includes("Priority"))!;
@@ -214,7 +223,7 @@ describe("editing in the task sidebar", () => {
     const { view, main, side, store } = await setup([["A.md", "- [ ] Call the venue\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
     rows(main())[0].click();
-    const box = side().querySelector<HTMLInputElement>(".tm-things-card-head .tm-task-checkbox")!;
+    const box = side().querySelector<HTMLInputElement>(".tm-sidebar-head .tm-task-checkbox")!;
     box.checked = true;
     box.dispatchEvent(new Event("change", { bubbles: true }));
     await vi.waitFor(() => expect(store.toggle).toHaveBeenCalledOnce());
@@ -225,7 +234,7 @@ describe("editing in the task sidebar", () => {
     const { view, main, side } = await setup([["A.md", "- [ ] Keep me\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
     rows(main())[0].click();
-    side().querySelector<HTMLElement>(".tm-things-card-notes")!.click();
+    side().querySelector<HTMLElement>(".tm-sidebar-notes")!.click();
     side().click();
     expect(view.getSelectedTasks().map(task => task.title)).toEqual(["Keep me"]);
     document.body.click();

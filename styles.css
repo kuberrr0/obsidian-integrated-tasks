@@ -2524,39 +2524,27 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
 .tm-things-card-project-chevron svg { width: 12px; height: 12px; color: var(--text-faint); }
 .tm-things-card-project-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Task sidebar (the right sidebar by default): Today's calendar, Upcoming's tasks with no date on a calendar, or the
-   selected task's details. It shares the task views' styles through .tm-main-view. */
+/* Task sidebar (the right sidebar by default): Today's calendar, Upcoming's tasks with no date, or the selected task's
+   details; only the tasks, with no headings or calendar controls. It shares the task views' styles through
+   .tm-main-view. */
 .workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar {
   display: flex;
   flex-direction: column;
   gap: var(--size-4-3);
   padding: var(--size-4-3) var(--size-4-3) var(--size-4-6);
 }
-.tm-sidebar-header { flex-shrink: 0; }
-.tm-task-sidebar h4.tm-sidebar-title { margin: 0; font-size: var(--font-ui-large); font-weight: var(--font-bold); }
-.tm-sidebar-subtitle { margin-top: 2px; color: var(--text-muted); font-size: var(--font-ui-small); }
 
-/* A calendar fills the sidebar's height: the day's hours scroll, and so do the unscheduled tasks below the month. */
-.workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar:is(.is-today, .is-upcoming) { overflow: hidden; }
+/* Today's calendar fills the sidebar's height, and its hours scroll. */
+.workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar.is-today { overflow: hidden; }
 .tm-sidebar-calendar, .tm-sidebar-calendar .tm-calendar { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
-/* Too narrow for the centred controls: the month, then the controls, wrapping below it when they do not fit. */
-.tm-task-sidebar .tm-calendar .tm-calendar-toolbar { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: var(--size-4-2); padding: 0; margin-bottom: var(--size-4-2); }
-.tm-task-sidebar .tm-calendar .tm-calendar-toolbar h2 { flex: 1 0 auto; font-size: var(--font-ui-medium); }
-.tm-task-sidebar .tm-calendar-controls { flex-wrap: wrap; }
-.tm-task-sidebar .tm-calendar-scopes { margin-right: 0; }
-/* Today's calendar is one day, named by the header. */
-.tm-task-sidebar.is-today :is(.tm-calendar-scopes, .tm-calendar-toolbar h2) { display: none; }
 .tm-task-sidebar .tm-calendar-day-scroll { flex: 1; min-height: 0; max-height: none; border-radius: var(--radius-m); }
 .tm-task-sidebar .tm-calendar-allday { flex-shrink: 0; max-height: 30%; overflow-y: auto; }
-.tm-task-sidebar .tm-calendar.is-month-scope .tm-calendar-surface > .tm-calendar-grid { flex: 0 1 auto; grid-template-rows: auto repeat(6, minmax(34px, 1fr)); }
-.tm-task-sidebar .tm-calendar.is-month-scope .tm-calendar-cell > .tm-calendar-date { font-size: var(--font-ui-small); }
-.tm-task-sidebar .tm-calendar-unscheduled { flex: 1 1 auto; min-height: 0; margin-top: var(--size-4-3); overflow-y: auto; }
-/* The header names the list and says what to do with it; its tasks stack one per line. */
+/* Upcoming's tasks with no date, one per line, without the tray's heading and hint. */
+.tm-task-sidebar .tm-calendar-unscheduled { margin: 0; }
 .tm-task-sidebar .tm-calendar-unscheduled :is(h3, .tm-calendar-plan-hint) { display: none; }
 .tm-task-sidebar .tm-calendar-unscheduled .tm-calendar-task { width: 100%; margin: 0 0 4px; }
 
 /* The selected task. */
-.tm-task-sidebar .tm-things-card { margin: 0; }
 .tm-task-sidebar .tm-sidebar-empty { flex: 1; min-height: 240px; padding: 0 var(--size-4-4); }
 .tm-sidebar-footer { display: flex; }
 button.tm-sidebar-open-note {
@@ -2568,7 +2556,7 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 .tm-sidebar-open-note-icon { display: inline-flex; }
 .tm-sidebar-open-note-icon svg { width: 14px; height: 14px; }
 
-/* Griply: the title over rows of properties (a name at the left, its value at the right), then notes and subtasks. */
+/* The title over rows of properties (a name at the left, its value at the right), then notes and subtasks. */
 .tm-sidebar-details { display: flex; flex-direction: column; }
 .tm-sidebar-head {
   display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; align-items: start;
