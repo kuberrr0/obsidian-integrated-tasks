@@ -1979,8 +1979,8 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
   margin: 10px 0 10px calc(var(--tm-depth, 0) * 24px);
   padding: 12px 14px 10px 8px;
   border-radius: 10px;
-  /* The theme's secondary background, set off by its shadow and a faint outline. */
-  background: var(--background-secondary);
+  /* The main area's own background, set off by its shadow and a faint outline. */
+  background: var(--background-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 6px 18px rgba(0, 0, 0, 0.16), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
   font-family: var(--font-interface);
 }
@@ -2206,7 +2206,7 @@ button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-bl
   padding: 12px 14px 10px 10px;
   border: 0;
   border-radius: 10px;
-  background: var(--background-secondary);
+  background: var(--background-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.12), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
 }
 .tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card.has-project-color {
@@ -2215,7 +2215,7 @@ button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-bl
 /* The selection colour is laid over the card, which keeps its own background beneath. */
 .tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card.is-selected {
   border-radius: 10px;
-  background: linear-gradient(var(--text-selection), var(--text-selection)), var(--background-secondary);
+  background: linear-gradient(var(--text-selection), var(--text-selection)), var(--background-primary);
 }
 .tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-task-item.tm-things-board-card .tm-checkbox-target { align-self: start; padding-top: 3px; }
 .tm-main-view.tm-style-things .tm-kanban .tm-things-board-card .tm-task-content { display: flex; flex-direction: column; gap: 8px; padding: 0; }
