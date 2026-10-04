@@ -25,7 +25,7 @@ import { TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { parseTaskQuery } from "../src/task-query";
-import { DEFAULT_SETTINGS, type SavedViewOptions, type SmartList } from "../src/types";
+import { DEFAULT_SETTINGS, type SavedViewOptions, type SmartList, type ViewLayout } from "../src/types";
 import { todayIso } from "../src/date";
 import type TaskManagerPlugin from "../src/main";
 
@@ -42,11 +42,12 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
   } as unknown as App;
   const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
   await index.initialize();
-  const settings = { ...DEFAULT_SETTINGS, viewOptions: {} as Record<string, SavedViewOptions>, smartLists: [] as SmartList[] };
+  const settings = { ...DEFAULT_SETTINGS, viewOptions: {} as Record<string, SavedViewOptions>, viewLayouts: {} as Record<string, ViewLayout>, smartLists: [] as SmartList[] };
   const plugin = {
     settings, index, store: {}, dateFormat: () => "YYYY-MM-DD", openEditor: vi.fn(), openTaskView: vi.fn().mockResolvedValue(undefined),
     projectDraft: vi.fn(() => ({ tags: "" })),
     saveViewOptions: vi.fn((key: string, options?: SavedViewOptions) => { if (options) settings.viewOptions[key] = options; else delete settings.viewOptions[key]; }),
+    saveViewLayout: vi.fn((key: string, layout?: ViewLayout) => { if (layout && layout !== "list") settings.viewLayouts[key] = layout; else delete settings.viewLayouts[key]; }),
     saveSmartList: vi.fn(async (draft: Omit<SmartList, "id">) => { const list = { ...draft, id: "new" }; settings.smartLists.push(list); return list; })
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
@@ -98,6 +99,39 @@ describe("View options kept for each view", () => {
     await first.view.setState({ mode: "today" });
     expect(titles(first.content())).toEqual(["Urgent"]);
     expect(first.view.getState().showProjects).toBe(false);
+  });
+});
+
+describe("Layouts kept for each view", () => {
+  it("opens each view in the layout it was left in, a list until then, and keeps the Projects list's and a smart list's too", async () => {
+    const today = todayIso();
+    const { view, plugin, settings, content } = await setup([["A.md", `- [ ] Call ${today}`], ["Site.md", "- [ ] Page"]], { "Site.md": { tags: ["project"] } });
+    settings.smartLists.push({ id: "p1", name: "P1", filters: [], sort: "date", descending: false, grouping: "default" });
+    const layoutButton = (name: string) => content().querySelector<HTMLButtonElement>(`[data-tm-focus-key="${name}"]`)!;
+    await view.setState({ mode: "today" });
+    layoutButton("layout-calendar").click();
+    expect(plugin.saveViewLayout).toHaveBeenLastCalledWith("today", "calendar");
+    await view.setState({ mode: "upcoming" });
+    expect(view.getState().layout).toBe("list");
+    layoutButton("layout-kanban").click();
+    await view.setState({ mode: "projects" });
+    layoutButton("project-layout-gantt").click();
+    await view.setState({ mode: "smartLists", smartListId: "p1" });
+    layoutButton("layout-calendar").click();
+    expect(settings.viewLayouts).toEqual({ today: "calendar", upcoming: "kanban", projects: "gantt", "smartList:p1": "calendar" });
+
+    await view.setState({ mode: "today" });
+    expect(view.getState().layout).toBe("calendar");
+    await view.setState({ mode: "projects" });
+    expect(view.getState().projectLayout).toBe("gantt");
+    // A layout the state names (a restored tab, or Back) holds; switching to it by command keeps it for the view.
+    await view.setState({ mode: "upcoming", layout: "list" });
+    expect(view.getState().layout).toBe("list");
+    await view.setState({ ...view.getState(), layout: "calendar" });
+    expect(settings.viewLayouts.upcoming).toBe("calendar");
+    // Back to a list, nothing is kept.
+    layoutButton("layout-list").click();
+    expect(settings.viewLayouts.upcoming).toBeUndefined();
   });
 });
 

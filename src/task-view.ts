@@ -206,6 +206,27 @@ export class TaskMainView extends ItemView {
     });
   }
 
+  /** Which view's layout this page keeps: as for its View options, and a smart list's or the Projects list's too. */
+  private get layoutKey(): string | undefined {
+    if (this.state.mode === "smartLists") return this.state.smartListId ? `smartList:${this.state.smartListId}` : undefined;
+    if (this.state.mode === "projects" && !this.pagePath) return "projects";
+    return this.optionsKey;
+  }
+
+  /** The layout given, else the one the page was left with, else a list. */
+  private restoreLayout(layout?: "list" | "calendar" | "kanban", projectLayout?: "list" | "gantt"): void {
+    const key = this.layoutKey;
+    const saved = key ? this.plugin.settings?.viewLayouts?.[key] : undefined;
+    this.layout = layout ?? (saved === "calendar" || saved === "kanban" ? saved : "list");
+    this.projectLayout = projectLayout ?? (saved === "gantt" ? "gantt" : "list");
+  }
+
+  /** Keeps the page's layout for its next visit. */
+  private saveLayout(): void {
+    const key = this.layoutKey;
+    if (key) this.plugin.saveViewLayout?.(key, key === "projects" ? this.projectLayout : this.layout);
+  }
+
   /**
    * `result`: Obsidian's; moving to another page (a project, tag, list or smart list) records the page left in the
    * tab's history, as a note does when its file changes, so Back and Forward step through task pages too. Obsidian
@@ -213,12 +234,13 @@ export class TaskMainView extends ItemView {
    */
   async setState(state: Record<string, unknown>, result?: ViewStateResult): Promise<void> {
     const mode = state.mode;
-    if (state.projectLayout === "list" || state.projectLayout === "gantt") this.projectLayout = state.projectLayout;
+    // A layout given (a tab's own, or its history's) holds; without one, a new page opens with the layout it was left with.
+    const layout = state.layout === "list" || state.layout === "calendar" || state.layout === "kanban" ? state.layout
+      : typeof state.calendar === "boolean" ? state.calendar ? "calendar" : "list" : undefined;
+    const projectLayout = state.projectLayout === "list" || state.projectLayout === "gantt" ? state.projectLayout : undefined;
     if (state.ganttZoom === "month" || state.ganttZoom === "quarter" || state.ganttZoom === "year" || state.ganttZoom === "five-year") this.ganttZoom = state.ganttZoom;
     else if (state.ganttZoom === "week") this.ganttZoom = "month";
     if (typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor)) this.ganttAnchor = state.ganttAnchor;
-    if (state.layout === "list" || state.layout === "calendar" || state.layout === "kanban") this.layout = state.layout;
-    else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
     if (["day", "four-day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     const newPage = this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId;
@@ -241,7 +263,14 @@ export class TaskMainView extends ItemView {
     // File-backed task views must participate in normal same-tab navigation.
     this.navigation = Boolean(this.pagePath);
     // Each view opens with the View options it was left with (a tab saved before they were kept may still say whether it showed projects).
-    if (newPage || !this.stateSet) this.restoreViewOptions(typeof state.showProjects === "boolean" ? state.showProjects : undefined);
+    if (newPage || !this.stateSet) {
+      this.restoreViewOptions(typeof state.showProjects === "boolean" ? state.showProjects : undefined);
+      this.restoreLayout(layout, projectLayout);
+    } else if ((layout && layout !== this.layout) || (projectLayout && projectLayout !== this.projectLayout)) {
+      this.layout = layout ?? this.layout;
+      this.projectLayout = projectLayout ?? this.projectLayout;
+      this.saveLayout();
+    }
     this.stateSet = true;
     this.render();
     this.refreshTitle();
@@ -703,7 +732,7 @@ export class TaskMainView extends ItemView {
     for (const [layout, icon, label] of [["list", "list", "List"], ["calendar", "calendar-days", "Calendar"], ["kanban", "columns-3", "Kanban"]] as const) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${label} view`, title: `${label} view`, "aria-pressed": String(this.layout === layout), "data-tm-focus-key": `layout-${layout}` } });
       setIcon(button, icon);
-      button.addEventListener("click", () => { this.layout = layout; this.render(); });
+      button.addEventListener("click", () => { this.layout = layout; this.saveLayout(); this.render(); });
     }
     const toggle = actions.createEl("button", { cls: "tm-filter-toggle clickable-icon", attr: { "aria-label": "View options: filter, sort, and group", "data-tm-focus-key": "view-options" } });
     const add = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Add task", title: "Add task", "data-tm-focus-key": "add-task" } });
@@ -1062,7 +1091,7 @@ export class TaskMainView extends ItemView {
     for (const [layout, icon] of [["list", "list"], ["gantt", "chart-gantt"]] as const) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${layout === "gantt" ? "Gantt" : "List"} projects view`, "aria-pressed": String(this.projectLayout === layout), title: `${layout === "gantt" ? "Gantt" : "List"} view`, "data-tm-focus-key": `project-layout-${layout}` } });
       setIcon(button, icon);
-      button.addEventListener("click", () => { this.projectLayout = layout; this.render(); });
+      button.addEventListener("click", () => { this.projectLayout = layout; this.saveLayout(); this.render(); });
     }
     const create = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Create new project", title: "Create new project" } });
     setIcon(create, "plus");

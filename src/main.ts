@@ -25,7 +25,7 @@ import { TaskStore, type TaskChange } from "./task-store";
 import { TasksImportModal } from "./tasks-import-modal";
 import { TASK_QUERY_LANGUAGE, TASK_QUERY_TEMPLATE, TaskQueryBlock } from "./task-query-block";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
-import { DEFAULT_SETTINGS, type Project, type SavedViewOptions, type SmartList, type Task, type TaskDraft, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
+import { DEFAULT_SETTINGS, type Project, type SavedViewOptions, type SmartList, type ViewLayout, type Task, type TaskDraft, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
@@ -306,6 +306,9 @@ export default class TaskManagerPlugin extends Plugin {
     const options: unknown = this.settings.viewOptions;
     // A fresh object, never the defaults' own: views write into it.
     this.settings.viewOptions = options && typeof options === "object" && !Array.isArray(options) ? { ...options as Record<string, SavedViewOptions> } : {};
+    const layouts: unknown = this.settings.viewLayouts;
+    this.settings.viewLayouts = layouts && typeof layouts === "object" && !Array.isArray(layouts)
+      ? Object.fromEntries(Object.entries(layouts as Record<string, unknown>).filter((entry): entry is [string, ViewLayout] => ["calendar", "kanban", "gantt"].includes(String(entry[1])))) : {};
     for (const key of ["ignoredPaths", "ignoredTags"] as const) {
       const list: unknown = this.settings[key];
       this.settings[key] = Array.isArray(list) ? parseIgnoreList(list.filter((item): item is string => typeof item === "string").join("\n"), key === "ignoredTags") : [];
@@ -327,6 +330,17 @@ export default class TaskManagerPlugin extends Plugin {
   saveViewOptions(key: string, options: SavedViewOptions | undefined): void {
     if (options) this.settings.viewOptions[key] = options;
     else delete this.settings.viewOptions[key];
+    this.saveViewSoon();
+  }
+
+  /** Keeps a view's layout (none: a list) for its next visit. */
+  saveViewLayout(key: string, layout: ViewLayout | undefined): void {
+    if (layout && layout !== "list") this.settings.viewLayouts[key] = layout;
+    else delete this.settings.viewLayouts[key];
+    this.saveViewSoon();
+  }
+
+  private saveViewSoon(): void {
     window.clearTimeout(this.viewOptionsSave);
     this.viewOptionsSave = window.setTimeout(() => { void this.saveSettings().catch(error => new Notice(String(error))); }, 500);
   }
@@ -386,6 +400,7 @@ export default class TaskManagerPlugin extends Plugin {
   async deleteSmartList(id: string): Promise<void> {
     const previous = this.settings.smartLists;
     this.settings.smartLists = previous.filter(list => list.id !== id);
+    delete this.settings.viewLayouts[`smartList:${id}`];
     try { await this.saveSettings(); }
     catch (cause) { this.settings.smartLists = previous; throw cause; }
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
@@ -690,17 +705,18 @@ export default class TaskManagerPlugin extends Plugin {
     return this.viewRetargeting;
   }
 
-  /** What is kept for a renamed note (or the notes in a renamed folder) follows it: its views' options and the smart lists made from it. */
+  /** What is kept for a renamed note (or the notes in a renamed folder) follows it: its views' options and layouts, and the smart lists made from it. */
   private async renameKeptPaths(renamed: (path: unknown) => string | undefined): Promise<void> {
     let changed = false;
-    const options = this.settings.viewOptions;
-    for (const key of Object.keys(options)) {
-      const match = /^(project|tag):(.+)$/.exec(key);
-      const target = match ? renamed(match[2]) : undefined;
-      if (!match || !target) continue;
-      options[`${match[1]}:${target}`] = options[key];
-      delete options[key];
-      changed = true;
+    for (const kept of [this.settings.viewOptions, this.settings.viewLayouts] as Array<Record<string, unknown>>) {
+      for (const key of Object.keys(kept)) {
+        const match = /^(project|tag):(.+)$/.exec(key);
+        const target = match ? renamed(match[2]) : undefined;
+        if (!match || !target) continue;
+        kept[`${match[1]}:${target}`] = kept[key];
+        delete kept[key];
+        changed = true;
+      }
     }
     this.settings.smartLists = this.settings.smartLists.map(list => {
       const scope = list.scope;

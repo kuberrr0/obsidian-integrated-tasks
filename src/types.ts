@@ -127,6 +127,9 @@ export interface SmartList {
   scope?: SmartListScope;
 }
 
+/** How a task view lays its tasks out (list, calendar or board), or the Projects list its projects (list or Gantt). */
+export type ViewLayout = "list" | "calendar" | "kanban" | "gantt";
+
 /** A view's View options, kept between visits. */
 export interface SavedViewOptions {
   filters: TaskFilter[];
@@ -169,6 +172,8 @@ export interface TaskManagerSettings {
   completionDates: boolean;
   /** Each view's View options, by view: "today", "project:Projects/Site.md", "tag:errand" or "tag:Errands.md". */
   viewOptions: Record<string, SavedViewOptions>;
+  /** Each view's layout other than a list, by view as for its options, plus "smartList:<id>" and "projects" (the Projects list's). */
+  viewLayouts: Record<string, ViewLayout>;
   /** Folders and notes whose tasks are left out of every view. */
   ignoredPaths: string[];
   /** Tags whose notes (frontmatter) and tasks are left out of every view. */
@@ -194,6 +199,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   style: "things",
   completionDates: false,
   viewOptions: {},
+  viewLayouts: {},
   ignoredPaths: [],
   ignoredTags: []
 };
