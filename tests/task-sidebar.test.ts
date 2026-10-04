@@ -151,6 +151,21 @@ describe("what the task sidebar shows", () => {
     expect(side().classList.contains("is-today")).toBe(true);
   });
 
+  it("lists the view's own tasks without a date beside its calendar: a project's or a smart list's, through its filters but those on dates", async () => {
+    const today = todayIso();
+    const { view, plugin, side } = await setup([["A.md", "- [ ] Elsewhere p2"], ["Site.md", [`- [ ] Launch ${today}`, "- [ ] Write copy p1", "- [ ] Pick fonts"].join("\n")]]);
+    const listed = () => Array.from(side().querySelectorAll(".tm-sidebar-planner .tm-task-item .tm-task-title")).map(title => title.textContent);
+    await view.setState({ mode: "all", layout: "calendar" });
+    expect(listed()).toEqual(["Write copy", "Elsewhere", "Pick fonts"]);
+    // The project's view shows its P1 tasks with a date; beside it, its P1 tasks without one.
+    plugin.settings.viewOptions = { "project:Site.md": { filters: [{ property: "priority", operator: "is", values: ["1"] }, { property: "scheduledDate", operator: "has", values: [] }], sort: "date", descending: false, grouping: "default" } };
+    await view.setState({ mode: "all", pagePath: "Site.md", layout: "calendar" });
+    expect(listed()).toEqual(["Write copy"]);
+    plugin.settings.smartLists = [{ id: "p2", name: "P2", filters: [{ property: "priority", operator: "is", values: ["2"] }], sort: "date", descending: false, grouping: "default" }];
+    await view.setState({ mode: "smartLists", smartListId: "p2", layout: "calendar" });
+    expect(listed()).toEqual(["Elsewhere"]);
+  });
+
   it("takes the dates off a card dragged from the view's calendar into the tasks without a date", async () => {
     const today = todayIso();
     const { view, main, side, store } = await setup([["A.md", [`- [ ] At nine ${today} 09:00`, "- [ ] No date"].join("\n")]]);

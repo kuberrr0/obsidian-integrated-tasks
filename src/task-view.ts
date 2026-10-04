@@ -5,7 +5,7 @@ import { editable, renderTaskDetails } from "./task-row-details";
 import { renderThingsProjectDetails, renderThingsTaskDetails } from "./things-row-details";
 import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardProperties, renderThingsTaskCard, repeatIcon, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
-import { cloneTaskFilters, smartListDraft, type SmartListDraft } from "./task-filters";
+import { cloneTaskFilters, smartListDraft, undatedFilters, type SmartListDraft } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
 import type { ProjectDraft } from "./project-creator";
@@ -1446,6 +1446,17 @@ export class TaskMainView extends ItemView {
    * just saved stays shown while the rows catch up.
    */
   sidebarSelection(): Task[] { return this.selection.chosen(this.visibleTasks); }
+
+  /**
+   * For the task sidebar beside this view's calendar (or Upcoming): the view's own tasks (a project's, a tag's, a smart
+   * list's…) that have no date, through its filters but those on dates, in its order. Today's and Upcoming's are every
+   * task's, since their own all have dates.
+   */
+  undatedQuery(): { query: TaskQuery; sort: TaskSort; descending: boolean } {
+    const query = this.baseQuery();
+    const mode = query.mode === "today" || query.mode === "upcoming" ? "all" : query.mode;
+    return { query: { ...query, mode, showCompleted: false, filters: undatedFilters(query.filters ?? []) }, sort: this.sort, descending: this.descending };
+  }
 
   /**
    * The right-click menu, for the selection when the task is selected: complete, dates and priority at once,

@@ -1,4 +1,4 @@
-import type { SmartList, SmartListScope, TaskFilter } from "./types";
+import type { SmartList, SmartListScope, TaskFilter, TaskProperty } from "./types";
 
 export function cloneTaskFilters(filters: readonly TaskFilter[]): TaskFilter[] {
   return filters.map(filter => ({
@@ -23,4 +23,16 @@ export function smartListScopeLabel(scope: SmartListScope): string {
   if (scope.mode === "project") return scope.path.replace(/\.md$/i, "").split("/").pop() ?? scope.path;
   if (scope.mode === "tag") return scope.tag ?? scope.path?.replace(/\.md$/i, "").split("/").pop() ?? "Tag";
   return { inbox: "Inbox", today: "Today", upcoming: "Upcoming" }[scope.mode];
+}
+
+/** View options › No date, for both the scheduled date and the deadline. */
+export const UNDATED_FILTERS: readonly TaskFilter[] = [
+  { property: "scheduledDate", operator: "missing", values: [] },
+  { property: "deadline", operator: "missing", values: [] }
+];
+const DATE_PROPERTIES = new Set<TaskProperty>(["scheduledDate", "scheduledTime", "deadline", "deadlineTime"]);
+
+/** A view's filters narrowed to its tasks without a date: any on dates give way to No date for both. */
+export function undatedFilters(filters: readonly TaskFilter[]): TaskFilter[] {
+  return cloneTaskFilters([...filters.filter(filter => !DATE_PROPERTIES.has(filter.property)), ...UNDATED_FILTERS]);
 }

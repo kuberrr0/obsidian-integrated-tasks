@@ -17,7 +17,7 @@ import { taskInputRanges } from "./task-input";
 import { deadlineIsDistant, deadlineIsOverdue, editable, renderTaskDetails, taskDeadlineCountdown, taskTimeDurationLabel, taskTimeLabel } from "./task-row-details";
 import { STATUS_ICONS, STATUS_LABELS, checkboxLabel, statusClass } from "./task-status";
 import { PRIORITY_NAMES, cardNotes, longDate, paintTokens, repeatIcon, type TaskCardDraft } from "./things-task-card";
-import type { Task, TaskFilter } from "./types";
+import type { Task } from "./types";
 
 export const TASK_SIDEBAR_VIEW = "task-manager-sidebar";
 
@@ -26,12 +26,6 @@ export const TASK_SIDEBAR_VIEW = "task-manager-sidebar";
 type SidebarMode = "today" | "upcoming" | "details";
 /** A property the sidebar edits through the task view showing the task (see TaskMainView.editTaskProperty). */
 type SidebarProperty = TaskEditorProperty | "status" | "project";
-
-/** Upcoming's list is All Tasks with View options › No date for both the scheduled date and the deadline. */
-const UNDATED: TaskFilter[] = [
-  { property: "scheduledDate", operator: "missing", values: [] },
-  { property: "deadline", operator: "missing", values: [] }
-];
 
 const noteName = (path: string): string => path.replace(/\.md$/i, "").split("/").pop() ?? path;
 const isTextField = (element: Element | null): element is HTMLInputElement | HTMLTextAreaElement =>
@@ -50,7 +44,7 @@ const LIST_PAGE = 100;
 
 /**
  * The task sidebar (in the right sidebar by default). Its content follows the task view in front: with Today open, the
- * day's hours; with Upcoming (or any view's calendar) open, the tasks with no date; and below them when a task is selected (or, anywhere else,
+ * day's hours; with Upcoming open, the tasks with no date (beside a calendar, the view's own); and below them when a task is selected (or, anywhere else,
  * filling it) the selected task's details, editable in place. Only the tasks show: no headings or calendar controls. Tasks drag between it and
  * the view: onto an hour to schedule them then, from the tasks without a date onto a day.
  */
@@ -141,8 +135,11 @@ export class TaskSidebarView extends ItemView {
     if (skeleton !== this.skeleton || !this.details?.element.isConnected) this.build(mode, skeleton);
     this.mode = mode;
     const planner = this.planner;
-    if (planner && mode !== "details") {
-      this.draw(planner, JSON.stringify([todayIso(), this.indexVersion, this.listRows, settings.calendarProjectColors, settings.calendarPriorityColors]), force, () => this.renderPlanner(planner.element, mode));
+    if (planner && view && mode !== "details") {
+      // The tasks without a date are the view's own: a project's, a tag's, a smart list's…
+      const undated = mode === "upcoming" ? view.undatedQuery() : undefined;
+      this.draw(planner, JSON.stringify([todayIso(), this.indexVersion, this.listRows, undated, settings.calendarProjectColors, settings.calendarPriorityColors]), force,
+        () => undated ? this.renderUndated(planner.element, undated) : this.renderToday(planner.element));
       for (const element of Array.from(planner.element.querySelectorAll<HTMLElement>("[data-task-id]"))) element.toggleClass("is-selected", element.getAttribute("data-task-id") === this.localId);
     }
     const details = this.details!;
@@ -212,10 +209,9 @@ export class TaskSidebarView extends ItemView {
     await this.taskView()?.dropTasks(tasks, target);
   }
 
-  // Today: the day's hours. Upcoming: the tasks without a date, as list rows.
+  // Today: the day's hours. Upcoming, or beside a calendar: the view's tasks without a date, as list rows.
 
-  private renderPlanner(element: HTMLElement, mode: "today" | "upcoming"): void {
-    if (mode === "upcoming") { this.renderUndated(element); return; }
+  private renderToday(element: HTMLElement): void {
     const tasks = sortTasks(this.plugin.index.query({ mode: "all", showCompleted: false }).filter(task => calendarDate(task)));
     renderCalendar(element.createDiv({ cls: "tm-sidebar-calendar" }), {
       // Today's hours only: no toolbar, no all-day row, and the period never changes.
@@ -240,11 +236,11 @@ export class TaskSidebarView extends ItemView {
   }
 
   /**
-   * Upcoming's tasks without a date (All Tasks with No date for both dates), as a list's rows; they drag onto a day in
-   * the view, and tasks dragged here from the view lose their dates.
+   * The view's tasks without a date (Upcoming's: All Tasks with No date for both dates), as a list's rows; they drag
+   * onto a day in the view, and tasks dragged here from the view lose their dates.
    */
-  private renderUndated(element: HTMLElement): void {
-    const all = sortTasks(this.plugin.index.query({ mode: "all", showCompleted: false, filters: UNDATED }));
+  private renderUndated(element: HTMLElement, { query, sort, descending }: ReturnType<TaskMainView["undatedQuery"]>): void {
+    const all = sortTasks(this.plugin.index.query(query), sort, descending);
     const ids = new Set(all.map(task => task.id));
     // Subtasks go with their task.
     const tasks = all.filter(task => !task.parentId || !ids.has(task.parentId));
