@@ -247,15 +247,17 @@ describe("task views follow their notes", () => {
     expect(plugin.index.isProject("Projects/Renamed.md")).toBe(true);
   });
 
-  it("moves a renamed note's kept view options and the smart lists made from it to its new name", async () => {
+  it("moves a renamed note's kept view options and layout, and the smart lists made from it, to its new name", async () => {
     const { env, plugin } = await loaded(["Projects/Launch.md", "Errands.md"]);
     const options = { filters: [], sort: "title" as const, descending: false, grouping: "default" as const };
     plugin.settings.viewOptions = { "project:Projects/Launch.md": options, "tag:Errands.md": options, today: options };
+    plugin.settings.viewLayouts = { "project:Projects/Launch.md": "kanban" };
     plugin.settings.smartLists = [{ id: "a", name: "Launch P1", filters: [], sort: "date", descending: false, grouping: "default", scope: { mode: "project", path: "Projects/Launch.md" } }];
     const save = vi.spyOn(plugin, "saveSettings");
     env.vault.trigger("rename", Object.assign(new TFile(), { path: "Projects/Liftoff.md", extension: "md" }), "Projects/Launch.md");
     await retargeting(plugin);
     expect(Object.keys(plugin.settings.viewOptions).sort()).toEqual(["project:Projects/Liftoff.md", "tag:Errands.md", "today"]);
+    expect(plugin.settings.viewLayouts).toEqual({ "project:Projects/Liftoff.md": "kanban" });
     expect(plugin.settings.smartLists[0].scope).toEqual({ mode: "project", path: "Projects/Liftoff.md" });
     expect(save).toHaveBeenCalled();
   });
