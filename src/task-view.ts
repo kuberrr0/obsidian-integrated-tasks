@@ -380,7 +380,10 @@ export class TaskMainView extends ItemView {
     try { update(); } finally { this.preserving = false; }
     for (const { key, top, left } of scrolled) {
       const element = key ? container.querySelector<HTMLElement>(`[data-tm-scroll-key="${key}"]`) : container;
-      if (element) { element.scrollTop = top; element.scrollLeft = left; }
+      if (!element) continue;
+      element.scrollTop = top;
+      // The Gantt lays its dates out from where it was left (or sent): only its vertical scroll is kept.
+      if (element.getAttribute("data-tm-scroll-axis") !== "y") element.scrollLeft = left;
     }
     const pending = this.pendingFocus;
     this.pendingFocus = undefined;

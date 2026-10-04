@@ -45,6 +45,7 @@ import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { DEFAULT_SETTINGS, type Project } from "../src/types";
 import { todayIso } from "../src/date";
+import { addDays } from "../src/calendar";
 import type TaskManagerPlugin from "../src/main";
 
 beforeAll(() => {
@@ -1030,6 +1031,25 @@ describe("Create new task in the Things style", () => {
     await view.setState({ mode: "today" });
     view.newTask();
     expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ mode: "today" }));
+  });
+});
+
+describe("Gantt navigation", () => {
+  it("moves the arrows' period on from the dates in view, after scrolling the timeline either way", async () => {
+    const { view, content } = await setup([note("Site.md", 1)], { "Site.md": { tags: ["project"], start: "2026-03-02", end: "2026-03-20" } });
+    await view.setState({ mode: "projects", projectLayout: "gantt", ganttAnchor: "2026-03-01", ganttZoom: "month" });
+    const scroll = () => content().querySelector<HTMLElement>(".tm-gantt-scroll")!;
+    // The first day in view: the timeline's first date plus the days scrolled past.
+    const shown = () => addDays(content().querySelector<HTMLElement>(".tm-gantt-date")!.title, Math.floor(scroll().scrollLeft / 32));
+    expect(shown()).toBe("2026-03-01");
+    for (const [days, next] of [[-36, "2026-02-28"], [-40, "2026-02-23"], [20, "2026-04-19"]] as const) {
+      // Scrolled by hand, then on by a period: from the dates in view, wherever the timeline was scrolled.
+      scroll().scrollLeft += days * 32;
+      scroll().dispatchEvent(new Event("scroll"));
+      content().querySelector<HTMLElement>("[aria-label='Next period']")!.click();
+      expect(shown()).toBe(next);
+      expect(view.getState().ganttAnchor).toBe(next);
+    }
   });
 });
 

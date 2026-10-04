@@ -52,7 +52,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
     const button = scopes.createEl("button", { text: label, attr: { "aria-label": value === "five-year" ? "5 years" : value[0].toUpperCase() + value.slice(1), "aria-pressed": String(options.zoom === value) } });
     button.addEventListener("click", () => options.navigate(anchor, value));
   }
-  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0", "data-tm-scroll-key": "gantt" } });
+  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0", "data-tm-scroll-key": "gantt", "data-tm-scroll-axis": "y" } });
   const buffer = Math.max(period, Math.ceil((scroll.clientWidth || 1200) / width));
   days = buffer * 5;
   start = addDays(anchor, -buffer * 2);
