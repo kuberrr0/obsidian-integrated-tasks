@@ -239,6 +239,35 @@ describe("what the Task Details sidebar shows", () => {
 });
 
 describe("editing in the Task Details sidebar", () => {
+  it("confirms typing with Enter in the title or notes (Shift+Enter starts a line of notes), and cancels it with Escape", async () => {
+    const { view, main, side, store, contents } = await setup([["A.md", "- [ ] Draft the brief\n- [ ] Other"]]);
+    await view.setState({ mode: "all" });
+    rows(main())[0].click();
+    const title = () => side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
+    const notes = () => side().querySelector<HTMLTextAreaElement>(".tm-sidebar-notes")!;
+    const key = (target: HTMLElement, init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(event);
+      return event;
+    };
+    title().focus();
+    title().value = "Draft the whole brief";
+    title().dispatchEvent(new Event("input", { bubbles: true }));
+    key(title(), { key: "Escape" });
+    await settle();
+    expect(title().value).toBe("Draft the brief");
+    expect(store.update).not.toHaveBeenCalled();
+
+    notes().focus();
+    expect(key(notes(), { key: "Enter", shiftKey: true }).defaultPrevented).toBe(false);
+    title().focus();
+    title().value = "Draft the launch brief";
+    title().dispatchEvent(new Event("input", { bubbles: true }));
+    key(title(), { key: "Enter" });
+    await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Draft the launch brief\n- [ ] Other"));
+    expect(document.activeElement).not.toBe(title());
+  });
+
   it("saves a typed title once focus leaves it, and the task stays selected", async () => {
     const { view, main, side, store, contents } = await setup([["A.md", "- [ ] Draft the brief\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
@@ -366,7 +395,7 @@ describe("three panes (Task details › Three panes: in the sidebar)", () => {
     expect(plugin.openEditor).not.toHaveBeenCalled();
   });
 
-  it("starts a new task in the sidebar, written only by Enter once titled: Escape drops it untitled, and leaving it titled writes it", async () => {
+  it("starts a new task in the sidebar, written only by Enter once titled: Escape drops it, and leaving it titled writes it", async () => {
     const { view, plugin, store, main, side, contents } = await setup([["A.md", "- [ ] Existing"]]);
     plugin.settings.taskDetails = "sidebar";
     await view.setState({ mode: "all" });
@@ -382,8 +411,9 @@ describe("three panes (Task details › Three panes: in the sidebar)", () => {
     expect(view.getSelectedTasks()).toEqual([]);
     expect(side().querySelector(".tm-sidebar-subtasks, .tm-sidebar-open-note")).toBeNull();
     expect(main().querySelector(".tm-things-card")).toBeNull();
-    // Enter without a title does nothing; Escape drops it.
+    // Enter without a title does nothing; Escape drops it, titled or not.
     key("Enter");
+    type("Not this one");
     key("Escape");
     await settle();
     expect(store.create).not.toHaveBeenCalled();

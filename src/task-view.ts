@@ -880,11 +880,11 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * For the Task Details sidebar (Enter, or Escape): writes the new task when it has a title and selects it, so the sidebar
-   * goes on showing it; drops it without one.
+   * For the Task Details sidebar: Enter writes the new task when it has a title and selects it, so the sidebar goes on
+   * showing it; Escape (`write` off) drops it.
    */
-  async finishNewTask(): Promise<void> {
-    const task = await this.endNewTask();
+  async finishNewTask(write = true): Promise<void> {
+    const task = await this.endNewTask(write);
     if (!task) return;
     this.revealInSidebar(task);
     this.selectionRows.get(task.id)?.[0]?.focus({ preventScroll: true });

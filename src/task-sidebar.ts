@@ -603,18 +603,22 @@ export class TaskSidebarView extends ItemView {
       autosize(title); paint(); change();
     });
     notes.addEventListener("input", () => { autosize(notes); change(); });
-    // Enter in the title moves on to the notes; Escape saves and leaves the field. A new task's Enter writes it once
-    // titled, and its Escape writes it titled or drops it untitled.
+    // Enter in the title or notes confirms what was typed (Shift+Enter starts a line of notes): it is saved as the
+    // field is left, and a new task is written once titled. Escape cancels it: the task's own text comes back, and a new
+    // task is dropped.
     panel.addEventListener("keydown", event => {
       const target = event.target as HTMLElement;
-      if (target === title && event.key === "Enter" && !event.isComposing) {
+      if (target !== title && target !== notes) return;
+      if (event.key === "Enter" && !event.isComposing && (!event.shiftKey || event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        if (!isNew) notes.focus();
+        if (!isNew) target.blur();
         else if (title.value.trim()) void view.finishNewTask();
-      } else if ((target === title || target === notes) && event.key === "Escape") {
+      } else if (event.key === "Escape") {
         event.preventDefault(); event.stopPropagation();
-        if (isNew) void view.finishNewTask();
-        else target.blur();
+        if (isNew) { void view.finishNewTask(false); return; }
+        this.draft = { id: task.id, dirty: false, title: task.title, notes: cardNotes(task.description), subtask: this.draft?.subtask };
+        target.blur();
+        this.render(true);
       }
     });
     const fit = (): void => { autosize(title); autosize(notes); };
