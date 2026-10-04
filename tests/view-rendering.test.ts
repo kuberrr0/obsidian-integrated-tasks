@@ -83,19 +83,10 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
     projectDraft: vi.fn(() => ({ name: "Site", date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "work", archived: false, color: "" })),
     updateProject: vi.fn().mockResolvedValue("Site.md"), deleteProject: vi.fn().mockResolvedValue(undefined)
   };
-  // As the plugin writes a new task: “New To-Do”, where the view would start it (tests give newTaskDraft and create).
-  const writer = plugin as unknown as { newTaskDraft(state: unknown): { destination: string }; store: { create(draft: object): Promise<number> } };
-  Object.assign(plugin, { createBlankTask: async (state: unknown) => {
-    const draft = { ...writer.newTaskDraft(state), title: "New To-Do" };
-    const path = draft.destination.split("#")[0];
-    const line = await writer.store.create(draft);
-    await index.refreshPath(path);
-    return index.tasksForPath(path).find(task => task.line === line);
-  } });
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const internals = view as unknown as { refresh(): void; content: HTMLElement };
   const edit = async (path: string, content: string) => { contents.set(path, content); emitModify(files.get(path)!); await new Promise(resolve => setTimeout(resolve, 0)); };
-  return { view, internals, index, store, plugin, edit, files, content: () => internals.content };
+  return { view, internals, index, store, plugin, edit, files, read: (path: string) => contents.get(path) ?? "", content: () => internals.content };
 }
 
 const rows = (container: HTMLElement, section?: HTMLElement) => Array.from((section ?? container).querySelectorAll<HTMLElement>(".tm-task-item"));
@@ -933,47 +924,80 @@ describe("Create new task in the Things style", () => {
   async function inserted() {
     const inbox = DEFAULT_SETTINGS.inboxPath;
     const ctx = await setup([[inbox, "- [ ] Existing"]]);
-    const { view, plugin, store, edit } = ctx;
+    const { view, plugin, store, edit, read } = ctx;
     plugin.settings.style = "things";
     const extra = store as unknown as Record<string, ReturnType<typeof vi.fn>>;
-    extra.create = vi.fn(async (draft: { title: string }) => { await edit(inbox, `- [ ] ${draft.title}\n- [ ] Existing`); return 0; });
-    extra.delete = vi.fn().mockResolvedValue(undefined);
-    extra.update = vi.fn().mockResolvedValue(undefined);
+    // Written at the top of the note, as with New task position › Top.
+    extra.create = vi.fn(async (draft: { title: string; priority?: number }) => {
+      await edit(inbox, `- [ ] ${draft.title}${draft.priority ? ` p${draft.priority}` : ""}\n${read(inbox)}`);
+      return 0;
+    });
     (plugin as unknown as { newTaskDraft: () => object }).newTaskDraft = () => ({ title: "", completed: false, indent: 0, destination: inbox });
     await view.setState({ mode: "inbox" });
     view.newTask();
     await vi.waitFor(() => expect(ctx.content().querySelector(".tm-things-card")).not.toBeNull());
-    return { ...ctx, extra, card: () => ctx.content().querySelector<HTMLElement>(".tm-things-card")! };
+    const card = () => ctx.content().querySelector<HTMLElement>(".tm-things-card");
+    const title = () => card()!.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    const type = (text: string) => { title().value = text; title().dispatchEvent(new Event("input")); };
+    const key = (target: HTMLElement, name: string) => target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+    const listed = () => Array.from(ctx.content().querySelectorAll(".tm-task-list > *")).map(item => item.matches(".tm-things-card") ? "card" : item.querySelector(".tm-task-title")?.textContent);
+    return { ...ctx, extra, card, title, type, key, listed };
   }
 
-  it("adds the task and opens its card with the title empty, instead of the editor", async () => {
-    const { extra, card, plugin } = await inserted();
-    expect(extra.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "New To-Do" }));
-    const title = card().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
-    expect(title.value).toBe("");
-    expect(title.placeholder).toBe("New To-Do");
+  it("opens a blank card where the task would go, writing nothing until its title is entered", async () => {
+    const { extra, card, title, plugin, listed } = await inserted();
+    expect(extra.create).not.toHaveBeenCalled();
+    expect(listed()).toEqual(["card", "Existing"]);
+    expect(title().value).toBe("");
+    expect(title().placeholder).toBe("New To-Do");
+    // Nothing to complete, nor subtasks to add, until it is written.
+    expect(card()!.querySelector<HTMLInputElement>(".tm-task-checkbox")!.disabled).toBe(true);
+    expect(card()!.querySelector("[data-tm-focus-key='card-add-checklist']")).toBeNull();
     expect(plugin.openEditor).not.toHaveBeenCalled();
   });
 
-  it("removes the task when its card closes with nothing typed", async () => {
-    const { extra, view, index } = await inserted();
-    await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
-    expect(extra.delete).toHaveBeenCalledExactlyOnceWith(index.allTasks().find(task => task.title === "New To-Do"));
-    expect(extra.update).not.toHaveBeenCalled();
+  it("writes the task on Enter once titled, with what its title sets, and closes the card", async () => {
+    const { extra, title, type, key, card, listed } = await inserted();
+    key(title(), "Enter");
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(extra.create).not.toHaveBeenCalled();
+    expect(card()).not.toBeNull();
+    type("Buy milk p1");
+    key(title(), "Enter");
+    await vi.waitFor(() => expect(card()).toBeNull());
+    expect(extra.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Buy milk", priority: 1, destination: DEFAULT_SETTINGS.inboxPath }));
+    await vi.waitFor(() => expect(listed()).toEqual(["Buy milk", "Existing"]));
   });
 
-  it("saves the typed title when its card closes", async () => {
-    const { extra, view, card } = await inserted();
-    const title = card().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
-    title.value = "Buy milk p1";
-    title.dispatchEvent(new Event("input"));
+  it("drops the card closed untitled (Escape), writing nothing; closed titled, it writes the task", async () => {
+    const { extra, view, type, key, card, listed } = await inserted();
+    key(card()!, "Escape");
+    await vi.waitFor(() => expect(card()).toBeNull());
+    expect(extra.create).not.toHaveBeenCalled();
+    expect(listed()).toEqual(["Existing"]);
+    view.newTask();
+    await vi.waitFor(() => expect(card()).not.toBeNull());
+    type("Buy milk");
     await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
-    expect(extra.delete).not.toHaveBeenCalled();
-    expect(extra.update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "New To-Do" }), expect.objectContaining({ title: "Buy milk", priority: 1, sortProperties: true }));
+    expect(extra.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Buy milk" }));
+  });
+
+  it("keeps what is set in the card (its priority, from the toolbar) to write with the task", async () => {
+    const { extra, card, title, type, key } = await inserted();
+    type("Buy milk");
+    card()!.querySelector<HTMLElement>("[data-tm-focus-key='card-add-priority']")!.click();
+    await vi.waitFor(() => expect(document.querySelector(".tm-choice-popover [data-value='2']")).not.toBeNull());
+    document.querySelector<HTMLElement>(".tm-choice-popover [data-value='2']")!.click();
+    await vi.waitFor(() => expect(card()!.querySelector("[data-tm-focus-key='card-priority']")).not.toBeNull());
+    expect(extra.create).not.toHaveBeenCalled();
+    // The typing survives the redraw.
+    expect(title().value).toBe("Buy milk");
+    key(title(), "Enter");
+    await vi.waitFor(() => expect(extra.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Buy milk", priority: 2 })));
   });
 
   it("starts a group's card with the group's value, as its heading's + button adds it", async () => {
-    const { extra, view, plugin, content } = await inserted();
+    const { extra, view, plugin, content, type, key, title } = await inserted();
     const drafts: unknown[] = [];
     (plugin as unknown as { newTaskDraft: (state: { preset?: object }) => object }).newTaskDraft = state => {
       drafts.push(state.preset);
@@ -981,10 +1005,12 @@ describe("Create new task in the Things style", () => {
     };
     await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
     view.newTask({ priority: 2 });
-    await vi.waitFor(() => expect(extra.create).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(content().querySelector(".tm-things-card [data-tm-focus-key='card-priority']")).not.toBeNull());
     expect(drafts).toEqual([{ priority: 2 }]);
-    expect(extra.create).toHaveBeenLastCalledWith(expect.objectContaining({ title: "New To-Do", priority: 2 }));
-    await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).not.toBeNull());
+    expect(extra.create).not.toHaveBeenCalled();
+    type("Call Sam");
+    key(title(), "Enter");
+    await vi.waitFor(() => expect(extra.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Call Sam", priority: 2 })));
     expect(plugin.openEditor).not.toHaveBeenCalled();
   });
 
@@ -993,8 +1019,8 @@ describe("Create new task in the Things style", () => {
     await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
     await view.setState({ mode: "inbox", layout: "kanban" } as never);
     view.newTask();
-    await vi.waitFor(() => expect(extra.create).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(content().querySelector(".tm-kanban .tm-things-card")).not.toBeNull());
+    expect(extra.create).not.toHaveBeenCalled();
     expect(plugin.openEditor).not.toHaveBeenCalled();
   });
 

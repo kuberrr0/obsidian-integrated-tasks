@@ -81,24 +81,19 @@ async function setup(notes: Array<[string, string]>) {
     }),
     setStatus: vi.fn().mockResolvedValue([]), addSubtask: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]),
     bulkChange: vi.fn().mockResolvedValue([]),
-    delete: vi.fn(async (task: Task) => {
-      const lines = contents.get(task.path)!.split("\n");
-      lines.splice(task.line, 1);
-      contents.set(task.path, lines.join("\n"));
+    /** Writes a new task at the top of its note, as the store does with New task position › Top. */
+    create: vi.fn(async (draft: TaskDraft) => {
+      const path = draft.destination.split("#")[0];
+      contents.set(path, `- [ ] ${draft.title}${draft.priority ? ` p${draft.priority}` : ""}\n${contents.get(path) ?? ""}`.replace(/\n$/, ""));
+      return 0;
     })
   };
   const plugin = {
     settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
     openEditor: vi.fn(), openTag: vi.fn().mockResolvedValue(undefined), openQuickSwitcher: vi.fn(), undoTaskChange: vi.fn(), redoTaskChange: vi.fn(),
     refreshTaskSidebar: () => sidebar.render(),
-    showInTaskSidebar: vi.fn(async (id: string, options?: { focus?: boolean; blank?: boolean }) => sidebar.showTask(id, options)),
-    settleTaskSidebar: () => sidebar.settle(),
-    /** As the plugin adds a task in a view: “New To-Do”, here at the top of A.md. */
-    createBlankTask: vi.fn(async () => {
-      contents.set("A.md", `- [ ] New To-Do\n${contents.get("A.md")}`);
-      await index.refreshPath("A.md");
-      return index.tasksForPath("A.md")[0];
-    })
+    showInTaskSidebar: vi.fn(async (id: string, options?: { focus?: boolean }) => sidebar.showTask(id, options)),
+    newTaskDraft: () => ({ title: "", completed: false, indent: 0, destination: "A.md" })
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const sidebar = new TaskSidebarView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
@@ -371,41 +366,53 @@ describe("three panes (Task details › Three panes: in the sidebar)", () => {
     expect(plugin.openEditor).not.toHaveBeenCalled();
   });
 
-  it("adds a new task in the sidebar, its title empty to type: left untitled it is removed again, and a typed title is saved", async () => {
+  it("starts a new task in the sidebar, written only by Enter once titled: Escape drops it untitled, and leaving it titled writes it", async () => {
     const { view, plugin, store, main, side, contents } = await setup([["A.md", "- [ ] Existing"]]);
     plugin.settings.taskDetails = "sidebar";
     await view.setState({ mode: "all" });
     const title = () => side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
+    const key = (name: string) => title().dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+    const type = (text: string) => { title().value = text; title().dispatchEvent(new Event("input", { bubbles: true })); };
     view.newTask();
     await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
     expect(title().value).toBe("");
     expect(document.activeElement).toBe(title());
-    expect(view.getSelectedTasks().map(task => task.title)).toEqual(["New To-Do"]);
-    expect(main().querySelector(".tm-things-card")).toBeNull();
-    // Another task selected with nothing typed: the new one goes.
-    rows(main()).find(row => row.textContent?.includes("Existing"))!.click();
-    await vi.waitFor(() => expect(store.delete).toHaveBeenCalledOnce());
+    // Nothing is written (or listed) yet; its subtasks and note wait until it is.
     expect(contents.get("A.md")).toBe("- [ ] Existing");
-    // As does one left for another new task, which takes its line.
-    view.newTask();
-    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
-    view.newTask();
-    await vi.waitFor(() => expect(store.delete).toHaveBeenCalledTimes(2));
-    await vi.waitFor(() => expect(view.getSelectedTasks().map(task => task.title)).toEqual(["New To-Do"]));
-    expect(contents.get("A.md")).toBe("- [ ] New To-Do\n- [ ] Existing");
-    rows(main()).find(row => row.textContent?.includes("Existing"))!.click();
-    await vi.waitFor(() => expect(store.delete).toHaveBeenCalledTimes(3));
-
-    view.newTask();
-    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
-    title().value = "Buy milk";
-    title().dispatchEvent(new Event("input", { bubbles: true }));
-    title().blur();
-    await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Buy milk\n- [ ] Existing"));
+    expect(view.getSelectedTasks()).toEqual([]);
+    expect(side().querySelector(".tm-sidebar-subtasks, .tm-sidebar-open-note")).toBeNull();
+    expect(main().querySelector(".tm-things-card")).toBeNull();
+    // Enter without a title does nothing; Escape drops it.
+    key("Enter");
+    key("Escape");
     await settle();
+    expect(store.create).not.toHaveBeenCalled();
+    expect(side().querySelector(".tm-sidebar-empty h3")!.textContent).toBe("No task selected");
+
+    // What is set before it is written goes with it; Enter writes it, and it stays shown, now selected.
+    view.newTask();
+    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
+    type("Buy milk");
+    side().querySelector<HTMLElement>("[data-tm-focus-key='sidebar-priority']")!.click();
+    await vi.waitFor(() => expect(document.querySelector(".tm-choice-popover [data-value='1']")).not.toBeNull());
+    document.querySelector<HTMLElement>(".tm-choice-popover [data-value='1']")!.click();
+    await vi.waitFor(() => expect(side().querySelector(".tm-sidebar-property.is-p1")).not.toBeNull());
+    expect(contents.get("A.md")).toBe("- [ ] Existing");
+    expect(title().value).toBe("Buy milk");
+    key("Enter");
+    await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Buy milk p1\n- [ ] Existing"));
+    await vi.waitFor(() => expect(view.getSelectedTasks().map(task => task.title)).toEqual(["Buy milk"]));
     expect(title().value).toBe("Buy milk");
     expect(title().placeholder).toBe("Title");
-    expect(store.delete).toHaveBeenCalledTimes(3);
+
+    // Selecting another task writes one left titled; that task stays selected though its line moved.
+    view.newTask();
+    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
+    type("Call Sam");
+    rows(main()).find(row => row.textContent?.includes("Existing"))!.click();
+    await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Call Sam\n- [ ] Buy milk p1\n- [ ] Existing"));
+    await vi.waitFor(() => expect(view.getSelectedTasks().map(task => task.title)).toEqual(["Existing"]));
+    expect(store.create).toHaveBeenCalledTimes(2);
     expect(plugin.openEditor).not.toHaveBeenCalled();
   });
 });

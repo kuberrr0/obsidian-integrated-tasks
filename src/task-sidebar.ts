@@ -1,6 +1,7 @@
 import { ItemView, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
-import { TaskMainView } from "./task-view";
+import { NEW_TASK_ID, TaskMainView } from "./task-view";
+import { splitDestination } from "./structure";
 import { renderCalendar } from "./calendar-view";
 import { ListDragController } from "./list-drag-view";
 import { activeTaskDrag, markDropZone, startTaskDrag, TASK_DRAG_TYPE, type SidebarDrop, type TaskDrag } from "./sidebar-drop";
@@ -63,8 +64,6 @@ export class TaskSidebarView extends ItemView {
    * details until the view's selection changes.
    */
   private localId?: string;
-  /** A task just added (three panes), shown with its title empty to type; left untitled, it is removed again. */
-  private newId?: string;
   /** The view's selection as last seen, to tell when it changes. */
   private viewSelection = "";
   private listRows = LIST_PAGE;
@@ -95,8 +94,7 @@ export class TaskSidebarView extends ItemView {
     this.unsubscribe?.();
     if (this.renderFrame !== undefined) this.containerEl.win.cancelAnimationFrame(this.renderFrame);
     this.renderFrame = undefined;
-    this.leaveDraft();
-    await this.saving;
+    await this.saveDraft();
   }
 
   private get content(): HTMLElement { return this.containerEl.children[1] as HTMLElement; }
@@ -134,8 +132,10 @@ export class TaskSidebarView extends ItemView {
     if (mode !== this.mode) { this.localId = undefined; this.listRows = LIST_PAGE; }
     const local = this.localId ? this.plugin.index.taskById(this.localId) : undefined;
     if (!local) this.localId = undefined;
-    const task = local ?? (selected.length === 1 ? selected[0] : undefined);
-    this.followTask(task);
+    // A new task the view started here (three panes) comes first, until it is written or dropped.
+    const entry = view?.newTaskInSidebar();
+    const task = entry?.task ?? local ?? (selected.length === 1 ? selected[0] : undefined);
+    this.followTask(task, entry);
     const settings = this.plugin.settings;
     const skeleton = [mode, settings.style, settings.density].join("|");
     if (skeleton !== this.skeleton || !this.details?.element.isConnected) this.build(mode, skeleton);
@@ -152,8 +152,9 @@ export class TaskSidebarView extends ItemView {
     // Below Today's hours or Upcoming's list, the details take room only for a selected task, and as much as it needs.
     const shown = mode === "details" || Boolean(task);
     details.element.hidden = !shown;
-    this.draw(details, JSON.stringify([shown, Boolean(view), local ? "local" : selected.length, task?.id, task?.id === this.newId, task?.raw, task?.description, task && this.children(task).map(child => child.raw)]), force,
-      () => { if (shown) this.renderDetails(details.element, view, local ? [local] : selected, task); });
+    // A new task redraws as its properties change (not as it is typed).
+    this.draw(details, JSON.stringify([shown, Boolean(view), local ? "local" : selected.length, task?.id, entry && [entry.task, entry.destination], task?.raw, task?.description, task && this.children(task).map(child => child.raw)]), force,
+      () => { if (shown) this.renderDetails(details.element, view, entry ? [] : local ? [local] : selected, task, entry?.destination); });
   }
 
   /** Lays the sidebar out for a mode: in Today and Upcoming, their tasks over the selected task's details; else the details alone. */
@@ -205,40 +206,22 @@ export class TaskSidebarView extends ItemView {
   }
 
   /**
-   * Shows a task the view opened (three panes; see TaskMainView.revealInSidebar): `focus` puts the caret in its title,
-   * `blank` (a task just added) shows the title empty to type.
+   * Shows a task the view opened, or its new task (three panes; see TaskMainView.revealInSidebar): `focus` puts the
+   * caret in its title.
    */
-  showTask(id: string, options: { focus?: boolean; blank?: boolean } = {}): void {
+  showTask(id: string, options: { focus?: boolean } = {}): void {
     // Settle on the view in front first (a redraw may be pending), so the task is not taken for the last view's.
     this.render();
-    if (options.blank) this.newId = id;
-    this.localId = id;
+    if (id !== NEW_TASK_ID) this.localId = id;
     this.render();
     if (options.focus) this.content.querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")?.focus();
   }
 
-  /**
-   * Saves the shown task's typing, or removes it when it was just added and left untitled, before a view adds another
-   * (whose line may take its id).
-   */
-  async settle(): Promise<void> {
-    this.leaveDraft();
-    await this.saving;
-  }
-
-  /** Adds a task as the view would (three panes: here, its title empty to type), at a time clicked in Today's hours. */
-  private async addTask(preset: TaskEditorPreset): Promise<void> {
+  /** A time clicked in Today's hours adds a task then: with three panes, here, as the view adds one; else in the task editor. */
+  private addTask(preset: TaskEditorPreset): void {
     const view = this.taskView();
-    if (this.plugin.settings.taskDetails !== "sidebar") { this.plugin.openEditor({ mode: "all", preset }); return; }
-    try {
-      await this.settle();
-      const task = await this.plugin.createBlankTask({ mode: "all", preset });
-      if (!task) return;
-      if (view) view.revealInSidebar(task, { focus: true, blank: true });
-      else this.showTask(task.id, { focus: true, blank: true });
-    } catch (cause) {
-      new Notice(cause instanceof Error ? cause.message : "Could not add the task.");
-    }
+    if (view && this.plugin.settings.taskDetails === "sidebar") view.newTask(preset);
+    else this.plugin.openEditor({ mode: "all", preset });
   }
 
   /** Starts a drag of tasks here, which a sidebar list, another pane, or a view's own drop zones can take. */
@@ -261,7 +244,7 @@ export class TaskSidebarView extends ItemView {
       anchor: todayIso(), scope: "day", toolbar: false, allDay: false, tasks, dateFormat: this.plugin.dateFormat(), navigate: () => {},
       color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
       priorityColors: this.plugin.settings.calendarPriorityColors,
-      create: preset => void this.addTask(preset),
+      create: preset => this.addTask(preset),
       // A click shows the task in the details below.
       bind: (card, task) => {
         card.setAttribute("data-task-id", task.id);
@@ -392,35 +375,21 @@ export class TaskSidebarView extends ItemView {
   }
 
   /**
-   * Another task shown saves the last one's typing first; an untouched draft takes the task's current text (a task
-   * just added, an empty title to type).
+   * Another task shown saves the last one's typing first; an untouched draft takes the task's current text (a new
+   * task, what is typed for it, which the view keeps).
    */
-  private followTask(task: Task | undefined): void {
-    if (this.draft && this.draft.id !== task?.id) this.leaveDraft();
-    if (task && !this.draft?.dirty) this.draft = { id: task.id, dirty: false, title: task.id === this.newId ? "" : task.title, notes: cardNotes(task.description), subtask: this.draft?.subtask };
-  }
-
-  /**
-   * The shown task is left: its typing is saved, but a task just added and left with nothing typed (no title, notes
-   * or subtasks) is removed again, as a new card closed empty is.
-   */
-  private leaveDraft(): void {
-    const draft = this.draft;
-    if (!draft) return;
-    const task = draft.id === this.newId ? this.plugin.index.taskById(draft.id) : undefined;
-    if (draft.id === this.newId) this.newId = undefined;
-    // Still untitled in its note: ids go by line, so another task may have the id by now.
-    if (task?.title === NEW_TASK_TITLE && !draft.title.trim() && !draft.notes.trim() && !task.childIds.length) {
-      this.saving = this.saving.then(async () => {
-        await this.plugin.store.delete(task);
-        await this.plugin.index.refreshPath(task.path);
-      }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not remove the empty task."); });
-    } else void this.saveDraft();
-    this.draft = undefined;
+  private followTask(task: Task | undefined, entry?: { title: string; notes: string }): void {
+    if (this.draft && this.draft.id !== task?.id) {
+      void this.saveDraft();
+      this.draft = undefined;
+    }
+    if (task && !this.draft?.dirty) this.draft = { id: task.id, dirty: false, title: entry?.title ?? task.title, notes: entry?.notes ?? cardNotes(task.description), subtask: this.draft?.subtask };
   }
 
   private typed(task: Task, next: TaskCardDraft): void {
     if (this.draft?.id !== task.id) return;
+    // A new task's typing is the view's to keep until it is written.
+    if (task.id === NEW_TASK_ID) { this.draft = { ...next, id: task.id, dirty: false }; this.taskView()?.typeNewTask(next.title, next.notes); return; }
     const dirty = this.draft.dirty || next.title !== this.draft.title || next.notes !== this.draft.notes;
     this.draft = { ...next, id: task.id, dirty };
   }
@@ -436,7 +405,7 @@ export class TaskSidebarView extends ItemView {
     this.saving = this.saving.then(async () => {
       const task = this.plugin.index.taskById(typed.id);
       if (!task) return;
-      // A title cleared keeps the task's own (a task just added, “New To-Do”).
+      // A title cleared keeps the task's own.
       const next = draftFromTitle(task, typed.title.trim() ? typed.title : task.title, new Date(), this.plugin.dateFormat());
       const notes = typed.notes.trim() === cardNotes(task.description).trim() ? undefined : typed.notes;
       try {
@@ -450,8 +419,6 @@ export class TaskSidebarView extends ItemView {
         }
         // Anything typed while saving is still to save.
         const current = this.draft;
-        // Once titled, a task just added is the task it is named.
-        if (typed.id === this.newId && typed.title.trim()) this.newId = undefined;
         if (current?.id === typed.id && current.title === typed.title && current.notes === typed.notes) {
           current.dirty = false;
           if (!this.closed) this.render(true);
@@ -526,7 +493,8 @@ export class TaskSidebarView extends ItemView {
     if (file instanceof TFile) await this.app.workspace.getLeaf("tab").openFile(file, { eState: { line: task.line } });
   }
 
-  private renderDetails(container: HTMLElement, view: TaskMainView | undefined, selected: Task[], task: Task | undefined): void {
+  /** `destination`: for a new task, the note it will go to. */
+  private renderDetails(container: HTMLElement, view: TaskMainView | undefined, selected: Task[], task: Task | undefined, destination?: string): void {
     if (!view || !task) {
       const empty = container.createDiv({ cls: "tm-empty tm-sidebar-empty" });
       setIcon(empty.createDiv({ cls: "tm-empty-icon" }), selected.length > 1 ? "list-checks" : "mouse-pointer-click");
@@ -535,7 +503,9 @@ export class TaskSidebarView extends ItemView {
         : view ? "Select a task to see its details here." : "Select a task in a task view to see its details here." });
       return;
     }
-    this.renderTaskDetails(container, view, task);
+    this.renderTaskDetails(container, view, task, destination);
+    // A new task is in no note yet.
+    if (task.id === NEW_TASK_ID) return;
     const footer = container.createDiv({ cls: "tm-sidebar-footer" });
     const open = footer.createEl("button", { cls: "tm-sidebar-open-note", attr: { type: "button", title: task.path, "data-tm-focus-key": "sidebar-open-note" } });
     setIcon(open.createSpan({ cls: "tm-sidebar-open-note-icon", attr: { "aria-hidden": "true" } }), "file-text");
@@ -556,8 +526,10 @@ export class TaskSidebarView extends ItemView {
    * The title over a list of the task's properties, each a row that opens its editor, then its notes and subtasks; in
    * either style, drawn in its colours and checkboxes.
    */
-  private renderTaskDetails(container: HTMLElement, view: TaskMainView, task: Task): void {
+  private renderTaskDetails(container: HTMLElement, view: TaskMainView, task: Task, destination?: string): void {
     const draft = this.draft!;
+    // A new task, not yet written: Enter writes it (once titled), Escape writes it titled or drops it untitled.
+    const isNew = task.id === NEW_TASK_ID;
     const now = new Date();
     const today = todayIso(now);
     const dateFormat = this.plugin.dateFormat();
@@ -569,12 +541,13 @@ export class TaskSidebarView extends ItemView {
     const box = head.createEl("label", { cls: `tm-checkbox-target${repeating ? ` tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` : ""}` });
     const checkbox = box.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "sidebar-checkbox" } });
     checkbox.checked = task.completed;
-    checkbox.addEventListener("change", () => this.toggle(task, checkbox.checked, true));
+    if (isNew) checkbox.disabled = true;
+    else checkbox.addEventListener("change", () => this.toggle(task, checkbox.checked, true));
     if (repeating) repeatIcon(box);
     // As in a card: the title is one wrapping line, and what saving reads as a property is marked behind it.
     const titleBox = head.createDiv({ cls: "tm-things-card-title-box" });
     const backdrop = titleBox.createDiv({ cls: "tm-things-card-title-backdrop", attr: { "aria-hidden": "true" } });
-    const title = titleBox.createEl("textarea", { cls: "tm-things-card-title tm-sidebar-title-field", attr: { "aria-label": "Title", placeholder: task.id === this.newId ? NEW_TASK_TITLE : "Title", rows: "1", "data-tm-focus-key": "sidebar-title" } });
+    const title = titleBox.createEl("textarea", { cls: "tm-things-card-title tm-sidebar-title-field", attr: { "aria-label": "Title", placeholder: isNew ? NEW_TASK_TITLE : "Title", rows: "1", "data-tm-focus-key": "sidebar-title" } });
     title.value = draft.title;
     const paint = (): void => paintTokens(backdrop, title.value, taskInputRanges(title.value, task.title, now, dateFormat));
     paint();
@@ -606,8 +579,9 @@ export class TaskSidebarView extends ItemView {
     });
     row("signal", "Priority", "priority", value => { if (task.priority) value.setText(`P${task.priority} · ${PRIORITY_NAMES[task.priority]}`); }, task.priority ? `is-p${task.priority}` : "");
     row("folder", "Project", "project", value => {
-      const source = value.createSpan({ cls: "tm-task-source", text: task.path === this.plugin.settings.inboxPath ? "Inbox" : noteName(task.path) });
-      const color = this.plugin.index.projectColor(task.path);
+      const path = destination ? splitDestination(destination).path : task.path;
+      const source = value.createSpan({ cls: "tm-task-source", text: path === this.plugin.settings.inboxPath ? "Inbox" : noteName(path) });
+      const color = this.plugin.index.projectColor(path);
       if (color) source.style.setProperty("--tm-project-color", color);
     });
     row("tag", "Tags", "tags", value => {
@@ -629,18 +603,27 @@ export class TaskSidebarView extends ItemView {
       autosize(title); paint(); change();
     });
     notes.addEventListener("input", () => { autosize(notes); change(); });
-    // Enter in the title moves on to the notes; Escape saves and leaves the field.
+    // Enter in the title moves on to the notes; Escape saves and leaves the field. A new task's Enter writes it once
+    // titled, and its Escape writes it titled or drops it untitled.
     panel.addEventListener("keydown", event => {
       const target = event.target as HTMLElement;
-      if (target === title && event.key === "Enter" && !event.isComposing) { event.preventDefault(); notes.focus(); }
-      else if ((target === title || target === notes) && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); target.blur(); }
+      if (target === title && event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        if (!isNew) notes.focus();
+        else if (title.value.trim()) void view.finishNewTask();
+      } else if ((target === title || target === notes) && event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation();
+        if (isNew) void view.finishNewTask();
+        else target.blur();
+      }
     });
     const fit = (): void => { autosize(title); autosize(notes); };
     if (panel.isConnected) fit();
     window.requestAnimationFrame(fit);
     this.saveOnLeave(panel, ".tm-sidebar-title-field, .tm-sidebar-notes");
 
-    this.renderSubtasks(panel, task);
+    // A new task's subtasks wait until it is written.
+    if (!isNew) this.renderSubtasks(panel, task);
   }
 
   /** The subtasks: each checks off and renames in place; the last line adds one, and Enter starts the next. */

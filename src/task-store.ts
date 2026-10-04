@@ -6,7 +6,7 @@ import { newTaskLines } from "./task-description";
 import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
 import { copiedTaskText, duplicateTaskBlocks, insertAfterTask, liveTaskBlock, pastedTaskLines } from "./task-block";
-import { parseTaskLine, serializeTask } from "./parser";
+import { parseTaskLine, scanTasks, serializeTask } from "./parser";
 import { TASK_INDENT } from "./task-indentation";
 import type { ListPlacement } from "./list-drag";
 import { splitDestination } from "./structure";
@@ -37,6 +37,20 @@ export function insertedTaskLine(before: string, after: string): number {
   while (line < old.length && line < next.length && old[line] === next[line]) line++;
   while (line < next.length && !/^\s*[-*+]\s+\[.\]/.test(next[line])) line++;
   return line < next.length ? line : -1;
+}
+
+/**
+ * The task `draft` would be once created (see TaskStore.create) in the note at `path` reading `content`, at the line it
+ * would take; undefined when the heading it names is missing.
+ */
+export function previewCreatedTask(path: string, content: string, draft: TaskDraft, options: { dateFormat?: string; position?: TaskManagerSettings["newTaskPosition"]; linkDates?: boolean; sectionHeadingLevel?: number } = {}): Task | undefined {
+  try {
+    const next = insertIntoDestination(content, newTaskLines(draft, options.dateFormat, options.linkDates), splitDestination(draft.destination).heading, options.position, options.sectionHeadingLevel);
+    const line = insertedTaskLine(content, next);
+    return scanTasks(path, next, new Date(), options.dateFormat, options.sectionHeadingLevel).find(task => task.line === line);
+  } catch {
+    return undefined;
+  }
 }
 
 function taskName(title: string): string {
