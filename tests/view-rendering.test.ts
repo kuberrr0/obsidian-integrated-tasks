@@ -45,6 +45,7 @@ import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { DEFAULT_SETTINGS, type Project } from "../src/types";
 import { todayIso } from "../src/date";
+import { addDays } from "../src/calendar";
 import type TaskManagerPlugin from "../src/main";
 
 beforeAll(() => {
@@ -982,6 +983,40 @@ describe("Create new task in the Things style", () => {
     expect(extra.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Buy milk" }));
   });
 
+  it("drops a titled new task on Escape too", async () => {
+    const { extra, type, key, card, title } = await inserted();
+    type("Buy milk");
+    key(title(), "Escape");
+    await vi.waitFor(() => expect(card()).toBeNull());
+    expect(extra.create).not.toHaveBeenCalled();
+  });
+
+  it("confirms an open task's card on Enter, saving what was typed, and cancels it on Escape, saving nothing", async () => {
+    const { view, plugin, store, content } = await setup([note("A.md", 1)]);
+    plugin.settings.style = "things";
+    const update = vi.fn().mockResolvedValue(undefined);
+    (store as unknown as { update: typeof update }).update = update;
+    await view.setState({ mode: "all" });
+    const title = () => content().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    const open = async () => {
+      rows(content())[0].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).not.toBeNull());
+    };
+    await open();
+    title().value = "Renamed";
+    title().dispatchEvent(new Event("input"));
+    title().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).toBeNull());
+    expect(update).not.toHaveBeenCalled();
+    await open();
+    expect(title().value).toBe("A.md task 0");
+    title().value = "Renamed";
+    title().dispatchEvent(new Event("input"));
+    title().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).toBeNull());
+    expect(update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "A.md task 0" }), expect.objectContaining({ title: "Renamed" }));
+  });
+
   it("keeps what is set in the card (its priority, from the toolbar) to write with the task", async () => {
     const { extra, card, title, type, key } = await inserted();
     type("Buy milk");
@@ -1030,6 +1065,40 @@ describe("Create new task in the Things style", () => {
     await view.setState({ mode: "today" });
     view.newTask();
     expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ mode: "today" }));
+  });
+});
+
+describe("Gantt navigation", () => {
+  it("moves the arrows' period on from the dates in view, after scrolling the timeline either way", async () => {
+    const { view, content } = await setup([note("Site.md", 1)], { "Site.md": { tags: ["project"], start: "2026-03-02", end: "2026-03-20" } });
+    await view.setState({ mode: "projects", projectLayout: "gantt", ganttAnchor: "2026-03-01", ganttZoom: "month" });
+    const scroll = () => content().querySelector<HTMLElement>(".tm-gantt-scroll")!;
+    // The first day in view: the timeline's first date plus the days scrolled past.
+    const shown = () => addDays(content().querySelector<HTMLElement>(".tm-gantt-date")!.title, Math.floor(scroll().scrollLeft / 32));
+    expect(shown()).toBe("2026-03-01");
+    for (const [days, next] of [[-36, "2026-02-24"], [-40, "2026-02-15"], [20, "2026-04-07"]] as const) {
+      // Scrolled by hand, then on by a month: from the dates in view, wherever the timeline was scrolled.
+      scroll().scrollLeft += days * 32;
+      scroll().dispatchEvent(new Event("scroll"));
+      content().querySelector<HTMLElement>("[aria-label='Next period']")!.click();
+      expect(shown()).toBe(next);
+    }
+  });
+
+  it("opens at the start of the year, in the Year view at first, and there again when opened anew", async () => {
+    const { view, content } = await setup([note("Site.md", 1)], { "Site.md": { tags: ["project"], start: "2026-03-02", end: "2026-03-20" } });
+    const yearStart = `${todayIso().slice(0, 4)}-01-01`;
+    const shown = () => addDays(content().querySelector<HTMLElement>(".tm-gantt-date")!.title, Math.floor(content().querySelector<HTMLElement>(".tm-gantt-scroll")!.scrollLeft / 3));
+    await view.setState({ mode: "projects", projectLayout: "gantt" });
+    expect(shown()).toBe(yearStart);
+    expect(content().querySelector("[aria-label='Year'][aria-pressed='true']")).not.toBeNull();
+    content().querySelector<HTMLElement>("[aria-label='Next period']")!.click();
+    expect(shown()).toBe(`${Number(yearStart.slice(0, 4)) + 1}-01-01`);
+    // Another page and back: the start of the year again, in the scale it was left in.
+    await view.setState({ mode: "today" });
+    await view.setState({ mode: "projects", projectLayout: "gantt" });
+    expect(shown()).toBe(yearStart);
+    expect(view.getState().ganttAnchor).toBeUndefined();
   });
 });
 

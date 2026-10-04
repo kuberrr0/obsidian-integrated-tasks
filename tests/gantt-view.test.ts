@@ -3,7 +3,14 @@ vi.mock("obsidian", async importOriginal => ({ ...await importOriginal<typeof im
 import { renderGantt } from "../src/gantt-view";
 import { addDays } from "../src/calendar";
 import { daysBetween } from "../src/gantt";
-import { ganttSegments } from "../src/gantt";
+import { ganttSegments, shiftGantt } from "../src/gantt";
+
+it("moves the arrows by a calendar month, quarter, year or five years, keeping the day where the month has it", () => {
+  expect(shiftGantt("2026-01-31", "month", 1)).toBe("2026-02-28");
+  expect(shiftGantt("2026-01-01", "quarter", 1)).toBe("2026-04-01");
+  expect(shiftGantt("2026-01-01", "year", -1)).toBe("2025-01-01");
+  expect(shiftGantt("2026-01-01", "five-year", 1)).toBe("2031-01-01");
+});
 
 it("groups month dates by Monday, quarter/year by month, and five years by year", () => {
   expect(ganttSegments("2026-09-07", 21, "month").map(s => [s.label, s.days])).toEqual([["Sep 7", 7], ["Sep 14", 7], ["Sep 21", 7]]);
@@ -13,6 +20,14 @@ it("groups month dates by Monday, quarter/year by month, and five years by year"
   expect(ganttSegments("2027-01-01", 731, "five-year").map(s => [s.label, s.days])).toEqual([["2027", 365], ["2028", 366]]);
   const partial = ganttSegments("2026-09-10", 10, "month");
   expect(partial.map(s => [s.label, s.offset, s.days])).toEqual([["Sep 7", 0, 4], ["Sep 14", 4, 6]]);
+});
+
+it("names the year once, at its first month, or by weeks its first week", () => {
+  for (const zoom of ["quarter", "year"] as const) {
+    expect(ganttSegments("2026-11-01", 92, zoom).map(s => [s.label, s.year])).toEqual([["Nov", undefined], ["Dec", undefined], ["Jan", "2027"]]);
+  }
+  expect(ganttSegments("2026-12-21", 21, "month").map(s => [s.label, s.year])).toEqual([["Dec 21", undefined], ["Dec 28", undefined], ["Jan 4", "2027"]]);
+  expect(ganttSegments("2026-12-01", 62, "five-year").every(s => !s.year)).toBe(true);
 });
 
 class Element extends EventTarget {
@@ -83,7 +98,7 @@ it("repositions project bars after scrolling and retains date editing", async ()
   expect(bar.style.left).toBe(`${daysBetween(first, project.scheduledDate) * 32 + 2}px`);
   const next = container.all().find(el => el.attrs["aria-label"] === "Next period")!;
   next.dispatchEvent(new Event("click"));
-  expect(navigate).toHaveBeenCalledWith(addDays(viewportChanged.mock.lastCall![0], 35), "month");
+  expect(navigate).toHaveBeenCalledWith(shiftGantt(viewportChanged.mock.lastCall![0], "month", 1), "month", undefined);
   const handle = container.all().find(el => el.cls === "tm-gantt-handle is-finish")!;
   expect(bar.text).toBe("2026-09-18 – 2026-09-25");
   expect(container.all().some(el => el.cls === "tm-gantt-deadline")).toBe(false);

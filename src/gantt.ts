@@ -8,6 +8,28 @@ export const GANTT_ZOOMS: Record<GanttZoom, { days: number; width: number }> = {
   month: { days: 35, width: 32 }, quarter: { days: 91, width: 12 },
   year: { days: 366, width: 3 }, "five-year": { days: 1827, width: 0.7 }
 };
+/** How far zooming goes: pixels per day. */
+export const GANTT_MIN_SCALE = 0.5;
+export const GANTT_MAX_SCALE = 96;
+
+/** The range a zoomed scale reads as (its dates labelled, and its arrows moving, as that range's are). */
+export function ganttZoomFor(scale: number): GanttZoom {
+  return scale >= 20 ? "month" : scale >= 6 ? "quarter" : scale >= 1.5 ? "year" : "five-year";
+}
+
+/** The Gantt opens at the start of the year, for an overview of it. */
+export function ganttYearStart(today: string): string { return `${today.slice(0, 4)}-01-01`; }
+
+/** The arrows' period, from the first day in view: a month, a quarter, a year or five years. */
+export function shiftGantt(anchor: string, zoom: GanttZoom, direction: number): string {
+  const date = localDate(anchor);
+  const day = date.getDate();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + direction * { month: 1, quarter: 3, year: 12, "five-year": 60 }[zoom]);
+  date.setDate(Math.min(day, new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()));
+  return addDays(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`, date.getDate() - 1);
+}
+
 export function daysBetween(start: string, end: string): number {
   const utc = (iso: string): number => { const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d); };
   return Math.round((utc(end) - utc(start)) / 86400000);
@@ -41,9 +63,15 @@ export function ganttSelection(first: string, last: string): { scheduledDate: st
   return first <= last ? { scheduledDate: first, endDate: last } : { scheduledDate: last, endDate: first };
 }
 
-/** Calendar boundaries, clipped to the buffered timeline while retaining their labels. */
-export function ganttSegments(start: string, days: number, zoom: GanttZoom): Array<{ start: string; offset: number; days: number; label: string }> {
-  const segments: Array<{ start: string; offset: number; days: number; label: string }> = [];
+export interface GanttSegment { start: string; offset: number; days: number; label: string; year?: string }
+
+/**
+ * Calendar boundaries, clipped to the buffered timeline while retaining their labels. A year's first month (or, by
+ * weeks, its first week) also names the year.
+ */
+export function ganttSegments(start: string, days: number, zoom: GanttZoom): GanttSegment[] {
+  const segments: GanttSegment[] = [];
+  let lastYear: number | undefined;
   for (let offset = 0; offset < days; offset++) {
     const iso = addDays(start, offset), date = localDate(iso);
     const boundary = zoom === "month" ? date.getDay() === 1 : zoom === "five-year" ? date.getMonth() === 0 && date.getDate() === 1 : date.getDate() === 1;
@@ -51,7 +79,11 @@ export function ganttSegments(start: string, days: number, zoom: GanttZoom): Arr
       const weekStart = localDate(addDays(iso, -((date.getDay() + 6) % 7)));
       const label = zoom === "month" ? weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })
         : zoom === "five-year" ? String(date.getFullYear()) : date.toLocaleDateString("en-US", { month: "short" });
-      segments.push({ start: iso, offset, days: 0, label });
+      const year = (zoom === "month" ? weekStart : date).getFullYear();
+      const segment: GanttSegment = { start: iso, offset, days: 0, label };
+      if (zoom !== "five-year" && lastYear !== undefined && year !== lastYear) segment.year = String(year);
+      lastYear = year;
+      segments.push(segment);
     }
     segments[segments.length - 1].days++;
   }

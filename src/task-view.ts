@@ -21,7 +21,7 @@ import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
 import { PROJECT_COLORS, projectColorValue, updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
-import { daysBetween, type GanttZoom } from "./gantt";
+import { daysBetween, ganttYearStart, GANTT_MAX_SCALE, GANTT_MIN_SCALE, type GanttZoom } from "./gantt";
 import { projectHierarchy } from "./project-hierarchy";
 import { kanbanColumns, type KanbanColumn } from "./kanban";
 import { ListDragController } from "./list-drag-view";
@@ -96,8 +96,11 @@ export class TaskMainView extends ItemView {
   private stateSet = false;
   private layout: "list" | "calendar" | "kanban" = "list";
   private projectLayout: "list" | "gantt" = "list";
-  private ganttAnchor = addDays(todayIso(), -2);
-  private ganttZoom: GanttZoom = "month";
+  /** Where the Gantt is (its first day in view), kept while the view is open; it opens at the start of the year. */
+  private ganttAnchor = ganttYearStart(todayIso());
+  private ganttZoom: GanttZoom = "year";
+  /** The Gantt's scale (pixels per day) when zoomed in or out; else its range's own. */
+  private ganttScale?: number;
   private calendarScope: CalendarScope = "month";
   private calendarAnchor = todayIso();
   private showCompleted = false;
@@ -179,7 +182,7 @@ export class TaskMainView extends ItemView {
     return TITLES[this.state.mode];
   }
   getIcon(): string { return this.state.mode === "projects" ? "target" : "circle-check-big"; }
-  getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor, showProjects: this.showProjects }; }
+  getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttZoom: this.ganttZoom, ganttScale: this.ganttScale, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor, showProjects: this.showProjects }; }
 
   /** Which view's options this page keeps: a list's, a project's or a tag's (by its note when it has one). Smart lists keep theirs in their own definition. */
   private get optionsKey(): string | undefined {
@@ -245,10 +248,18 @@ export class TaskMainView extends ItemView {
     const projectLayout = state.projectLayout === "list" || state.projectLayout === "gantt" ? state.projectLayout : undefined;
     if (state.ganttZoom === "month" || state.ganttZoom === "quarter" || state.ganttZoom === "year" || state.ganttZoom === "five-year") this.ganttZoom = state.ganttZoom;
     else if (state.ganttZoom === "week") this.ganttZoom = "month";
-    if (typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor)) this.ganttAnchor = state.ganttAnchor;
+    // A range chosen drops a zoom; a tab restored keeps its own.
+    if ("ganttZoom" in state || "ganttScale" in state) {
+      this.ganttScale = typeof state.ganttScale === "number" && state.ganttScale >= GANTT_MIN_SCALE && state.ganttScale <= GANTT_MAX_SCALE ? state.ganttScale : undefined;
+    }
+    const ganttAnchor = typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor) ? state.ganttAnchor : undefined;
     if (["day", "four-day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     const newPage = this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId;
+    // The Gantt opens at the start of the year (for an overview of it) unless sent somewhere; it keeps its place only
+    // while the page stays open.
+    if (ganttAnchor) this.ganttAnchor = ganttAnchor;
+    else if (newPage) this.ganttAnchor = ganttYearStart(todayIso());
     if (newPage) {
       // A new task left for another page is written with a title, else dropped.
       if (this.newTaskEntry) {
@@ -382,7 +393,10 @@ export class TaskMainView extends ItemView {
     try { update(); } finally { this.preserving = false; }
     for (const { key, top, left } of scrolled) {
       const element = key ? container.querySelector<HTMLElement>(`[data-tm-scroll-key="${key}"]`) : container;
-      if (element) { element.scrollTop = top; element.scrollLeft = left; }
+      if (!element) continue;
+      element.scrollTop = top;
+      // The Gantt lays its dates out from where it was left (or sent): only its vertical scroll is kept.
+      if (element.getAttribute("data-tm-scroll-axis") !== "y") element.scrollLeft = left;
     }
     const pending = this.pendingFocus;
     this.pendingFocus = undefined;
@@ -831,15 +845,15 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * Ends the new task: written when it has a title (properties typed into it apply, as in the task editor), else
-   * dropped. Returns the task written.
+   * Ends the new task: written when it has a title (properties typed into it apply, as in the task editor), else, or
+   * cancelled (`write` off), dropped. Returns the task written.
    */
-  private async endNewTask(): Promise<Task | undefined> {
+  private async endNewTask(write = true): Promise<Task | undefined> {
     const entry = this.newTaskEntry;
     if (!entry) return undefined;
     this.newTaskEntry = undefined;
     this.plugin.refreshTaskSidebar?.();
-    if (!entry.title.trim()) return undefined;
+    if (!write || !entry.title.trim()) return undefined;
     const typed = draftWithTitle(entry.draft, "", entry.title, new Date(), this.plugin.dateFormat());
     // A title of properties alone ("tomorrow p1") stays the title.
     const draft: TaskDraft = { ...typed, title: typed.title || entry.title.trim(), description: entry.notes.trim() ? entry.notes : undefined };
@@ -1224,7 +1238,10 @@ export class TaskMainView extends ItemView {
     for (const [layout, icon] of [["list", "list"], ["gantt", "chart-gantt"]] as const) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${layout === "gantt" ? "Gantt" : "List"} projects view`, "aria-pressed": String(this.projectLayout === layout), title: `${layout === "gantt" ? "Gantt" : "List"} view`, "data-tm-focus-key": `project-layout-${layout}` } });
       setIcon(button, icon);
-      button.addEventListener("click", () => { this.projectLayout = layout; this.saveLayout(); this.render(); });
+      button.addEventListener("click", () => {
+        if (layout === "gantt" && this.projectLayout !== "gantt") this.ganttAnchor = ganttYearStart(todayIso());
+        this.projectLayout = layout; this.saveLayout(); this.render();
+      });
     }
     const create = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Create new project", title: "Create new project" } });
     setIcon(create, "plus");
@@ -1244,8 +1261,11 @@ export class TaskMainView extends ItemView {
       renderGantt(container, {
         projects,
         anchor: this.ganttAnchor, zoom: this.ganttZoom, dateFormat: this.plugin.dateFormat(), things: this.plugin.settings.style === "things",
-        navigate: (anchor, zoom) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.render(); },
+        navigate: (anchor, zoom, scale) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.ganttScale = scale; this.render(); },
         viewportChanged: anchor => { this.ganttAnchor = anchor; },
+        scale: this.ganttScale,
+        // The timeline redraws itself; the view keeps where it is for its next drawing.
+        zoomed: (anchor, zoom, scale) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.ganttScale = scale; },
         open: project => { void this.plugin.openProject(project.path).catch(error => new Notice(String(error))); },
         edit: (project, field) => this.openProjectProperty(project, field),
         update: async (project, changes) => {
@@ -2286,16 +2306,16 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * Saves the card, shrinks it back into the space its rows take, then shows the rows.
-   * Refreshes wait until it has closed, so the save cannot redraw the card mid-animation.
+   * Saves the card (unless cancelled: `save` off leaves the task as it was), shrinks it back into the space its rows
+   * take, then shows the rows. Refreshes wait until it has closed, so the save cannot redraw the card mid-animation.
    */
-  private collapseCard(): Promise<void> {
+  private collapseCard(save = true): Promise<void> {
     if (this.cardClosing || !this.expanded) return this.cardClosing ?? Promise.resolve();
     let id = this.expanded.id;
     this.cardClosing = (async () => {
       // A new task's card writes it (with a title, else drops it); the row then focused is the task written.
-      if (id === NEW_TASK_ID) id = (await this.endNewTask())?.id ?? "";
-      else await this.saveCard();
+      if (id === NEW_TASK_ID) id = (await this.endNewTask(save))?.id ?? "";
+      else if (save) await this.saveCard();
       const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
       if (card) await animateCardClose(card, this.cardRowsHeight || card.querySelector(".tm-things-card-head")!.getBoundingClientRect().height + 10);
       this.expanded = undefined;
@@ -2366,6 +2386,7 @@ export class TaskMainView extends ItemView {
       },
       edit: property => void this.editFromCard(task.id, property),
       collapse: () => void this.collapseCard(),
+      cancel: () => void this.collapseCard(false),
       renameChild: (child, title) => {
         // A subtask stays under its parent: its title's tokens set properties but do not move it.
         const draft = draftFromTitle(child, title, new Date(), this.plugin.dateFormat(), false);
@@ -2401,6 +2422,7 @@ export class TaskMainView extends ItemView {
         this.typeNewTask(draft.title, draft.notes);
       },
       submit: () => { if (this.newTaskEntry?.title.trim()) void this.collapseCard(); },
+      cancel: () => void this.collapseCard(false),
       edit: property => void this.editFromCard(task.id, property),
       collapse: () => void this.collapseCard(),
       renameChild: () => {},

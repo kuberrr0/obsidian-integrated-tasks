@@ -36,8 +36,10 @@ export interface TaskCardOptions {
     change: (draft: TaskCardDraft) => void;
     /** Completes or reopens the task or a subtask; without it (a new task not yet written), the checkbox is off. */
     toggle?: (task: Task, completed: boolean) => void;
-    /** Enter in the title: writes a new task (without it, Enter moves on to the notes). */
+    /** Enter: confirms the card (without it, `collapse`): a new task's writes it once titled. */
     submit?: () => void;
+    /** Escape: closes the card leaving the task as it was (a new task, not written); without it, `collapse`. */
+    cancel?: () => void;
     /** Adds tags typed into the card; without it, tags open the task editor. */
     addTags?: (tags: string[]) => void;
     /** Existing tags, suggested while typing one. */
@@ -115,21 +117,23 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
         autosize(title); paintTitle(); preview(); change();
     });
     notes.addEventListener("input", () => { autosize(notes); change(); });
-    // Enter in the title moves on to the notes, as in Things; a new task's writes it.
-    title.addEventListener("keydown", event => {
-        if (event.key !== "Enter" || event.isComposing || event.metaKey || event.ctrlKey) return;
-        event.preventDefault();
-        if (options.submit) { event.stopPropagation(); options.submit(); }
-        else notes.focus();
-    });
-    // Subtask edits save as you leave each one; closing the card saves the one still being edited.
+    // Subtask edits save as you leave each one; confirming the card saves the one still being edited, cancelling it
+    // keeps none.
     const commits: Array<() => void> = [];
+    let cancelled = false;
     card.addEventListener("keydown", event => {
-        // Escape, or Cmd/Ctrl+Enter, closes the card and saves it.
-        if (event.key === "Escape" || (event.key === "Enter" && (event.metaKey || event.ctrlKey))) {
+        const field = event.target === title || event.target === notes;
+        // Escape cancels the card: what was typed in it is not saved.
+        if (event.key === "Escape") {
+            event.preventDefault(); event.stopPropagation();
+            cancelled = true;
+            (options.cancel ?? options.collapse)();
+        }
+        // Enter in the title or notes (Shift+Enter starts a line of notes), or Cmd/Ctrl+Enter anywhere, confirms it.
+        else if (event.key === "Enter" && !event.isComposing && ((field && !event.shiftKey) || event.metaKey || event.ctrlKey)) {
             event.preventDefault(); event.stopPropagation();
             for (const commit of commits) commit();
-            options.collapse();
+            (options.submit ?? options.collapse)();
         }
         // Keep row shortcuts (M, S, arrows) from acting while typing.
         else event.stopPropagation();
@@ -156,7 +160,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
         let finished = false;
         // Enter adds it and starts the next; leaving it adds it; either way an empty one just goes away.
         const finish = (next: boolean): void => {
-            if (finished) return;
+            if (finished || cancelled) return;
             finished = true;
             const value = input.value.trim();
             if (newRow === row) newRow = undefined;
@@ -190,6 +194,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
         name.value = child.title;
         let saved = child.title;
         const commit = (): void => {
+            if (cancelled) return;
             const value = name.value.trim();
             if (!value) { name.value = saved; return; }
             if (value === saved) return;

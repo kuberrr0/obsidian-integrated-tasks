@@ -262,24 +262,40 @@ describe("Things task card", () => {
     expect(element.querySelector(".is-new")).toBeNull();
   });
 
-  it("keeps a subtask being typed across a redraw, and saves it when the card closes", () => {
-    const { element, options } = card("- [ ] Task 1", { draft: { title: "Task 1", notes: "", subtask: { text: "Half typed" } }, focus: "new" });
-    const input = element.querySelector<HTMLInputElement>(".is-new .tm-things-card-check-title")!;
+  it("keeps a subtask being typed across a redraw: Mod+Enter saves it with the card, Escape keeps nothing", () => {
+    const draft = { title: "Task 1", notes: "", subtask: { text: "Half typed" } };
+    const first = card("- [ ] Task 1", { draft, focus: "new", cancel: vi.fn() });
+    const input = first.element.querySelector<HTMLInputElement>(".is-new .tm-things-card-check-title")!;
     expect(input.value).toBe("Half typed");
-    expect(element.ownerDocument.activeElement).toBe(input);
+    expect(first.element.ownerDocument.activeElement).toBe(input);
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(options.addChild).toHaveBeenCalledExactlyOnceWith("Half typed", undefined, false);
-    expect(options.collapse).toHaveBeenCalledOnce();
+    input.dispatchEvent(new Event("blur"));
+    expect(first.options.cancel).toHaveBeenCalledOnce();
+    expect(first.options.addChild).not.toHaveBeenCalled();
+    expect(first.options.collapse).not.toHaveBeenCalled();
+    const second = card("- [ ] Task 1", { draft, focus: "new", cancel: vi.fn() });
+    second.element.querySelector(".is-new .tm-things-card-check-title")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+    expect(second.options.addChild).toHaveBeenCalledExactlyOnceWith("Half typed", undefined, false);
+    expect(second.options.collapse).toHaveBeenCalledOnce();
   });
 
-  it("closes on Escape or Mod+Enter and moves from the title to the notes on Enter", () => {
-    const { element, options } = card("- [ ] Task 1");
+  it("confirms on Enter in the title or the notes (Shift+Enter starts a line of notes), and cancels on Escape", () => {
+    const { element, options } = card("- [ ] Task 1", { cancel: vi.fn() });
     const title = element.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
     const notes = element.querySelector<HTMLTextAreaElement>(".tm-things-card-notes")!;
-    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect(element.ownerDocument.activeElement).toBe(notes);
-    notes.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    notes.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+    const key = (target: HTMLElement, init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(event);
+      return event;
+    };
+    key(title, { key: "Enter" });
+    expect(options.collapse).toHaveBeenCalledOnce();
+    expect(key(notes, { key: "Enter", shiftKey: true }).defaultPrevented).toBe(false);
+    expect(options.collapse).toHaveBeenCalledOnce();
+    key(notes, { key: "Enter" });
+    expect(options.collapse).toHaveBeenCalledTimes(2);
+    key(notes, { key: "Escape" });
+    expect(options.cancel).toHaveBeenCalledOnce();
     expect(options.collapse).toHaveBeenCalledTimes(2);
   });
 });
