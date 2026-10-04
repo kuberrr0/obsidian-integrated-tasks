@@ -21,6 +21,10 @@ const NEST_PX = 24;
 const NEST_RELEASE_PX = 16;
 /** Once above or below a row is chosen, the other side needs the lifted row this far past the row's middle. */
 const SIDE_HYSTERESIS_PX = 4;
+/** What makes way for the gap, sliding as rows do: rows, the gap, group headings, and a list's "Show more". */
+const MOVERS = ".tm-task-item:not(.tm-drag-preview), .tm-drop-gap, .tm-section > h2, .tm-show-more-tasks";
+/** What the pointer can rest on mid-slide: a row, the gap or a group heading. */
+const HOLDERS = ".tm-task-item, .tm-drop-gap, .tm-section > h2";
 /** On touch screens a row lifts for dragging after a press held this long (and within PRESS_SLOP px of where it began). */
 const LONG_PRESS_MS = 350;
 const PRESS_SLOP = 8;
@@ -106,31 +110,37 @@ export class ListDragController {
   /** `element`'s box where it will rest once the row (or gap) holding it stops sliding. */
   private settledRect(element: Element): { left: number; right: number; top: number; bottom: number; height: number } {
     const rect = element.getBoundingClientRect();
-    const holder = element.closest(".tm-task-item, .tm-drop-gap");
+    const holder = element.closest(HOLDERS);
     const shift = holder ? this.slideOffset(holder) : 0;
     return { left: rect.left, right: rect.right, top: rect.top - shift, bottom: rect.bottom - shift, height: rect.height };
   }
 
   /**
    * What will be under the point once sliding rows settle. Rows (and the gap) slide aside for 150ms after the gap
-   * moves; aiming at where they are drawn mid-slide would move the gap again, and again. So look past sliding rows
-   * to the list beneath, and find the row (or gap) whose resting place holds the point.
+   * moves; aiming at where they are drawn mid-slide would move the gap again, and again. And while they slide,
+   * or beside an indented gap, the point can fall where no row is drawn, on the list itself, which would read
+   * as its empty end. So unless a resting row (or the gap) is under the point, find by height the row (or gap)
+   * whose resting place holds it; only below them all is it the list's end.
    */
   private settledAt(doc: Document, x: number, y: number): HTMLElement | null {
     const stack = doc.elementsFromPoint?.(x, y) ?? [];
     const under = stack.length ? stack : [doc.elementFromPoint(x, y)].filter((element): element is Element => element !== null);
-    const sliding = (element: Element): boolean => {
-      const holder = element.closest(".tm-task-item, .tm-drop-gap");
-      return Boolean(holder && this.slideOffset(holder) !== 0);
-    };
     const first = under[0];
     if (!first?.instanceOf(HTMLElement)) return null;
-    // Nothing sliding under the point: it is what it seems.
-    if (!sliding(first)) return first;
-    const stable = under.find(element => !sliding(element));
-    const list = stable?.closest<HTMLElement>(".tm-task-list") ?? first.closest<HTMLElement>(".tm-task-list");
-    if (!list) return stable?.instanceOf(HTMLElement) ? stable : first;
-    // The row resting under the point; between rows, the nearest; below them all, the list itself (its end).
+    const holder = first.closest(HOLDERS);
+    if (holder && this.slideOffset(holder) === 0) return first;
+    const list = (holder ?? first).closest<HTMLElement>(".tm-task-list");
+    if (!list) {
+      // A heading mid-slide: whatever rests under the point, a row, the gap or a heading.
+      const scope = holder?.closest(".tm-main-view");
+      if (!scope) return first;
+      for (const element of Array.from(scope.querySelectorAll<HTMLElement>(HOLDERS))) {
+        if (element.classList.contains("tm-drag-preview") || element.classList.contains("tm-drag-source")) continue;
+        const rect = this.settledRect(element);
+        if (rect.height > 0 && x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom) return element;
+      }
+      return first;
+    }
     let nearest: { element: HTMLElement; distance: number } | undefined;
     let bottom = -Infinity;
     for (const child of Array.from(list.children)) {
@@ -143,6 +153,7 @@ export class ListDragController {
       const distance = y < rect.top ? rect.top - y : y - rect.bottom;
       if (!nearest || distance < nearest.distance) nearest = { element: child, distance };
     }
+    // Above or between the rows, the nearest one; below them all, the list (its end).
     return nearest && y < bottom ? nearest.element : list;
   }
 
@@ -152,7 +163,7 @@ export class ListDragController {
    * leaves alone keeps sliding as it was; one that moves glides on from where it is drawn.
    */
   private slide(scope: Element | Document, change: () => void): void {
-    const rows = Array.from(scope.querySelectorAll<HTMLElement>(".tm-task-item:not(.tm-drag-preview), .tm-drop-gap"));
+    const rows = Array.from(scope.querySelectorAll<HTMLElement>(MOVERS));
     // Read every position first, then change and read again, then start animations: one layout each way.
     const before = new Map(rows.map(row => { const top = row.getBoundingClientRect().top; return [row, { drawn: top, rest: top - this.slideOffset(row) }]; }));
     change();
@@ -339,8 +350,8 @@ export class ListDragController {
   }
 
   /**
-   * Over a group's heading in a list, the drop belongs to what is above the heading: after the last
-   * top-level task of the list above (or at the start of this group when nothing is above it).
+   * Above a group's heading: after the last top-level task of the list above (or at the start of this
+   * group when nothing is above it).
    */
   private aboveHeading(list: HTMLElement, group: ListDropGroup): DropIntent {
     const lists = Array.from(list.closest(".tm-main-view")?.querySelectorAll<HTMLElement>(".tm-task-list") ?? []);
@@ -355,14 +366,37 @@ export class ListDragController {
     return this.targets.get(last)!({ clientX: title.left, clientY: this.settledRect(last).bottom - 1 });
   }
 
+  /** The start of a group's list: before its first top-level task still shown (in a section or note, that task's place). */
+  private groupStart(list: HTMLElement, group: ListDropGroup): DropIntent {
+    const first = Array.from(list.children).find((row): row is HTMLElement =>
+      row.instanceOf(HTMLElement) && this.rowTasks.has(row) && !row.classList.contains("tm-drag-source")
+      && !row.classList.contains("tm-drag-preview") && depthOf(row) === 0);
+    const task = first && this.rowTasks.get(first);
+    return { group, indicator: "group", gap: { element: list, where: "start", depth: 0 }, ...task && isStructuralGroup(group) ? { anchor: task, placement: "before" as const } : {} };
+  }
+
+  /**
+   * A group's heading takes drops as a row would: over its top half, the end of the group above; over its bottom
+   * half, the start of its own group. Having chosen one, the other needs the lifted row a few pixels past the middle.
+   */
+  private overHeading(title: HTMLElement, list: HTMLElement, group: ListDropGroup, y: number): DropIntent {
+    const above = this.aboveHeading(list, group);
+    const start = this.groupStart(list, group);
+    const current = this.flat?.gap ? this.slotKey(this.flat.gap) : undefined;
+    const rect = this.settledRect(title);
+    const shift = current === this.slotKey(start.gap!) ? -SIDE_HYSTERESIS_PX : above.gap && current === this.slotKey(above.gap) ? SIDE_HYSTERESIS_PX : 0;
+    return y < rect.top + rect.height / 2 + shift ? above : start;
+  }
+
   group(element: HTMLElement, group: ListDropGroup): void {
     // Dropped on a group but not on a row: the gap waits at the end of the group's list,
     // except over the heading of a list group, which belongs to what is above it.
     const list = (): HTMLElement => element.matches(".tm-task-list") ? element : element.querySelector<HTMLElement>(".tm-task-list") ?? element;
     this.targets.set(element, point => {
       const items = list();
-      const heading = items !== element && !element.closest(".tm-kanban") && point.clientY < items.getBoundingClientRect().top;
-      if (heading) return this.aboveHeading(items, group);
+      const title = items !== element && !element.closest(".tm-kanban")
+        ? Array.from(element.children).find((child): child is HTMLElement => child.instanceOf(HTMLElement) && child.tagName === "H2") : undefined;
+      if (title && point.clientY < items.getBoundingClientRect().top) return this.overHeading(title, items, group, point.clientY);
       // In a section or note, the end of the list is a place in the note: after its last task.
       const last = isStructuralGroup(group) ? this.lastRow(items) : undefined;
       return { group, indicator: "group", gap: { element: items, where: "end", depth: 0 }, ...last ? { anchor: last, placement: "after" as const } : {} };

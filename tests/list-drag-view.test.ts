@@ -174,7 +174,8 @@ function sections(kanban = false) {
   const section = root.createEl("section", { cls: "tm-section" });
   const heading = section.createEl("h2", { text: "Plan" });
   const second = section.createDiv({ cls: "tm-task-list" });
-  // The heading sits above the section's list, which starts lower down.
+  // The heading (60–100, its middle at 80) sits above the section's list, which starts at 100.
+  heading.style.top = "60px";
   second.style.top = "100px";
   const row = (list: HTMLElement, task: Task, depth: number, group: typeof top) => {
     const element = list.createDiv({ cls: "tm-task-row tm-task-item", attr: { "data-task-id": task.id } });
@@ -200,6 +201,23 @@ it("drops a task hovering a group's heading after the last task above the headin
   expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
   fire(rows[3], "pointerup", { clientY: 50 });
   await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[3], { destination: "Work.md" }, tasks[0], "after"));
+});
+
+it("takes a heading as a row: its bottom half starts its group, before the group's first task", async () => {
+  const { tasks, rows, drop, second } = sections();
+  // Grabbed at its middle, so the lifted row's middle is the pointer.
+  fire(rows[0], "pointerdown", { clientY: 20 });
+  // 85 is in the heading's bottom half: the start of Plan, before B.
+  fire(rows[0], "pointermove", { clientY: 85 });
+  expect(second.firstElementChild).toBe(gap());
+  // Back over the middle, but not 4px past it, keeps the start; well past it is the end of the list above.
+  fire(rows[0], "pointermove", { clientY: 78 });
+  expect(second.firstElementChild).toBe(gap());
+  fire(rows[0], "pointermove", { clientY: 70 });
+  expect(second.firstElementChild).not.toBe(gap());
+  fire(rows[0], "pointermove", { clientY: 85 });
+  fire(rows[0], "pointerup", { clientY: 85 });
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], { destination: "Work.md#Plan" }, tasks[2], "before"));
 });
 
 it("drops above every heading into the empty list waiting there", async () => {
@@ -610,4 +628,50 @@ it("handles pointer moves once per frame, and the last move before a drop", asyn
   fire(rows[0].row, "pointermove", { clientX: 10, clientY: 15 });
   fire(rows[0].row, "pointerup", { clientX: 10, clientY: 15 });
   await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], undefined, tasks[1], "before"));
+});
+
+it("never reads a spot where sliding rows leave nothing drawn as the end of the list", () => {
+  try {
+    const { rows, controller, element } = laidOut("- [ ] A\n- [ ] B\n- [ ] C\n- [ ] D\n- [ ] E");
+    // The list's own drop: its end, for the empty space below the last row.
+    controller.group(element, { destination: "Work.md" });
+    fire(rows[0].row, "pointerdown", { clientX: 10, clientY: 20 });
+    fire(rows[0].row, "pointermove", { clientX: 10, clientY: 70 });
+    const placed = gap()!;
+    expect(placed.previousElementSibling).toBe(rows[1].row);
+    // Mid-slide, nothing is drawn under the point but the list (as when rows pass each other).
+    document.elementsFromPoint = () => [element];
+    fire(rows[0].row, "pointermove", { clientX: 10, clientY: 72 });
+    expect(gap()).toBe(placed);
+    expect(placed.previousElementSibling).toBe(rows[1].row);
+    // Over C's resting top half, still only the list drawn there: before C, the same slot. Never the end.
+    fire(rows[0].row, "pointermove", { clientX: 10, clientY: 95 });
+    expect(placed.previousElementSibling).toBe(rows[1].row);
+    expect(element.lastElementChild).not.toBe(placed);
+    // Below every row it is the end.
+    fire(rows[0].row, "pointermove", { clientX: 10, clientY: 400 });
+    expect(element.lastElementChild === gap() || element.lastElementChild?.classList.contains("tm-drag-preview")).toBe(true);
+  } finally { delete (HTMLElement.prototype as { animate?: unknown }).animate; delete (document as { elementsFromPoint?: unknown }).elementsFromPoint; }
+});
+
+it("slides a heading out of the way when the gap moves past it, as rows do", () => {
+  const { rows, heading, first } = sections();
+  // The heading rests 40px lower while the gap sits in the list above it.
+  const rect = HTMLElement.prototype.getBoundingClientRect as unknown as { getMockImplementation(): (this: HTMLElement) => DOMRect; mockImplementation(fn: (this: HTMLElement) => DOMRect): void };
+  const base = rect.getMockImplementation();
+  rect.mockImplementation(function (this: HTMLElement) {
+    const box = base.call(this);
+    if (this !== heading || !first.contains(gap())) return box;
+    return { ...box, top: box.top + 40, bottom: box.bottom + 40, y: box.top + 40 } as DOMRect;
+  });
+  const animate = vi.fn(() => ({ playState: "running", effect: { getComputedTiming: () => ({ progress: 0 }) }, cancel: vi.fn(), finished: Promise.resolve() }) as unknown as Animation);
+  HTMLElement.prototype.animate = animate as unknown as HTMLElement["animate"];
+  try {
+    fire(rows[3], "pointerdown");
+    fire(rows[3], "pointermove", { clientY: 50 });
+    expect(first.contains(gap())).toBe(true);
+    expect(animate.mock.contexts).toContain(heading);
+    const call = animate.mock.calls[animate.mock.contexts.indexOf(heading)] as unknown as [Keyframe[]];
+    expect(call[0][0].transform).toBe("translateY(-40px)");
+  } finally { delete (HTMLElement.prototype as { animate?: unknown }).animate; }
 });
