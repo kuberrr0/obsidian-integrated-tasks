@@ -170,7 +170,7 @@ export interface TaskManagerSettings {
   style: "griply" | "things";
   /**
    * Where an opened task shows its details: "view" (two panes) as a card in its list (Things) or in the task editor
-   * (Griply); "sidebar" (three panes) only in the task sidebar.
+   * (Griply); "sidebar" (three panes) only in the Task Details sidebar.
    */
   taskDetails: "view" | "sidebar";
   /** Stamp tasks with the date they were completed. */

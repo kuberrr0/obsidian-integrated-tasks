@@ -148,7 +148,7 @@ export class TaskMainView extends ItemView {
   /**
    * A new task (Create new task, or an Add task button), written only once its title is entered: what it will be so far
    * (`draft`), the task it would be where it would go (`task`), and its title and notes as typed, in a card in the list
-   * or in the task sidebar.
+   * or in the Task Details sidebar.
    */
   private newTaskEntry?: { draft: TaskDraft; task: Task; title: string; notes: string; host: "card" | "sidebar" };
   private rovingRow?: HTMLElement;
@@ -553,7 +553,7 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * Tasks dragged in another pane (the task sidebar's) drop in this list as its own rows do: its gap opens where they
+   * Tasks dragged in another pane (the Task Details sidebar's) drop in this list as its own rows do: its gap opens where they
    * would land. On a group of a property's value (a date, a priority…) they take the value but keep their place in their
    * notes; in a note or section, the place dropped on too.
    */
@@ -794,7 +794,7 @@ export class TaskMainView extends ItemView {
    * A new task in this view's context: its tag, its project, or today's (or tomorrow's) date, and a group's value
    * when added from the group's heading (`preset`). In the Things style a list or board opens it as a blank card
    * in place, in its group or column, as Things does; otherwise the task editor opens. With three panes (Task
-   * details › Three panes), it opens in the task sidebar instead, its title empty to type.
+   * details › Three panes), it opens in the Task Details sidebar instead, its title empty to type.
    */
   newTask(preset?: TaskEditorPreset): void {
     const state = preset ? { ...this.state, preset } : this.state;
@@ -808,7 +808,7 @@ export class TaskMainView extends ItemView {
   /**
    * Starts a new task, as the task editor does, written only once its title is entered: Enter writes it, as does
    * leaving it titled; Escape, or leaving it untitled, drops it. In a card it shows where it would go, with its
-   * title empty to type; with three panes, in the task sidebar.
+   * title empty to type; with three panes, in the Task Details sidebar.
    */
   private async startNewTask(state: OpenEditorState, host: "card" | "sidebar"): Promise<void> {
     await this.endNewTask();
@@ -868,19 +868,19 @@ export class TaskMainView extends ItemView {
     }
   }
 
-  /** For the task sidebar: the new task it shows (three panes), with its title and notes as typed and its note. */
+  /** For the Task Details sidebar: the new task it shows (three panes), with its title and notes as typed and its note. */
   newTaskInSidebar(): { task: Task; title: string; notes: string; destination: string } | undefined {
     const entry = this.newTaskEntry;
     return entry?.host === "sidebar" ? { task: entry.task, title: entry.title, notes: entry.notes, destination: entry.draft.destination } : undefined;
   }
 
-  /** For the task sidebar: the new task's title and notes as typed. */
+  /** For the Task Details sidebar: the new task's title and notes as typed. */
   typeNewTask(title: string, notes: string): void {
     if (this.newTaskEntry) Object.assign(this.newTaskEntry, { title, notes });
   }
 
   /**
-   * For the task sidebar (Enter, or Escape): writes the new task when it has a title and selects it, so the sidebar
+   * For the Task Details sidebar (Enter, or Escape): writes the new task when it has a title and selects it, so the sidebar
    * goes on showing it; drops it without one.
    */
   async finishNewTask(): Promise<void> {
@@ -918,11 +918,11 @@ export class TaskMainView extends ItemView {
     this.plugin.refreshTaskSidebar?.();
   }
 
-  /** Task details › Three panes: an opened task shows only in the task sidebar. */
+  /** Task details › Three panes: an opened task shows only in the Task Details sidebar. */
   private get detailsInSidebar(): boolean { return this.plugin.settings.taskDetails === "sidebar"; }
 
   /**
-   * Three panes: selects the task (when the view lists it) and shows it in the task sidebar, which opens if it is
+   * Three panes: selects the task (when the view lists it) and shows it in the Task Details sidebar, which opens if it is
    * closed (on phones and tablets, its drawer slides in). `focus` puts the caret in its title.
    */
   revealInSidebar(task: Task, options: { focus?: boolean } = {}): void {
@@ -936,7 +936,7 @@ export class TaskMainView extends ItemView {
     void this.plugin.showInTaskSidebar(task.id, options).catch((error: unknown) => new Notice(String(error)));
   }
 
-  /** A task's editor: with three panes the task sidebar (see revealInSidebar), else the task editor. */
+  /** A task's editor: with three panes the Task Details sidebar (see revealInSidebar), else the task editor. */
   private openTaskEditor(task: Task, focusProperty?: TaskEditorProperty): void {
     if (this.detailsInSidebar) this.revealInSidebar(task, { focus: !Platform.isMobile });
     else this.plugin.openEditor({ ...this.state, task, ...(focusProperty ? { focusProperty } : {}) });
@@ -1509,7 +1509,7 @@ export class TaskMainView extends ItemView {
     if (event.button !== 0 || (Platform.isMacOS && event.ctrlKey) || !this.getSelectedTasks().length) return;
     // Clicking any task row changes the selection itself, so only clicks elsewhere clear it.
     const target = event.target as HTMLElement | null;
-    // Working in the task menu, a popover or the task sidebar (which shows the selected task) edits the selection; it
+    // Working in the task menu, a popover or the Task Details sidebar (which shows the selected task) edits the selection; it
     // does not end it.
     if (target?.closest?.(".tm-task-menu, .tm-date-popover, .tm-choice-popover, .tm-tags-popover, .tm-task-sidebar, .workspace-leaf-content[data-type='task-manager-sidebar']")) return;
     const onRow = Array.from(this.selectionRows.values()).some(rows => rows.some(row => target && row.contains(target)));
@@ -1540,7 +1540,7 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * For the task sidebar: a property of `task` (one of the selected tasks) in a popover beside `anchor`, as its row
+   * For the Task Details sidebar: a property of `task` (one of the selected tasks) in a popover beside `anchor`, as its row
    * edits it; the task stays selected. Status and project have their lists; anything else opens the task editor.
    */
   editTaskProperty(task: Task, property: TaskEditorProperty | "status" | "project", anchor: HTMLElement): void {
@@ -1554,14 +1554,14 @@ export class TaskMainView extends ItemView {
     } else if (!this.openPropertyEditor([task], property, anchor)) this.openTaskEditor(task, property);
   }
 
-  /** For the task sidebar: completes, reopens or otherwise sets a task's status; the selection stays (focus does not move here). */
+  /** For the Task Details sidebar: completes, reopens or otherwise sets a task's status; the selection stays (focus does not move here). */
   setTaskStatus(task: Task, status: TaskStatus): void {
     if (task.id === NEW_TASK_ID) this.patchNewTask({ status, completed: isClosedStatus(status) });
     else if (task.status !== status) void this.commit(() => this.plugin.store.setStatus([task], status));
   }
 
   /**
-   * For the task sidebar: writes a change to one task (its title or notes) and keeps it selected when it was. Changed
+   * For the Task Details sidebar: writes a change to one task (its title or notes) and keeps it selected when it was. Changed
    * in place it keeps its line, and so its id; moved to `moveTo`, it is found there by its title.
    */
   async changeTask(task: Task, write: () => Promise<string[]>, moveTo?: string): Promise<void> {
@@ -1575,13 +1575,13 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * For the task sidebar: the selected tasks, as last selected or rewritten (see changeTask), so a task the sidebar
+   * For the Task Details sidebar: the selected tasks, as last selected or rewritten (see changeTask), so a task the sidebar
    * just saved stays shown while the rows catch up.
    */
   sidebarSelection(): Task[] { return this.selection.chosen(this.visibleTasks); }
 
   /**
-   * For the task sidebar beside this view's calendar (or Upcoming): the view's own tasks (a project's, a tag's, a smart
+   * For the Task Details sidebar beside this view's calendar (or Upcoming): the view's own tasks (a project's, a tag's, a smart
    * list's…) that have no date, through its filters but those on dates, in its order. Today's and Upcoming's are every
    * task's, since their own all have dates.
    */
@@ -1823,8 +1823,8 @@ export class TaskMainView extends ItemView {
 
   /**
    * Dragged tasks dropped on a list in the sidebar: Inbox or a project takes them in, Today schedules them for today,
-   * and a tag is added to them. A calendar's day (or hour) in the task sidebar or another pane schedules them then, and
-   * a place for tasks without a date takes their dates off. Also for tasks dragged in the task sidebar.
+   * and a tag is added to them. A calendar's day (or hour) in the Task Details sidebar or another pane schedules them then, and
+   * a place for tasks without a date takes their dates off. Also for tasks dragged in the Task Details sidebar.
    */
   async dropTasks(tasks: Task[], target: SidebarDrop): Promise<void> {
     this.draggedTasks = [];
@@ -1931,7 +1931,7 @@ export class TaskMainView extends ItemView {
   }
 
   private updateSelection(): void {
-    // Selecting a task leaves the new task in the task sidebar: written with a title (which may move the selected
+    // Selecting a task leaves the new task in the Task Details sidebar: written with a title (which may move the selected
     // task's line, so it is found again), else dropped.
     if (this.newTaskEntry?.host === "sidebar" && this.getSelectedTasks().length) {
       const selected = this.getSelectedTasks();
@@ -1944,7 +1944,7 @@ export class TaskMainView extends ItemView {
       const marker = row.querySelector?.(".tm-selected-marker");
       if (marker) marker.textContent = selected ? "Selected" : "";
     }
-    // The task sidebar shows the selected task.
+    // The Task Details sidebar shows the selected task.
     this.plugin.refreshTaskSidebar?.();
   }
 
@@ -2230,7 +2230,7 @@ export class TaskMainView extends ItemView {
 
   /**
    * Opens a task: in the Things style as a card in place, except in the calendar, which has no room for one; with
-   * three panes, in the task sidebar (with the caret in its title, but on phones and tablets, where it only shows).
+   * three panes, in the Task Details sidebar (with the caret in its title, but on phones and tablets, where it only shows).
    */
   private openTask(task: Task): void {
     if (this.plugin.settings.style === "things" && this.layout !== "calendar" && !this.detailsInSidebar) void this.expandCard(task);

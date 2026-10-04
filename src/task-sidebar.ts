@@ -44,7 +44,7 @@ interface Section { element: HTMLElement; drawn?: string }
 const LIST_PAGE = 100;
 
 /**
- * The task sidebar (in the right sidebar by default). Its content follows the task view in front: with Today open, the
+ * The Task Details sidebar (in the right sidebar by default). Its content follows the task view in front: with Today open, the
  * day's hours; with Upcoming open, the tasks with no date (beside a calendar, the view's own); and below them when a task is selected (or, anywhere else,
  * filling it) the selected task's details, editable in place. Only the tasks show: no headings or calendar controls. Tasks drag between it and
  * the view: onto an hour to schedule them then, from the tasks without a date onto a day.
@@ -79,7 +79,7 @@ export class TaskSidebarView extends ItemView {
   }
 
   getViewType(): string { return TASK_SIDEBAR_VIEW; }
-  getDisplayText(): string { return "Task sidebar"; }
+  getDisplayText(): string { return "Task Details"; }
   getIcon(): string { return "circle-check-big"; }
 
   async onOpen(): Promise<void> {

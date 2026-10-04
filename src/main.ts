@@ -125,7 +125,7 @@ export default class TaskManagerPlugin extends Plugin {
         return true;
       } });
     }
-    this.addCommand({ id: "open-task-sidebar", name: "Open task sidebar", callback: () => void this.activateTaskSidebar().catch((error) => new Notice(String(error))) });
+    this.addCommand({ id: "open-task-sidebar", name: "Open Task Details sidebar", callback: () => void this.activateTaskSidebar().catch((error) => new Notice(String(error))) });
     this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
     this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: checking => {
       const list = this.activeSmartList();
@@ -360,7 +360,7 @@ export default class TaskManagerPlugin extends Plugin {
     if (reveal) await this.app.workspace.revealLeaf(leaf);
   }
 
-  /** The task sidebar, in the right sidebar unless it has been moved; created there when missing. */
+  /** The Task Details sidebar, in the right sidebar unless it has been moved; created there when missing. */
   async activateTaskSidebar(reveal = true): Promise<void> {
     let leaf: WorkspaceLeaf | undefined = this.app.workspace.getLeavesOfType(TASK_SIDEBAR_VIEW)[0];
     if (!leaf) {
@@ -372,7 +372,7 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   /**
-   * Shows a task (or a view's new task) in the task sidebar, opening the sidebar first (on phones and tablets, its
+   * Shows a task (or a view's new task) in the Task Details sidebar, opening the sidebar first (on phones and tablets, its
    * drawer) when it is closed. `focus` puts the caret in the task's title.
    */
   async showInTaskSidebar(id: string, options: { focus?: boolean } = {}): Promise<void> {
@@ -381,7 +381,7 @@ export default class TaskManagerPlugin extends Plugin {
     if (view instanceof TaskSidebarView) view.showTask(id, options);
   }
 
-  /** The task sidebar follows the task view in front and its selection; it redraws on the next frame. */
+  /** The Task Details sidebar follows the task view in front and its selection; it redraws on the next frame. */
   refreshTaskSidebar(): void {
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_SIDEBAR_VIEW)) {
       if (leaf.view instanceof TaskSidebarView) leaf.view.scheduleRender();

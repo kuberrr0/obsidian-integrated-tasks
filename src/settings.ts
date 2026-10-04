@@ -175,7 +175,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       {
         section: "Appearance",
         name: "Task details",
-        desc: "Where a task you open shows its details. Two panes: in a card in the list (Things) or the task editor (Griply). Three panes: only in the task sidebar, which a double-click (on phones and tablets, a tap) brings up; new tasks open there too.",
+        desc: "Where a task you open shows its details. Two panes: in a card in the list (Things) or the task editor (Griply). Three panes: only in the Task Details sidebar, which a double-click (on phones and tablets, a tap) brings up; new tasks open there too.",
         render: (setting: Setting) => { setting.addDropdown(dropdown => dropdown
           .addOption("view", "Two panes: in the view").addOption("sidebar", "Three panes: in the sidebar")
           .setValue(this.plugin.settings.taskDetails)

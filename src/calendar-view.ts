@@ -8,7 +8,7 @@ import { addDays, SLOT_MINUTES, calendarDate, calendarDays, calendarTime, localD
 import type { Project, Task } from "./types";
 import { renderProjectProgress } from "./project-progress";
 
-/** Tasks without a date have no day here: the task sidebar lists them beside the calendar, to drag onto one. */
+/** Tasks without a date have no day here: the Task Details sidebar lists them beside the calendar, to drag onto one. */
 export interface CalendarOptions {
   anchor: string;
   scope: CalendarScope;

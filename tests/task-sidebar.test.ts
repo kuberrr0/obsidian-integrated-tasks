@@ -107,7 +107,7 @@ async function setup(notes: Array<[string, string]>) {
 const rows = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>(".tm-task-item[data-task-id]"));
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
-describe("what the task sidebar shows", () => {
+describe("what the Task Details sidebar shows", () => {
   it("follows the task view in front: today's hours for Today, the tasks with no date for Upcoming, else the selected task", async () => {
     const today = todayIso();
     const { view, sidebar, side, setActive, contents } = await setup([["A.md", [`- [ ] At nine ${today} 09:00`, `- [ ] Due today ${today}`, "- [ ] No date", "  - [ ] Its subtask", `- [ ] Only a deadline {${today}}`, "- [ ] Another undated"].join("\n")]]);
@@ -238,7 +238,7 @@ describe("what the task sidebar shows", () => {
   });
 });
 
-describe("editing in the task sidebar", () => {
+describe("editing in the Task Details sidebar", () => {
   it("saves a typed title once focus leaves it, and the task stays selected", async () => {
     const { view, main, side, store, contents } = await setup([["A.md", "- [ ] Draft the brief\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
@@ -417,7 +417,7 @@ describe("three panes (Task details › Three panes: in the sidebar)", () => {
   });
 });
 
-describe("dragging between the task sidebar and the view", () => {
+describe("dragging between the Task Details sidebar and the view", () => {
   const pointer = (target: EventTarget, type: string, clientX: number, clientY: number) =>
     target.dispatchEvent(new PointerEvent(type, { pointerId: 1, pointerType: "mouse", button: 0, clientX, clientY, bubbles: true, cancelable: true }));
   const frame = () => new Promise(resolve => window.requestAnimationFrame(resolve));

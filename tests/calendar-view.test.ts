@@ -73,7 +73,7 @@ it.each(["day", "week"] as const)("snaps %s calendar drops to quarter hours whil
   }
 });
 
-it("leaves tasks without a date out, with no planner or tray for them (the task sidebar lists them), and drags a task to another day", () => {
+it("leaves tasks without a date out, with no planner or tray for them (the Task Details sidebar lists them), and drags a task to another day", () => {
   const container = new Element();
   const [undated, dated] = scanTasks("Tasks.md", "- [ ] Plan workshop\n- [ ] Book the room 2026-09-21");
   const move = vi.fn().mockResolvedValue(undefined), navigate = vi.fn();
