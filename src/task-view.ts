@@ -815,14 +815,14 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * Ends the new task: written when it has a title (properties typed into it apply, as in the task editor), else
-   * dropped. Returns the task written.
+   * Ends the new task: written when it has a title (properties typed into it apply, as in the task editor), else, or
+   * cancelled (`write` off), dropped. Returns the task written.
    */
-  private async endNewTask(): Promise<Task | undefined> {
+  private async endNewTask(write = true): Promise<Task | undefined> {
     const entry = this.newTaskEntry;
     if (!entry) return undefined;
     this.newTaskEntry = undefined;
-    if (!entry.title.trim()) return undefined;
+    if (!write || !entry.title.trim()) return undefined;
     const typed = draftWithTitle(entry.draft, "", entry.title, new Date(), this.plugin.dateFormat());
     // A title of properties alone ("tomorrow p1") stays the title.
     const draft: TaskDraft = { ...typed, title: typed.title || entry.title.trim(), description: entry.notes.trim() ? entry.notes : undefined };
@@ -2158,16 +2158,16 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * Saves the card, shrinks it back into the space its rows take, then shows the rows.
-   * Refreshes wait until it has closed, so the save cannot redraw the card mid-animation.
+   * Saves the card (unless cancelled: `save` off leaves the task as it was), shrinks it back into the space its rows
+   * take, then shows the rows. Refreshes wait until it has closed, so the save cannot redraw the card mid-animation.
    */
-  private collapseCard(): Promise<void> {
+  private collapseCard(save = true): Promise<void> {
     if (this.cardClosing || !this.expanded) return this.cardClosing ?? Promise.resolve();
     let id = this.expanded.id;
     this.cardClosing = (async () => {
       // A new task's card writes it (with a title, else drops it); the row then focused is the task written.
-      if (id === NEW_TASK_ID) id = (await this.endNewTask())?.id ?? "";
-      else await this.saveCard();
+      if (id === NEW_TASK_ID) id = (await this.endNewTask(save))?.id ?? "";
+      else if (save) await this.saveCard();
       const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
       if (card) await animateCardClose(card, this.cardRowsHeight || card.querySelector(".tm-things-card-head")!.getBoundingClientRect().height + 10);
       this.expanded = undefined;
@@ -2238,6 +2238,7 @@ export class TaskMainView extends ItemView {
       },
       edit: property => void this.editFromCard(task.id, property),
       collapse: () => void this.collapseCard(),
+      cancel: () => void this.collapseCard(false),
       renameChild: (child, title) => {
         // A subtask stays under its parent: its title's tokens set properties but do not move it.
         const draft = draftFromTitle(child, title, new Date(), this.plugin.dateFormat(), false);
@@ -2273,6 +2274,7 @@ export class TaskMainView extends ItemView {
         if (this.newTaskEntry) Object.assign(this.newTaskEntry, { title: draft.title, notes: draft.notes });
       },
       submit: () => { if (this.newTaskEntry?.title.trim()) void this.collapseCard(); },
+      cancel: () => void this.collapseCard(false),
       edit: property => void this.editFromCard(task.id, property),
       collapse: () => void this.collapseCard(),
       renameChild: () => {},

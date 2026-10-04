@@ -983,6 +983,40 @@ describe("Create new task in the Things style", () => {
     expect(extra.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Buy milk" }));
   });
 
+  it("drops a titled new task on Escape too", async () => {
+    const { extra, type, key, card, title } = await inserted();
+    type("Buy milk");
+    key(title(), "Escape");
+    await vi.waitFor(() => expect(card()).toBeNull());
+    expect(extra.create).not.toHaveBeenCalled();
+  });
+
+  it("confirms an open task's card on Enter, saving what was typed, and cancels it on Escape, saving nothing", async () => {
+    const { view, plugin, store, content } = await setup([note("A.md", 1)]);
+    plugin.settings.style = "things";
+    const update = vi.fn().mockResolvedValue(undefined);
+    (store as unknown as { update: typeof update }).update = update;
+    await view.setState({ mode: "all" });
+    const title = () => content().querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    const open = async () => {
+      rows(content())[0].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).not.toBeNull());
+    };
+    await open();
+    title().value = "Renamed";
+    title().dispatchEvent(new Event("input"));
+    title().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).toBeNull());
+    expect(update).not.toHaveBeenCalled();
+    await open();
+    expect(title().value).toBe("A.md task 0");
+    title().value = "Renamed";
+    title().dispatchEvent(new Event("input"));
+    title().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).toBeNull());
+    expect(update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "A.md task 0" }), expect.objectContaining({ title: "Renamed" }));
+  });
+
   it("keeps what is set in the card (its priority, from the toolbar) to write with the task", async () => {
     const { extra, card, title, type, key } = await inserted();
     type("Buy milk");
