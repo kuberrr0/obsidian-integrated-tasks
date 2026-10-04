@@ -259,7 +259,44 @@ describe("what the Task Details sidebar shows", () => {
     }
 
     rows(main()).find(row => row.textContent!.includes("Other"))!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
-    expect(side().querySelector(".tm-sidebar-empty h3")!.textContent).toBe("2 tasks selected");
+    // Several: Multiple Tasks in the title's place, the values they share (else Mixed), and no notes or subtasks.
+    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple Tasks");
+    expect(side().querySelector(".tm-sidebar-selection-count")!.textContent).toBe("2 tasks selected");
+    expect(side().querySelector(".tm-sidebar-title-field, .tm-sidebar-notes, .tm-sidebar-subtasks, .tm-sidebar-open-note")).toBeNull();
+    expect(property("Priority").textContent).toBe("Mixed");
+    expect(property("Project").textContent).toBe("A");
+    expect(property("Deadline").classList.contains("is-empty")).toBe(true);
+  });
+
+  it("sets a property of several selected tasks at once, completes them together, and closes on Escape", async () => {
+    const today = todayIso();
+    const { view, main, side, store } = await setup([["A.md", [`- [ ] One ${today} p2`, `- [ ] Two ${today}`, `- [ ] Three ${today}`].join("\n")]]);
+    await view.setState({ mode: "today" });
+    const planner = () => side().querySelector<HTMLElement>(".tm-sidebar-planner")!;
+    const property = (name: string) => Array.from(side().querySelectorAll<HTMLElement>(".tm-sidebar-property"))
+      .find(row => row.querySelector(".tm-sidebar-property-name")!.textContent === name)!;
+    const titles = (tasks: Task[]) => tasks.map(task => task.title);
+    rows(main())[0].click();
+    rows(main())[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
+    // Together they have the sidebar to themselves, as one task does.
+    expect(planner().hidden).toBe(true);
+    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple Tasks");
+    property("Priority").click();
+    await vi.waitFor(() => expect(document.querySelector(".tm-choice-popover [data-value='1']")).not.toBeNull());
+    document.querySelector<HTMLElement>(".tm-choice-popover [data-value='1']")!.click();
+    await vi.waitFor(() => expect(store.bulkUpdate).toHaveBeenCalledOnce());
+    expect(titles(store.bulkUpdate.mock.calls[0][0])).toEqual(["One", "Two"]);
+    expect(store.bulkUpdate.mock.calls[0][1]).toEqual({ priority: 1 });
+    // Still selected, now sharing P1.
+    await vi.waitFor(() => expect(property("Priority").querySelector(".tm-sidebar-property-value")!.textContent).toBe("P1 · High"));
+    expect(titles(view.getSelectedTasks())).toEqual(["One", "Two"]);
+    side().querySelector<HTMLInputElement>(".tm-sidebar-head .tm-task-checkbox")!.click();
+    expect(store.setStatus).toHaveBeenCalledOnce();
+    expect([titles(store.setStatus.mock.calls[0][0] as Task[]), store.setStatus.mock.calls[0][1]]).toEqual([["One", "Two"], "done"]);
+    // Escape clears the selection, and the hours come back.
+    side().querySelector<HTMLElement>(".tm-sidebar-property")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(view.getSelectedTasks()).toEqual([]);
+    expect(planner().hidden).toBe(false);
   });
 });
 

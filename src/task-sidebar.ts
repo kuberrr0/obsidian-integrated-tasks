@@ -66,7 +66,7 @@ export class TaskSidebarView extends ItemView {
   private localId?: string;
   /** The view's selection as last seen, to tell when it changes. */
   private viewSelection = "";
-  /** The task the details show, if any (Escape, or the close button, takes it away). */
+  /** The task the details show, or "selection" for several tasks, if any (Escape, or the close button, takes them away). */
   private shownId?: string;
   /** A drag of tasks in progress somewhere: Today's hours or the tasks without a date come back for it. */
   private dragging = false;
@@ -167,16 +167,17 @@ export class TaskSidebarView extends ItemView {
       for (const element of Array.from(planner.element.querySelectorAll<HTMLElement>("[data-task-id]"))) element.toggleClass("is-selected", element.getAttribute("data-task-id") === this.localId);
     }
     const details = this.details!;
-    // One at a time: a task shown has the sidebar to itself; without one (or after Escape), it shows Today's hours or
-    // the tasks without a date, as a drag of tasks also brings them back meanwhile, to drop on.
-    this.shownId = task?.id;
-    const alone = Boolean(task) && !(this.dragging && planner);
+    // One at a time: a task shown (or several selected) has the sidebar to itself; without one (or after Escape), it
+    // shows Today's hours or the tasks without a date, as a drag of tasks also brings them back meanwhile, to drop on.
+    const several = !task && selected.length > 1;
+    this.shownId = task?.id ?? (several ? "selection" : undefined);
+    const alone = Boolean(this.shownId) && !(this.dragging && planner);
     this.content.toggleClass("is-showing-task", alone);
     if (planner) planner.element.hidden = alone;
     const shown = mode === "details" || alone;
     details.element.hidden = !shown;
     // A new task redraws as its properties change (not as it is typed).
-    this.draw(details, JSON.stringify([shown, Boolean(view), local ? "local" : selected.length, task?.id, entry && [entry.task, entry.destination], task?.raw, task?.description, task && this.children(task).map(child => child.raw)]), force,
+    this.draw(details, JSON.stringify([shown, Boolean(view), local ? "local" : selected.length, task?.id, entry && [entry.task, entry.destination], task?.raw, task?.description, task && this.children(task).map(child => child.raw), several && selected.map(item => item.raw)]), force,
       () => { if (shown) this.renderDetails(details.element, view, entry ? [] : local ? [local] : selected, task, entry?.destination); });
   }
 
@@ -386,7 +387,7 @@ export class TaskSidebarView extends ItemView {
     const view = this.taskView();
     const details = {
       grouping: "none" as const, dateFormat: this.plugin.dateFormat(), show: (property: string) => property !== "defer", source: task.path, tags: task.tags ?? [],
-      edit: (property: TaskEditorProperty) => { if (view) void this.edit(view, task, property); },
+      edit: (property: TaskEditorProperty) => { if (view) void this.edit(view, [task], property); },
       openSource: () => void this.openSource(task)
     };
     if (lead) {
@@ -479,13 +480,18 @@ export class TaskSidebarView extends ItemView {
     return active && this.content.contains(active) ? active : undefined;
   }
 
-  /** Edits a property in its popover, as the task's row would; the typing is saved first, so it edits the task as it now reads. */
-  private async edit(view: TaskMainView, task: Task, property: SidebarProperty, anchor = this.popoverAnchor()): Promise<void> {
+  /**
+   * Edits a property in its popover, as the task's row would (for several tasks, as their menu would); the typing is
+   * saved first, so it edits the task as it now reads.
+   */
+  private async edit(view: TaskMainView, tasks: Task[], property: SidebarProperty, anchor = this.popoverAnchor()): Promise<void> {
     const key = anchor?.getAttribute("data-tm-focus-key");
     await this.saveDraft();
     // Saving redraws: open beside the same control in the new drawing.
     const target = anchor?.isConnected ? anchor : (key ? this.content.querySelector<HTMLElement>(`[data-tm-focus-key="${CSS.escape(key)}"]`) : null) ?? this.content;
-    view.editTaskProperty(this.plugin.index.taskById(task.id) ?? task, property, target);
+    // Several are the view's selection as it now reads; one, as saved.
+    const current = tasks.length > 1 ? view.getSelectedTasks() : tasks.map(task => this.plugin.index.taskById(task.id) ?? task);
+    view.editTaskProperty(current, property, target);
   }
 
   /** The shown task's checkbox keeps it selected (completing a recurring task moves its dates); a subtask's just toggles. */
@@ -531,12 +537,12 @@ export class TaskSidebarView extends ItemView {
 
   /** `destination`: for a new task, the note it will go to. */
   private renderDetails(container: HTMLElement, view: TaskMainView | undefined, selected: Task[], task: Task | undefined, destination?: string): void {
+    if (view && !task && selected.length > 1) { this.renderSelectionDetails(container, view, selected); return; }
     if (!view || !task) {
       const empty = container.createDiv({ cls: "tm-empty tm-sidebar-empty" });
-      setIcon(empty.createDiv({ cls: "tm-empty-icon" }), selected.length > 1 ? "list-checks" : "mouse-pointer-click");
-      empty.createEl("h3", { text: selected.length > 1 ? `${selected.length} tasks selected` : "No task selected" });
-      empty.createEl("p", { text: selected.length > 1 ? "Right-click them, or press E, to change them together."
-        : view ? "Select a task to see its details here." : "Select a task in a task view to see its details here." });
+      setIcon(empty.createDiv({ cls: "tm-empty-icon" }), "mouse-pointer-click");
+      empty.createEl("h3", { text: "No task selected" });
+      empty.createEl("p", { text: view ? "Select a task to see its details here." : "Select a task in a task view to see its details here." });
       return;
     }
     this.renderTaskDetails(container, view, task, destination);
@@ -564,10 +570,9 @@ export class TaskSidebarView extends ItemView {
    */
   private renderTaskDetails(container: HTMLElement, view: TaskMainView, task: Task, destination?: string): void {
     const draft = this.draft!;
-    // A new task, not yet written: Enter writes it (once titled), Escape writes it titled or drops it untitled.
+    // A new task, not yet written: Enter writes it (once titled), Escape drops it.
     const isNew = task.id === NEW_TASK_ID;
     const now = new Date();
-    const today = todayIso(now);
     const dateFormat = this.plugin.dateFormat();
     const panel = container.createDiv({ cls: "tm-sidebar-details" });
 
@@ -592,47 +597,7 @@ export class TaskSidebarView extends ItemView {
     const paint = (): void => paintTokens(backdrop, title.value, taskInputRanges(title.value, task.title, now, dateFormat));
     paint();
 
-    const properties = panel.createDiv({ cls: "tm-sidebar-properties", attr: { role: "group", "aria-label": "Properties" } });
-    const row = (icon: string, name: string, property: SidebarProperty, fill: (value: HTMLElement) => void, cls = ""): void => {
-      const element = properties.createDiv({ cls: `tm-sidebar-property${cls ? ` ${cls}` : ""}` });
-      const label = element.createSpan({ cls: "tm-sidebar-property-name" });
-      setIcon(label.createSpan({ cls: "tm-sidebar-property-icon", attr: { "aria-hidden": "true" } }), icon);
-      label.createSpan({ text: name });
-      const value = element.createSpan({ cls: "tm-sidebar-property-value" });
-      fill(value);
-      if (!value.childElementCount && !value.textContent) { value.addClass("is-empty"); value.setText("None"); }
-      editable(element, `${name}: ${value.textContent}`, `sidebar-${property}`, () => void this.edit(view, task, property, element));
-    };
-    row(STATUS_ICONS[task.status], "Status", "status", value => { value.setText(STATUS_LABELS[task.status]); }, `is-status${statusClass(task.status)}`);
-    row("calendar", "Date", "scheduledDate", value => {
-      const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
-      const day = task.scheduledDate ? task.scheduledDate === today ? "Today" : longDate(task.scheduledDate, now) : "";
-      value.setText([day, time].filter(Boolean).join(", "));
-      value.toggleClass("is-overdue", Boolean(task.scheduledDate && task.scheduledDate < today && !task.completed));
-    });
-    row("flag", "Deadline", "deadline", value => {
-      if (!task.deadline) return;
-      const pill = value.createSpan({ cls: `tm-task-due${deadlineIsDistant(task.deadline, now) ? " is-distant" : ""}${!task.completed && deadlineIsOverdue(task.deadline, task.deadlineTime, now) ? " is-overdue" : ""}` });
-      setIcon(pill.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
-      pill.createSpan({ text: taskDeadlineCountdown(task.deadline, now) });
-      value.createSpan({ cls: "tm-sidebar-property-extra", text: `${longDate(task.deadline, now)}${task.deadlineTime ? `, ${taskTimeLabel(task.deadlineTime)}` : ""}` });
-    });
-    row("signal", "Priority", "priority", value => { if (task.priority) value.setText(`P${task.priority} · ${PRIORITY_NAMES[task.priority]}`); }, task.priority ? `is-p${task.priority}` : "");
-    row("folder", "Project", "project", value => {
-      const path = destination ? splitDestination(destination).path : task.path;
-      const source = value.createSpan({ cls: "tm-task-source", text: path === this.plugin.settings.inboxPath ? "Inbox" : noteName(path) });
-      const color = this.plugin.index.projectColor(path);
-      if (color) source.style.setProperty("--tm-project-color", color);
-    });
-    row("tag", "Tags", "tags", value => {
-      for (const tag of task.tags ?? []) {
-        const pill = value.createSpan({ cls: "tm-task-tag" });
-        setIcon(pill.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "tag");
-        pill.createSpan({ text: tag });
-      }
-    });
-    row("repeat", "Repeat", "repeat", value => { if (task.repeat) value.setText(repeatLabel(task.repeat)); });
-    row("eye-off", "Hidden until", "defer", value => { value.setText(task.someday ? "Someday" : task.deferDate ? longDate(task.deferDate, now) : ""); });
+    this.renderProperties(panel, view, [task], destination);
 
     panel.createEl("h5", { cls: "tm-sidebar-section-title", text: "Notes" });
     const notes = panel.createEl("textarea", { cls: "tm-sidebar-notes", attr: { "aria-label": "Notes", placeholder: "Add notes", rows: "2", "data-tm-focus-key": "sidebar-notes" } });
@@ -661,6 +626,83 @@ export class TaskSidebarView extends ItemView {
 
     // A new task's subtasks wait until it is written.
     if (!isNew) this.renderSubtasks(panel, task);
+  }
+
+  /**
+   * The property rows, each a name and a value that opens its editor: one task's values, or for several the value they
+   * share (else Mixed), set for all of them at once. `destination`: a new task's note to be.
+   */
+  private renderProperties(panel: HTMLElement, view: TaskMainView, tasks: Task[], destination?: string): void {
+    const [task] = tasks;
+    const now = new Date();
+    const today = todayIso(now);
+    const properties = panel.createDiv({ cls: "tm-sidebar-properties", attr: { role: "group", "aria-label": "Properties" } });
+    const shares = (key: (item: Task) => unknown): boolean => tasks.every(item => JSON.stringify(key(item)) === JSON.stringify(key(task)));
+    const row = (icon: string, name: string, property: SidebarProperty, key: (item: Task) => unknown, fill: (value: HTMLElement) => void, cls = ""): void => {
+      const shared = shares(key);
+      const element = properties.createDiv({ cls: `tm-sidebar-property${shared && cls ? ` ${cls}` : ""}` });
+      const label = element.createSpan({ cls: "tm-sidebar-property-name" });
+      setIcon(label.createSpan({ cls: "tm-sidebar-property-icon", attr: { "aria-hidden": "true" } }), icon);
+      label.createSpan({ text: name });
+      const value = element.createSpan({ cls: "tm-sidebar-property-value" });
+      if (shared) fill(value);
+      else { value.addClass("is-mixed"); value.setText("Mixed"); }
+      if (!value.childElementCount && !value.textContent) { value.addClass("is-empty"); value.setText("None"); }
+      editable(element, `${name}: ${value.textContent}`, `sidebar-${property}`, () => void this.edit(view, tasks, property, element));
+    };
+    const status = (item: Task) => item.status;
+    row(shares(status) ? STATUS_ICONS[task.status] : "circle-dashed", "Status", "status", status, value => { value.setText(STATUS_LABELS[task.status]); }, `is-status${statusClass(task.status)}`);
+    row("calendar", "Date", "scheduledDate", item => [item.scheduledDate, item.scheduledTime, item.durationMinutes], value => {
+      const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
+      const day = task.scheduledDate ? task.scheduledDate === today ? "Today" : longDate(task.scheduledDate, now) : "";
+      value.setText([day, time].filter(Boolean).join(", "));
+      value.toggleClass("is-overdue", Boolean(task.scheduledDate && task.scheduledDate < today && !task.completed));
+    });
+    row("flag", "Deadline", "deadline", item => [item.deadline, item.deadlineTime], value => {
+      if (!task.deadline) return;
+      const pill = value.createSpan({ cls: `tm-task-due${deadlineIsDistant(task.deadline, now) ? " is-distant" : ""}${!task.completed && deadlineIsOverdue(task.deadline, task.deadlineTime, now) ? " is-overdue" : ""}` });
+      setIcon(pill.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
+      pill.createSpan({ text: taskDeadlineCountdown(task.deadline, now) });
+      value.createSpan({ cls: "tm-sidebar-property-extra", text: `${longDate(task.deadline, now)}${task.deadlineTime ? `, ${taskTimeLabel(task.deadlineTime)}` : ""}` });
+    });
+    row("signal", "Priority", "priority", item => item.priority, value => { if (task.priority) value.setText(`P${task.priority} · ${PRIORITY_NAMES[task.priority]}`); }, task.priority ? `is-p${task.priority}` : "");
+    row("folder", "Project", "project", item => item.path, value => {
+      const path = destination ? splitDestination(destination).path : task.path;
+      const source = value.createSpan({ cls: "tm-task-source", text: path === this.plugin.settings.inboxPath ? "Inbox" : noteName(path) });
+      const color = this.plugin.index.projectColor(path);
+      if (color) source.style.setProperty("--tm-project-color", color);
+    });
+    row("tag", "Tags", "tags", item => item.tags ?? [], value => {
+      for (const tag of task.tags ?? []) {
+        const pill = value.createSpan({ cls: "tm-task-tag" });
+        setIcon(pill.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "tag");
+        pill.createSpan({ text: tag });
+      }
+    });
+    row("repeat", "Repeat", "repeat", item => item.repeat, value => { if (task.repeat) value.setText(repeatLabel(task.repeat)); });
+    row("eye-off", "Hidden until", "defer", item => [item.someday, item.deferDate], value => { value.setText(task.someday ? "Someday" : task.deferDate ? longDate(task.deferDate, now) : ""); });
+  }
+
+  /**
+   * Several tasks selected: Multiple Tasks in place of a title, a checkbox that completes (or reopens) them all, and
+   * their properties, set for all of them at once; no notes or subtasks, which are each task's own.
+   */
+  private renderSelectionDetails(container: HTMLElement, view: TaskMainView, tasks: Task[]): void {
+    const panel = container.createDiv({ cls: "tm-sidebar-details is-selection" });
+    const head = panel.createDiv({ cls: "tm-sidebar-head" });
+    const done = tasks.every(task => task.completed);
+    const box = head.createEl("label", { cls: "tm-checkbox-target" });
+    const checkbox = box.createEl("input", { type: "checkbox", cls: "tm-task-checkbox", attr: { "aria-label": done ? `Reopen ${tasks.length} tasks` : `Complete ${tasks.length} tasks`, "data-tm-focus-key": "sidebar-checkbox" } });
+    checkbox.checked = done;
+    checkbox.indeterminate = !done && tasks.some(task => task.completed);
+    checkbox.addEventListener("change", () => view.setTaskStatus(view.getSelectedTasks(), checkbox.checked ? "done" : "todo"));
+    const name = head.createDiv({ cls: "tm-sidebar-selection-title" });
+    name.createDiv({ cls: "tm-sidebar-selection-name", text: "Multiple Tasks" });
+    name.createDiv({ cls: "tm-sidebar-selection-count", text: `${tasks.length} tasks selected` });
+    const close = head.createEl("button", { cls: "clickable-icon tm-sidebar-close", attr: { type: "button", "aria-label": "Close", title: "Close (Escape)", "data-tm-focus-key": "sidebar-close" } });
+    setIcon(close, "x");
+    close.addEventListener("click", () => this.closeDetails());
+    this.renderProperties(panel, view, tasks);
   }
 
   /** The subtasks: each checks off and renames in place; the last line adds one, and Enter starts the next. */

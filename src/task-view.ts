@@ -1548,24 +1548,26 @@ export class TaskMainView extends ItemView {
   }
 
   /**
-   * For the Task Details sidebar: a property of `task` (one of the selected tasks) in a popover beside `anchor`, as its row
-   * edits it; the task stays selected. Status and project have their lists; anything else opens the task editor.
+   * For the Task Details sidebar: a property of the shown task, or of the selected tasks together, in a popover beside
+   * `anchor`, as their rows (or their menu) edit it; they stay selected. Status and project have their lists.
    */
-  editTaskProperty(task: Task, property: TaskEditorProperty | "status" | "project", anchor: HTMLElement): void {
-    if (property === "project") this.openProjectChoice([task], anchor);
+  editTaskProperty(tasks: Task[], property: TaskEditorProperty | "status" | "project", anchor: HTMLElement): void {
+    if (!tasks.length) return;
+    if (property === "project") this.openProjectChoice(tasks, anchor);
     else if (property === "status") {
       openChoicePopover({
-        anchor, label: "Status", selected: task.status, cycleKey: "s",
+        anchor, label: "Status", selected: tasks.every(task => task.status === tasks[0].status) ? tasks[0].status : undefined, cycleKey: "s",
         choices: TASK_STATUSES.map(status => ({ value: status, label: STATUS_LABELS[status], icon: STATUS_ICONS[status] })),
-        choose: value => this.setTaskStatus(task, value as TaskStatus)
+        choose: value => this.setTaskStatus(tasks, value as TaskStatus)
       });
-    } else if (!this.openPropertyEditor([task], property, anchor)) this.openTaskEditor(task, property);
+    } else if (!this.openPropertyEditor(tasks, property, anchor) && tasks.length === 1) this.openTaskEditor(tasks[0], property);
   }
 
-  /** For the Task Details sidebar: completes, reopens or otherwise sets a task's status; the selection stays (focus does not move here). */
-  setTaskStatus(task: Task, status: TaskStatus): void {
-    if (task.id === NEW_TASK_ID) this.patchNewTask({ status, completed: isClosedStatus(status) });
-    else if (task.status !== status) void this.commit(() => this.plugin.store.setStatus([task], status));
+  /** For the Task Details sidebar: completes, reopens or otherwise sets tasks' status; the selection stays (focus does not move here). */
+  setTaskStatus(tasks: Task[], status: TaskStatus): void {
+    if (tasks.some(task => task.id === NEW_TASK_ID)) this.patchNewTask({ status, completed: isClosedStatus(status) });
+    const changing = tasks.filter(task => task.id !== NEW_TASK_ID && task.status !== status);
+    if (changing.length) void this.commit(() => this.plugin.store.setStatus(changing, status));
   }
 
   /**
