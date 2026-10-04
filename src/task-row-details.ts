@@ -120,13 +120,17 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
             editable(timeLabel, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, "time", () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
         }
     }
-    // A repeat shows as an icon beside the title, its rule in the tooltip; the deadline pill follows.
+    // Beside the title, as in Griply: a repeat icon (its rule in the tooltip), a notes icon, then the deadline pill.
     if (task.repeat && show("repeat") && grouping !== "repeat") {
         const label = repeatLabel(task.repeat);
         const repeat = primary.createSpan({ cls: "tm-task-repeat", attr: { title: `Repeats ${label.toLowerCase()}` } });
         const icon = repeat.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
         setIcon(icon, "repeat");
         editable(repeat, `Edit repeat: ${label}`, "repeat", () => options.edit("repeat"));
+    }
+    if (task.description?.trim()) {
+        const notes = primary.createSpan({ cls: "tm-task-notes-mark", attr: { role: "img", "aria-label": "Has notes", title: "Notes" } });
+        setIcon(notes, "align-left");
     }
     const due = task.deadline && showDate("deadline") ? taskDeadlineCountdown(task.deadline, now) : "";
     const dueTime = task.deadlineTime && show("deadlineTime") && grouping !== "deadlineTime" ? taskTimeLabel(task.deadlineTime) : "";

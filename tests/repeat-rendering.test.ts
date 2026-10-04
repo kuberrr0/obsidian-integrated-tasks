@@ -26,6 +26,15 @@ function row(line: string, options: { grouping?: TaskGrouping; show?: (property:
 }
 
 describe("task row pills", () => {
+  it("marks a task with notes by an icon beside the title, after its repeat and before its deadline", () => {
+    const primary = document.createElement("div"), metadata = document.createElement("div");
+    const task = { ...scanTasks("Note.md", "- [ ] Water every week {2026-10-02}", now)[0], description: "Use the blue can" };
+    renderTaskDetails(primary, metadata, task, { now, grouping: "none", dateFormat: "MMM D, YYYY", tags: [], edit: vi.fn(), openSource: vi.fn() });
+    expect(Array.from(primary.children).map(child => child.className)).toEqual(["tm-task-repeat", "tm-task-notes-mark", "tm-task-due"]);
+    expect(primary.querySelector(".tm-task-notes-mark")!.getAttribute("aria-label")).toBe("Has notes");
+    expect(row("- [ ] Water every week").primary.querySelector(".tm-task-notes-mark")).toBeNull();
+  });
+
   it("shows an editable repeat icon beside the title, before the deadline, with its rule in the tooltip", () => {
     const { primary, metadata, repeat, edit } = row("- [ ] Water 2026-09-28 every week {2026-10-02} #[[home]]");
     expect(Array.from(primary.children).map(child => child.className)).toEqual(["tm-task-repeat", "tm-task-due"]);

@@ -199,7 +199,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       {
         section: "Appearance",
         name: "Show subtasks in task views",
-        desc: "List subtasks as their own rows under their task. When off, they appear in the task's card, and a subtask shows on its own only in views its task is not in.",
+        desc: "In the Things style, list subtasks as their own rows under their task. When off, they appear in the task's card, and a subtask shows on its own only in views its task is not in. The Griply style always lists them.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.showSubtasks).onChange(async value => {
           this.plugin.settings.showSubtasks = value;
           await this.plugin.saveSettings();

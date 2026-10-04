@@ -491,23 +491,20 @@ describe("today header, density and gestures", () => {
     expect(store.toggle).not.toHaveBeenCalled();
   });
 
-  it("closes each Griply group with an Add task row in place of the heading's +, adding to that group", async () => {
-    const { view, content, plugin } = await setup([note("A.md", 2), note("B.md", 1)]);
+  it("adds to a Griply group from its heading's +, and always lists subtasks as rows", async () => {
+    const { view, content, plugin } = await setup([["A.md", "- [ ] Parent\n  - [ ] Child"], note("B.md", 1)]);
     plugin.settings.style = "griply";
+    plugin.settings.showSubtasks = false;
     await view.setState({ mode: "all" });
     expect(content().classList.contains("tm-style-griply")).toBe(true);
+    expect(rows(content()).map(row => row.querySelector(".tm-task-title")?.textContent)).toEqual(["Parent", "Child", "B.md task 0"]);
     const [, second] = sections(content());
-    expect(sections(content()).map(section => section.lastElementChild?.className)).toEqual(["tm-add-task-row", "tm-add-task-row"]);
-    expect(content().querySelector(".tm-group-add-task")).toBeNull();
-    second.querySelector<HTMLButtonElement>(".tm-add-task-row")!.click();
+    second.querySelector<HTMLButtonElement>("h2 .tm-group-add-task")!.click();
     expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ preset: expect.objectContaining({ destination: "B.md" }) }));
-    // Boards, and the Things style, keep the heading's + instead.
-    await view.setState({ mode: "all", layout: "kanban" } as never);
-    expect(content().querySelector(".tm-add-task-row")).toBeNull();
+    // The Things style still follows the setting: the subtask lives in its task's card.
     plugin.settings.style = "things";
-    await view.setState({ mode: "all", layout: "list" } as never);
-    expect(content().querySelector(".tm-add-task-row")).toBeNull();
-    expect(content().querySelector(".tm-group-add-task")).not.toBeNull();
+    await view.setState({ mode: "all" });
+    expect(rows(content()).map(row => row.querySelector(".tm-task-title")?.textContent)).toEqual(["Parent", "B.md task 0"]);
   });
 
   it("opens a task on a double tap, once even when the browser also sends dblclick", async () => {

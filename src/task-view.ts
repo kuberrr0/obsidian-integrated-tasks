@@ -756,7 +756,6 @@ export class TaskMainView extends ItemView {
     // With every task under a heading, an empty list still waits above the first one, so a task can be
     // dragged there (above all headings); it takes no space until a drag opens its gap.
     this.renderTaskList(container, unsectioned, { destination: path }, Boolean(headings.length && !unsectioned.length));
-    if (unsectioned.length || !headings.length) this.renderAddTaskRow(container, path.replace(/\.md$/i, "").split("/").pop() ?? path, { destination: path });
     for (const heading of headings) {
       const group = bySection.get(heading.line) ?? [];
       const section = container.createEl("section", { cls: "tm-section" });
@@ -765,9 +764,7 @@ export class TaskMainView extends ItemView {
       this.renderGroupAddButton(title, heading.name, target);
       this.listDrag?.group(section, target);
       this.addMoveTarget(heading.name, target);
-      if (this.renderGroupFold(section, title, `group:${path}#${heading.name}`, heading.name)) continue;
-      this.renderTaskList(section, group, target);
-      this.renderAddTaskRow(section, heading.name, target);
+      if (!this.renderGroupFold(section, title, `group:${path}#${heading.name}`, heading.name)) this.renderTaskList(section, group, target);
     }
     if (!tasks.length && !headings.length) this.renderEmpty(container);
   }
@@ -1238,26 +1235,10 @@ export class TaskMainView extends ItemView {
   }
 
   private renderGroupAddButton(parent: HTMLElement, title: string, target?: ListDropGroup): void {
-    // Griply lists close each group with an "Add task" row instead.
-    if (this.addTaskRows()) return;
     const add = parent.createEl("button", { cls: "clickable-icon tm-group-add-task", attr: {
       type: "button", "aria-label": `Add task to ${title}`, title: `Add task to ${title}`
     } });
     setIcon(add, "plus");
-    add.addEventListener("click", event => { event.stopPropagation(); this.addToGroup(target); });
-  }
-
-  /** Whether groups end with an "Add task" row: Griply's lists, as in Griply. */
-  private addTaskRows(): boolean {
-    return this.plugin.settings.style === "griply" && this.layout === "list";
-  }
-
-  /** A faint "Add task" row at the end of a group, adding a task to it. */
-  private renderAddTaskRow(container: HTMLElement, title: string, target?: ListDropGroup): void {
-    if (!this.addTaskRows()) return;
-    const add = container.createEl("button", { cls: "tm-add-task-row", attr: { type: "button", "aria-label": `Add task to ${title}` } });
-    add.createSpan({ cls: "tm-add-task-box", attr: { "aria-hidden": "true" } });
-    add.createSpan({ text: "Add task" });
     add.addEventListener("click", event => { event.stopPropagation(); this.addToGroup(target); });
   }
 
@@ -1274,9 +1255,7 @@ export class TaskMainView extends ItemView {
     heading.createSpan({ text: title });
     this.renderGroupAddButton(heading, title, target);
     if (target) { this.listDrag?.group(section, target); this.addMoveTarget(title, target); }
-    if (this.renderGroupFold(section, heading, `group:${title}`, title)) return;
-    this.renderTaskList(section, tasks, target);
-    this.renderAddTaskRow(section, title, target);
+    if (!this.renderGroupFold(section, heading, `group:${title}`, title)) this.renderTaskList(section, tasks, target);
   }
 
   /** Folds a group from a chevron before its heading; returns whether it is folded (its tasks then stay hidden). */
@@ -1319,7 +1298,8 @@ export class TaskMainView extends ItemView {
     // An open card lists its subtasks itself; a folded task hides its subtasks (boards show every card).
     const inCard = this.expandedDescendants();
     // With subtasks off, a subtask whose task is in the list lives in that task's card instead of a row.
-    const showSubtasks = this.plugin.settings.showSubtasks;
+    // The Griply style, which has no cards, always lists them.
+    const showSubtasks = this.plugin.settings.style === "griply" || this.plugin.settings.showSubtasks;
     const foldable = this.layout !== "kanban" && showSubtasks;
     const parents = new Set(foldable ? tasks.filter(task => task.childIds.some(id => visibleIds.has(id))).map(task => task.id) : []);
     const hidden = new Set<string>();

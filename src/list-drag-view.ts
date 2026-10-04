@@ -21,8 +21,8 @@ const NEST_PX = 24;
 const NEST_RELEASE_PX = 16;
 /** Once above or below a row is chosen, the other side needs the lifted row this far past the row's middle. */
 const SIDE_HYSTERESIS_PX = 4;
-/** What makes way for the gap, sliding as rows do: rows, the gap, group headings, a list's "Show more" and "Add task". */
-const MOVERS = ".tm-task-item:not(.tm-drag-preview), .tm-drop-gap, .tm-section > h2, .tm-show-more-tasks, .tm-add-task-row";
+/** What makes way for the gap, sliding as rows do: rows, the gap, group headings, and a list's "Show more". */
+const MOVERS = ".tm-task-item:not(.tm-drag-preview), .tm-drop-gap, .tm-section > h2, .tm-show-more-tasks";
 /** What the pointer can rest on mid-slide: a row, the gap or a group heading. */
 const HOLDERS = ".tm-task-item, .tm-drop-gap, .tm-section > h2";
 /** On touch screens a row lifts for dragging after a press held this long (and within PRESS_SLOP px of where it began). */
