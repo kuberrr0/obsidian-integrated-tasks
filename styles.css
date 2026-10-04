@@ -2566,7 +2566,9 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
   display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; align-items: start;
   padding-bottom: var(--size-4-3); border-bottom: 1px solid var(--background-modifier-border);
 }
-.tm-sidebar-head .tm-checkbox-target { display: flex; margin-top: 4px; }
+/* The checkbox sits in a box as tall as the title's first line, centred on it, whatever the style's checkbox size. */
+.tm-task-sidebar .tm-sidebar-head .tm-checkbox-target { display: flex; align-items: center; align-self: start; width: auto; height: calc(var(--font-ui-large) * 1.35); min-height: 0; margin: 0; padding: 0; }
+.tm-task-sidebar .tm-sidebar-head .tm-task-checkbox { margin: 0; }
 .tm-task-sidebar .tm-sidebar-head :is(.tm-things-card-title-backdrop, textarea.tm-things-card-title) { font-size: var(--font-ui-large); font-weight: var(--font-semibold); line-height: 1.35; }
 .tm-sidebar-properties { display: flex; flex-direction: column; padding: var(--size-4-2) 0; border-bottom: 1px solid var(--background-modifier-border); }
 .tm-sidebar-property {
