@@ -3,7 +3,7 @@ import type TaskManagerPlugin from "./main";
 import { TaskMainView } from "./task-view";
 import { renderCalendar } from "./calendar-view";
 import { ListDragController } from "./list-drag-view";
-import { markDropZone, startTaskDrag, type SidebarDrop } from "./sidebar-drop";
+import { activeTaskDrag, markDropZone, startTaskDrag, TASK_DRAG_TYPE, type SidebarDrop, type TaskDrag } from "./sidebar-drop";
 import { taskTitleLabel } from "./task-title";
 import { renderThingsTaskDetails } from "./things-row-details";
 import { calendarDate, rescheduledDraft } from "./calendar";
@@ -50,7 +50,7 @@ const LIST_PAGE = 100;
 
 /**
  * The task sidebar (in the right sidebar by default). Its content follows the task view in front: with Today open, the
- * day's hours; with Upcoming open, the tasks with no date; and below them when a task is selected (or, anywhere else,
+ * day's hours; with Upcoming (or any view's calendar) open, the tasks with no date; and below them when a task is selected (or, anywhere else,
  * filling it) the selected task's details, editable in place. Only the tasks show: no headings or calendar controls. Tasks drag between it and
  * the view: onto an hour to schedule them then, from the tasks without a date onto a day.
  */
@@ -82,7 +82,7 @@ export class TaskSidebarView extends ItemView {
 
   getViewType(): string { return TASK_SIDEBAR_VIEW; }
   getDisplayText(): string { return "Task sidebar"; }
-  getIcon(): string { return "panel-right"; }
+  getIcon(): string { return "circle-check-big"; }
 
   async onOpen(): Promise<void> {
     this.unsubscribe = this.plugin.index.subscribe(() => { this.indexVersion++; this.scheduleRender(); });
@@ -121,7 +121,9 @@ export class TaskSidebarView extends ItemView {
   render(force = false): void {
     const view = this.taskView();
     const state = view?.getState();
-    const mode: SidebarMode = view && !view.pagePath && (state?.mode === "today" || state?.mode === "upcoming") ? state.mode : "details";
+    // A calendar, like Upcoming, has the tasks without a date beside it, to drag onto a day.
+    const mode: SidebarMode = !view ? "details" : view.hasCalendar ? "upcoming"
+      : !view.pagePath && (state?.mode === "today" || state?.mode === "upcoming") ? state.mode : "details";
     const selected = view?.sidebarSelection() ?? [];
     // A task selected in the view takes over from one selected here.
     const viewSelection = selected.map(task => task.id).join("\n");
@@ -163,6 +165,7 @@ export class TaskSidebarView extends ItemView {
     container.toggleClass("tm-density-compact", settings.density === "compact");
     for (const name of ["today", "upcoming", "details"] as const) container.toggleClass(`is-${name}`, mode === name);
     this.planner = mode === "details" ? undefined : { element: container.createDiv({ cls: "tm-sidebar-planner", attr: { "data-tm-scroll-key": "sidebar-planner" } }) };
+    if (mode === "upcoming") this.takeUndatedDrops(this.planner!.element);
     this.details = { element: container.createDiv({ cls: "tm-sidebar-pane", attr: { "data-tm-scroll-key": "sidebar-details" } }) };
     this.skeleton = skeleton;
   }
@@ -245,7 +248,6 @@ export class TaskSidebarView extends ItemView {
     const ids = new Set(all.map(task => task.id));
     // Subtasks go with their task.
     const tasks = all.filter(task => !task.parentId || !ids.has(task.parentId));
-    this.takeUndatedDrops(element);
     if (!tasks.length) {
       const empty = element.createDiv({ cls: "tm-empty tm-sidebar-empty" });
       setIcon(empty.createDiv({ cls: "tm-empty-icon" }), "calendar-check");
@@ -263,20 +265,44 @@ export class TaskSidebarView extends ItemView {
     }
   }
 
-  /** Tasks dragged here from the view's list take their dates off; a slot opens at the top of the list meanwhile. */
+  /**
+   * Tasks dragged here from the view (its list's rows, or its calendar's cards) take their dates off; a slot opens at the
+   * top of the list meanwhile.
+   */
   private takeUndatedDrops(element: HTMLElement): void {
     let gap: HTMLElement | undefined;
+    const show = (drag: TaskDrag): void => {
+      gap ??= element.ownerDocument.createElement("div");
+      gap.className = "tm-drop-gap";
+      gap.style.setProperty("--tm-gap-height", `${drag.height ?? 32}px`);
+      const host = element.querySelector(".tm-task-list") ?? element;
+      if (host.firstElementChild !== gap) host.prepend(gap);
+    };
     const leave = (): void => { gap?.remove(); gap = undefined; };
     markDropZone(element, {
-      hover: (_point, drag) => {
-        gap ??= element.ownerDocument.createElement("div");
-        gap.className = "tm-drop-gap";
-        gap.style.setProperty("--tm-gap-height", `${drag.height ?? 32}px`);
-        const host = element.querySelector(".tm-task-list") ?? element;
-        if (host.firstElementChild !== gap) host.prepend(gap);
-      },
+      hover: (_point, drag) => show(drag),
       leave,
       drop: async (_point, drag) => { leave(); await drag.drop({ kind: "schedule" }); }
+    });
+    // A calendar card drags natively; tasks without a date (this list's own) have nothing to take off.
+    const native = (event: DragEvent): TaskDrag | undefined => {
+      const drag = event.dataTransfer?.types.includes(TASK_DRAG_TYPE) ? activeTaskDrag() : undefined;
+      return drag?.tasks.some(task => task.scheduledDate || task.deadline) ? drag : undefined;
+    };
+    element.addEventListener("dragover", event => {
+      const drag = native(event);
+      if (!drag) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      show(drag);
+    });
+    element.addEventListener("dragleave", event => { if (!element.contains(event.relatedTarget as Node | null)) leave(); });
+    element.addEventListener("drop", event => {
+      const drag = native(event);
+      leave();
+      if (!drag) return;
+      event.preventDefault();
+      void drag.drop({ kind: "schedule" });
     });
   }
 

@@ -26,6 +26,7 @@ import { TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { TaskSidebarView } from "../src/task-sidebar";
+import { TASK_DRAG_TYPE } from "../src/sidebar-drop";
 import { DEFAULT_SETTINGS, type Task, type TaskDraft } from "../src/types";
 import { todayIso } from "../src/date";
 import type TaskManagerPlugin from "../src/main";
@@ -131,6 +132,41 @@ describe("what the task sidebar shows", () => {
     setActive(undefined);
     sidebar.render();
     expect(side().querySelector(".tm-sidebar-empty p")!.textContent).toBe("Select a task in a task view to see its details here.");
+  });
+
+  it("lists the tasks without a date beside any view's calendar, as for Upcoming, under the plugin's icon", async () => {
+    const today = todayIso();
+    const { view, sidebar, main, side } = await setup([["A.md", [`- [ ] At nine ${today} 09:00`, "- [ ] No date"].join("\n")]]);
+    expect(sidebar.getIcon()).toBe("circle-check-big");
+    const layout = (name: string) => main().querySelector<HTMLButtonElement>(`[data-tm-focus-key="layout-${name}"]`)!.click();
+    await view.setState({ mode: "all" });
+    expect(side().classList.contains("is-details")).toBe(true);
+    layout("calendar");
+    expect(side().classList.contains("is-upcoming")).toBe(true);
+    expect(Array.from(side().querySelectorAll(".tm-sidebar-planner .tm-task-item .tm-task-title")).map(title => title.textContent)).toEqual(["No date"]);
+    // Today's calendar too, rather than its hours again.
+    await view.setState({ mode: "today", layout: "calendar" });
+    expect(side().classList.contains("is-upcoming")).toBe(true);
+    layout("list");
+    expect(side().classList.contains("is-today")).toBe(true);
+  });
+
+  it("takes the dates off a card dragged from the view's calendar into the tasks without a date", async () => {
+    const today = todayIso();
+    const { view, main, side, store } = await setup([["A.md", [`- [ ] At nine ${today} 09:00`, "- [ ] No date"].join("\n")]]);
+    await view.setState({ mode: "all", layout: "calendar", calendarScope: "day", calendarAnchor: today });
+    const transfer = { types: [TASK_DRAG_TYPE], dropEffect: "", effectAllowed: "", setData: () => {} };
+    const drag = (target: EventTarget, type: string) => target.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), { dataTransfer: transfer, clientY: 0 }));
+    drag(main().querySelector<HTMLElement>(".tm-calendar-lane .tm-calendar-task")!, "dragstart");
+    const planner = side().querySelector<HTMLElement>(".tm-sidebar-planner")!;
+    drag(planner, "dragover");
+    expect(planner.querySelector(".tm-task-list > .tm-drop-gap:first-child")).not.toBeNull();
+    drag(planner, "drop");
+    await vi.waitFor(() => expect(store.bulkChange).toHaveBeenCalledOnce());
+    const [tasks, draft] = store.bulkChange.mock.calls[0] as unknown as [Task[], (task: Task) => TaskDraft];
+    expect(tasks.map(task => task.title)).toEqual(["At nine"]);
+    expect(draft(tasks[0])).toMatchObject({ scheduledDate: undefined, scheduledTime: undefined });
+    expect(planner.querySelector(".tm-drop-gap")).toBeNull();
   });
 
   it("shows the details of a task selected in the sidebar's day or list, until the view's selection changes", async () => {
