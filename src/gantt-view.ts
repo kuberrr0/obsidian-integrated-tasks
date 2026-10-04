@@ -43,10 +43,6 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
   }
   const today = controls.createEl("button", { text: "Today" });
   today.addEventListener("click", () => options.navigate(addDays(todayIso(), -2), options.zoom));
-  const first = toolbar.createEl("button", { cls: "tm-gantt-first", text: "First project" });
-  const earliest = options.projects.map(project => project.scheduledDate).filter((date): date is string => Boolean(date)).sort()[0];
-  first.disabled = !earliest;
-  first.addEventListener("click", () => { if (earliest) options.navigate(addDays(earliest, -1), options.zoom); });
   const scopes = controls.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Gantt date range" } });
   for (const [value, label] of [["month", "M"], ["quarter", "Q"], ["year", "Y"], ["five-year", "5Y"]] as const) {
     const button = scopes.createEl("button", { text: label, attr: { "aria-label": value === "five-year" ? "5 years" : value[0].toUpperCase() + value.slice(1), "aria-pressed": String(options.zoom === value) } });
