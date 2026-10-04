@@ -8,6 +8,15 @@ export const GANTT_ZOOMS: Record<GanttZoom, { days: number; width: number }> = {
   month: { days: 35, width: 32 }, quarter: { days: 91, width: 12 },
   year: { days: 366, width: 3 }, "five-year": { days: 1827, width: 0.7 }
 };
+/** How far zooming goes: pixels per day. */
+export const GANTT_MIN_SCALE = 0.5;
+export const GANTT_MAX_SCALE = 96;
+
+/** The range a zoomed scale reads as (its dates labelled, and its arrows moving, as that range's are). */
+export function ganttZoomFor(scale: number): GanttZoom {
+  return scale >= 20 ? "month" : scale >= 6 ? "quarter" : scale >= 1.5 ? "year" : "five-year";
+}
+
 /** The Gantt opens at the start of the year, for an overview of it. */
 export function ganttYearStart(today: string): string { return `${today.slice(0, 4)}-01-01`; }
 

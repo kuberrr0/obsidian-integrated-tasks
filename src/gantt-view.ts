@@ -2,7 +2,7 @@ import { Notice, setIcon } from "obsidian";
 import { addDays } from "./calendar";
 import { formatDate, todayIso } from "./date";
 import { projectHierarchy } from "./project-hierarchy";
-import { ganttSegments, shiftGantt, daysBetween, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate, GANTT_ZOOMS, type GanttZoom, type GanttHandle, type ProjectDateField } from "./gantt";
+import { ganttSegments, ganttZoomFor, shiftGantt, daysBetween, GANTT_MAX_SCALE, GANTT_MIN_SCALE, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate, GANTT_ZOOMS, type GanttZoom, type GanttHandle, type ProjectDateField } from "./gantt";
 import type { Project } from "./types";
 import type { ProjectDraft } from "./project-creator";
 import { projectStatuses, renderProjectProgress, type ProjectStatus } from "./project-progress";
@@ -14,8 +14,12 @@ interface GanttOptions {
   anchor: string;
   zoom: GanttZoom;
   dateFormat: string;
-  navigate: (anchor: string, zoom: GanttZoom) => void;
+  /** Moves to `anchor`: in a range's own scale, or (moving within a zoomed scale) in `scale`. */
+  navigate: (anchor: string, zoom: GanttZoom, scale?: number) => void;
   viewportChanged?: (anchor: string) => void;
+  /** A scale zoomed to (pixels per day) instead of the range's own; the timeline then redraws itself. */
+  scale?: number;
+  zoomed?: (anchor: string, zoom: GanttZoom, scale: number) => void;
   open: (project: Project) => void;
   edit?: (project: Project, field: keyof ProjectDraft) => void;
   update: (project: Project, changes: Partial<Record<ProjectDateField, string>>) => Promise<void>;
@@ -25,9 +29,15 @@ interface GanttOptions {
 
 // Arrow keys preview date changes live and save once they pause, so focus is not lost per key.
 const KEY_SAVE_DELAY_MS = 500;
+/** Each zoom button (or + and - key) press scales the timeline by this much. */
+const ZOOM_STEP = 1.5;
 export function renderGantt(container: HTMLElement, options: GanttOptions): void {
   const root = container.createDiv({ cls: "tm-gantt" });
-  const { days: period, width } = GANTT_ZOOMS[options.zoom];
+  // Zoomed in or out, the scale reads as the range nearest it.
+  const scale = options.scale === undefined ? undefined : Math.min(GANTT_MAX_SCALE, Math.max(GANTT_MIN_SCALE, options.scale));
+  const zoom = scale === undefined ? options.zoom : ganttZoomFor(scale);
+  const width = scale ?? GANTT_ZOOMS[zoom].width;
+  const period = GANTT_ZOOMS[zoom].days;
   let anchor = options.anchor;
   let start = anchor;
   let days = period;
@@ -39,16 +49,23 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]] as const) {
     const button = controls.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
     setIcon(button, icon);
-    button.addEventListener("click", () => options.navigate(shiftGantt(anchor, options.zoom, delta), options.zoom));
+    button.addEventListener("click", () => options.navigate(shiftGantt(anchor, zoom, delta), zoom, scale));
   }
   const today = controls.createEl("button", { text: "Today" });
-  today.addEventListener("click", () => options.navigate(addDays(todayIso(), -2), options.zoom));
+  today.addEventListener("click", () => options.navigate(addDays(todayIso(), -2), zoom, scale));
   const scopes = controls.createDiv({ cls: "tm-calendar-scopes", attr: { "aria-label": "Gantt date range" } });
   for (const [value, label] of [["month", "M"], ["quarter", "Q"], ["year", "Y"], ["five-year", "5Y"]] as const) {
-    const button = scopes.createEl("button", { text: label, attr: { "aria-label": value === "five-year" ? "5 years" : value[0].toUpperCase() + value.slice(1), "aria-pressed": String(options.zoom === value) } });
+    const button = scopes.createEl("button", { text: label, attr: { "aria-label": value === "five-year" ? "5 years" : value[0].toUpperCase() + value.slice(1), "aria-pressed": String(zoom === value) } });
     button.addEventListener("click", () => options.navigate(anchor, value));
   }
-  const scroll = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0", "data-tm-scroll-key": "gantt", "data-tm-scroll-axis": "y" } });
+  const zooming = toolbar.createDiv({ cls: "tm-gantt-zoom" });
+  for (const [factor, icon, label] of [[1 / ZOOM_STEP, "zoom-out", "Zoom out"], [ZOOM_STEP, "zoom-in", "Zoom in"]] as const) {
+    const button = zooming.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
+    setIcon(button, icon);
+    button.disabled = factor > 1 ? width >= GANTT_MAX_SCALE : width <= GANTT_MIN_SCALE;
+    button.addEventListener("click", () => zoomBy(factor));
+  }
+  const scroll: HTMLElement = root.createDiv({ cls: "tm-gantt-scroll", attr: { "aria-label": "Project timeline", tabindex: "0", "data-tm-scroll-key": "gantt", "data-tm-scroll-axis": "y" } });
   const buffer = Math.max(period, Math.ceil((scroll.clientWidth || 1200) / width));
   days = buffer * 5;
   start = addDays(anchor, -buffer * 2);
@@ -57,9 +74,9 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
   const header = scroll.createDiv({ cls: "tm-gantt-row tm-gantt-header" });
   header.createDiv({ cls: "tm-gantt-label", text: "Project" });
   const dates = header.createDiv({ cls: "tm-gantt-dates" });
-  let segments = ganttSegments(start, days, options.zoom);
+  let segments = ganttSegments(start, days, zoom);
   const paintDates = (): void => {
-    segments = ganttSegments(start, days, options.zoom);
+    segments = ganttSegments(start, days, zoom);
     dates.empty();
     for (const segment of segments) {
       const cell = dates.createDiv({ cls: "tm-gantt-date", text: segment.label, attr: { title: formatDate(segment.start, options.dateFormat) } });
@@ -69,6 +86,82 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
     }
   };
   paintDates();
+
+  /**
+   * Zooms by `factor` about a point of the timeline (`at`, in pixels from the dates' left edge; else the middle of the
+   * dates in view), keeping the date there in place: the timeline redraws at the new scale.
+   */
+  const zoomBy = (factor: number, at?: number): void => {
+    const next = Math.min(GANTT_MAX_SCALE, Math.max(GANTT_MIN_SCALE, width * factor));
+    if (Math.abs(next - width) < 0.001 || !root.isConnected) return;
+    const labelWidth = header.firstElementChild?.getBoundingClientRect().width ?? 330;
+    const x = Math.max(0, at !== undefined && Number.isFinite(at) ? at : (scroll.clientWidth - labelWidth) / 2);
+    // Days from the timeline's start: to the point, then to the dates' left edge at the new scale.
+    const left = (scroll.scrollLeft + x) / width - x / next;
+    const day = Math.floor(left);
+    const nextAnchor = addDays(start, day);
+    const nextZoom = ganttZoomFor(next);
+    const top = scroll.scrollTop;
+    const focused = scroll.ownerDocument.activeElement === scroll;
+    options.zoomed?.(nextAnchor, nextZoom, next);
+    root.remove();
+    renderGantt(container, { ...options, anchor: nextAnchor, zoom: nextZoom, scale: next });
+    const redrawn = container.querySelector<HTMLElement>(".tm-gantt-scroll");
+    if (!redrawn) return;
+    redrawn.scrollLeft += (left - day) * next;
+    redrawn.scrollTop = top;
+    if (focused) redrawn.focus({ preventScroll: true });
+  };
+  // The wheel zooms about the pointer over the dates, or anywhere with Ctrl/Cmd held (as a trackpad's pinch does);
+  // elsewhere it scrolls. Wheel steps between frames zoom once.
+  let wheelFactor = 1;
+  let wheelAt = 0;
+  let wheelFrame: number | undefined;
+  scroll.addEventListener("wheel", event => {
+    if (!event.deltaY || !(event.ctrlKey || event.metaKey || header.contains(event.target as Node))) return;
+    event.preventDefault();
+    const labelWidth = header.firstElementChild?.getBoundingClientRect().width ?? 330;
+    wheelAt = event.clientX - scroll.getBoundingClientRect().left - labelWidth;
+    wheelFactor *= Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.002));
+    wheelFrame ??= (scroll.ownerDocument.defaultView ?? window).requestAnimationFrame(() => {
+      wheelFrame = undefined;
+      const factor = wheelFactor;
+      wheelFactor = 1;
+      zoomBy(factor, wheelAt);
+    });
+  }, { passive: false });
+  // Dragging with the right mouse button pans the timeline, across and down.
+  let pan: { id: number; x: number; y: number } | undefined;
+  scroll.addEventListener("pointerdown", event => {
+    if (event.button !== 2) return;
+    event.preventDefault();
+    pan = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    scroll.setPointerCapture(event.pointerId);
+    scroll.addClass("is-panning");
+  });
+  scroll.addEventListener("pointermove", event => {
+    if (pan?.id !== event.pointerId) return;
+    scroll.scrollLeft -= event.clientX - pan.x;
+    scroll.scrollTop -= event.clientY - pan.y;
+    pan.x = event.clientX;
+    pan.y = event.clientY;
+  });
+  const endPan = (event: PointerEvent): void => {
+    if (pan?.id !== event.pointerId) return;
+    pan = undefined;
+    scroll.removeClass("is-panning");
+  };
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"] as const) scroll.addEventListener(type, endPan);
+  // The right button pans here; the timeline has no menu of its own.
+  scroll.addEventListener("contextmenu", event => event.preventDefault());
+  // With the timeline focused, + and - zoom in and out.
+  scroll.addEventListener("keydown", event => {
+    if (event.target !== scroll || event.ctrlKey || event.metaKey || event.altKey) return;
+    const factor = event.key === "+" || event.key === "=" ? ZOOM_STEP : event.key === "-" ? 1 / ZOOM_STEP : undefined;
+    if (!factor) return;
+    event.preventDefault();
+    zoomBy(factor);
+  });
   const syncViewport = (): void => {
     const labelWidth = header.firstElementChild?.getBoundingClientRect().width ?? 330;
     const visibleDays = Math.max(1, Math.ceil((scroll.clientWidth - labelWidth) / width));
@@ -216,7 +309,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
     const bar = track.createEl("button", { cls: "tm-gantt-bar" });
     bar.addEventListener("click", () => { if (!busy) options.open(project); });
     const jump = track.createEl("button", { cls: "tm-gantt-jump", text: `Show ${formatDate(range.start, options.dateFormat)}` });
-    jump.addEventListener("click", () => options.navigate(addDays(project.scheduledDate!, -1), options.zoom));
+    jump.addEventListener("click", () => options.navigate(addDays(project.scheduledDate!, -1), zoom, scale));
     const handles = new Map<GanttHandle, HTMLButtonElement>();
     const fieldFor = (handle: GanttHandle): ProjectDateField => handle === "start" ? "scheduledDate" : "endDate";
     for (const handle of ["start", "finish"] as GanttHandle[]) {

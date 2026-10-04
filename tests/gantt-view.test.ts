@@ -98,7 +98,7 @@ it("repositions project bars after scrolling and retains date editing", async ()
   expect(bar.style.left).toBe(`${daysBetween(first, project.scheduledDate) * 32 + 2}px`);
   const next = container.all().find(el => el.attrs["aria-label"] === "Next period")!;
   next.dispatchEvent(new Event("click"));
-  expect(navigate).toHaveBeenCalledWith(shiftGantt(viewportChanged.mock.lastCall![0], "month", 1), "month");
+  expect(navigate).toHaveBeenCalledWith(shiftGantt(viewportChanged.mock.lastCall![0], "month", 1), "month", undefined);
   const handle = container.all().find(el => el.cls === "tm-gantt-handle is-finish")!;
   expect(bar.text).toBe("2026-09-18 – 2026-09-25");
   expect(container.all().some(el => el.cls === "tm-gantt-deadline")).toBe(false);

@@ -1394,9 +1394,13 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-gantt-toolbar .tm-calendar-scopes { height: var(--input-height, 30px); box-sizing: border-box; padding: 2px; gap: 2px; align-items: center; }
 .tm-gantt-toolbar .tm-calendar-scopes button { height: 100%; min-height: 0; padding: 0 10px; line-height: normal; }
 .tm-gantt-toolbar button:hover { background: var(--background-modifier-hover); }
+/* Zoom out and in, at the toolbar's right; the right button drags the timeline. */
+.tm-gantt-zoom { grid-column: 3; grid-row: 1; justify-self: end; display: flex; gap: 2px; }
+.tm-gantt-scroll.is-panning { cursor: grabbing; user-select: none; }
 @media (max-width: 700px) {
   .tm-gantt-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
   .tm-gantt-toolbar .tm-calendar-controls { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
+  .tm-gantt-zoom { grid-column: 2; }
 }
 
 /* A task view's deadline pill. */
