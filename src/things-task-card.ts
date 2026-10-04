@@ -34,7 +34,10 @@ export interface TaskCardOptions {
     dateFormat?: string;
     now?: Date;
     change: (draft: TaskCardDraft) => void;
-    toggle: (task: Task, completed: boolean) => void;
+    /** Completes or reopens the task or a subtask; without it (a new task not yet written), the checkbox is off. */
+    toggle?: (task: Task, completed: boolean) => void;
+    /** Enter in the title: writes a new task (without it, Enter moves on to the notes). */
+    submit?: () => void;
     /** Adds tags typed into the card; without it, tags open the task editor. */
     addTags?: (tags: string[]) => void;
     /** Existing tags, suggested while typing one. */
@@ -47,8 +50,8 @@ export interface TaskCardOptions {
     openTag?: (tag: string) => void;
     /** Renames a subtask. */
     renameChild: (child: Task, title: string) => void;
-    /** Adds a subtask after `after` (or at the end); `next` starts another one below it once added. */
-    addChild: (title: string, after: Task | undefined, next: boolean) => void;
+    /** Adds a subtask after `after` (or at the end); `next` starts another one below it once added. Without it, no checklist. */
+    addChild?: (title: string, after: Task | undefined, next: boolean) => void;
     /** What to focus once drawn: a subtask's id, or "new" for the subtask being typed. */
     focus?: string;
     edit: (property: TaskEditorProperty) => void;
@@ -64,7 +67,7 @@ export function cardNotes(description: string | undefined): string {
 }
 
 /** Matches the project editor's P1 — High, P2 — Medium, P3 — Low. */
-const PRIORITY_NAMES: Record<number, string> = { 1: "High", 2: "Medium", 3: "Low" };
+export const PRIORITY_NAMES: Record<number, string> = { 1: "High", 2: "Medium", 3: "Low" };
 
 /** "Thu, Oct 8", with the year outside the current one. */
 export function longDate(date: string, now: Date): string {
@@ -91,7 +94,9 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     const checkboxTarget = options.repeating ? head.createEl("label", { cls: `tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` }) : head;
     const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "card-checkbox" } });
     checkbox.checked = task.completed;
-    checkbox.addEventListener("change", () => options.toggle(task, checkbox.checked));
+    const toggle = options.toggle;
+    if (toggle) checkbox.addEventListener("change", () => toggle(task, checkbox.checked));
+    else checkbox.disabled = true;
     if (options.repeating) repeatIcon(checkboxTarget);
     // A text area so long titles wrap, as in Things; it stays one logical line. Behind it, the same text marks
     // what saving reads as a property (dates, p1, #[[tags]]…); the text area's own text is transparent.
@@ -110,9 +115,12 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
         autosize(title); paintTitle(); preview(); change();
     });
     notes.addEventListener("input", () => { autosize(notes); change(); });
-    // Enter in the title moves on to the notes, as in Things.
+    // Enter in the title moves on to the notes, as in Things; a new task's writes it.
     title.addEventListener("keydown", event => {
-        if (event.key === "Enter" && !event.isComposing && !event.metaKey && !event.ctrlKey) { event.preventDefault(); notes.focus(); }
+        if (event.key !== "Enter" || event.isComposing || event.metaKey || event.ctrlKey) return;
+        event.preventDefault();
+        if (options.submit) { event.stopPropagation(); options.submit(); }
+        else notes.focus();
     });
     // Subtask edits save as you leave each one; closing the card saves the one still being edited.
     const commits: Array<() => void> = [];
@@ -155,7 +163,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
             row.remove();
             subtask = undefined;
             change();
-            if (value) options.addChild(value, after, next);
+            if (value) options.addChild?.(value, after, next);
         };
         input.addEventListener("input", () => { subtask = { after: after?.id, text: input.value }; change(); });
         input.addEventListener("keydown", event => {
@@ -175,7 +183,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
         items.set(child.id, item);
         const box = item.createEl("input", { type: "checkbox", cls: "tm-things-card-check-box", attr: { "aria-label": checkboxLabel(child) } });
         box.checked = child.completed;
-        box.addEventListener("change", () => options.toggle(child, box.checked));
+        box.addEventListener("change", () => options.toggle?.(child, box.checked));
         // Subtasks show their properties as task rows do: a star before the name, then tags, dates and the deadline.
         const lead = item.createSpan({ cls: "tm-things-lead" });
         const name = item.createEl("input", { type: "text", cls: "tm-things-card-check-title", attr: { "aria-label": `Subtask: ${child.title}`, "data-tm-focus-key": `card-subtask:${child.id}` } });
@@ -239,7 +247,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
             renderAddTag(pills, { add: addTags, suggestions: options.tagSuggestions ?? [], tags, remove: options.removeTag }, true);
         });
         // The first subtask starts here; later ones follow with Enter.
-        if (!options.children.length) add("list-check", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
+        if (!options.children.length && options.addChild) add("list-check", "Checklist", "checklist", () => { if (!newRow) startSubtask(undefined).focus(); });
         if (!shown.priority) add("signal", "Priority", "priority", () => options.edit("priority"));
         if (!shown.repeat) add("repeat", "Repeat", "repeat", () => options.edit("repeat"));
         if (!shown.deadline) add("flag", "Deadline", "deadline", () => options.edit("deadline"));

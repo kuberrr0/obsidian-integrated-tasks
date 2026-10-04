@@ -1,4 +1,6 @@
-import { taskTitleLabel } from "./task-title";
+import { NEW_TASK_TITLE, taskTitleLabel } from "./task-title";
+import { previewCreatedTask } from "./task-store";
+import { splitDestination } from "./structure";
 import { activeProjects, projectStatuses, renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { editable, renderTaskDetails } from "./task-row-details";
@@ -9,7 +11,7 @@ import { cloneTaskFilters, smartListDraft, type SmartListDraft } from "./task-fi
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
 import type { ProjectDraft } from "./project-creator";
-import { draftFromTask, draftFromTitle, draftMatchesTask } from "./task-draft";
+import { draftFromTask, draftFromTitle, draftMatchesTask, draftWithTitle } from "./task-draft";
 import { nextWeek, openDatePopover } from "./date-popover";
 import { openActionMenu, openTagsPopover, openTaskMenu, priorityIcons } from "./task-menu";
 import { openConfirm } from "./confirm-modal";
@@ -36,8 +38,8 @@ import type { OpenEditorState } from "./main";
 import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
-/** What a new task's card is called in its note until a title is typed, as Things names a new to-do. */
-const NEW_TASK_TITLE = "New To-Do";
+/** The id a new task goes by until it is written (written tasks' ids are their note and line). */
+export const NEW_TASK_ID = "tm-new-task";
 
 // Large lists render in pages; more rows load as the "Show more" button scrolls into view.
 const ROW_PAGE = 200;
@@ -141,8 +143,11 @@ export class TaskMainView extends ItemView {
   private liveRegion?: HTMLElement;
   /** A moved task gets a new id (its line changes); focus it again by note and title. */
   private pendingFocus?: { path: string; title: string };
-  /** The card of a task Create new task (or an Add task button) just added; closing it untouched removes the task. */
-  private newCardId?: string;
+  /**
+   * A new task (Create new task, or an Add task button) in its card, written only once its title is entered: what it
+   * will be so far (`draft`), the task it would be where it would go (`task`), and its title and notes as typed.
+   */
+  private newTaskEntry?: { draft: TaskDraft; task: Task; title: string; notes: string };
   private rovingRow?: HTMLElement;
   private moveTargets = new Map<string, { title: string; target: ListDropGroup }>();
   private viewOptions?: ViewOptionsPanel;
@@ -245,6 +250,11 @@ export class TaskMainView extends ItemView {
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     const newPage = this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId;
     if (newPage) {
+      // A new task left for another page is written with a title, else dropped.
+      if (this.newTaskEntry) {
+        void this.endNewTask();
+        if (this.expanded?.id === NEW_TASK_ID) this.expanded = undefined;
+      }
       // A new page, not the first one this view opens with (a new view is recorded as it replaces the last).
       if (this.stateSet && result) result.history = true;
       this.smartListVersion = undefined;
@@ -325,6 +335,7 @@ export class TaskMainView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    await this.endNewTask();
     await this.saveCard();
     this.expanded = undefined;
     this.closed = true;
@@ -513,7 +524,9 @@ export class TaskMainView extends ItemView {
     this.updateSelection();
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", task => this.prepareDrag(task));
     const query = this.baseQuery();
-    const tasks = sortTasks([...this.plugin.index.query(query), ...this.projectItems(query)], this.sort, this.descending);
+    // A new task's card shows where the task would go, among the rest.
+    const entry = this.newTaskEntry ? [this.newTaskEntry.task] : [];
+    const tasks = sortTasks([...this.plugin.index.query(query), ...this.projectItems(query), ...entry], this.sort, this.descending);
     this.selection.retain(tasks);
     this.renderTaskLayouts(container, tasks);
     this.selection.retain(this.visibleTasks);
@@ -751,48 +764,90 @@ export class TaskMainView extends ItemView {
     const state = preset ? { ...this.state, preset } : this.state;
     // Lists and boards show a card in place; the calendar has no room for one.
     const list = this.layout !== "calendar" && !this.propertyFilters.length && (Boolean(this.taskSourcePath) || ["inbox", "today", "upcoming", "all", "tags"].includes(this.state.mode));
-    if (this.plugin.settings.style === "things" && list) void this.newTaskCard(state);
+    if (this.plugin.settings.style === "things" && list) void this.startNewTask(state);
     else this.plugin.openEditor(state);
   }
 
-  /** Writes the new task at once (titled "New To-Do" in its note) and opens its card with the title empty to type. */
-  private async newTaskCard(state: OpenEditorState): Promise<void> {
+  /**
+   * Starts a new task in a card where it would go, its title empty to type, written only once its title is entered,
+   * as the task editor does: Enter writes it, as does closing the card titled; Escape, or closing it untitled, drops it.
+   */
+  private async startNewTask(state: OpenEditorState): Promise<void> {
     await this.collapseCard();
-    const draft: TaskDraft = { ...this.plugin.newTaskDraft(state), title: NEW_TASK_TITLE };
-    const path = draft.destination.split("#")[0];
-    try {
-      const line = await this.plugin.store.create(draft);
-      await this.plugin.index.refreshPath(path);
-      const task = this.plugin.index.tasksForPath(path).find(item => item.line === line);
-      if (!task) return;
-      this.newCardId = task.id;
-      await this.expandCard(task, true);
-      // A view that does not list the new task cannot show its card: edit it in the task editor instead.
-      if (!this.content?.querySelector(".tm-things-card")) {
-        this.expanded = undefined;
-        this.newCardId = undefined;
-        this.plugin.openEditor({ ...this.state, task });
-      }
-    } catch (cause) {
-      new Notice(cause instanceof Error ? cause.message : "Could not add the task.");
+    const draft = this.plugin.newTaskDraft(state);
+    const task = await this.newTaskStandIn(draft);
+    if (!task) { this.plugin.openEditor(state); return; }
+    this.newTaskEntry = { draft, task, title: "", notes: "" };
+    await this.expandCard(task, true);
+    // A view that does not list the new task cannot show its card: the task editor takes it instead.
+    if (!this.content?.querySelector(".tm-things-card")) {
+      this.newTaskEntry = undefined;
+      this.expanded = undefined;
+      this.plugin.openEditor(state);
     }
   }
 
-  /** Closing a new task's card with nothing typed (no title, notes or subtasks) removes the task again. */
-  private async discardNewCard(): Promise<boolean> {
-    const card = this.expanded;
-    if (!card || card.id !== this.newCardId) return false;
-    this.newCardId = undefined;
-    const task = this.plugin.index.taskById(card.id);
-    if (!task || card.title.trim() || card.notes.trim() || task.childIds.length) return false;
+  /** The task `draft` would be once written, at the place it would take in its note, standing in for it meanwhile. */
+  private async newTaskStandIn(draft: TaskDraft): Promise<Task | undefined> {
+    const path = splitDestination(draft.destination).path;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    const content = file instanceof TFile ? await this.app.vault.cachedRead(file) : "";
+    const settings = this.plugin.settings;
+    const task = previewCreatedTask(path, content, { ...draft, title: NEW_TASK_TITLE }, {
+      dateFormat: this.plugin.dateFormat(), position: settings.newTaskPosition, linkDates: settings.linkDates, sectionHeadingLevel: settings.sectionHeadingLevel
+    });
+    // Just before the task now on its line, under an id no written task has.
+    return task && { ...task, id: NEW_TASK_ID, line: task.line - 0.5, endLine: task.line - 0.5, childIds: [] };
+  }
+
+  /**
+   * Ends the new task: written when it has a title (properties typed into it apply, as in the task editor), else
+   * dropped. Returns the task written.
+   */
+  private async endNewTask(): Promise<Task | undefined> {
+    const entry = this.newTaskEntry;
+    if (!entry) return undefined;
+    this.newTaskEntry = undefined;
+    if (!entry.title.trim()) return undefined;
+    const typed = draftWithTitle(entry.draft, "", entry.title, new Date(), this.plugin.dateFormat());
+    // A title of properties alone ("tomorrow p1") stays the title.
+    const draft: TaskDraft = { ...typed, title: typed.title || entry.title.trim(), description: entry.notes.trim() ? entry.notes : undefined };
+    const path = splitDestination(draft.destination).path;
     try {
-      await this.plugin.store.delete(task);
-      await this.plugin.index.refreshPath(task.path);
-      return true;
+      const line = await this.plugin.store.create(draft);
+      await this.plugin.index.refreshPath(path);
+      return this.plugin.index.tasksForPath(path).find(task => task.line === line);
     } catch (cause) {
-      new Notice(cause instanceof Error ? cause.message : "Could not remove the empty task.");
-      return false;
+      new Notice(cause instanceof Error ? cause.message : "Could not add the task.");
+      return undefined;
     }
+  }
+
+  /** A task by id as it now reads: the index's, or the new task not yet written. */
+  private liveTask(id: string): Task | undefined {
+    return id === NEW_TASK_ID ? this.newTaskEntry?.task : this.plugin.index.taskById(id);
+  }
+
+  /** Writes a change to tasks; the new task not yet written takes it into what it will be instead. */
+  private updateTasks(tasks: Task[], patch: BulkTaskPatch | ((task: Task) => BulkTaskPatch), failure?: string, keep?: { moveTo?: string } | false): Promise<void> {
+    const entry = this.newTaskEntry;
+    if (entry && tasks.some(task => task.id === NEW_TASK_ID)) {
+      this.patchNewTask(typeof patch === "function" ? patch(entry.task) : patch);
+      tasks = tasks.filter(task => task.id !== NEW_TASK_ID);
+      if (!tasks.length) return Promise.resolve();
+    }
+    return this.commit(() => this.plugin.store.bulkUpdate(tasks, patch), failure, keep);
+  }
+
+  /** Changes what the new task will be. It stays where it is shown, its project naming the note it will go to. */
+  private patchNewTask(patch: BulkTaskPatch): void {
+    const entry = this.newTaskEntry;
+    if (!entry) return;
+    entry.draft = { ...entry.draft, ...patch };
+    const { destination, description, ...fields } = patch;
+    void destination; void description;
+    entry.task = { ...entry.task, ...fields };
+    this.renderTaskResults();
   }
 
   /** The Open project actions command: the menu below the project title's "…" button. */
@@ -1496,11 +1551,13 @@ export class TaskMainView extends ItemView {
 
   /** Inbox and the active projects; choosing one moves the tasks (with their subtasks) there. */
   private openProjectChoice(tasks: Task[], anchor: HTMLElement, beside = false, done?: () => void): void {
-    const current = tasks.every(task => task.path === tasks[0].path) ? tasks[0].path : undefined;
+    // The new task's note is the one it will go to.
+    const pathOf = (task: Task): string => task.id === NEW_TASK_ID && this.newTaskEntry ? splitDestination(this.newTaskEntry.draft.destination).path : task.path;
+    const current = tasks.every(task => pathOf(task) === pathOf(tasks[0])) ? pathOf(tasks[0]) : undefined;
     const move = (path: string): void => {
       done?.();
-      const moving = tasks.filter(task => task.path !== path);
-      if (moving.length) void this.commit(() => this.plugin.store.bulkUpdate(moving, { destination: path }), "Could not move the task.", { moveTo: path });
+      const moving = tasks.filter(task => pathOf(task) !== path);
+      if (moving.length) void this.updateTasks(moving, { destination: path }, "Could not move the task.", { moveTo: path });
     };
     openChoicePopover({
       anchor, beside, label: "Move to project", choices: this.projectChoices(current), selected: current,
@@ -1541,11 +1598,11 @@ export class TaskMainView extends ItemView {
     const others = this.plugin.index.tagSummaries().map(tag => tag.name).filter(name => !counts.has(name)).map(name => ({ name, state: "none" as const }));
     let queue = Promise.resolve();
     const change = (next: (tags: string[]) => string[]): void => {
-      queue = queue.then(() => this.commit(() => {
-        const current = ids.map(id => this.plugin.index.taskById(id)).filter((task): task is Task => Boolean(task));
+      queue = queue.then(() => {
+        const current = ids.map(id => this.liveTask(id)).filter((task): task is Task => Boolean(task));
         const changed = current.filter(task => next(task.tags ?? []).join("\n") !== (task.tags ?? []).join("\n"));
-        return changed.length ? this.plugin.store.bulkUpdate(changed, task => ({ tags: next(task.tags ?? []) })) : Promise.resolve([]);
-      }));
+        return changed.length ? this.updateTasks(changed, task => ({ tags: next(task.tags ?? []) })) : undefined;
+      });
     };
     openTagsPopover({
       anchor, beside, tags: [...own, ...others],
@@ -1561,7 +1618,8 @@ export class TaskMainView extends ItemView {
       choose: value => {
         done?.();
         const repeat = value || undefined;
-        void this.commit(() => this.plugin.store.bulkUpdate(tasks.filter(task => task.repeat !== repeat), { repeat }));
+        const changed = tasks.filter(task => task.repeat !== repeat);
+        if (changed.length) void this.updateTasks(changed, { repeat });
       }
     });
   }
@@ -1589,7 +1647,7 @@ export class TaskMainView extends ItemView {
       choose: value => {
         done?.();
         const patch: BulkTaskPatch = value === "someday" ? { deferDate: undefined, someday: true } : { deferDate: value || undefined, someday: undefined };
-        void this.commit(() => this.plugin.store.bulkUpdate(tasks, patch));
+        void this.updateTasks(tasks, patch);
       }
     });
   }
@@ -2015,8 +2073,11 @@ export class TaskMainView extends ItemView {
   private async expandCard(task: Task, blank = false): Promise<void> {
     await this.cardClosing;
     if (this.expanded?.id === task.id) return;
-    if (!(this.newCardId && await this.discardNewCard())) await this.saveCard();
-    const fresh = this.plugin.index.taskById(task.id) ?? task;
+    // The card open before is saved (a new task's written, or dropped untitled), which may move this task's line.
+    if (this.expanded?.id === NEW_TASK_ID) await this.endNewTask();
+    else await this.saveCard();
+    const latest = this.plugin.index.taskById(task.id);
+    const fresh = (latest?.raw === task.raw ? latest : this.plugin.index.tasksForPath(task.path).find(item => item.raw === task.raw)) ?? task;
     this.expanded = { id: fresh.id, title: blank ? "" : fresh.title, notes: cardNotes(fresh.description) };
     // The card takes the place of the row and its subtask rows; it grows out of the space they filled.
     const replaced = [fresh.id, ...this.expandedDescendants()];
@@ -2082,9 +2143,11 @@ export class TaskMainView extends ItemView {
    */
   private collapseCard(): Promise<void> {
     if (this.cardClosing || !this.expanded) return this.cardClosing ?? Promise.resolve();
-    const id = this.expanded.id;
+    let id = this.expanded.id;
     this.cardClosing = (async () => {
-      if (!(this.newCardId && await this.discardNewCard())) await this.saveCard();
+      // A new task's card writes it (with a title, else drops it); the row then focused is the task written.
+      if (id === NEW_TASK_ID) id = (await this.endNewTask())?.id ?? "";
+      else await this.saveCard();
       const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
       if (card) await animateCardClose(card, this.cardRowsHeight || card.querySelector(".tm-things-card-head")!.getBoundingClientRect().height + 10);
       this.expanded = undefined;
@@ -2135,6 +2198,7 @@ export class TaskMainView extends ItemView {
   }
 
   private renderTaskCard(list: HTMLElement, task: Task, depth: number): void {
+    if (task.id === NEW_TASK_ID) { this.renderNewTaskCard(list, task, depth); return; }
     const expanded = this.expanded!;
     const focus = this.cardFocus;
     this.cardFocus = undefined;
@@ -2172,9 +2236,41 @@ export class TaskMainView extends ItemView {
     });
   }
 
+  /**
+   * The new task's card: what is set in it is what will be written. Enter writes it once titled, as closing it does;
+   * closed untitled (Escape), it goes. Its subtasks wait until it is written.
+   */
+  private renderNewTaskCard(list: HTMLElement, task: Task, depth: number): void {
+    const entry = this.newTaskEntry;
+    if (!entry) return;
+    const focus = this.cardFocus;
+    this.cardFocus = undefined;
+    const tags = (): string[] => this.newTaskEntry?.task.tags ?? [];
+    renderThingsTaskCard(list, {
+      task, depth, draft: this.expanded!, tags: tags(), focus, dateFormat: this.plugin.dateFormat(), children: [],
+      change: draft => {
+        if (this.expanded?.id === task.id) this.expanded = { id: task.id, ...draft };
+        if (this.newTaskEntry) Object.assign(this.newTaskEntry, { title: draft.title, notes: draft.notes });
+      },
+      submit: () => { if (this.newTaskEntry?.title.trim()) void this.collapseCard(); },
+      edit: property => void this.editFromCard(task.id, property),
+      collapse: () => void this.collapseCard(),
+      renameChild: () => {},
+      addTags: added => this.patchNewTask({ tags: [...new Set([...tags(), ...added])] }),
+      removeTag: tag => this.patchNewTask({ tags: tags().filter(item => item !== tag) }),
+      // As a card names a note typed into its title: "Site › Copy".
+      project: { label: entry.draft.destination.replace(/\.md(?=#|$)/i, "").split("/").pop()!.replace("#", " › "), choose: anchor => this.openProjectChoice([task], anchor) },
+      tagSuggestions: this.plugin.index.tagSummaries().map(tag => tag.name)
+    });
+  }
+
   /** Opens a tag's view; an open card is saved and closed first, so nothing typed in it is lost. */
   private async openTagView(tag: string): Promise<void> {
-    if (this.expanded) { await this.saveCard(); this.expanded = undefined; }
+    if (this.expanded) {
+      if (this.expanded.id === NEW_TASK_ID) await this.endNewTask();
+      else await this.saveCard();
+      this.expanded = undefined;
+    }
     await this.plugin.openTag(tag).catch((error: unknown) => { new Notice(String(error)); });
   }
 
@@ -2263,8 +2359,8 @@ export class TaskMainView extends ItemView {
   private async editFromCard(id: string, property: TaskEditorProperty): Promise<void> {
     const anchor = this.popoverAnchor();
     await this.saveCard();
-    const task = this.plugin.index.taskById(id);
-    if (task && !this.openPropertyEditor([task], property, anchor)) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
+    const task = this.liveTask(id);
+    if (task && !this.openPropertyEditor([task], property, anchor) && id !== NEW_TASK_ID) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
   }
 
   /** Priority edits in a small list beside the property: P1–P3 or none, for every task given. */
@@ -2279,10 +2375,7 @@ export class TaskMainView extends ItemView {
       choose: value => {
         const priority = value ? Number(value) as Task["priority"] : undefined;
         const changed = tasks.filter(task => task.priority !== priority);
-        if (!changed.length) return;
-        void this.plugin.store.bulkUpdate(changed, { priority }).then(async paths => {
-          for (const path of paths) await this.plugin.index.refreshPath(path);
-        }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); });
+        if (changed.length) void this.updateTasks(changed, { priority });
       }
     });
     return true;
@@ -2320,9 +2413,7 @@ export class TaskMainView extends ItemView {
           if (value.time !== first.scheduledTime) patch.scheduledTime = value.time;
           if (value.duration !== first.durationMinutes) patch.durationMinutes = value.duration;
         }
-        void this.plugin.store.bulkUpdate(tasks, patch).then(async paths => {
-          for (const path of paths) await this.plugin.index.refreshPath(path);
-        }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not update the task."); });
+        void this.updateTasks(tasks, patch);
       }
     });
     return true;
