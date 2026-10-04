@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async importOriginal => ({ ...await importOriginal<typeof import("./obsidian-mock")>(), Notice: class {}, setIcon: vi.fn() }));
-import { renderCalendar, UNSCHEDULED_PAGE, type CalendarOptions } from "../src/calendar-view";
+import { renderCalendar, type CalendarOptions } from "../src/calendar-view";
 import { scanTasks } from "../src/parser";
 import type { Task } from "../src/types";
 
@@ -66,30 +66,12 @@ const undated = (count: number): Task[] => scanTasks("Big.md", Array.from({ leng
 
 afterEach(() => { vi.useRealTimers(); focused = undefined; });
 
-describe("unscheduled tray", () => {
-  it.each([false, true])("renders undated tasks in pages of 200 (planner: %s)", planning => {
-    const { container } = render({ tasks: undated(450), planning });
-    const tray = container.byClass("tm-calendar-unscheduled")[0];
-    expect(tray.attrs["data-tm-scroll-key"]).toBe("calendar-tray");
-    const cards = () => tray.byClass("tm-calendar-task");
-    expect(cards()).toHaveLength(UNSCHEDULED_PAGE);
-    const more = tray.byClass("tm-show-more-tasks")[0];
-    expect(more.text).toBe("Show 200 more (250 hidden)");
-    more.dispatchEvent(new Event("click"));
-    expect(cards()).toHaveLength(400);
-    expect(more.text).toBe("Show 50 more (50 hidden)");
-    more.dispatchEvent(new Event("click"));
-    expect(cards()).toHaveLength(450);
-    expect(tray.byClass("tm-show-more-tasks")).toHaveLength(0);
-    expect(focused?.text).toBe("Undated 400");
-    expect(cards().map(card => card.byClass("tm-calendar-task-title")[0].text).slice(-2)).toEqual(["Undated 448", "Undated 449"]);
-  });
-
-  it("shows every task without a button when they fit in one page", () => {
-    const { container } = render({ tasks: undated(3) });
-    expect(container.byClass("tm-calendar-task")).toHaveLength(3);
-    expect(container.byClass("tm-show-more-tasks")).toHaveLength(0);
-  });
+it("draws no tray for tasks without a date: they have no day in the calendar", () => {
+  for (const scope of ["month", "week", "day", "year"] as const) {
+    const { container } = render({ scope, tasks: undated(3) });
+    expect(container.byClass("tm-calendar-task")).toHaveLength(0);
+    expect(container.byClass("tm-calendar-unscheduled")).toHaveLength(0);
+  }
 });
 
 it("builds a year view month's task list only when it is first opened", () => {

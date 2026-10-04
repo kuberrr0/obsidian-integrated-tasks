@@ -114,11 +114,11 @@ With tasks selected, these keys change all of them; the lists open just below th
 
 See your schedule across four days, a week, or a month. Day and year views are also available from the command palette.
 
-![Weekly calendar with timed tasks and the unscheduled task planning sidebar](resources/images/All%20tasks%20calendar%20week%20plan%20tasks.png)
+![Weekly calendar with timed tasks](resources/images/All%20tasks%20calendar%20week%20plan%20tasks.png)
 
 Drag tasks to a new date or time to reschedule them. In the daily and weekly layouts, drag across empty time slots to create a task, or resize a timed task to change how much time it takes.
 
-Turn on **Plan tasks** to see unscheduled tasks beside the calendar, then drag them into your schedule. Tasks without a time stay in a separate area above the time slots.
+Tasks without a date wait in the task sidebar beside the calendar; drag them onto a day or time to schedule them. Tasks without a time stay in a separate area above the time slots.
 
 The calendar places a task on its scheduled date, or on its deadline if it has no scheduled date.
 

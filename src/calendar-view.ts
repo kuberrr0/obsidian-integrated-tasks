@@ -8,10 +8,8 @@ import { addDays, SLOT_MINUTES, calendarDate, calendarDays, calendarTime, localD
 import type { Project, Task } from "./types";
 import { renderProjectProgress } from "./project-progress";
 
+/** Tasks without a date have no day here: the task sidebar lists them beside the calendar, to drag onto one. */
 export interface CalendarOptions {
-  planning?: boolean;
-  planningOpen?: boolean;
-  planningChanged?: (open: boolean) => void;
   anchor: string;
   scope: CalendarScope;
   tasks: Task[];
@@ -36,14 +34,10 @@ export interface CalendarOptions {
   initialScrollTop?: number;
   /** False draws no toolbar, and the period and scope then stay as given (no keys change them either). */
   toolbar?: boolean;
-  /** Draws only the tasks without a date, without the days. */
-  unscheduledOnly?: boolean;
   /** False leaves out a day's all-day row (its tasks without a time). */
   allDay?: boolean;
 }
 
-/** Unscheduled tasks render in pages so a large vault does not build every card at once. */
-export const UNSCHEDULED_PAGE = 200;
 const HOUR_HEIGHT = 48;
 const DEFAULT_SLOT = 36; // 09:00
 const KEY_SAVE_DELAY_MS = 500;
@@ -70,11 +64,12 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   const byDate = new Map<string, Task[]>();
   const byMonth = new Map<string, Task[]>();
   for (const task of options.tasks) {
-    const key = calendarDate(task) ?? "";
+    const key = calendarDate(task);
+    if (!key) continue;
     const group = byDate.get(key) ?? [];
     group.push(task);
     byDate.set(key, group);
-    if (key && options.scope === "year") {
+    if (options.scope === "year") {
       const month = byMonth.get(key.slice(0, 7)) ?? [];
       month.push(task);
       byMonth.set(key.slice(0, 7), month);
@@ -106,17 +101,6 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   const body = root.createDiv({ cls: "tm-calendar-body" });
   // Stable scroll keys let the task view restore scroll positions across re-renders.
   const surface = body.createDiv({ cls: "tm-calendar-surface", attr: { "data-tm-scroll-key": "calendar-surface" } });
-  const planner = options.planning ? body.createEl("aside", { cls: "tm-calendar-planner", attr: { "aria-label": "Plan tasks", "data-tm-scroll-key": "calendar-planner" } }) : undefined;
-  if (planner && toolbar) {
-    planner.hidden = !options.planningOpen;
-    const plan = toolbar.createEl("button", { cls: "tm-calendar-plan-toggle", text: "Plan tasks", attr: { "aria-expanded": String(!planner.hidden) } });
-    const icon = plan.createSpan(); setIcon(icon, "panel-right");
-    plan.addEventListener("click", () => {
-      planner.hidden = !planner.hidden;
-      plan.setAttribute("aria-expanded", String(!planner.hidden));
-      options.planningChanged?.(!planner.hidden);
-    });
-  }
 
   // Where a dragged task would land shows as lists show it: a faint accent slot, at its time and as long as the task in
   // a day's hours, or after a day's tasks.
@@ -472,9 +456,7 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     const now = new Date();
     scroll.scrollTop = Math.max(0, (now.getHours() + now.getMinutes() / 60 - 1) * HOUR_HEIGHT);
   };
-  if (options.unscheduledOnly) {
-    // Only the tasks without a date, below.
-  } else if (options.scope === "day" || options.scope === "week" || options.scope === "four-day") {
+  if (options.scope === "day" || options.scope === "week" || options.scope === "four-day") {
     if (options.scope === "day") {
       if (options.allDay !== false) {
         const allDay = surface.createDiv({ cls: "tm-calendar-allday" });
@@ -528,35 +510,6 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
           for (const task of monthTasks) taskCard(list, task);
         });
       }
-    }
-  }
-  const unscheduled = byDate.get("") ?? [];
-  if (unscheduled.length || planner) {
-    const tray = (planner ?? surface).createEl("section", { cls: "tm-calendar-unscheduled", attr: { "data-tm-scroll-key": "calendar-tray" } });
-    tray.createEl("h3", { text: "Unscheduled" });
-    tray.createEl("p", { cls: "tm-calendar-plan-hint", text: unscheduled.length ? "Drag a task onto the calendar to schedule it." : "No unscheduled tasks." });
-    const list = tray.createDiv({ cls: "tm-calendar-unscheduled-list" });
-    let shown = 0;
-    const showMore = (): HTMLElement | undefined => {
-      const page = unscheduled.slice(shown, shown + UNSCHEDULED_PAGE);
-      shown += page.length;
-      return page.map(task => taskCard(list, task))[0];
-    };
-    showMore();
-    if (shown < unscheduled.length) {
-      const more = tray.createEl("button", { cls: "tm-show-more-tasks" });
-      const label = (): void => {
-        const remaining = unscheduled.length - shown;
-        more.setText(`Show ${Math.min(UNSCHEDULED_PAGE, remaining)} more (${remaining} hidden)`);
-      };
-      label();
-      more.addEventListener("click", () => {
-        const first = showMore();
-        if (shown < unscheduled.length) { label(); return; }
-        // The button goes away, so keep focus on the first newly shown task.
-        more.remove();
-        first?.querySelector<HTMLElement>(".tm-calendar-task-title")?.focus();
-      });
     }
   }
 }

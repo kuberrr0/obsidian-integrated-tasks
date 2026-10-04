@@ -73,41 +73,25 @@ it.each(["day", "week"] as const)("snaps %s calendar drops to quarter hours whil
   }
 });
 
-it("toggles the main-view planner and schedules an unscheduled task into the four-day calendar", async () => {
+it("leaves tasks without a date out, with no planner or tray for them (the task sidebar lists them), and drags a task to another day", () => {
   const container = new Element();
-  const task = scanTasks("Tasks.md", "- [ ] Plan workshop")[0];
-  const move = vi.fn().mockResolvedValue(undefined), planningChanged = vi.fn(), navigate = vi.fn();
+  const [undated, dated] = scanTasks("Tasks.md", "- [ ] Plan workshop\n- [ ] Book the room 2026-09-21");
+  const move = vi.fn().mockResolvedValue(undefined), navigate = vi.fn();
   renderCalendar(container as unknown as HTMLElement, {
-    anchor: "2026-09-20", scope: "four-day", tasks: [task], dateFormat: "YYYY-MM-DD",
-    planning: true, navigate, planningChanged, create: vi.fn(), edit: vi.fn(), move, resize: vi.fn()
+    anchor: "2026-09-20", scope: "four-day", tasks: [undated, dated], dateFormat: "YYYY-MM-DD",
+    navigate, create: vi.fn(), edit: vi.fn(), move, resize: vi.fn()
   });
-  const planner = container.all().find(el => el.cls === "tm-calendar-planner")! as Element & { hidden: boolean };
-  expect(planner.hidden).toBe(true);
-  const toggle = container.all().find(el => el.cls === "tm-calendar-plan-toggle")!;
-  toggle.dispatchEvent(new Event("click"));
-  expect(planner.hidden).toBe(false);
-  expect(toggle.attrs["aria-expanded"]).toBe("true");
-  expect(planningChanged).toHaveBeenCalledWith(true);
+  expect(container.all().some(el => /tm-calendar-(planner|plan-toggle|unscheduled)/.test(el.cls) || el.text === "Plan tasks")).toBe(false);
+  const cards = container.all().filter(el => el.cls.split(" ").includes("tm-calendar-task"));
+  expect(cards).toHaveLength(1);
   const lanes = container.all().filter(el => el.cls === "tm-calendar-lane");
   expect(lanes).toHaveLength(4);
   expect(lanes[3].attrs["aria-label"]).toBe("Daily schedule for 2026-09-23");
-  const card = planner.all().find(el => el.cls === "tm-calendar-task")!;
-  card.dispatchEvent(Object.assign(new Event("dragstart"), { clientY: 0 }));
-  lanes[1].dispatchEvent(Object.assign(new Event("drop"), { clientY: 432 }));
-  expect(move).toHaveBeenCalledWith(task, "2026-09-21", "09:00");
-  toggle.dispatchEvent(new Event("click"));
-  expect(planner.hidden).toBe(true);
+  cards[0].dispatchEvent(Object.assign(new Event("dragstart"), { clientY: 0 }));
+  lanes[2].dispatchEvent(Object.assign(new Event("drop"), { clientY: 432 }));
+  expect(move).toHaveBeenCalledWith(dated, "2026-09-22", "09:00");
   container.all().find(el => el.attrs["aria-label"] === "Next period")!.dispatchEvent(new Event("click"));
   expect(navigate).toHaveBeenCalledWith("2026-09-24", "four-day");
-});
-
-it("does not add the planning sidebar to embedded calendars", () => {
-  const container = new Element();
-  renderCalendar(container as unknown as HTMLElement, {
-    anchor: "2026-09-20", scope: "month", tasks: [], dateFormat: "YYYY-MM-DD",
-    navigate: vi.fn(), create: vi.fn(), edit: vi.fn(), move: vi.fn(), resize: vi.fn()
-  });
-  expect(container.all().some(el => el.cls === "tm-calendar-plan-toggle")).toBe(false);
 });
 
 it("keeps today's hour boundaries aligned with other days despite the current-time marker", () => {

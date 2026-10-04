@@ -96,7 +96,6 @@ export class TaskMainView extends ItemView {
   private projectLayout: "list" | "gantt" = "list";
   private ganttAnchor = addDays(todayIso(), -2);
   private ganttZoom: GanttZoom = "month";
-  private calendarPlanningOpen = false;
   private calendarScope: CalendarScope = "month";
   private calendarAnchor = todayIso();
   private showCompleted = false;
@@ -578,8 +577,6 @@ export class TaskMainView extends ItemView {
   private renderTaskLayouts(container: HTMLElement, tasks: Task[]): void {
     if (this.layout === "calendar") {
       renderCalendar(container, {
-        planning: true, planningOpen: this.calendarPlanningOpen,
-        planningChanged: open => { this.calendarPlanningOpen = open; },
         anchor: this.calendarAnchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
         color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
         priorityColors: this.plugin.settings.calendarPriorityColors,
