@@ -31,7 +31,7 @@ import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
 import { TaskQuickSwitcher } from "./quick-switcher";
 
-const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay", "linkTags", "taskHoverHighlight", "wrapTaskTitles", "wrapCalendarTaskTitles", "wrapKanbanTaskTitles", "showSubtaskCounts", "showGroupTaskCounts"];
+const LEGACY_SETTINGS = ["taskListRowHeight", "taskListRowHeightMultiplier", "hiddenListTaskProperties", "hiddenKanbanTaskProperties", "tasksHeading", "taskDeadlineDisplay", "linkTags", "taskHoverHighlight", "wrapTaskTitles", "wrapCalendarTaskTitles", "wrapKanbanTaskTitles", "showSubtaskCounts", "showGroupTaskCounts", "weeklyReview"];
 
 export interface OpenEditorState extends TaskViewState {
   focusProperty?: TaskEditorOptions["focusProperty"];
@@ -73,14 +73,12 @@ export default class TaskManagerPlugin extends Plugin {
     this.addRibbonIcon("circle-check-big", "Open task manager", () => void this.activateNavigation().catch((error) => new Notice(String(error))));
 
     const commands: Array<[TaskViewMode, string, string]> = [
-      ["dashboard", "Open task dashboard", "open-task-dashboard"],
       ["inbox", "Open inbox", "open-inbox"],
       ["today", "Open today", "open-today"],
       ["upcoming", "Open upcoming", "open-upcoming"],
       ["all", "Open all tasks", "open-all-tasks"],
       ["projects", "Open projects", "open-projects"],
-      ["tags", "Open tags", "open-tags"],
-      ["review", "Open weekly review", "open-weekly-review"]
+      ["tags", "Open tags", "open-tags"]
     ];
     for (const [mode, name, id] of commands) {
       this.addCommand({ id, name, callback: () => void this.openTaskView({ mode }).catch((error) => new Notice(String(error))) });
@@ -94,7 +92,6 @@ export default class TaskManagerPlugin extends Plugin {
             const view = this.app.workspace.getActiveViewOfType(TaskMainView);
             if (!view) return false;
             const state = view.getState();
-            if (state.mode === "dashboard") return false;
             const isProjects = state.mode === "projects" && !view.pagePath;
             if (isProjects !== (scope === "projects")) return false;
             if (!checking) {

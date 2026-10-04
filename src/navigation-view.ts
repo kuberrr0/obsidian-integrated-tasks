@@ -17,10 +17,6 @@ const NAV_GROUPS: NavEntry[][] = [
     { mode: "today", label: "Today", icon: "star", color: "yellow", count: true },
     { mode: "upcoming", label: "Upcoming", icon: "calendar-days", color: "red" },
     { mode: "all", label: "All Tasks", icon: "layers", color: "cyan" }
-  ],
-  [
-    { mode: "review", label: "Weekly Review", icon: "notebook-pen", color: "green" },
-    { mode: "dashboard", label: "Dashboard", icon: "layout-dashboard", color: "purple" }
   ]
 ];
 

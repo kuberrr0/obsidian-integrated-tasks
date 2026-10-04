@@ -5,7 +5,6 @@ import { scanTasks } from "../src/parser";
 import { matchesFilter, propertyValue } from "../src/task-properties";
 import { groupTasks, sortTasks, taskMatchesQuery } from "../src/query";
 import { parseTaskQuery } from "../src/task-query";
-import { todaySummary } from "../src/today-summary";
 import { taskTagSummaries } from "../src/task-tags";
 import { TaskIndex } from "../src/task-index";
 import { DEFAULT_SETTINGS, type TaskFilter } from "../src/types";
@@ -47,12 +46,6 @@ describe("status as a property", () => {
 });
 
 describe("counting statuses", () => {
-  it("counts in-progress tasks today and leaves cancelled ones out of the total", () => {
-    const now = new Date(2026, 8, 27, 14);
-    const today = scanTasks("A.md", ["- [x] Done 2026-09-27", "- [-] Dropped 2026-09-27", "- [/] Doing 2026-09-27", "- [/] Late 2026-09-20", "- [/] Later 2026-09-30", "- [ ] Plan 2026-09-27"].join("\n"), now);
-    expect(todaySummary(today, now)).toMatchObject({ total: 3, done: 1, inProgress: 2, overdue: 1 });
-  });
-
   it("excludes cancelled tasks from tag and project progress", async () => {
     expect(taskTagSummaries(tasks)).toEqual([{ name: "t", openTasks: 2, completedTasks: 1 }]);
     const file = Object.assign(new TFile(), { path: "Project.md", extension: "md" });

@@ -57,7 +57,7 @@ export interface Project extends ProjectProperties {
   archived: boolean;
 }
 
-export type TaskViewMode = "dashboard" | "inbox" | "today" | "upcoming" | "all" | "projects" | "tags" | "smartLists" | "review";
+export type TaskViewMode = "inbox" | "today" | "upcoming" | "all" | "projects" | "tags" | "smartLists";
 
 export interface TaskViewState {
   smartListId?: string;
@@ -152,8 +152,6 @@ export interface TaskManagerSettings {
   style: "griply" | "things";
   /** Stamp tasks with the date they were completed. */
   completionDates: boolean;
-  /** Weekly review sections marked as reviewed, for the ISO week they were reviewed in. */
-  weeklyReview: { week: string; reviewed: string[] };
   /** Folders and notes whose tasks are left out of every view. */
   ignoredPaths: string[];
   /** Tags whose notes (frontmatter) and tasks are left out of every view. */
@@ -178,7 +176,6 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   fileSortOrder: "alphabetical",
   style: "things",
   completionDates: false,
-  weeklyReview: { week: "", reviewed: [] },
   ignoredPaths: [],
   ignoredTags: []
 };

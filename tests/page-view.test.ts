@@ -452,7 +452,7 @@ it("keeps the pressed task selected if layout movement retargets contextmenu", (
 });
 
 
-it("allows normal navigation from project files while keeping dashboards persistent", async () => {
+it("allows normal navigation from project files while keeping lists persistent", async () => {
   const view = new TaskMainView({} as WorkspaceLeaf, {} as TaskManagerPlugin);
   vi.spyOn(view, "render").mockImplementation(() => {});
   expect(view.navigation).toBe(false);
@@ -666,8 +666,7 @@ it("edits the task on the current editor line only when task mode is off", () =>
    [{ mode: "tags", layout: "calendar" }, false],
    [{ mode: "tags", tag: "work", layout: "calendar" }, true],
    [{ mode: "smartLists", layout: "calendar" }, false],
-   [{ mode: "smartLists", smartListId: "missing", layout: "calendar" }, false],
-   [{ mode: "dashboard", layout: "list" }, true]
+   [{ mode: "smartLists", smartListId: "missing", layout: "calendar" }, false]
  ] as const)("enables calendar commands only for a rendered calendar: %j", async (state, expected) => {
    const plugin = new TaskManagerPlugin({} as App, {} as never);
    const view = new TaskMainView({} as WorkspaceLeaf, plugin);

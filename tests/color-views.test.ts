@@ -179,7 +179,6 @@ it("lays the navigation out like Things: coloured lists in groups, counts for In
   expect(groups.map(rows)).toEqual([
     [["Inbox", "blue", "1"]],
     [["Today", "yellow", "3"], ["Upcoming", "red", undefined], ["All Tasks", "cyan", undefined]],
-    [["Weekly Review", "green", undefined], ["Dashboard", "purple", undefined]],
     [["Projects", "section", undefined]], [["Tags", "section", undefined]]
   ]);
   // All Tasks folds its smart lists away from its chevron; they start open.

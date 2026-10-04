@@ -36,9 +36,7 @@ export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string
       return task.path === query.projectPath;
     case "projects":
       return false;
-    case "dashboard":
     case "smartLists":
-    case "review":
     case "tags":
     case "all":
       return true;

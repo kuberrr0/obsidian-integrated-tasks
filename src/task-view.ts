@@ -5,8 +5,6 @@ import { editable, renderTaskDetails } from "./task-row-details";
 import { renderThingsProjectDetails, renderThingsTaskDetails } from "./things-row-details";
 import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardProperties, renderThingsTaskCard, repeatIcon, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
-import { renderDashboard } from "./dashboard-view";
-import { renderTodaySummary, todaySummary } from "./today-summary";
 import { cloneTaskFilters, smartListDraft, type SmartListDraft } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import type { TaskEditorProperty } from "./task-editor";
@@ -31,7 +29,7 @@ import { addDays, rescheduledDraft, type CalendarScope } from "./calendar";
 import { STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, checkboxLabel, statusClass } from "./task-status";
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
-import { groupTasks, isDeferred, orderTaskTree, sortTasks, taskMatchesQuery } from "./query";
+import { groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "./query";
 import { startTaskDrag, type SidebarDrop } from "./sidebar-drop";
 import type TaskManagerPlugin from "./main";
 import type { OpenEditorState } from "./main";
@@ -43,12 +41,10 @@ const NEW_TASK_TITLE = "New To-Do";
 
 // Large lists render in pages; more rows load as the "Show more" button scrolls into view.
 const ROW_PAGE = 200;
-// The first few lists (sections, board columns, dashboard cards) always show some rows,
+// The first few lists (sections, board columns) always show some rows,
 // even after the shared page budget is spent, so no visible group looks empty.
 const MIN_LIST_ROWS = 20;
 const MIN_ROW_LISTS = 10;
-// The weekly review lists undated tasks in notes unedited for this long.
-const STALE_DAYS = 30;
 // Swipe gestures on touch screens, in pixels.
 const SWIPE_START = 12;
 const SWIPE_COMMIT = 80;
@@ -60,15 +56,13 @@ const DOUBLE_TAP_MS = 350;
 interface FocusKey { taskId?: string; index?: number; part?: string; key?: string }
 
 const TITLES: Record<TaskViewMode, string> = {
-  dashboard: "Task Dashboard",
   inbox: "Inbox",
   today: "Today",
   upcoming: "Upcoming",
   all: "All Tasks",
   projects: "Projects",
   tags: "Tags",
-  smartLists: "Smart Lists",
-  review: "Weekly Review"
+  smartLists: "Smart Lists"
 };
 
 /**
@@ -167,7 +161,6 @@ export class TaskMainView extends ItemView {
   get pagePath(): string | undefined { return this.state.pagePath ?? this.state.projectPath; }
 
   get hasCalendar(): boolean {
-    if (this.state.mode === "dashboard") return true;
     if (this.layout !== "calendar") return false;
     if (this.state.mode === "projects" && !this.pagePath) return false;
     if (this.state.mode === "tags" && !this.state.tag) return false;
@@ -387,22 +380,11 @@ export class TaskMainView extends ItemView {
     this.viewOptions = undefined;
     this.liveRegion = container.createDiv({ cls: "tm-sr-only", attr: { "aria-live": "polite" } });
     container.addClass("tm-main-view");
-    container.classList.toggle("is-dashboard-view", this.state.mode === "dashboard");
     container.classList.toggle("tm-density-compact", this.plugin.settings.density === "compact");
     container.classList.toggle("tm-style-things", this.plugin.settings.style === "things");
     container.classList.toggle("tm-style-griply", this.plugin.settings.style === "griply");
     container.classList.toggle("is-calendar-view", this.layout === "calendar" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
     container.classList.toggle("is-kanban-view", this.layout === "kanban" && (this.state.mode !== "projects" || Boolean(this.pagePath)));
-    if (this.state.mode === "dashboard") {
-      container.classList.remove("is-calendar-view", "is-kanban-view");
-      this.renderTaskDashboard(container);
-      return;
-    }
-    if (this.state.mode === "review") {
-      container.classList.remove("is-calendar-view", "is-kanban-view");
-      this.renderWeeklyReview(container);
-      return;
-    }
     if (this.state.mode === "smartLists" && !this.state.smartListId) {
       container.classList.remove("is-calendar-view", "is-kanban-view");
       this.renderSmartLists(container);
@@ -428,53 +410,6 @@ export class TaskMainView extends ItemView {
     this.renderTaskResults();
   }
 
-  private renderTaskDashboard(container: HTMLElement): void {
-    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), true, task => this.prepareDrag(task));
-    const tasks = (mode: "today" | "upcoming" | "all"): Task[] => this.plugin.index.query({ mode, showCompleted: false });
-    const today = tasks("today");
-    const upcoming = tasks("upcoming");
-    this.selection.retain([...today, ...upcoming]);
-    renderDashboard(container, {
-      today: card => {
-        renderTodaySummary(card, todaySummary(this.plugin.index.query({ mode: "today", showCompleted: true })), false);
-        if (today.length) this.renderTaskList(card, today);
-        else card.createDiv({ cls: "tm-empty", text: "No tasks for today" });
-      },
-      upcoming: card => {
-        if (upcoming.length) this.renderTaskList(card, upcoming);
-        else card.createDiv({ cls: "tm-empty", text: "No upcoming tasks" });
-      },
-      projects: card => {
-        const projects = activeProjects(this.plugin.index.projects());
-        if (projects.length) this.renderProjectGroup(card, "Active", projects);
-        else card.createDiv({ cls: "tm-empty", text: "No projects yet" });
-      },
-      calendar: card => {
-        renderCalendar(card, {
-          anchor: this.calendarAnchor, scope: this.calendarScope, tasks: tasks("all"), dateFormat: this.plugin.dateFormat(),
-          color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
-          priorityColors: this.plugin.settings.calendarPriorityColors,
-          navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.render(); },
-          create: preset => this.plugin.openEditor({ mode: "all", preset }),
-          edit: task => this.plugin.openEditor({ mode: "all", task }),
-          toggle: (task, completed) => this.plugin.store.toggle(task, completed),
-          move: async (task, date, time) => {
-            await this.plugin.store.update(task, rescheduledDraft(task, date, time));
-            await this.plugin.index.refreshPath(task.path);
-          },
-          resize: async (task, date, time, duration) => {
-            await this.plugin.store.update(task, { ...rescheduledDraft(task, date, time), durationMinutes: duration });
-            await this.plugin.index.refreshPath(task.path);
-          }
-        });
-      },
-      createTask: mode => this.plugin.openEditor({ mode }),
-      createProject: () => this.plugin.openProjectCreator()
-    });
-    this.updateSelection();
-    this.updateRoving();
-  }
-
   private resetRows(): void {
     this.disconnectRowObservers();
     this.renderGeneration++;
@@ -486,92 +421,7 @@ export class TaskMainView extends ItemView {
     this.selectionRows.clear();
   }
 
-  /**
-   * A checklist for the weekly review: each section lists tasks or projects to look at,
-   * and can be marked reviewed for the current week (collapsing it).
-   */
-  private renderWeeklyReview(container: HTMLElement): void {
-    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), true, task => this.prepareDrag(task));
-    const today = todayIso();
-    const week = addDays(today, -((new Date().getDay() + 6) % 7));
-    const saved = this.plugin.settings.weeklyReview;
-    const reviewed = new Set(saved?.week === week ? saved.reviewed : []);
-    const tasks = this.plugin.index.allTasks();
-    const open = tasks.filter(task => !task.completed);
-    const staleBefore = Date.now() - STALE_DAYS * 86_400_000;
-    const modified = new Map<string, number>();
-    const noteModified = (path: string): number => {
-      if (!modified.has(path)) {
-        const file = this.app.vault.getAbstractFileByPath(path);
-        modified.set(path, file instanceof TFile ? file.stat?.mtime ?? Date.now() : Date.now());
-      }
-      return modified.get(path)!;
-    };
-    const repeating = (task: Task): boolean => isRepeatingTask(this.app, task);
-    const hasNextAction = new Set(open.filter(task => !isDeferred(task, today)).map(task => task.path));
-    const sections: Array<{ id: string; title: string; hint: string; empty: string; tasks?: Task[]; projects?: Project[] }> = [
-      { id: "completed", title: "Completed this week", hint: "What you finished in the last 7 days.",
-        empty: this.plugin.settings.completionDates ? "Nothing completed in the last 7 days." : "Turn on Record completion dates in settings to see what you finished.",
-        tasks: tasks.filter(task => task.status === "done" && task.completedDate !== undefined && task.completedDate > addDays(today, -7) && task.completedDate <= today) },
-      { id: "overdue", title: "Overdue", hint: "Reschedule, finish, or let go of these.", empty: "Nothing is overdue.",
-        tasks: open.filter(task => !isDeferred(task, today) && (actionDate(task) ?? today) < today && !repeating(task)) },
-      { id: "waiting", title: "Waiting", hint: "Follow up on these.", empty: "Nothing is waiting on someone else.",
-        tasks: open.filter(task => task.status === "waiting") },
-      { id: "routines", title: "Routines behind", hint: "Repeating tasks past their date.", empty: "All routines are up to date.",
-        tasks: open.filter(task => repeating(task) && task.scheduledDate !== undefined && task.scheduledDate < today) },
-      { id: "deadlines", title: "Deadlines in the next 7 days", hint: "Make time for these before they're due.", empty: "No deadlines this week.",
-        tasks: open.filter(task => task.deadline !== undefined && task.deadline >= today && task.deadline <= addDays(today, 7)) },
-      { id: "stale", title: "Untouched for a month", hint: `Undated tasks in notes nobody has edited for ${STALE_DAYS} days.`, empty: "No stale tasks.",
-        tasks: open.filter(task => !actionDate(task) && !task.someday && !task.deferDate && noteModified(task.path) < staleBefore) },
-      { id: "projects", title: "Projects without a next action", hint: "Add a next step, or archive the project.", empty: "Every active project has a next action.",
-        projects: activeProjects(this.plugin.index.projects()).filter(project => !hasNextAction.has(project.path)) },
-      { id: "someday", title: "Someday", hint: "Anything here ready to schedule or delete?", empty: "No someday tasks.",
-        tasks: open.filter(task => task.someday) }
-    ];
-
-    const header = container.createDiv({ cls: "tm-view-header" });
-    const title = header.createDiv({ cls: "tm-title-group" }).createDiv();
-    pageTitle(title, "Weekly Review");
-    const actions = header.createDiv({ cls: "tm-header-actions" });
-    const restart = actions.createEl("button", { text: "Start over", attr: { "data-tm-focus-key": "review-restart" } });
-    restart.disabled = !reviewed.size;
-    const save = async (next: Set<string>): Promise<void> => {
-      this.plugin.settings.weeklyReview = { week, reviewed: [...next] };
-      await this.plugin.saveSettings();
-      this.render();
-    };
-    restart.addEventListener("click", () => void save(new Set()).catch(error => new Notice(String(error))));
-
-    const visible: Task[] = [];
-    for (const section of sections) {
-      const done = reviewed.has(section.id);
-      const element = container.createEl("section", { cls: `tm-section tm-review-section${done ? " is-reviewed" : ""}` });
-      const heading = element.createEl("h2");
-      heading.createSpan({ text: section.title });
-      heading.createSpan({ cls: "tm-section-count", text: String(section.tasks?.length ?? section.projects?.length ?? 0) });
-      const check = heading.createEl("label", { cls: "tm-review-check" });
-      const box = check.createEl("input", { type: "checkbox", attr: { "data-tm-focus-key": `review:${section.id}` } });
-      box.checked = done;
-      check.createSpan({ text: "Reviewed" });
-      box.addEventListener("change", () => {
-        const next = new Set(reviewed);
-        if (box.checked) next.add(section.id); else next.delete(section.id);
-        void save(next).catch(error => new Notice(String(error)));
-      });
-      if (done) continue;
-      element.createDiv({ cls: "tm-filter-hint", text: section.hint });
-      const count = section.tasks?.length ?? section.projects?.length ?? 0;
-      if (!count) { element.createDiv({ cls: "tm-empty tm-review-empty", text: section.empty }); continue; }
-      if (section.projects) this.renderProjectGroup(element, "", section.projects, false);
-      else { this.renderTaskList(element, section.tasks!); visible.push(...section.tasks!); }
-    }
-    this.selection.retain(visible);
-    this.updateSelection();
-    this.updateRoving();
-  }
-
   private renderTaskResults(): void {
-    if (this.state.mode === "dashboard" || this.state.mode === "review") { this.render(); return; }
     const container = this.taskResults;
     if (!container) return;
     this.preserveView(() => this.renderTaskResultsNow(container));
@@ -1889,7 +1739,7 @@ export class TaskMainView extends ItemView {
       .map(element => this.taskForRow(element as HTMLElement))
       .filter((item): item is Task => Boolean(item) && item!.parentId === task.parentId);
     const index = siblings.findIndex(item => item.id === task.id);
-    const nesting = this.layout !== "kanban" || this.state.mode === "dashboard";
+    const nesting = this.layout !== "kanban";
     let anchor: Task | undefined;
     let placement: ListPlacement | undefined;
     if (key === "ArrowUp") { anchor = siblings[index - 1]; placement = "before"; }

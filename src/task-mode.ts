@@ -73,7 +73,7 @@ export class TaskModeController {
           await replaceView(leaf, { type: TASK_MAIN_VIEW, state: this.taskViewState(leaf, view.file.path, view.getState()) });
         } else if (view instanceof TaskMainView) {
           const state = view.getState();
-          // Dashboards have no file path. Accept projectPath as well so tabs
+          // Lists such as Today have no file path. Accept projectPath as well so tabs
           // restored from older versions also follow the task-mode toggle.
           const path = typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : undefined;
           if (!path) continue;

@@ -44,8 +44,8 @@ describe("hiding deferred tasks", () => {
     expect(titles(inbox(), { mode: "today", showCompleted: false })).toEqual(["Plain today", "Past defer"]);
     expect(titles(inbox(), { mode: "upcoming", showCompleted: false })).toEqual([]);
   });
-  it("keeps them in All, projects, tags, smart lists and the dashboard", () => {
-    for (const mode of ["all", "tags", "smartLists", "dashboard"] as const) {
+  it("keeps them in All, projects, tags and smart lists", () => {
+    for (const mode of ["all", "tags", "smartLists"] as const) {
       expect(titles(inbox(), { mode, showCompleted: false })).toHaveLength(6);
     }
     expect(titles(inbox(), { mode: "project", projectPath: "Inbox.md", showCompleted: false })).toHaveLength(6);

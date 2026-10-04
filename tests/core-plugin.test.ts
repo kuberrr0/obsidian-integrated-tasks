@@ -224,15 +224,15 @@ describe("task views follow their notes", () => {
     const legacy = env.addLeaf(TASK_MAIN_VIEW, { mode: "projects", projectPath: "Gone.md" });
     const nested = env.addLeaf(TASK_MAIN_VIEW, { mode: "all", pagePath: "Folder/Inner.md" });
     const kept = env.addLeaf(TASK_MAIN_VIEW, { mode: "all", pagePath: "Kept.md" });
-    const dashboard = env.addLeaf(TASK_MAIN_VIEW, { mode: "dashboard" });
+    const today = env.addLeaf(TASK_MAIN_VIEW, { mode: "today" });
     env.vault.trigger("delete", env.files[0]);
     expect(gone.detach).toHaveBeenCalledOnce();
     expect(legacy.detach).toHaveBeenCalledOnce();
     env.vault.trigger("delete", Object.assign(new TFolder(), { path: "Folder" }));
     expect(nested.detach).toHaveBeenCalledOnce();
     expect(kept.detach).not.toHaveBeenCalled();
-    expect(dashboard.detach).not.toHaveBeenCalled();
-    expect(env.leaves).toEqual([kept, dashboard]);
+    expect(today.detach).not.toHaveBeenCalled();
+    expect(env.leaves).toEqual([kept, today]);
   });
 
   it("points the project's tab at its new name after renaming it instead of opening a duplicate", async () => {

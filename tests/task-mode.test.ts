@@ -113,7 +113,7 @@ it("restores legacy project tabs to Markdown and remembers their layout on re-en
   expect(leaf.view).toBeInstanceOf(MarkdownView);
 });
 
-it("keeps the Projects dashboard open when task mode is turned off", async () => {
+it("keeps the Projects list open when task mode is turned off", async () => {
   const { controller, add } = await setup();
   const { leaf } = add("Project.md");
   await leaf.setViewState({ type: TASK_MAIN_VIEW, state: { mode: "projects" } });

@@ -78,7 +78,7 @@ describe("quick switcher items", () => {
     const plugin = host();
     const items = switcherItems(plugin as unknown as TaskManagerPlugin);
     expect(items.map(item => `${item.kind}:${item.label}`)).toEqual([
-      "view:Task dashboard", "view:Inbox", "view:Today", "view:Upcoming", "view:All tasks", "view:Projects", "view:Tags", "view:Smart lists", "view:Weekly review",
+      "view:Inbox", "view:Today", "view:Upcoming", "view:All tasks", "view:Projects", "view:Tags", "view:Smart lists",
       "project:Launch", "project:Shipped", "project:Old", "tag:#work", "smartList:Focus", "task:Task 0", "task:Task 1"
     ]);
     expect(items.find(item => item.label === "Old")).toMatchObject({ status: "archived" });
@@ -97,8 +97,8 @@ describe("quick switcher items", () => {
 
   it("keeps the natural order with an empty query and ranks matches when typing", () => {
     const modal = switcher(host());
-    expect(modal.getSuggestions("").map(result => result.item.label).slice(0, 3)).toEqual(["Task dashboard", "Inbox", "Today"]);
-    expect(modal.getSuggestions("  ")[0].item.label).toBe("Task dashboard");
+    expect(modal.getSuggestions("").map(result => result.item.label).slice(0, 3)).toEqual(["Inbox", "Today", "Upcoming"]);
+    expect(modal.getSuggestions("  ")[0].item.label).toBe("Inbox");
     expect(modal.getSuggestions("launch").map(result => result.item.label)).toEqual(["Launch"]);
     expect((modal as unknown as { placeholder: string }).placeholder).toBe("Jump to a view, project, tag, smart list, or task…");
   });

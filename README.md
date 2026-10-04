@@ -2,9 +2,7 @@
 
 Keep your tasks alongside the notes that give them context. Integrated Task Manager brings checklists from across your vault into one place, with lists, calendars, Kanban boards, and project timelines. Complete or edit a task in any view, and the change is saved in its original note.
 
-Start your day with a dashboard of today's work, upcoming tasks, projects, and your calendar.
-
-![Dashboard showing Today, Upcoming, Projects, and Calendar](resources/images/Dashboard.png)
+Start your day in **Today**, with overdue work and today's plan in one list.
 
 Works on **desktop and mobile**, with **Obsidian 1.7.2 or newer**. Your tasks stay in your vault; the plugin does not upload your notes or task data to an external service.
 
@@ -15,7 +13,7 @@ Once the plugin is enabled, click **Open task manager** in Obsidian's ribbon to 
 1. Open **Inbox** and choose **Add task**.
 2. Type something like `Call the venue tomorrow at 9am`.
 3. Add a deadline, priority, or other details if you need them, then save.
-4. Open **Today**, **Upcoming**, or **Dashboard** to see your plan.
+4. Open **Today** or **Upcoming** to see your plan.
 
 Quick-created tasks go to `Inbox.md` by default. You can choose another inbox note in settings. Checklists already in your notes appear in **All Tasks**.
 
@@ -23,7 +21,6 @@ Quick-created tasks go to `Inbox.md` by default. You can choose another inbox no
 
 | View | Use it to… |
 | --- | --- |
-| **Dashboard** | Get an overview of your day and projects. |
 | **Inbox** | Capture tasks and sort them out later. |
 | **Today** | Focus on today's tasks and catch overdue work. |
 | **Upcoming** | Look ahead at future tasks, organized by date. |
@@ -31,11 +28,8 @@ Quick-created tasks go to `Inbox.md` by default. You can choose another inbox no
 | **Projects** | Review project progress and open a project's tasks. |
 | **Tags** | Bring related tasks together across different notes. |
 | **Smart Lists** | Return to your own saved views of the work. |
-| **Weekly Review** | Step through what needs attention once a week. |
 
 Today and Upcoming consider both the scheduled date and the deadline, using whichever comes first. Tasks without either date remain available in All Tasks and their source notes.
-
-The **Dashboard**'s Today card shows how your day is going: a progress circle of tasks done against tasks planned, the time you've planned, how many tasks are overdue, and your next timed task with a countdown.
 
 Press **Cmd/Ctrl+K** in a task view, or run **Quick switch to view, project, tag, or task**, to jump anywhere by typing: a view, a project, a tag, a smart list, or an open task by its title.
 
@@ -140,7 +134,7 @@ Give a project a colour from its **…** menu, or with a `color` property such a
 
 Add the `archived` tag to a project note to hide it from the default Projects list. **Show archived projects** brings it back; its tasks remain available in other task views.
 
-A project whose tasks are all done (100%) is completed, as in Things: it leaves the sidebar, the dashboard, the weekly review and the lists you move tasks to, and the Projects list and Gantt chart show it under **Completed**. In task views that show projects among tasks, it appears only with completed tasks shown. A project with no tasks yet, or with a subproject still in progress, stays active, and adding an open task makes a completed project active again.
+A project whose tasks are all done (100%) is completed, as in Things: it leaves the sidebar and the lists you move tasks to, and the Projects list and Gantt chart show it under **Completed**. In task views that show projects among tasks, it appears only with completed tasks shown. A project with no tasks yet, or with a subproject still in progress, stays active, and adding an open task makes a completed project active again.
 
 ### See the bigger picture with Gantt
 
@@ -174,6 +168,8 @@ sort: priority
 ````
 
 The list updates as your tasks change. Check tasks off, click a title to edit it, or click a date or tag to change it, right from the note. It works in Reading view and Live Preview.
+
+Put several blocks in one note to build your own dashboard or weekly review: one block for `view: today`, one for `deadline: before in 7 days`, one for `status: waiting`, and so on.
 
 Write one option per line:
 
@@ -217,21 +213,6 @@ Right-click a task, or run **Open task menu**, for its menu; with several tasks 
 While the menu is open, each row's letter opens it: **D** for a date, **P** for priority, **G** for the project, **Shift+D** for the deadline, **T** for tags, **R** for repeat, **Shift+S** to snooze, **S** for the status and **C** to complete. A task's tags list checks the tags every selected task has and marks those only some have with a dash. Clicking a tag toggles it on every task, and typing adds new ones (separate several with commas).
 
 You can also drag a selection to move tasks together, drop it onto the calendar to reschedule it, or delete selected tasks along with their subtasks.
-
-## Review your week
-
-Open **Weekly Review** from the sidebar, the quick switcher, or the command palette. It walks through what needs your attention, one section at a time:
-
-- **Completed this week**, when completion dates are turned on
-- **Overdue** tasks to reschedule, finish, or let go of
-- **Waiting** tasks to follow up on
-- **Routines behind** their date
-- **Deadlines in the next 7 days**
-- **Untouched for a month**: undated tasks in notes nobody has edited for 30 days
-- **Projects without a next action**
-- **Someday** tasks, to schedule or delete
-
-Work on tasks right in the review, with the same checkboxes, keys, and swipes as other views. Tick **Reviewed** on each section as you finish it; it folds away, and your progress is kept until the week ends. **Start over** clears it.
 
 ## Use it on your phone
 
@@ -297,7 +278,7 @@ Repeat rules include every day, every week, every other week, every month, every
 
 ## Record when tasks were done
 
-Turn on **Record completion dates** in the settings to stamp each task with the day you complete it, such as `- [x] Pay rent ✓Sep 27, 2026`. Reopening or cancelling the task removes the date, and cancelling never adds one. Completed tasks then show a **Done** label, the weekly review lists what you finished this week, and smart lists can filter and sort by **Completed date**. Dates written by the Tasks plugin, such as `✅ 2026-09-27`, are read too.
+Turn on **Record completion dates** in the settings to stamp each task with the day you complete it, such as `- [x] Pay rent ✓Sep 27, 2026`. Reopening or cancelling the task removes the date, and cancelling never adds one. Completed tasks then show a **Done** label, and smart lists and task queries can filter and sort by **Completed date**. Dates written by the Tasks plugin, such as `✅ 2026-09-27`, are read too.
 
 ## Make it fit your workflow
 
@@ -305,7 +286,7 @@ In the plugin settings, you can choose your inbox, decide whether new tasks go a
 
 Turn on **Show files in sidebar** to keep your vault's files and folders in the task sidebar, below projects and tags, so one sidebar does both jobs. Click a note to open it (hold Ctrl or Cmd for a new tab), and click a folder to open or close it; the sidebar remembers which folders are open. With files shown, the sidebar's toolbar adds **New folder** and **Change sort order** to its **New task**, **New note**, and **Task mode** buttons; sort files by name, modified time, or created time, as in the file explorer. **New note** puts the note where Obsidian puts new notes. Drag files as you would in the file explorer: into a note to link them, onto a tab to open them, or onto a folder (or the **Files** heading, for the top of the vault) to move them there; folders and files dragged from the file explorer can be dropped on its folders too. Drop a task on a note to move the task into that note. Right-click a file or folder to open it in a new tab or to the right, make a note or folder inside it, rename it in place, or delete it. Other plugins' file menu items appear there too.
 
-To keep some checklists out of the plugin, list them under **Ignored folders and notes**, such as `Templates/` or `Journal/Private.md`: a folder covers everything inside it. Under **Ignored tags**, list tags such as `template` or `someday`: notes with one of them in their properties are left out entirely, and single tasks tagged with one (as `#someday` or `#[[someday]]`) are hidden along with their subtasks. Ignoring a tag also ignores its nested tags, such as `archive/2025`. Ignored tasks stay in your notes; they just don't appear in task views, query blocks, counts, or the weekly review, and an ignored note isn't treated as a project. Changes apply straight away.
+To keep some checklists out of the plugin, list them under **Ignored folders and notes**, such as `Templates/` or `Journal/Private.md`: a folder covers everything inside it. Under **Ignored tags**, list tags such as `template` or `someday`: notes with one of them in their properties are left out entirely, and single tasks tagged with one (as `#someday` or `#[[someday]]`) are hidden along with their subtasks. Ignoring a tag also ignores its nested tags, such as `archive/2025`. Ignored tasks stay in your notes; they just don't appear in task views, query blocks, or counts, and an ignored note isn't treated as a project. Changes apply straight away.
 
 Choose your preferred date format and whether dates link to notes. These choices apply to new edits; use **Update dates** to apply them to existing tasks and recurring-task history.
 

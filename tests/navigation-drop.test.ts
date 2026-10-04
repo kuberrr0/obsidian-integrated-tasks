@@ -57,7 +57,7 @@ it("marks Inbox, Today, each project and each tag as places to drop tasks, and n
   expect(drops("mode:today")).toEqual({ kind: "today" });
   expect(drops("project:Work.md")).toEqual({ kind: "project", path: "Work.md" });
   expect(drops("tag:errand")).toEqual({ kind: "tag", tag: "errand" });
-  for (const key of ["mode:upcoming", "mode:all", "mode:review", "mode:dashboard", "mode:projects", "mode:tags"]) expect(drops(key)).toBeUndefined();
+  for (const key of ["mode:upcoming", "mode:all", "mode:projects", "mode:tags"]) expect(drops(key)).toBeUndefined();
   // The list under the pointer, found from anything inside its row.
   const label = row("mode:today").querySelector<HTMLElement>(".tm-nav-label")!;
   const doc = { elementFromPoint: () => label } as unknown as Document;
