@@ -3,7 +3,14 @@ vi.mock("obsidian", async importOriginal => ({ ...await importOriginal<typeof im
 import { renderGantt } from "../src/gantt-view";
 import { addDays } from "../src/calendar";
 import { daysBetween } from "../src/gantt";
-import { ganttSegments } from "../src/gantt";
+import { ganttSegments, shiftGantt } from "../src/gantt";
+
+it("moves the arrows by a calendar month, quarter, year or five years, keeping the day where the month has it", () => {
+  expect(shiftGantt("2026-01-31", "month", 1)).toBe("2026-02-28");
+  expect(shiftGantt("2026-01-01", "quarter", 1)).toBe("2026-04-01");
+  expect(shiftGantt("2026-01-01", "year", -1)).toBe("2025-01-01");
+  expect(shiftGantt("2026-01-01", "five-year", 1)).toBe("2031-01-01");
+});
 
 it("groups month dates by Monday, quarter/year by month, and five years by year", () => {
   expect(ganttSegments("2026-09-07", 21, "month").map(s => [s.label, s.days])).toEqual([["Sep 7", 7], ["Sep 14", 7], ["Sep 21", 7]]);
@@ -91,7 +98,7 @@ it("repositions project bars after scrolling and retains date editing", async ()
   expect(bar.style.left).toBe(`${daysBetween(first, project.scheduledDate) * 32 + 2}px`);
   const next = container.all().find(el => el.attrs["aria-label"] === "Next period")!;
   next.dispatchEvent(new Event("click"));
-  expect(navigate).toHaveBeenCalledWith(addDays(viewportChanged.mock.lastCall![0], 35), "month");
+  expect(navigate).toHaveBeenCalledWith(shiftGantt(viewportChanged.mock.lastCall![0], "month", 1), "month");
   const handle = container.all().find(el => el.cls === "tm-gantt-handle is-finish")!;
   expect(bar.text).toBe("2026-09-18 – 2026-09-25");
   expect(container.all().some(el => el.cls === "tm-gantt-deadline")).toBe(false);

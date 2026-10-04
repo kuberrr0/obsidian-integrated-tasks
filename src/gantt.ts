@@ -8,6 +8,19 @@ export const GANTT_ZOOMS: Record<GanttZoom, { days: number; width: number }> = {
   month: { days: 35, width: 32 }, quarter: { days: 91, width: 12 },
   year: { days: 366, width: 3 }, "five-year": { days: 1827, width: 0.7 }
 };
+/** The Gantt opens at the start of the year, for an overview of it. */
+export function ganttYearStart(today: string): string { return `${today.slice(0, 4)}-01-01`; }
+
+/** The arrows' period, from the first day in view: a month, a quarter, a year or five years. */
+export function shiftGantt(anchor: string, zoom: GanttZoom, direction: number): string {
+  const date = localDate(anchor);
+  const day = date.getDate();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + direction * { month: 1, quarter: 3, year: 12, "five-year": 60 }[zoom]);
+  date.setDate(Math.min(day, new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()));
+  return addDays(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`, date.getDate() - 1);
+}
+
 export function daysBetween(start: string, end: string): number {
   const utc = (iso: string): number => { const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d); };
   return Math.round((utc(end) - utc(start)) / 86400000);

@@ -1042,14 +1042,29 @@ describe("Gantt navigation", () => {
     // The first day in view: the timeline's first date plus the days scrolled past.
     const shown = () => addDays(content().querySelector<HTMLElement>(".tm-gantt-date")!.title, Math.floor(scroll().scrollLeft / 32));
     expect(shown()).toBe("2026-03-01");
-    for (const [days, next] of [[-36, "2026-02-28"], [-40, "2026-02-23"], [20, "2026-04-19"]] as const) {
-      // Scrolled by hand, then on by a period: from the dates in view, wherever the timeline was scrolled.
+    for (const [days, next] of [[-36, "2026-02-24"], [-40, "2026-02-15"], [20, "2026-04-07"]] as const) {
+      // Scrolled by hand, then on by a month: from the dates in view, wherever the timeline was scrolled.
       scroll().scrollLeft += days * 32;
       scroll().dispatchEvent(new Event("scroll"));
       content().querySelector<HTMLElement>("[aria-label='Next period']")!.click();
       expect(shown()).toBe(next);
-      expect(view.getState().ganttAnchor).toBe(next);
     }
+  });
+
+  it("opens at the start of the year, in the Year view at first, and there again when opened anew", async () => {
+    const { view, content } = await setup([note("Site.md", 1)], { "Site.md": { tags: ["project"], start: "2026-03-02", end: "2026-03-20" } });
+    const yearStart = `${todayIso().slice(0, 4)}-01-01`;
+    const shown = () => addDays(content().querySelector<HTMLElement>(".tm-gantt-date")!.title, Math.floor(content().querySelector<HTMLElement>(".tm-gantt-scroll")!.scrollLeft / 3));
+    await view.setState({ mode: "projects", projectLayout: "gantt" });
+    expect(shown()).toBe(yearStart);
+    expect(content().querySelector("[aria-label='Year'][aria-pressed='true']")).not.toBeNull();
+    content().querySelector<HTMLElement>("[aria-label='Next period']")!.click();
+    expect(shown()).toBe(`${Number(yearStart.slice(0, 4)) + 1}-01-01`);
+    // Another page and back: the start of the year again, in the scale it was left in.
+    await view.setState({ mode: "today" });
+    await view.setState({ mode: "projects", projectLayout: "gantt" });
+    expect(shown()).toBe(yearStart);
+    expect(view.getState().ganttAnchor).toBeUndefined();
   });
 });
 

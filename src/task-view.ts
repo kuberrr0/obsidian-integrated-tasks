@@ -21,7 +21,7 @@ import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
 import { PROJECT_COLORS, projectColorValue, updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
-import { daysBetween, type GanttZoom } from "./gantt";
+import { daysBetween, ganttYearStart, type GanttZoom } from "./gantt";
 import { projectHierarchy } from "./project-hierarchy";
 import { kanbanColumns, type KanbanColumn } from "./kanban";
 import { ListDragController } from "./list-drag-view";
@@ -96,8 +96,9 @@ export class TaskMainView extends ItemView {
   private stateSet = false;
   private layout: "list" | "calendar" | "kanban" = "list";
   private projectLayout: "list" | "gantt" = "list";
-  private ganttAnchor = addDays(todayIso(), -2);
-  private ganttZoom: GanttZoom = "month";
+  /** Where the Gantt is (its first day in view), kept while the view is open; it opens at the start of the year. */
+  private ganttAnchor = ganttYearStart(todayIso());
+  private ganttZoom: GanttZoom = "year";
   private calendarPlanningOpen = false;
   private calendarScope: CalendarScope = "month";
   private calendarAnchor = todayIso();
@@ -179,7 +180,7 @@ export class TaskMainView extends ItemView {
     return TITLES[this.state.mode];
   }
   getIcon(): string { return this.state.mode === "projects" ? "target" : "circle-check-big"; }
-  getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor, showProjects: this.showProjects }; }
+  getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor, showProjects: this.showProjects }; }
 
   /** Which view's options this page keeps: a list's, a project's or a tag's (by its note when it has one). Smart lists keep theirs in their own definition. */
   private get optionsKey(): string | undefined {
@@ -245,10 +246,14 @@ export class TaskMainView extends ItemView {
     const projectLayout = state.projectLayout === "list" || state.projectLayout === "gantt" ? state.projectLayout : undefined;
     if (state.ganttZoom === "month" || state.ganttZoom === "quarter" || state.ganttZoom === "year" || state.ganttZoom === "five-year") this.ganttZoom = state.ganttZoom;
     else if (state.ganttZoom === "week") this.ganttZoom = "month";
-    if (typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor)) this.ganttAnchor = state.ganttAnchor;
+    const ganttAnchor = typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor) ? state.ganttAnchor : undefined;
     if (["day", "four-day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     const newPage = this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId;
+    // The Gantt opens at the start of the year (for an overview of it) unless sent somewhere; it keeps its place only
+    // while the page stays open.
+    if (ganttAnchor) this.ganttAnchor = ganttAnchor;
+    else if (newPage) this.ganttAnchor = ganttYearStart(todayIso());
     if (newPage) {
       // A new task left for another page is written with a title, else dropped.
       if (this.newTaskEntry) {
@@ -1149,7 +1154,10 @@ export class TaskMainView extends ItemView {
     for (const [layout, icon] of [["list", "list"], ["gantt", "chart-gantt"]] as const) {
       const button = layouts.createEl("button", { cls: "clickable-icon", attr: { "aria-label": `${layout === "gantt" ? "Gantt" : "List"} projects view`, "aria-pressed": String(this.projectLayout === layout), title: `${layout === "gantt" ? "Gantt" : "List"} view`, "data-tm-focus-key": `project-layout-${layout}` } });
       setIcon(button, icon);
-      button.addEventListener("click", () => { this.projectLayout = layout; this.saveLayout(); this.render(); });
+      button.addEventListener("click", () => {
+        if (layout === "gantt" && this.projectLayout !== "gantt") this.ganttAnchor = ganttYearStart(todayIso());
+        this.projectLayout = layout; this.saveLayout(); this.render();
+      });
     }
     const create = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Create new project", title: "Create new project" } });
     setIcon(create, "plus");

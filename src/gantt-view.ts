@@ -2,7 +2,7 @@ import { Notice, setIcon } from "obsidian";
 import { addDays } from "./calendar";
 import { formatDate, todayIso } from "./date";
 import { projectHierarchy } from "./project-hierarchy";
-import { ganttSegments, daysBetween, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate, GANTT_ZOOMS, type GanttZoom, type GanttHandle, type ProjectDateField } from "./gantt";
+import { ganttSegments, shiftGantt, daysBetween, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate, GANTT_ZOOMS, type GanttZoom, type GanttHandle, type ProjectDateField } from "./gantt";
 import type { Project } from "./types";
 import type { ProjectDraft } from "./project-creator";
 import { projectStatuses, renderProjectProgress, type ProjectStatus } from "./project-progress";
@@ -39,7 +39,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
   for (const [delta, icon, label] of [[-1, "chevron-left", "Previous period"], [1, "chevron-right", "Next period"]] as const) {
     const button = controls.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label, title: label } });
     setIcon(button, icon);
-    button.addEventListener("click", () => options.navigate(addDays(anchor, delta * period), options.zoom));
+    button.addEventListener("click", () => options.navigate(shiftGantt(anchor, options.zoom, delta), options.zoom));
   }
   const today = controls.createEl("button", { text: "Today" });
   today.addEventListener("click", () => options.navigate(addDays(todayIso(), -2), options.zoom));

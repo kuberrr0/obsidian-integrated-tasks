@@ -138,7 +138,7 @@ A project whose tasks are all done (100%) is completed, as in Things: it leaves 
 
 ### See the bigger picture with Gantt
 
-Switch Projects to **Gantt** to see your projects on a timeline. Choose month, quarter, year, or five-year views to plan at different scales.
+Switch Projects to **Gantt** to see your projects on a timeline. It opens at the start of the year in the year view, for an overview of the year. Choose month, quarter, year, or five-year views to plan at different scales; the arrows move by a month, a quarter, a year, or five years, and **Today** brings you back to today. Each year's first month (or week) is labelled with its year.
 
 ![Project timeline showing a parent project and its related projects](resources/images/Projects%20gantt.png)
 
