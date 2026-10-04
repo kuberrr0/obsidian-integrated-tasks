@@ -217,10 +217,13 @@ export class ViewOptionsPanel {
     if (open) (this.panel.querySelector<HTMLElement>(".tm-options-select") ?? this.panel).focus({ preventScroll: true });
   }
 
-  /** Clicks outside the panel and its button close it. */
+  /** A click outside an open list (sort, group or a property's choices) closes it; outside the panel and its button, the panel closes too. */
   handleOutside(event: Event): void {
     const target = event.target as Node | null;
-    if (!this.isOpen || !target || this.panel.contains(target) || this.toggle.contains(target)) return;
+    if (!this.isOpen || !target) return;
+    const dropdown = this.dropdown;
+    if (dropdown && !dropdown.element.contains(target) && !dropdown.button.contains(target)) this.closeDropdown(false);
+    if (this.panel.contains(target) || this.toggle.contains(target)) return;
     this.setOpen(false);
   }
 
