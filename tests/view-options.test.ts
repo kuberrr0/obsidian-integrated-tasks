@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { installObsidianDom } from "./helpers/obsidian-dom";
 
 vi.mock("obsidian", async importOriginal => ({ ...await importOriginal<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
@@ -45,6 +45,29 @@ describe("view options panel", () => {
     select("group").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     expect(panel.panel.hidden).toBe(false);
     outside.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(panel.panel.hidden).toBe(true);
+  });
+
+  it("closes an open list (a date filter's, the group's) on a click outside it, inside the panel or not", () => {
+    const { panel, toggle, select } = setup();
+    const listen = (event: Event) => panel.handleOutside(event);
+    document.addEventListener("pointerdown", listen);
+    onTestFinished(() => document.removeEventListener("pointerdown", listen));
+    const press = (target: EventTarget) => target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    toggle.click();
+    select("scheduledDate").click();
+    const list = () => panel.panel.querySelector(".tm-options-dropdown");
+    // Inside the list it stays open.
+    press(list()!.querySelector("[role=option]")!);
+    expect(list()).not.toBeNull();
+    // Elsewhere in the panel, the list closes and the panel stays.
+    press(panel.panel.querySelector(".tm-options-header h2")!);
+    expect(list()).toBeNull();
+    expect(panel.panel.hidden).toBe(false);
+    expect(select("scheduledDate").getAttribute("aria-expanded")).toBe("false");
+    select("group").click();
+    press(document.body);
+    expect(list()).toBeNull();
     expect(panel.panel.hidden).toBe(true);
   });
 

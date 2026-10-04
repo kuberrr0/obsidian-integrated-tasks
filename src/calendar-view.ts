@@ -116,16 +116,37 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     });
   }
 
-  const dropTarget = (element: HTMLElement, targetDate: string, getTime?: (event: DragEvent) => string): void => {
+  // Where a dragged task would land shows as lists show it: a faint accent slot, at its time and as long as the task in
+  // a day's hours, or after a day's tasks.
+  let gap: HTMLElement | undefined;
+  const hideGap = (): void => { gap?.remove(); gap = undefined; };
+  const showGap = (element: HTMLElement, task: Task, time?: string): void => {
+    gap ??= root.ownerDocument.createElement("div");
+    gap.className = `tm-calendar-drop-gap${time ? " is-timed" : ""}`;
+    gap.setAttribute("aria-hidden", "true");
+    if (time) {
+      const begin = timeMinutes(time);
+      const end = Math.min(1440, begin + (task.durationMinutes ?? 30));
+      gap.style.top = `${begin / 15 * 12}px`;
+      gap.style.height = `${Math.max(12, (end - begin) / 15 * 12)}px`;
+    } else {
+      gap.style.removeProperty("top");
+      gap.style.removeProperty("height");
+    }
+    if (gap.parentElement !== element || gap !== element.lastElementChild) element.appendChild(gap);
+  };
+  const dropTarget = (element: HTMLElement, targetDate: string, getTime?: (point: { clientY: number }) => string): void => {
     element.addEventListener("dragover", event => {
       if (!dragged || moving) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      element.addClass("is-drop-target");
+      showGap(element, dragged, getTime?.(event));
     });
-    element.addEventListener("dragleave", () => element.removeClass("is-drop-target"));
+    element.addEventListener("dragleave", event => {
+      if (gap?.parentElement === element && !element.contains(event.relatedTarget as Node | null)) hideGap();
+    });
     element.addEventListener("drop", event => {
-      element.removeClass("is-drop-target");
+      hideGap();
       if (!dragged || moving) return;
       event.preventDefault();
       event.stopPropagation();
@@ -174,6 +195,7 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     card.addEventListener("dragstart", event => {
       options.dragStart?.(task);
       dragged = task;
+      liftCard(card);
       grabOffsetMinutes = card.hasClass("is-timed")
         ? Math.max(0, (event.clientY - card.getBoundingClientRect().top) / parent.getBoundingClientRect().height * 1440)
         : 0;
@@ -184,9 +206,12 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         event.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
       }
     });
-    card.addEventListener("dragend", () => { dragged = undefined; root.querySelectorAll(".is-drop-target").forEach(el => el.removeClass("is-drop-target")); });
+    card.addEventListener("dragend", () => dropCard(card));
     return card;
   };
+  // A card being dragged fades where it was, as a list's row leaves its place; after the browser has taken its picture.
+  const liftCard = (card: HTMLElement): void => { (card.ownerDocument?.defaultView ?? window).setTimeout(() => { if (dragged) card.addClass("is-dragging"); }, 0); };
+  const dropCard = (card: HTMLElement): void => { dragged = undefined; card.removeClass("is-dragging"); hideGap(); };
   const projectCard = (card: HTMLElement, task: Task, project: Project): HTMLElement => {
     card.addClass("is-project");
     const icon = card.createSpan({ cls: "tm-calendar-project-progress", attr: { "aria-hidden": "true" } });
@@ -199,11 +224,12 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     card.draggable = true;
     card.addEventListener("dragstart", event => {
       dragged = task;
+      liftCard(card);
       grabOffsetMinutes = 0;
       event.stopPropagation();
       if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", project.name); }
     });
-    card.addEventListener("dragend", () => { dragged = undefined; root.querySelectorAll(".is-drop-target").forEach(el => el.removeClass("is-drop-target")); });
+    card.addEventListener("dragend", () => dropCard(card));
     return card;
   };
   const dateCell = (parent: HTMLElement, day: string, compact = false, outside = false): void => {

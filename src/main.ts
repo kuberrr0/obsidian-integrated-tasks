@@ -25,7 +25,7 @@ import { TaskStore, type TaskChange } from "./task-store";
 import { TasksImportModal } from "./tasks-import-modal";
 import { TASK_QUERY_LANGUAGE, TASK_QUERY_TEMPLATE, TaskQueryBlock } from "./task-query-block";
 import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
-import { DEFAULT_SETTINGS, type Project, type SmartList, type Task, type TaskDraft, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
+import { DEFAULT_SETTINGS, type Project, type SavedViewOptions, type SmartList, type Task, type TaskDraft, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
@@ -278,6 +278,8 @@ export default class TaskManagerPlugin extends Plugin {
 
   onunload(): void {
     this.unloaded = true;
+    // View options changed in the last moments are still written.
+    if (this.viewOptionsSave !== undefined) void this.saveSettings();
     this.taskModeController?.dispose();
     this.index.destroy();
   }
@@ -305,6 +307,9 @@ export default class TaskManagerPlugin extends Plugin {
     // Things is the default; only an explicit Griply choice keeps Griply.
     this.settings.style = this.settings.style === "griply" ? "griply" : "things";
     this.settings.completionDates = this.settings.completionDates === true;
+    const options: unknown = this.settings.viewOptions;
+    // A fresh object, never the defaults' own: views write into it.
+    this.settings.viewOptions = options && typeof options === "object" && !Array.isArray(options) ? { ...options as Record<string, SavedViewOptions> } : {};
     for (const key of ["ignoredPaths", "ignoredTags"] as const) {
       const list: unknown = this.settings[key];
       this.settings[key] = Array.isArray(list) ? parseIgnoreList(list.filter((item): item is string => typeof item === "string").join("\n"), key === "ignoredTags") : [];
@@ -312,7 +317,22 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
+    window.clearTimeout(this.viewOptionsSave);
+    this.viewOptionsSave = undefined;
     await this.saveData(this.settings);
+  }
+
+  private viewOptionsSave?: number;
+
+  /**
+   * Keeps a view's View options (none: its defaults) for its next visit. Filters change as they are typed, so the
+   * settings are written once the changes pause.
+   */
+  saveViewOptions(key: string, options: SavedViewOptions | undefined): void {
+    if (options) this.settings.viewOptions[key] = options;
+    else delete this.settings.viewOptions[key];
+    window.clearTimeout(this.viewOptionsSave);
+    this.viewOptionsSave = window.setTimeout(() => { void this.saveSettings().catch(error => new Notice(String(error))); }, 500);
   }
 
   async activateNavigation(reveal = true): Promise<void> {
@@ -673,6 +693,8 @@ export default class TaskManagerPlugin extends Plugin {
     };
     this.viewRetargeting = this.viewRetargeting.then(async () => {
       if (file instanceof TFile && file.extension === "md") this.taskModeController?.renamePath(oldPath, file.path);
+      // First, so the views opening at the new path find their options there.
+      await this.renameKeptPaths(renamed);
       for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
         const viewState = leaf.getViewState();
         const state = viewState.state ?? {};
@@ -688,6 +710,28 @@ export default class TaskManagerPlugin extends Plugin {
       }
     }).catch(error => { console.error("Task manager could not update renamed task views", error); });
     return this.viewRetargeting;
+  }
+
+  /** What is kept for a renamed note (or the notes in a renamed folder) follows it: its views' options and the smart lists made from it. */
+  private async renameKeptPaths(renamed: (path: unknown) => string | undefined): Promise<void> {
+    let changed = false;
+    const options = this.settings.viewOptions;
+    for (const key of Object.keys(options)) {
+      const match = /^(project|tag):(.+)$/.exec(key);
+      const target = match ? renamed(match[2]) : undefined;
+      if (!match || !target) continue;
+      options[`${match[1]}:${target}`] = options[key];
+      delete options[key];
+      changed = true;
+    }
+    this.settings.smartLists = this.settings.smartLists.map(list => {
+      const scope = list.scope;
+      const target = scope && "path" in scope ? renamed(scope.path) : undefined;
+      if (!scope || !target) return list;
+      changed = true;
+      return { ...list, scope: { ...scope, path: target } };
+    });
+    if (changed) await this.saveSettings();
   }
 
   private closeDeletedViews(file: TAbstractFile): void {

@@ -111,6 +111,9 @@ export interface TaskDraft extends ParsedTaskMetadata {
   sortProperties?: boolean;
 }
 
+/** The view a smart list narrows, when it was made from one (View options › Convert to smart list). */
+export type SmartListScope = { mode: "inbox" | "today" | "upcoming" } | { mode: "project"; path: string } | { mode: "tag"; tag?: string; path?: string };
+
 export interface SmartList {
   id: string;
   name: string;
@@ -119,6 +122,18 @@ export interface SmartList {
   descending: boolean;
   grouping: TaskGrouping;
   /** View options › Projects: false when the list leaves out the projects it matches (they show by default). */
+  showProjects?: boolean;
+  /** The view whose tasks it filters; without one, every task. */
+  scope?: SmartListScope;
+}
+
+/** A view's View options, kept between visits. */
+export interface SavedViewOptions {
+  filters: TaskFilter[];
+  sort: TaskSort;
+  descending: boolean;
+  grouping: TaskGrouping;
+  /** False when the view leaves out the projects it matches. */
   showProjects?: boolean;
 }
 
@@ -152,6 +167,8 @@ export interface TaskManagerSettings {
   style: "griply" | "things";
   /** Stamp tasks with the date they were completed. */
   completionDates: boolean;
+  /** Each view's View options, by view: "today", "project:Projects/Site.md", "tag:errand" or "tag:Errands.md". */
+  viewOptions: Record<string, SavedViewOptions>;
   /** Folders and notes whose tasks are left out of every view. */
   ignoredPaths: string[];
   /** Tags whose notes (frontmatter) and tasks are left out of every view. */
@@ -176,6 +193,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   fileSortOrder: "alphabetical",
   style: "things",
   completionDates: false,
+  viewOptions: {},
   ignoredPaths: [],
   ignoredTags: []
 };

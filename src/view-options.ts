@@ -21,6 +21,8 @@ export interface ViewOptionsHost {
   tasks(): Task[];
   expanded(): boolean;
   setExpanded(open: boolean): void;
+  /** Makes a smart list of the view as its options now show it, named in a popover beside `anchor`; the panel's footer offers it. */
+  convert?(anchor: HTMLElement): void;
 }
 
 type Property = typeof TASK_PROPERTIES[number];
@@ -205,6 +207,14 @@ export class ViewOptionsPanel {
         if (property) this.filterRow(section, property, label, icon);
       }
     }
+    const convert = host.convert;
+    if (convert) {
+      const footer = this.panel.createDiv({ cls: "tm-options-footer" });
+      const button = footer.createEl("button", { cls: "tm-options-convert", attr: { type: "button", "data-tm-focus-key": "option-convert" } });
+      setIcon(button.createSpan({ cls: "tm-options-icon", attr: { "aria-hidden": "true" } }), "list-plus");
+      button.createSpan({ text: "Convert to smart list" });
+      button.addEventListener("click", () => { this.setOpen(false); convert.call(host, this.toggle); });
+    }
     this.sync();
   }
 
@@ -217,10 +227,13 @@ export class ViewOptionsPanel {
     if (open) (this.panel.querySelector<HTMLElement>(".tm-options-select") ?? this.panel).focus({ preventScroll: true });
   }
 
-  /** Clicks outside the panel and its button close it. */
+  /** A click outside an open list (sort, group or a property's choices) closes it; outside the panel and its button, the panel closes too. */
   handleOutside(event: Event): void {
     const target = event.target as Node | null;
-    if (!this.isOpen || !target || this.panel.contains(target) || this.toggle.contains(target)) return;
+    if (!this.isOpen || !target) return;
+    const dropdown = this.dropdown;
+    if (dropdown && !dropdown.element.contains(target) && !dropdown.button.contains(target)) this.closeDropdown(false);
+    if (this.panel.contains(target) || this.toggle.contains(target)) return;
     this.setOpen(false);
   }
 

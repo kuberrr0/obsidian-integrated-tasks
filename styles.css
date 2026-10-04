@@ -600,7 +600,19 @@ body.is-mobile .tm-editor-modal > .tm-editor-actions {
 button.tm-calendar-date { border: 0; box-shadow: none; background: transparent; padding: 3px 7px; }
 .tm-calendar .tm-calendar-task { border-radius: 4px; display: block; width: 100%; height: auto; min-height: 12px; padding: 0 4px; margin: 2px 0; box-sizing: border-box; line-height: 10px; text-align: left; white-space: normal; overflow-wrap: anywhere; box-shadow: none; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); font-size: 10px; cursor: grab; }
 .tm-calendar-task.is-completed { text-decoration: line-through; opacity: .65; }
-.tm-calendar:is(.is-month-scope, .is-year-scope) .is-drop-target { outline: 2px solid var(--interactive-accent); outline-offset: -2px; background-color: var(--background-modifier-hover); }
+/* Where a dragged task would land: the list's drop slot, at its time and length in a day's hours, or after a day's
+   tasks; the card being dragged fades where it was, as a list's row does. */
+.tm-calendar-drop-gap { position: relative; box-sizing: border-box; height: 24px; margin: 2px 0; pointer-events: none; }
+.tm-calendar-drop-gap.is-timed { position: absolute; left: 2px; right: 2px; margin: 0; z-index: 2; }
+.tm-calendar-drop-gap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px dashed color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+}
+.tm-calendar-task.is-dragging { opacity: .45; }
 .tm-calendar-grid.is-week .tm-calendar-cell { min-height: 320px; }
 .tm-calendar-year { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; }
 .tm-calendar-year h3 { margin: 0 0 8px; }
@@ -2616,3 +2628,11 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 .tm-sidebar-subtask-add svg { width: 14px; height: 14px; }
 .tm-sidebar-subtask.is-new input::placeholder { color: var(--text-faint); }
 @media (pointer: coarse) { .tm-sidebar-property, .tm-sidebar-subtask { min-height: 40px; } }
+/* View options' footer: Convert to smart list, below the options, always in view. */
+.tm-options-footer { flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--background-modifier-border); }
+button.tm-options-convert {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: auto; padding: 8px 10px;
+  border: 0; border-radius: 8px; box-shadow: none; background: transparent;
+  color: var(--text-accent); font-size: var(--font-ui-small); font-weight: var(--font-medium); cursor: pointer;
+}
+button.tm-options-convert:hover, button.tm-options-convert:focus-visible { background: var(--background-modifier-hover); }
