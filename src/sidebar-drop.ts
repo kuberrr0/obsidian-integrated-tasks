@@ -1,13 +1,37 @@
 import type { Task } from "./types";
 
 /** A list in the task sidebar that takes dropped tasks, as Things' lists do: Inbox, a project and a note in the file
- * tree take them in, Today schedules them for today, and a tag is added to them. */
-export type SidebarDrop = { kind: "inbox" } | { kind: "today" } | { kind: "project"; path: string } | { kind: "note"; path: string } | { kind: "tag"; tag: string };
+ * tree take them in, Today schedules them for today, and a tag is added to them. A calendar's day (and hour) in another
+ * pane schedules them then; without a date, their dates come off. */
+export type SidebarDrop = { kind: "inbox" } | { kind: "today" } | { kind: "project"; path: string } | { kind: "note"; path: string } | { kind: "tag"; tag: string }
+  | { kind: "schedule"; date?: string; time?: string };
 
 /** The tasks being dragged in a task view, and what dropping them on a sidebar list does. */
-export interface TaskDrag { tasks: Task[]; drop(target: SidebarDrop): Promise<void> }
+export interface TaskDrag {
+  tasks: Task[];
+  drop(target: SidebarDrop): Promise<void>;
+  /** The dragged row's height, for the slot a list in another pane opens for it. */
+  height?: number;
+}
+
+export interface DropPoint { clientX: number; clientY: number }
+
+/**
+ * A place in another pane that takes dragged tasks where they land, as a calendar's hours or a list: it shows where
+ * they would land, as it does for its own tasks, and drops them there.
+ */
+export interface DropZone {
+  hover(point: DropPoint, drag: TaskDrag): void;
+  leave(): void;
+  drop(point: DropPoint, drag: TaskDrag): Promise<void>;
+}
+
+/** A drop target under the pointer: a sidebar list (`drop`) or a pane's drop zone (`zone`). */
+export type DropTarget = { element: HTMLElement; drop: SidebarDrop; zone?: undefined } | { element: HTMLElement; zone: DropZone; drop?: undefined };
 
 const ATTRIBUTE = "data-tm-drop";
+const ZONE_ATTRIBUTE = "data-tm-drop-zone";
+const zones = new WeakMap<HTMLElement, DropZone>();
 /** Marks a native drag of tasks, so the sidebar tells it from a file or text dragged over it. */
 export const TASK_DRAG_TYPE = "application/x-tm-task";
 
@@ -18,7 +42,16 @@ export function markDropTarget(element: HTMLElement, drop: SidebarDrop): void {
   element.setAttribute(ATTRIBUTE, JSON.stringify(drop));
 }
 
-export function dropTargetOf(element: Element | null): { element: HTMLElement; drop: SidebarDrop } | undefined {
+/** Makes `element` a drop zone for tasks dragged in another pane; marking it again replaces its zone. */
+export function markDropZone(element: HTMLElement, zone: DropZone): void {
+  element.setAttribute(ZONE_ATTRIBUTE, "");
+  zones.set(element, zone);
+}
+
+export function dropTargetOf(element: Element | null): DropTarget | undefined {
+  const area = element?.closest<HTMLElement>(`[${ZONE_ATTRIBUTE}]`);
+  const zone = area && zones.get(area);
+  if (area && zone) return { element: area, zone };
   const target = element?.closest<HTMLElement>(`[${ATTRIBUTE}]`);
   if (!target) return undefined;
   try {
@@ -27,8 +60,8 @@ export function dropTargetOf(element: Element | null): { element: HTMLElement; d
   } catch { return undefined; }
 }
 
-/** The sidebar list under a point, if any. */
-export function dropTargetAt(doc: Document, x: number, y: number): { element: HTMLElement; drop: SidebarDrop } | undefined {
+/** The sidebar list (or drop zone) under a point, if any. */
+export function dropTargetAt(doc: Document, x: number, y: number): DropTarget | undefined {
   return dropTargetOf(doc.elementFromPoint(x, y));
 }
 

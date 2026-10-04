@@ -30,7 +30,7 @@ import { STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, checkboxLabel, statusClass 
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "./query";
-import { startTaskDrag, type SidebarDrop } from "./sidebar-drop";
+import { markDropZone, startTaskDrag, type SidebarDrop } from "./sidebar-drop";
 import type TaskManagerPlugin from "./main";
 import type { OpenEditorState } from "./main";
 import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
@@ -488,10 +488,31 @@ export class TaskMainView extends ItemView {
     const query = this.baseQuery();
     const tasks = sortTasks([...this.plugin.index.query(query), ...this.projectItems(query)], this.sort, this.descending);
     this.selection.retain(tasks);
+    // In the calendar, its days and hours take them instead.
+    this.takeDropsFromOtherPanes(container);
     this.renderTaskLayouts(container, tasks);
     this.selection.retain(this.visibleTasks);
     this.updateSelection();
     this.updateRoving();
+  }
+
+  /**
+   * Tasks dragged in another pane (the task sidebar's) drop in this list as its own rows do: its gap opens where they
+   * would land. On a group of a property's value (a date, a priority…) they take the value but keep their place in their
+   * notes; in a note or section, the place dropped on too.
+   */
+  private takeDropsFromOtherPanes(container: HTMLElement): void {
+    markDropZone(container, {
+      hover: (point, drag) => this.listDrag?.hoverExternal(point, drag.height ?? 32, container.ownerDocument),
+      leave: () => this.listDrag?.leaveExternal(),
+      drop: async (_point, drag) => {
+        const intent = this.listDrag?.takeExternal();
+        if (!intent || !drag.tasks.length) return;
+        const place = !intent.group || isStructuralGroup(intent.group);
+        this.draggedTasks = drag.tasks;
+        await this.dropListTask(drag.tasks[0], intent.group, place ? intent.anchor : undefined, place ? intent.placement : undefined);
+      }
+    });
   }
 
   /**
@@ -1623,15 +1644,22 @@ export class TaskMainView extends ItemView {
     const tasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
     this.draggedTasks = tasks;
     const doc = this.selectionRows.get(task.id)?.[0]?.ownerDocument;
-    if (doc) startTaskDrag(doc, { tasks, drop: target => this.dropOnSidebar(tasks, target) });
+    if (doc) startTaskDrag(doc, { tasks, drop: target => this.dropTasks(tasks, target) });
     return tasks;
   }
 
-  /** Dragged tasks dropped on a list in the sidebar: Inbox or a project takes them in, Today schedules them for today,
-   * and a tag is added to them. */
-  private async dropOnSidebar(tasks: Task[], target: SidebarDrop): Promise<void> {
+  /**
+   * Dragged tasks dropped on a list in the sidebar: Inbox or a project takes them in, Today schedules them for today,
+   * and a tag is added to them. A calendar's day (or hour) in the task sidebar or another pane schedules them then, and
+   * a place for tasks without a date takes their dates off. Also for tasks dragged in the task sidebar.
+   */
+  async dropTasks(tasks: Task[], target: SidebarDrop): Promise<void> {
     this.draggedTasks = [];
-    if (target.kind === "today") {
+    if (target.kind === "schedule") {
+      const { date, time } = target;
+      const label = `${date ? "Rescheduled" : "Took the dates off"} ${tasks.length === 1 ? `“${tasks[0].title}”` : `${tasks.length} tasks`}`;
+      await this.commit(() => this.plugin.store.bulkChange(tasks, task => date ? rescheduledDraft(task, date, time) : draftForGroup(task, { property: "date" }), {}, label));
+    } else if (target.kind === "today") {
       const today = todayIso();
       const changing = tasks.filter(task => task.scheduledDate !== today);
       if (changing.length) await this.commit(() => this.plugin.store.bulkUpdate(changing, { scheduledDate: today }));

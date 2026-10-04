@@ -1,7 +1,11 @@
-import { ItemView, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
 import { TaskMainView } from "./task-view";
 import { renderCalendar } from "./calendar-view";
+import { ListDragController } from "./list-drag-view";
+import { markDropZone, startTaskDrag, type SidebarDrop } from "./sidebar-drop";
+import { taskTitleLabel } from "./task-title";
+import { renderThingsTaskDetails } from "./things-row-details";
 import { calendarDate, rescheduledDraft } from "./calendar";
 import { todayIso } from "./date";
 import { parseTaskInput, repeatLabel } from "./parser";
@@ -10,7 +14,7 @@ import { isRepeatingTask } from "./recurring-task";
 import { draftFromTask, draftFromTitle, draftMatchesTask } from "./task-draft";
 import type { TaskEditorProperty } from "./task-editor";
 import { taskInputRanges } from "./task-input";
-import { deadlineIsDistant, deadlineIsOverdue, editable, taskDeadlineCountdown, taskTimeDurationLabel, taskTimeLabel } from "./task-row-details";
+import { deadlineIsDistant, deadlineIsOverdue, editable, renderTaskDetails, taskDeadlineCountdown, taskTimeDurationLabel, taskTimeLabel } from "./task-row-details";
 import { STATUS_ICONS, STATUS_LABELS, checkboxLabel, statusClass } from "./task-status";
 import { PRIORITY_NAMES, cardNotes, longDate, paintTokens, repeatIcon, type TaskCardDraft } from "./things-task-card";
 import type { Task, TaskFilter } from "./types";
@@ -38,10 +42,17 @@ function autosize(area: HTMLTextAreaElement): void {
   area.setCssStyles({ height: `${area.scrollHeight}px` });
 }
 
+/** One part of the sidebar, redrawn only when what it shows changes, so typing in one is not disturbed by the other. */
+interface Section { element: HTMLElement; drawn?: string }
+
+/** Upcoming's tasks without a date show in pages, so a large vault does not build every row at once. */
+const LIST_PAGE = 100;
+
 /**
  * The task sidebar (in the right sidebar by default). Its content follows the task view in front: with Today open, the
- * day's calendar; with Upcoming open, the tasks with no date; anywhere else, the selected task's details, editable in
- * place. Only the tasks show: no headings or calendar controls.
+ * day's hours; with Upcoming open, the tasks with no date; and below them (or, anywhere else, filling it) the selected
+ * task's details, editable in place. Only the tasks show: no headings or calendar controls. Tasks drag between it and
+ * the view: onto an hour to schedule them then, from the tasks without a date onto a day.
  */
 export class TaskSidebarView extends ItemView {
   private mode?: SidebarMode;
@@ -49,8 +60,16 @@ export class TaskSidebarView extends ItemView {
   private draft?: { id: string; dirty: boolean } & TaskCardDraft;
   /** Saves and writes, one after another, so each sees the task as the last one left it. */
   private saving: Promise<void> = Promise.resolve();
-  /** What the last render drew; a render that would draw the same is skipped, leaving typing and scrolling alone. */
-  private drawn = "";
+  /** The layout drawn (mode, style, density) and its parts: the day or the list on top, then the details. */
+  private skeleton = "";
+  private planner?: Section;
+  private details?: Section;
+  /** A task selected here (in the day or the list), shown in the details until the view's selection changes. */
+  private localId?: string;
+  /** The view's selection as last seen, to tell when it changes. */
+  private viewSelection = "";
+  private listRows = LIST_PAGE;
+  private listDrag?: ListDragController;
   private indexVersion = 0;
   private renderFrame?: number;
   private closed = false;
@@ -98,79 +117,115 @@ export class TaskSidebarView extends ItemView {
     return view instanceof TaskMainView ? view : undefined;
   }
 
+  /** `force`: redraw both parts, even unchanged. */
   render(force = false): void {
     const view = this.taskView();
     const state = view?.getState();
     const mode: SidebarMode = view && !view.pagePath && (state?.mode === "today" || state?.mode === "upcoming") ? state.mode : "details";
-    const selected = mode === "details" ? view?.sidebarSelection() ?? [] : [];
-    const task = selected.length === 1 ? selected[0] : undefined;
+    const selected = view?.sidebarSelection() ?? [];
+    // A task selected in the view takes over from one selected here.
+    const viewSelection = selected.map(task => task.id).join("\n");
+    if (viewSelection !== this.viewSelection) {
+      this.viewSelection = viewSelection;
+      if (selected.length) this.localId = undefined;
+    }
+    if (mode !== this.mode) { this.localId = undefined; this.listRows = LIST_PAGE; }
+    const local = mode !== "details" && this.localId ? this.plugin.index.taskById(this.localId) : undefined;
+    if (!local) this.localId = undefined;
+    const task = local ?? (selected.length === 1 ? selected[0] : undefined);
     this.followTask(task);
     const settings = this.plugin.settings;
-    const drawn = JSON.stringify([mode, settings.style, settings.density, mode === "details"
-      ? [Boolean(view), selected.length, task?.id, task?.raw, task?.description, task && this.children(task).map(child => child.raw)]
-      : [todayIso(), this.indexVersion, settings.calendarProjectColors, settings.calendarPriorityColors]]);
-    if (!force && drawn === this.drawn) return;
-    const modeChanged = mode !== this.mode;
-    this.drawn = drawn;
+    const skeleton = [mode, settings.style, settings.density].join("|");
+    if (skeleton !== this.skeleton || !this.details?.element.isConnected) this.build(mode, skeleton);
     this.mode = mode;
-    this.preserveView(!modeChanged, () => {
-      const container = this.content;
-      container.empty();
-      // It shares the task views' styles (checkboxes, pills, the calendar), which hang off .tm-main-view.
-      container.addClass("tm-main-view", "tm-task-sidebar");
-      container.toggleClass("tm-style-things", settings.style === "things");
-      container.toggleClass("tm-style-griply", settings.style === "griply");
-      container.toggleClass("tm-density-compact", settings.density === "compact");
-      for (const name of ["today", "upcoming", "details"] as const) container.toggleClass(`is-${name}`, mode === name);
-      if (mode === "details") this.renderDetails(container, view, selected, task);
-      else this.renderPlanner(container, mode);
-    });
+    const planner = this.planner;
+    if (planner && mode !== "details") {
+      this.draw(planner, JSON.stringify([todayIso(), this.indexVersion, this.listRows, settings.calendarProjectColors, settings.calendarPriorityColors]), force, () => this.renderPlanner(planner.element, mode));
+      for (const element of Array.from(planner.element.querySelectorAll<HTMLElement>("[data-task-id]"))) element.toggleClass("is-selected", element.getAttribute("data-task-id") === this.localId);
+    }
+    const details = this.details!;
+    this.draw(details, JSON.stringify([Boolean(view), local ? "local" : selected.length, task?.id, task?.raw, task?.description, task && this.children(task).map(child => child.raw)]), force,
+      () => this.renderDetails(details.element, view, local ? [local] : selected, task));
+  }
+
+  /** Lays the sidebar out for a mode: in Today and Upcoming, their tasks over the details (the bottom third); else the details alone. */
+  private build(mode: SidebarMode, skeleton: string): void {
+    const container = this.content;
+    const settings = this.plugin.settings;
+    container.empty();
+    // It shares the task views' styles (checkboxes, rows, the calendar), which hang off .tm-main-view.
+    container.addClass("tm-main-view", "tm-task-sidebar");
+    container.toggleClass("tm-style-things", settings.style === "things");
+    container.toggleClass("tm-style-griply", settings.style === "griply");
+    container.toggleClass("tm-density-compact", settings.density === "compact");
+    for (const name of ["today", "upcoming", "details"] as const) container.toggleClass(`is-${name}`, mode === name);
+    this.planner = mode === "details" ? undefined : { element: container.createDiv({ cls: "tm-sidebar-planner", attr: { "data-tm-scroll-key": "sidebar-planner" } }) };
+    this.details = { element: container.createDiv({ cls: "tm-sidebar-pane", attr: { "data-tm-scroll-key": "sidebar-details" } }) };
+    this.skeleton = skeleton;
+  }
+
+  private draw(section: Section, drawn: string, force: boolean, render: () => void): void {
+    if (!force && section.drawn === drawn) return;
+    const first = section.drawn === undefined;
+    section.drawn = drawn;
+    this.preserveView(section.element, !first, () => { section.element.empty(); render(); });
   }
 
   /** Re-rendering replaces every element; focus (with its caret) and scroll positions go back where they were. */
-  private preserveView(scroll: boolean, update: () => void): void {
-    const container = this.content;
-    const active = container.ownerDocument.activeElement;
-    const key = active && container.contains(active) ? active.closest("[data-tm-focus-key]")?.getAttribute("data-tm-focus-key") : undefined;
+  private preserveView(root: HTMLElement, scroll: boolean, update: () => void): void {
+    const active = root.ownerDocument.activeElement;
+    const key = active && root.contains(active) ? active.closest("[data-tm-focus-key]")?.getAttribute("data-tm-focus-key") : undefined;
     const range = isTextField(active) ? [active.selectionStart ?? 0, active.selectionEnd ?? 0] as const : undefined;
-    const scrolled = [container, ...Array.from(container.querySelectorAll<HTMLElement>("[data-tm-scroll-key]"))]
-      .map(element => ({ key: element === container ? "" : element.getAttribute("data-tm-scroll-key") ?? "", top: element.scrollTop }));
+    const scrolled = [root, ...Array.from(root.querySelectorAll<HTMLElement>("[data-tm-scroll-key]"))]
+      .map(element => ({ key: element === root ? "" : element.getAttribute("data-tm-scroll-key") ?? "", top: element.scrollTop }));
     update();
     if (scroll) for (const { key, top } of scrolled) {
-      const element = key ? container.querySelector<HTMLElement>(`[data-tm-scroll-key="${CSS.escape(key)}"]`) : container;
+      const element = key ? root.querySelector<HTMLElement>(`[data-tm-scroll-key="${CSS.escape(key)}"]`) : root;
       if (element) element.scrollTop = top;
     }
-    const target = key ? container.querySelector<HTMLElement>(`[data-tm-focus-key="${CSS.escape(key)}"]`) : null;
+    const target = key ? root.querySelector<HTMLElement>(`[data-tm-focus-key="${CSS.escape(key)}"]`) : null;
     if (!target) return;
     target.focus({ preventScroll: true });
     if (range && isTextField(target)) target.setSelectionRange(range[0], range[1]);
   }
 
-  // Today and Upcoming: their tasks on a calendar, without its toolbar.
+  /** Shows a task of the day or the list in the details, until another is selected here or in the view. */
+  private select(task: Task): void {
+    this.localId = task.id;
+    this.render();
+  }
 
-  private renderPlanner(container: HTMLElement, mode: "today" | "upcoming"): void {
-    const today = todayIso();
-    const tasks = sortTasks(this.plugin.index.query({ mode: "all", showCompleted: false, filters: mode === "upcoming" ? UNDATED : [] })
-      .filter(task => mode === "upcoming" || calendarDate(task)));
-    if (mode === "upcoming" && !tasks.length) {
-      const empty = container.createDiv({ cls: "tm-empty tm-sidebar-empty" });
-      setIcon(empty.createDiv({ cls: "tm-empty-icon" }), "calendar-check");
-      empty.createEl("h3", { text: "Every task has a date" });
-      return;
-    }
-    renderCalendar(container.createDiv({ cls: "tm-sidebar-calendar" }), {
-      // Today's day, and for Upcoming only the tasks without a date; neither changes period.
-      anchor: today, scope: mode === "today" ? "day" : "month", toolbar: false, unscheduledOnly: mode === "upcoming",
-      tasks, dateFormat: this.plugin.dateFormat(), navigate: () => {},
+  /** Starts a drag of tasks here, which a sidebar list, another pane, or a view's own drop zones can take. */
+  private startDrag(tasks: Task[]): Task[] {
+    startTaskDrag(this.content.ownerDocument, { tasks, drop: target => this.dropTasks(tasks, target) });
+    return tasks;
+  }
+
+  /** What dropping tasks dragged here does is the view's to decide, as for its own (so its selection is kept). */
+  private async dropTasks(tasks: Task[], target: SidebarDrop): Promise<void> {
+    await this.taskView()?.dropTasks(tasks, target);
+  }
+
+  // Today: the day's hours. Upcoming: the tasks without a date, as list rows.
+
+  private renderPlanner(element: HTMLElement, mode: "today" | "upcoming"): void {
+    if (mode === "upcoming") { this.renderUndated(element); return; }
+    const tasks = sortTasks(this.plugin.index.query({ mode: "all", showCompleted: false }).filter(task => calendarDate(task)));
+    renderCalendar(element.createDiv({ cls: "tm-sidebar-calendar" }), {
+      // Today's hours only: no toolbar, no all-day row, and the period never changes.
+      anchor: todayIso(), scope: "day", toolbar: false, allDay: false, tasks, dateFormat: this.plugin.dateFormat(), navigate: () => {},
       color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
       priorityColors: this.plugin.settings.calendarPriorityColors,
       create: preset => this.plugin.openEditor({ mode: "all", preset }),
-      edit: task => this.plugin.openEditor({ mode: "all", task }),
-      toggle: (task, completed) => this.plugin.store.toggle(task, completed),
-      move: async (task, date, time) => {
-        await this.plugin.store.update(task, rescheduledDraft(task, date, time));
-        await this.plugin.index.refreshPath(task.path);
+      // A click shows the task in the details below.
+      bind: (card, task) => {
+        card.setAttribute("data-task-id", task.id);
+        card.addEventListener("click", event => { event.stopPropagation(); this.select(task); });
       },
+      edit: task => this.select(task),
+      dragStart: task => { this.startDrag([task]); },
+      toggle: (task, completed) => this.plugin.store.toggle(task, completed),
+      move: (task, date, time) => this.dropTasks([task], { kind: "schedule", date, time }),
       resize: async (task, date, time, duration) => {
         await this.plugin.store.update(task, { ...rescheduledDraft(task, date, time), durationMinutes: duration });
         await this.plugin.index.refreshPath(task.path);
@@ -178,7 +233,91 @@ export class TaskSidebarView extends ItemView {
     });
   }
 
-  // Everywhere else: the selected task.
+  /**
+   * Upcoming's tasks without a date (All Tasks with No date for both dates), as a list's rows; they drag onto a day in
+   * the view, and tasks dragged here from the view lose their dates.
+   */
+  private renderUndated(element: HTMLElement): void {
+    const all = sortTasks(this.plugin.index.query({ mode: "all", showCompleted: false, filters: UNDATED }));
+    const ids = new Set(all.map(task => task.id));
+    // Subtasks go with their task.
+    const tasks = all.filter(task => !task.parentId || !ids.has(task.parentId));
+    this.takeUndatedDrops(element);
+    if (!tasks.length) {
+      const empty = element.createDiv({ cls: "tm-empty tm-sidebar-empty" });
+      setIcon(empty.createDiv({ cls: "tm-empty-icon" }), "calendar-check");
+      empty.createEl("h3", { text: "Every task has a date" });
+      return;
+    }
+    // Its rows drag to the view (or a sidebar list); among themselves, there is nothing to reorder.
+    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), async () => {}, false, task => this.startDrag([task]), false);
+    const list = element.createDiv({ cls: "tm-task-list", attr: { role: "list", "aria-label": "Tasks without a date" } });
+    for (const task of tasks.slice(0, this.listRows)) this.renderRow(list, task);
+    const hidden = tasks.length - this.listRows;
+    if (hidden > 0) {
+      const more = element.createEl("button", { cls: "tm-show-more-tasks", text: `Show ${Math.min(LIST_PAGE, hidden)} more (${hidden} hidden)`, attr: { type: "button", "data-tm-focus-key": "sidebar-show-more" } });
+      more.addEventListener("click", () => { this.listRows += LIST_PAGE; this.render(); });
+    }
+  }
+
+  /** Tasks dragged here from the view's list take their dates off; a slot opens at the top of the list meanwhile. */
+  private takeUndatedDrops(element: HTMLElement): void {
+    let gap: HTMLElement | undefined;
+    const leave = (): void => { gap?.remove(); gap = undefined; };
+    markDropZone(element, {
+      hover: (_point, drag) => {
+        gap ??= element.ownerDocument.createElement("div");
+        gap.className = "tm-drop-gap";
+        gap.style.setProperty("--tm-gap-height", `${drag.height ?? 32}px`);
+        const host = element.querySelector(".tm-task-list") ?? element;
+        if (host.firstElementChild !== gap) host.prepend(gap);
+      },
+      leave,
+      drop: async (_point, drag) => { leave(); await drag.drop({ kind: "schedule" }); }
+    });
+  }
+
+  /** A task's row, as a list shows it in the chosen style: its checkbox, title and properties; a click shows its details. */
+  private renderRow(list: HTMLElement, task: Task): void {
+    const things = this.plugin.settings.style === "things";
+    const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}`, attr: { role: "listitem", tabindex: "0", "data-task-id": task.id } });
+    row.style.setProperty("--tm-depth", "0");
+    const repeating = things && isRepeatingTask(this.app, task);
+    const target = row.createEl("label", { cls: `tm-checkbox-target${repeating ? ` tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` : ""}` });
+    const checkbox = target.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task) } });
+    checkbox.checked = task.completed;
+    checkbox.addEventListener("change", () => this.toggle(task, checkbox.checked, task.id === this.draft?.id));
+    if (repeating) repeatIcon(target);
+    const content = row.createDiv({ cls: "tm-task-content" });
+    const primary = content.createDiv({ cls: "tm-task-primary" });
+    this.listDrag?.row(row, primary, task);
+    const color = this.plugin.index.projectColor(task.path);
+    if (color) { row.addClass("has-project-color"); row.style.setProperty("--tm-project-color", color); }
+    const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
+    primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title), "data-tm-focus-key": `sidebar-row:${task.id}` } });
+    const metadata = content.createDiv({ cls: things ? "tm-things-secondary" : "tm-task-metadata" });
+    const view = this.taskView();
+    const details = {
+      grouping: "none" as const, dateFormat: this.plugin.dateFormat(), show: (property: string) => property !== "defer", source: task.path, tags: task.tags ?? [],
+      edit: (property: TaskEditorProperty) => { if (view) void this.edit(view, task, property); },
+      openSource: () => void this.openSource(task)
+    };
+    if (lead) {
+      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: true, subtaskMark: true, datesBelow: Platform.isMobile });
+      if (!lead.childElementCount) lead.remove();
+    } else renderTaskDetails(primary, metadata, task, details);
+    if (!metadata.childElementCount) metadata.remove();
+    // The title selects as the rest of the row does; the checkbox and properties keep their own actions.
+    row.addEventListener("click", event => {
+      const control = (event.target as HTMLElement).closest("input, label, a, [role=button]:not(.tm-task-item)");
+      if (!control) this.select(task);
+    });
+    row.addEventListener("keydown", event => {
+      if (event.target === row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); this.select(task); }
+    });
+  }
+
+  // The selected task.
 
   private children(task: Task): Task[] {
     return task.childIds.map(id => this.plugin.index.taskById(id)).filter((child): child is Task => Boolean(child));

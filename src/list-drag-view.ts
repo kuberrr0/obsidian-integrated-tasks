@@ -2,9 +2,9 @@ import { Platform, setIcon } from "obsidian";
 import type { Task } from "./types";
 import { isStructuralGroup, type ListDropGroup, type ListPlacement } from "./list-drag";
 import { taskTitleLabel } from "./task-title";
-import { activeTaskDrag, dropTargetAt, highlightDropTarget, TASK_DRAG_TYPE, type SidebarDrop, type TaskDrag } from "./sidebar-drop";
+import { activeTaskDrag, dropTargetAt, highlightDropTarget, TASK_DRAG_TYPE, type DropPoint, type DropTarget, type TaskDrag } from "./sidebar-drop";
 
-interface DropIntent {
+export interface DropIntent {
   group?: ListDropGroup;
   anchor?: Task;
   placement?: ListPlacement;
@@ -77,9 +77,10 @@ export class ListDragController {
   /** Identifies drop targets so the gap only moves when the drop position changes. */
   private keys = new WeakMap<HTMLElement, number>();
   private lastKey = 0;
+  /** `reorder`: false for a list whose rows only drag elsewhere (to another pane or a sidebar list), taking no drops themselves. */
   constructor(private readonly getTask: (id: string) => Task | undefined,
     private readonly drop: (task: Task, group?: ListDropGroup, anchor?: Task, placement?: ListPlacement) => Promise<void>, private readonly allowNesting = true,
-    private readonly dragStart: (task: Task) => Task[] | void = () => {}) {}
+    private readonly dragStart: (task: Task) => Task[] | void = () => {}, private readonly reorder = true) {}
 
   private clear(): void {
     this.highlighted?.removeAttribute("data-drop-position");
@@ -97,6 +98,34 @@ export class ListDragController {
     if (!original || this.busy) return Promise.resolve();
     this.busy = true;
     return this.drop(original, group, anchor, placement).finally(() => { this.busy = false; });
+  }
+
+  /** The drop target under a point and what dropping there means, from the row (or group) under it outwards. */
+  private hitAt(doc: Document, point: DropPoint): { element: HTMLElement; target: DropIntent } | undefined {
+    let element = this.settledAt(doc, point.clientX, point.clientY);
+    while (element) {
+      const resolve = this.targets.get(element);
+      if (resolve) return { element, target: resolve(point) };
+      element = element.parentElement;
+    }
+    return undefined;
+  }
+
+  /** A drag from another pane over this list (see DropZone): the gap opens where it would land, as for the list's own rows. */
+  hoverExternal(point: DropPoint, height: number, doc: Document): void {
+    const found = this.hitAt(doc, point);
+    if (found && found.element !== this.gap) this.flat = found.target;
+    if (this.flat) this.placeGap(this.flat, height, doc);
+  }
+
+  /** The drag from another pane has left: the gap closes. */
+  leaveExternal(): void { this.removeGap(true); }
+
+  /** Where the drag from another pane lands, as it is let go; the gap closes. */
+  takeExternal(): DropIntent | undefined {
+    const intent = this.intent;
+    this.removeGap(false);
+    return intent;
   }
 
   /** How far `row` is still shifted from its place by a slide in progress: 0 once it has settled. */
@@ -462,7 +491,7 @@ export class ListDragController {
       }
       return { anchor, placement };
     };
-    this.targets.set(row, point => {
+    if (this.reorder) this.targets.set(row, point => {
       const result = intent(point);
       return { ...result, group, indicator: result.anchor.id !== task.id ? "outdent" : result.placement, gap: this.gapFor(row, task, result.anchor, result.placement) };
     });
@@ -481,20 +510,18 @@ export class ListDragController {
     let frameScheduled = false;
     let frameId = 0;
     let sourceRect: DOMRect | undefined;
-    // Dropping on a list in the task sidebar: the drag it reads, the list under the pointer, and, once the pointer
-    // leaves the view (which clips the lifted row), a label with the task's name that follows it instead.
+    // Dropping on a list in the task sidebar, or in another pane: the drag it reads, the list (or pane) under the
+    // pointer, and, once the pointer leaves the view (which clips the lifted row), a label with the task's name that
+    // follows it instead.
     let sidebar: TaskDrag | undefined;
-    let over: { element: HTMLElement; drop: SidebarDrop } | undefined;
+    let over: DropTarget | undefined;
     let chip: HTMLElement | undefined;
     let label = taskTitleLabel(task.title);
-    const hit = (point: { clientX: number; clientY: number }): { element: HTMLElement; target: DropIntent } | undefined => {
-      let element = this.settledAt(row.ownerDocument, point.clientX, point.clientY);
-      while (element) {
-        const resolve = this.targets.get(element);
-        if (resolve) return { element, target: resolve(point) };
-        element = element.parentElement;
-      }
-      return undefined;
+    const hit = (point: DropPoint): { element: HTMLElement; target: DropIntent } | undefined => this.hitAt(row.ownerDocument, point);
+    /** The pointer leaves a drop target: its highlight, or a pane's preview, goes. */
+    const leave = (target: DropTarget | undefined): void => {
+      if (target?.zone) target.zone.leave();
+      else highlightDropTarget(target?.element, false);
     };
     /** Glides the floating row onto `to` (the gap, or back to its slot); resolves when it arrives, at once without motion. */
     const glide = async (to: DOMRect): Promise<void> => {
@@ -563,8 +590,11 @@ export class ListDragController {
       const current = preview;
       if (!point || !dragging || !current) return;
       const doc = row.ownerDocument;
-      const side = sidebar ? dropTargetAt(doc, point.clientX, point.clientY) : undefined;
-      const bounds = (row.closest(".tm-main-view") ?? row.parentElement)?.getBoundingClientRect();
+      const scope = row.closest(".tm-main-view");
+      let side = sidebar ? dropTargetAt(doc, point.clientX, point.clientY) : undefined;
+      // The view the row is in takes it itself.
+      if (side && scope?.contains(side.element)) side = undefined;
+      const bounds = (scope ?? row.parentElement)?.getBoundingClientRect();
       const outside = Boolean(bounds && (point.clientX < bounds.left || point.clientX > bounds.right || point.clientY < bounds.top || point.clientY > bounds.bottom));
       const height = sourceRect?.height ?? 0;
       // Above or below is judged by the lifted row's middle, wherever on it the row was grabbed.
@@ -579,10 +609,11 @@ export class ListDragController {
       previewShift = { x: point.clientX - previewOffset.x - previewBase.left, y: point.clientY - previewOffset.y - previewBase.top };
       current.style.transform = `translate3d(${previewShift.x}px, ${previewShift.y}px, 0px)`;
       if (side?.element !== over?.element) {
-        highlightDropTarget(over?.element, false);
+        leave(over);
         over = side;
-        highlightDropTarget(over?.element, true);
+        if (over && !over.zone) highlightDropTarget(over.element, true);
       }
+      if (over?.zone && sidebar) over.zone.hover(point, sidebar);
       if (outside) {
         chip ??= doc.body.createDiv({ cls: "tm-drag-chip", text: label, attr: { "aria-hidden": "true" } });
         chip.style.left = `${point.clientX + 12}px`;
@@ -617,6 +648,7 @@ export class ListDragController {
         row.setPointerCapture(event.pointerId);
         const moving = this.dragStart(task) || [task];
         sidebar = activeTaskDrag();
+        if (sidebar) sidebar.height = row.getBoundingClientRect().height;
         label = moving.length > 1 ? `${moving.length} tasks` : taskTitleLabel(task.title);
         const rect = row.getBoundingClientRect();
         sourceRect = rect;
@@ -679,7 +711,7 @@ export class ListDragController {
       preview = undefined;
       chip?.remove();
       chip = undefined;
-      highlightDropTarget(over?.element, false);
+      leave(over);
       over = undefined;
       sidebar = undefined;
       stopEscape?.();
@@ -733,15 +765,19 @@ export class ListDragController {
       pointer = undefined;
       if (captured) row.releasePointerCapture(event.pointerId);
       if (!captured) { reset(); return; }
-      // Dropped on a sidebar list: the rows come back at once, and the list's change redraws them.
+      // Dropped on a sidebar list, or in another pane: the rows come back at once, and the change redraws them.
       const onSidebar = over && sidebar;
       if (onSidebar) {
-        const drop = over!.drop;
+        const target = over!;
+        // The pane drops before the drag resets (which would take its preview away).
+        over = undefined;
+        const point = { clientX: event.clientX, clientY: event.clientY };
+        const dropped = target.zone ? target.zone.drop(point, onSidebar) : onSidebar.drop(target.drop);
         this.removeGap(false);
         this.restoreSources(false);
         reset();
         this.original = undefined;
-        void onSidebar.drop(drop);
+        void dropped;
         return;
       }
       const gap = this.gap;

@@ -1,6 +1,6 @@
 import { taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
 import { taskTitleLabel } from "./task-title";
-import { TASK_DRAG_TYPE } from "./sidebar-drop";
+import { activeTaskDrag, markDropZone, TASK_DRAG_TYPE, type TaskDrag } from "./sidebar-drop";
 import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
@@ -38,6 +38,8 @@ export interface CalendarOptions {
   toolbar?: boolean;
   /** Draws only the tasks without a date, without the days. */
   unscheduledOnly?: boolean;
+  /** False leaves out a day's all-day row (its tasks without a time). */
+  allDay?: boolean;
 }
 
 /** Unscheduled tasks render in pages so a large vault does not build every card at once. */
@@ -135,18 +137,36 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     }
     if (gap.parentElement !== element || gap !== element.lastElementChild) element.appendChild(gap);
   };
+  // A card dragged in another calendar (its drag is the task drag in progress) drops here too, as do a list's rows
+  // dragged in another pane (on this day as a drop zone): either is scheduled on this day, at the time dropped on.
+  const foreign = (event: DragEvent): TaskDrag | undefined => !dragged && event.dataTransfer?.types.includes(TASK_DRAG_TYPE) ? activeTaskDrag() : undefined;
+  const scheduleElsewhere = (drag: TaskDrag, date: string, time?: string): Promise<void> => drag.drop({ kind: "schedule", date, time })
+    .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not reschedule task."); });
   const dropTarget = (element: HTMLElement, targetDate: string, getTime?: (point: { clientY: number }) => string): void => {
     element.addEventListener("dragover", event => {
-      if (!dragged || moving) return;
+      const task = dragged ?? foreign(event)?.tasks[0];
+      if (!task || moving) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      showGap(element, dragged, getTime?.(event));
+      showGap(element, task, getTime?.(event));
+    });
+    markDropZone(element, {
+      hover: (point, drag) => { if (drag.tasks[0]) showGap(element, drag.tasks[0], getTime?.(point)); },
+      leave: () => { if (gap?.parentElement === element) hideGap(); },
+      drop: async (point, drag) => { hideGap(); await scheduleElsewhere(drag, targetDate, getTime?.(point)); }
     });
     element.addEventListener("dragleave", event => {
       if (gap?.parentElement === element && !element.contains(event.relatedTarget as Node | null)) hideGap();
     });
     element.addEventListener("drop", event => {
       hideGap();
+      const other = foreign(event);
+      if (other && !moving) {
+        event.preventDefault();
+        event.stopPropagation();
+        void scheduleElsewhere(other, targetDate, getTime?.(event));
+        return;
+      }
       if (!dragged || moving) return;
       event.preventDefault();
       event.stopPropagation();
@@ -211,7 +231,7 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   };
   // A card being dragged fades where it was, as a list's row leaves its place; after the browser has taken its picture.
   const liftCard = (card: HTMLElement): void => { (card.ownerDocument?.defaultView ?? window).setTimeout(() => { if (dragged) card.addClass("is-dragging"); }, 0); };
-  const dropCard = (card: HTMLElement): void => { dragged = undefined; card.removeClass("is-dragging"); hideGap(); };
+  const dropCard = (card: HTMLElement): void => { dragged = undefined; grabOffsetMinutes = 0; card.removeClass("is-dragging"); hideGap(); };
   const projectCard = (card: HTMLElement, task: Task, project: Project): HTMLElement => {
     card.addClass("is-project");
     const icon = card.createSpan({ cls: "tm-calendar-project-progress", attr: { "aria-hidden": "true" } });
@@ -456,9 +476,11 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     // Only the tasks without a date, below.
   } else if (options.scope === "day" || options.scope === "week" || options.scope === "four-day") {
     if (options.scope === "day") {
-      const allDay = surface.createDiv({ cls: "tm-calendar-allday" });
-      allDay.createSpan({ text: "all-day" });
-      for (const task of (byDate.get(options.anchor) ?? []).filter(task => !calendarTime(task))) taskCard(allDay, task);
+      if (options.allDay !== false) {
+        const allDay = surface.createDiv({ cls: "tm-calendar-allday" });
+        allDay.createSpan({ text: "all-day" });
+        for (const task of (byDate.get(options.anchor) ?? []).filter(task => !calendarTime(task))) taskCard(allDay, task);
+      }
       const scroll = surface.createDiv({ cls: "tm-calendar-day-scroll", attr: { "data-tm-scroll-key": "calendar-grid" } });
       const timeline = scroll.createDiv({ cls: "tm-calendar-timeline" });
       renderHours(timeline);

@@ -297,7 +297,7 @@ it("drops dragged tasks on the sidebar's lists: Inbox or a project moves them, T
   const bulkUpdate = vi.fn().mockResolvedValue([]);
   Object.assign(plugin.store, { bulkUpdate });
   Object.assign(plugin.settings, { inboxPath: "Inbox.md" });
-  const drop = (view as unknown as { dropOnSidebar(tasks: Task[], target: SidebarDrop): Promise<void> }).dropOnSidebar.bind(view);
+  const drop = (tasks: Task[], target: SidebarDrop) => view.dropTasks(tasks, target);
   const tagged = { ...tasks[1], tags: ["work"] };
   await drop([tasks[0], tagged], { kind: "tag", tag: "work" });
   expect(bulkUpdate).toHaveBeenLastCalledWith([tasks[0]], expect.any(Function));
@@ -602,13 +602,13 @@ it("queries a file-backed tag across the vault instead of restricting results to
   vi.spyOn(view, "render").mockImplementation(() => {});
   await view.setState({ mode: "tags", tag: "work", pagePath: "Tags/work.md" });
   const internals = view as unknown as {
-    taskResults: { empty(): void };
+    taskResults: { empty(): void; setAttribute(name: string, value: string): void };
     updateSelection(): void;
     renderTaskLayouts(): void;
     renderTaskResults(): void;
     taskSourcePath?: string;
   };
-  internals.taskResults = { empty: vi.fn() };
+  internals.taskResults = { empty: vi.fn(), setAttribute: vi.fn() };
   vi.spyOn(internals, "updateSelection").mockImplementation(() => {});
   vi.spyOn(internals, "renderTaskLayouts").mockImplementation(() => {});
   internals.renderTaskResults();

@@ -2536,28 +2536,35 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
 .tm-things-card-project-chevron svg { width: 12px; height: 12px; color: var(--text-faint); }
 .tm-things-card-project-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Task sidebar (the right sidebar by default): Today's calendar, Upcoming's tasks with no date, or the selected task's
-   details; only the tasks, with no headings or calendar controls. It shares the task views' styles through
-   .tm-main-view. */
+/* Task sidebar (the right sidebar by default): Today's hours or Upcoming's tasks with no date over the selected task's
+   details (its bottom third), or elsewhere the details alone; only the tasks, with no headings or calendar controls.
+   It shares the task views' styles through .tm-main-view. */
 .workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar {
   display: flex;
   flex-direction: column;
-  gap: var(--size-4-3);
   padding: var(--size-4-3) var(--size-4-3) var(--size-4-6);
 }
+.tm-sidebar-pane { display: flex; flex-direction: column; gap: var(--size-4-3); }
+/* With Today or Upcoming open, each part scrolls on its own: the tasks in two thirds, the details in the last. */
+.workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar:is(.is-today, .is-upcoming) { overflow: hidden; padding-bottom: var(--size-4-3); }
+.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-planner { display: flex; flex: 2 1 0; flex-direction: column; min-height: 0; overflow-y: auto; }
+.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  margin-top: var(--size-4-3); padding-top: var(--size-4-3); border-top: 1px solid var(--background-modifier-border);
+}
+.tm-task-sidebar.is-today .tm-sidebar-planner { overflow: hidden; }
 
-/* Today's calendar fills the sidebar's height, and its hours scroll. */
-.workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar.is-today { overflow: hidden; }
+/* Today's hours fill their part, and scroll. */
 .tm-sidebar-calendar, .tm-sidebar-calendar .tm-calendar { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .tm-task-sidebar .tm-calendar-day-scroll { flex: 1; min-height: 0; max-height: none; border-radius: var(--radius-m); }
-.tm-task-sidebar .tm-calendar-allday { flex-shrink: 0; max-height: 30%; overflow-y: auto; }
-/* Upcoming's tasks with no date, one per line, without the tray's heading and hint. */
-.tm-task-sidebar .tm-calendar-unscheduled { margin: 0; }
-.tm-task-sidebar .tm-calendar-unscheduled :is(h3, .tm-calendar-plan-hint) { display: none; }
-.tm-task-sidebar .tm-calendar-unscheduled .tm-calendar-task { width: 100%; margin: 0 0 4px; }
+/* Upcoming's tasks with no date are a list's rows, narrower: their properties go below the title. */
+.tm-task-sidebar .tm-sidebar-planner .tm-task-list { margin: 0; }
+.tm-task-sidebar .tm-sidebar-planner .tm-task-content { grid-template-columns: minmax(0, 1fr); }
 
 /* The selected task. */
 .tm-task-sidebar .tm-sidebar-empty { flex: 1; min-height: 240px; padding: 0 var(--size-4-4); }
+.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane .tm-sidebar-empty { min-height: 0; padding-block: var(--size-4-2); }
+.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane .tm-empty-icon { display: none; }
 .tm-sidebar-footer { display: flex; }
 button.tm-sidebar-open-note {
   display: inline-flex; align-items: center; gap: 6px; height: auto; padding: 4px 8px;
