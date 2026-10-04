@@ -69,7 +69,7 @@ Break larger tasks into subtasks. A new task can also be typed or pasted with mo
 
 ### List: work through the details
 
-Click a checkbox to complete a task, or click its title to edit it. Drag tasks to reorder them or move them between sections and notes. Subtasks and descriptions travel with their parent. You can also drop tasks, from any list, board or calendar, on a list in the task sidebar, as in Things: drop them on **Inbox**, a project, or a note in the sidebar's file tree to move them there, on **Today** to schedule them for today, or on a tag to add that tag. The list lights up while a task is over it, and dragging a selection changes every selected task.
+Click a checkbox to complete a task, or click its title to edit it. Drag tasks to reorder them or move them between sections and notes; while dragging, move right to make a task a subtask of the one above, or left to outdent it. Subtasks and descriptions travel with their parent. You can also drop tasks, from any list, board or calendar, on a list in the task sidebar, as in Things: drop them on **Inbox**, a project, or a note in the sidebar's file tree to move them there, on **Today** to schedule them for today, or on a tag to add that tag. The list lights up while a task is over it, and dragging a selection changes every selected task.
 
 Use the **+** beside a group or heading to add a task there. Click a task's source label to return to the note it came from.
 

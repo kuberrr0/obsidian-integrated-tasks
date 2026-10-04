@@ -16,6 +16,11 @@ interface DropIntent {
 /** How long each drag motion takes: lifting, a gap moving, rows sliding, and settling on drop. */
 export const DRAG_MOTION_MS = 150;
 const DRAG_EASING = "cubic-bezier(0.2, 0, 0, 1)";
+/** Moving this far right of where the row was grabbed nests it; it un-nests back within NEST_RELEASE_PX. */
+const NEST_PX = 24;
+const NEST_RELEASE_PX = 16;
+/** Once above or below a row is chosen, the other side needs the lifted row this far past the row's middle. */
+const SIDE_HYSTERESIS_PX = 4;
 /** On touch screens a row lifts for dragging after a press held this long (and within PRESS_SLOP px of where it began). */
 const LONG_PRESS_MS = 350;
 const PRESS_SLOP = 8;
@@ -60,8 +65,11 @@ export class ListDragController {
   private gap?: HTMLElement;
   private gapKey?: string;
   private intent?: DropIntent;
+  /** The slot as chosen by position alone, before moving right nests it; un-nesting returns to it. */
+  private flat?: DropIntent;
   private sources: HTMLElement[] = [];
-  private slides = new WeakMap<HTMLElement, Animation>();
+  /** Rows (and the gap) sliding into place, with how far each started from where it now sits. */
+  private slides = new WeakMap<HTMLElement, { animation: Animation; delta: number }>();
   /** Identifies drop targets so the gap only moves when the drop position changes. */
   private keys = new WeakMap<HTMLElement, number>();
   private lastKey = 0;
@@ -87,32 +95,106 @@ export class ListDragController {
     return this.drop(original, group, anchor, placement).finally(() => { this.busy = false; });
   }
 
+  /** How far `row` is still shifted from its place by a slide in progress: 0 once it has settled. */
+  private slideOffset(row: Element): number {
+    const slide = row.instanceOf(HTMLElement) ? this.slides.get(row) : undefined;
+    if (!slide || slide.animation.playState === "finished" || slide.animation.playState === "idle") return 0;
+    const progress = slide.animation.effect?.getComputedTiming().progress;
+    return progress === null || progress === undefined ? 0 : slide.delta * (1 - progress);
+  }
+
+  /** `element`'s box where it will rest once the row (or gap) holding it stops sliding. */
+  private settledRect(element: Element): { left: number; right: number; top: number; bottom: number; height: number } {
+    const rect = element.getBoundingClientRect();
+    const holder = element.closest(".tm-task-item, .tm-drop-gap");
+    const shift = holder ? this.slideOffset(holder) : 0;
+    return { left: rect.left, right: rect.right, top: rect.top - shift, bottom: rect.bottom - shift, height: rect.height };
+  }
+
+  /**
+   * What will be under the point once sliding rows settle. Rows (and the gap) slide aside for 150ms after the gap
+   * moves; aiming at where they are drawn mid-slide would move the gap again, and again. So look past sliding rows
+   * to the list beneath, and find the row (or gap) whose resting place holds the point.
+   */
+  private settledAt(doc: Document, x: number, y: number): HTMLElement | null {
+    const stack = doc.elementsFromPoint?.(x, y) ?? [];
+    const under = stack.length ? stack : [doc.elementFromPoint(x, y)].filter((element): element is Element => element !== null);
+    const sliding = (element: Element): boolean => {
+      const holder = element.closest(".tm-task-item, .tm-drop-gap");
+      return Boolean(holder && this.slideOffset(holder) !== 0);
+    };
+    const first = under[0];
+    if (!first?.instanceOf(HTMLElement)) return null;
+    // Nothing sliding under the point: it is what it seems.
+    if (!sliding(first)) return first;
+    const stable = under.find(element => !sliding(element));
+    const list = stable?.closest<HTMLElement>(".tm-task-list") ?? first.closest<HTMLElement>(".tm-task-list");
+    if (!list) return stable?.instanceOf(HTMLElement) ? stable : first;
+    // The row resting under the point; between rows, the nearest; below them all, the list itself (its end).
+    let nearest: { element: HTMLElement; distance: number } | undefined;
+    let bottom = -Infinity;
+    for (const child of Array.from(list.children)) {
+      if (!child.instanceOf(HTMLElement) || child.classList.contains("tm-drag-preview")) continue;
+      if (!this.targets.has(child) && !child.classList.contains("tm-drop-gap")) continue;
+      const rect = this.settledRect(child);
+      if (rect.height <= 0) continue;
+      if (y >= rect.top && y < rect.bottom) return child;
+      bottom = Math.max(bottom, rect.bottom);
+      const distance = y < rect.top ? rect.top - y : y - rect.bottom;
+      if (!nearest || distance < nearest.distance) nearest = { element: child, distance };
+    }
+    return nearest && y < bottom ? nearest.element : list;
+  }
+
   /**
    * Moves something while every row it displaces slides from where it was to where it lands,
-   * so rows glide aside as the drop gap opens, closes or moves.
+   * so rows glide aside as the drop gap opens, closes or moves. A row whose resting place the change
+   * leaves alone keeps sliding as it was; one that moves glides on from where it is drawn.
    */
   private slide(scope: Element | Document, change: () => void): void {
     const rows = Array.from(scope.querySelectorAll<HTMLElement>(".tm-task-item:not(.tm-drag-preview), .tm-drop-gap"));
-    // Measured mid-slide, so a slide interrupted by the next one continues from where the row is.
-    const before = new Map(rows.map(row => [row, row.getBoundingClientRect().top]));
+    // Read every position first, then change and read again, then start animations: one layout each way.
+    const before = new Map(rows.map(row => { const top = row.getBoundingClientRect().top; return [row, { drawn: top, rest: top - this.slideOffset(row) }]; }));
     change();
     const duration = motion(scope.instanceOf(Document) ? scope : scope.ownerDocument);
+    const after = new Map(rows.filter(row => row.isConnected).map(row => [row, row.getBoundingClientRect().top - this.slideOffset(row)]));
     for (const row of rows) {
-      this.slides.get(row)?.cancel();
-      if (!row.isConnected || !duration || typeof row.animate !== "function") continue;
-      const delta = before.get(row)! - row.getBoundingClientRect().top;
-      if (Math.abs(delta) < 0.5) continue;
-      this.slides.set(row, row.animate([{ transform: `translateY(${delta}px)` }, { transform: "none" }], { duration, easing: DRAG_EASING }));
+      const rest = after.get(row);
+      const was = before.get(row)!;
+      if (rest === undefined) { this.slides.get(row)?.animation.cancel(); continue; }
+      if (Math.abs(rest - was.rest) < 0.5) continue;
+      this.slides.get(row)?.animation.cancel();
+      this.slides.delete(row);
+      const delta = was.drawn - rest;
+      if (!duration || typeof row.animate !== "function" || Math.abs(delta) < 0.5) continue;
+      this.slides.set(row, { animation: row.animate([{ transform: `translateY(${delta}px)` }, { transform: "none" }], { duration, easing: DRAG_EASING }), delta });
     }
+  }
+
+  /**
+   * Where the gap would sit, as one key however it is described: "after row 3" and "before row 4" are the
+   * same slot, as are slots that only folded-away dragged rows separate. Its list, the row shown above it, and its depth.
+   */
+  private slotKey(place: NonNullable<DropIntent["gap"]>): string {
+    const shown = (element: Element | null): boolean => Boolean(element?.instanceOf(HTMLElement) && element !== this.gap
+      && !element.classList.contains("tm-drag-source") && !element.classList.contains("tm-drag-preview"));
+    const container = place.where === "start" || place.where === "end" ? place.element : place.element.parentElement;
+    let above: Element | null = place.where === "start" ? null : place.where === "end" ? place.element.lastElementChild
+      : place.where === "after" ? place.element : place.element.previousElementSibling;
+    while (above && !shown(above)) above = above.previousElementSibling;
+    return `${container ? this.targetKey(container) : 0}:${above?.instanceOf(HTMLElement) ? this.targetKey(above) : "start"}:${place.depth}`;
   }
 
   /** Opens (or moves) the drop gap to where the dragged rows would land; rows slide aside unless `animate` is off. */
   private placeGap(intent: DropIntent | undefined, height: number, doc: Document, animate = true): void {
     const place = intent?.gap;
-    const key = place ? `${this.targetKey(place.element)}:${place.where}:${place.depth}` : undefined;
-    if (!place || key === this.gapKey) return;
+    if (!place) return;
+    // The latest description of the slot decides the drop, even when the gap stays where it is.
+    // The grabbed row's own slot is no drop: letting go there puts the row back.
+    this.intent = intent?.indicator === "none" ? undefined : intent;
+    const key = this.slotKey(place);
+    if (key === this.gapKey) return;
     this.gapKey = key;
-    this.intent = intent;
     const move = (): void => {
       if (!this.gap) {
         this.gap = doc.createElement("div");
@@ -172,6 +254,31 @@ export class ListDragController {
     return { group: this.rowGroups.get(anchor.id), anchor, placement: "after", indicator: "outdent", gap: this.gapFor(row, anchor, anchor, "after") };
   }
 
+  /** The row shown just above where `place` puts the gap (dragged rows are folded away), if any. */
+  private rowAbove(place: NonNullable<DropIntent["gap"]>): HTMLElement | undefined {
+    let above: Element | null = place.where === "start" ? null : place.where === "end" ? place.element.lastElementChild
+      : place.where === "after" ? place.element : place.element.previousElementSibling;
+    for (; above; above = above.previousElementSibling) {
+      if (above.instanceOf(HTMLElement) && this.rowTasks.has(above) && !above.classList.contains("tm-drag-source") && !above.classList.contains("tm-drag-preview")) return above;
+    }
+    return undefined;
+  }
+
+  /**
+   * `flat` nested one level deeper when the pointer has moved right of where the row was grabbed: the task becomes
+   * the last subtask of the nearest row above the slot at the slot's level. Otherwise `flat` as it is.
+   */
+  private nested(flat: DropIntent, x: number): DropIntent {
+    if (!this.allowNesting || !this.home || !flat.gap) return flat;
+    const dx = x - this.home.x;
+    if (dx < (this.intent?.placement === "child" ? NEST_RELEASE_PX : NEST_PX)) return flat;
+    const above = this.rowAbove(flat.gap);
+    const parentRow = above && this.rowAtDepth(above, flat.gap.depth);
+    const parent = parentRow && this.rowTasks.get(parentRow);
+    if (!parentRow || !parent) return flat;
+    return { group: this.rowGroups.get(parent.id), anchor: parent, placement: "child", indicator: "child", gap: this.gapFor(parentRow, parent, parent, "child") };
+  }
+
   /** The last top-level task in a list, so a drop at the end of a section lands after it in the note. */
   private lastRow(list: HTMLElement): Task | undefined {
     const row = Array.from(list.children).reverse().find((row): row is HTMLElement =>
@@ -224,6 +331,7 @@ export class ListDragController {
     this.sideways = false;
     this.gapKey = undefined;
     this.intent = undefined;
+    this.flat = undefined;
     if (!gap) return;
     this.targets.delete(gap);
     if (animated && gap.isConnected) this.slide(gap.closest(".tm-main-view") ?? gap.ownerDocument, () => gap.remove());
@@ -243,8 +351,8 @@ export class ListDragController {
       && !row.classList.contains("tm-drag-preview") && depthOf(row) === 0 && this.targets.has(row));
     if (!last) return this.targets.get(previous)?.({ clientX: 0, clientY: 0 }) ?? { group, indicator: "group", gap: { element: list, where: "start", depth: 0 } };
     // Resolve as a point just below the row, level with its title: "after", neither nested nor outdented.
-    const title = last.querySelector(".tm-task-primary")?.getBoundingClientRect() ?? last.getBoundingClientRect();
-    return this.targets.get(last)!({ clientX: title.left, clientY: last.getBoundingClientRect().bottom - 1 });
+    const title = this.settledRect(last.querySelector(".tm-task-primary") ?? last);
+    return this.targets.get(last)!({ clientX: title.left, clientY: this.settledRect(last).bottom - 1 });
   }
 
   group(element: HTMLElement, group: ListDropGroup): void {
@@ -276,7 +384,7 @@ export class ListDragController {
     this.rows.set(task.id, row);
     this.rowTasks.set(row, task);
     this.rowGroups.set(task.id, group);
-    const handle = primary.createEl("button", { cls: "clickable-icon tm-list-drag-handle", attr: { "aria-label": `Drag ${task.title}`, title: "Drag to reorder; drop on a task's title to nest under it, or to the left to outdent" } });
+    const handle = primary.createEl("button", { cls: "clickable-icon tm-list-drag-handle", attr: { "aria-label": `Drag ${task.title}`, title: "Drag to reorder; move right to nest under the task above, or left to outdent" } });
     setIcon(handle, "grip-vertical");
     primary.prepend(handle);
     row.draggable = true;
@@ -301,13 +409,14 @@ export class ListDragController {
     });
     row.addEventListener("dragend", () => { suppressClickUntil = Date.now() + 250; this.taskId = undefined; row.removeClass("is-dragging"); this.clear(); });
     const intent = (event: { clientX: number; clientY: number }): { anchor: Task; placement: ListPlacement } => {
-      const rect = row.getBoundingClientRect();
+      // Measured where the row will rest, should it be sliding aside.
+      const rect = this.settledRect(row);
       const left = primary.getBoundingClientRect().left;
       let anchor = task;
-      // Nesting only over the title of the task to nest under; elsewhere on the row, above or below it.
-      const title = primary.querySelector(".tm-task-title")?.getBoundingClientRect();
-      const onTitle = Boolean(title && event.clientX >= title.left && event.clientX <= title.right && event.clientY >= title.top && event.clientY <= title.bottom);
-      let placement: ListPlacement = this.allowNesting && onTitle ? "child" : event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      // Above or below the row by its middle; having chosen one side, the other needs a few pixels past it.
+      const current = this.flat?.anchor?.id === task.id ? this.flat.placement : undefined;
+      const middle = rect.top + rect.height / 2 + (current === "before" ? SIDE_HYSTERESIS_PX : current === "after" ? -SIDE_HYSTERESIS_PX : 0);
+      let placement: ListPlacement = event.clientY < middle ? "before" : "after";
       if (this.allowNesting && event.clientX < left - 16 && anchor.parentId) {
         let levels = Math.max(1, Math.floor((left - event.clientX) / 24));
         while (anchor.parentId && levels-- > 0) {
@@ -330,6 +439,13 @@ export class ListDragController {
     let dragging = false;
     let preview: HTMLElement | undefined;
     let previewOffset = { x: 0, y: 0 };
+    /** Where the floating row was placed when lifted; it then follows the pointer by a transform, which needs no layout. */
+    let previewBase = { left: 0, top: 0 };
+    let previewShift = { x: 0, y: 0 };
+    /** The latest pointer position, handled once per frame however many moves arrive. */
+    let latest: { clientX: number; clientY: number } | undefined;
+    let frameScheduled = false;
+    let frameId = 0;
     let sourceRect: DOMRect | undefined;
     // Dropping on a list in the task sidebar: the drag it reads, the list under the pointer, and, once the pointer
     // leaves the view (which clips the lifted row), a label with the task's name that follows it instead.
@@ -337,11 +453,11 @@ export class ListDragController {
     let over: { element: HTMLElement; drop: SidebarDrop } | undefined;
     let chip: HTMLElement | undefined;
     let label = taskTitleLabel(task.title);
-    const hit = (event: PointerEvent): { element: HTMLElement; target: DropIntent } | undefined => {
-      let element = row.ownerDocument.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+    const hit = (point: { clientX: number; clientY: number }): { element: HTMLElement; target: DropIntent } | undefined => {
+      let element = this.settledAt(row.ownerDocument, point.clientX, point.clientY);
       while (element) {
         const resolve = this.targets.get(element);
-        if (resolve) return { element, target: resolve(event) };
+        if (resolve) return { element, target: resolve(point) };
         element = element.parentElement;
       }
       return undefined;
@@ -351,10 +467,14 @@ export class ListDragController {
       const current = preview;
       if (!current) return;
       const from = current.getBoundingClientRect();
+      // It settles back to the row's size and shadow as it lands.
+      current.addClass("is-settling");
       const duration = motion(row.ownerDocument);
       if (!duration || typeof current.animate !== "function") return;
       current.querySelector(".tm-drag-count")?.remove();
-      const animation = current.animate([{ transform: "none" }, { transform: `translate(${to.left - from.left}px, ${to.top - from.top}px)` }], { duration, easing: DRAG_EASING, fill: "forwards" });
+      const shifted = (x: number, y: number): string => `translate3d(${x}px, ${y}px, 0px)`;
+      const animation = current.animate([{ transform: shifted(previewShift.x, previewShift.y) },
+        { transform: shifted(previewShift.x + to.left - from.left, previewShift.y + to.top - from.top) }], { duration, easing: DRAG_EASING, fill: "forwards" });
       await animation.finished.catch(() => {});
     };
     // Touch: a long press lifts the row (armed), and moving the finger then drags it. Before that, a quick
@@ -402,6 +522,55 @@ export class ListDragController {
       if (!armed && !dragging) return;
       event.preventDefault(); event.stopImmediatePropagation();
     }, true);
+    /** One frame's work for the latest pointer position: read where it is, move the gap, then move what follows the pointer. */
+    const update = (): void => {
+      frameScheduled = false;
+      const point = latest;
+      const current = preview;
+      if (!point || !dragging || !current) return;
+      const doc = row.ownerDocument;
+      const side = sidebar ? dropTargetAt(doc, point.clientX, point.clientY) : undefined;
+      const bounds = (row.closest(".tm-main-view") ?? row.parentElement)?.getBoundingClientRect();
+      const outside = Boolean(bounds && (point.clientX < bounds.left || point.clientX > bounds.right || point.clientY < bounds.top || point.clientY > bounds.bottom));
+      const height = sourceRect?.height ?? 0;
+      // Above or below is judged by the lifted row's middle, wherever on it the row was grabbed.
+      const found = hit({ clientX: point.clientX, clientY: point.clientY - previewOffset.y + height / 2 });
+      // The gap marks the drop. Hovering the gap keeps its slot, except that moving left over the grabbed
+      // row's own slot (or where earlier left moves took it) outdents it.
+      if (found && found.element !== this.gap) { this.sideways = false; this.flat = found.target; }
+      else if (found && this.sideways) { const beside = this.besideGap(point.clientX); if (beside) this.flat = beside; }
+      // Then, wherever the slot is, moving right of where the row was grabbed nests it under the row above.
+      if (this.flat) this.placeGap(this.nested(this.flat, point.clientX), height, doc);
+      // Writes last, so this frame lays out once.
+      previewShift = { x: point.clientX - previewOffset.x - previewBase.left, y: point.clientY - previewOffset.y - previewBase.top };
+      current.style.transform = `translate3d(${previewShift.x}px, ${previewShift.y}px, 0px)`;
+      if (side?.element !== over?.element) {
+        highlightDropTarget(over?.element, false);
+        over = side;
+        highlightDropTarget(over?.element, true);
+      }
+      if (outside) {
+        chip ??= doc.body.createDiv({ cls: "tm-drag-chip", text: label, attr: { "aria-hidden": "true" } });
+        chip.style.left = `${point.clientX + 12}px`;
+        chip.style.top = `${point.clientY + 8}px`;
+      } else {
+        chip?.remove();
+        chip = undefined;
+      }
+      current.toggleClass("is-outside", outside);
+    };
+    const win = (): Window => row.ownerDocument.defaultView ?? window;
+    /** Handles the pending pointer position now (before a drop reads where it lands). */
+    const flush = (): void => {
+      if (!frameScheduled) return;
+      win().cancelAnimationFrame(frameId);
+      update();
+    };
+    const cancelFrame = (): void => {
+      if (frameScheduled) win().cancelAnimationFrame(frameId);
+      frameScheduled = false;
+      latest = undefined;
+    };
     row.addEventListener("pointermove", event => {
       if (press?.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > PRESS_SLOP) cancelPress();
       if (pointer !== event.pointerId) return;
@@ -435,59 +604,43 @@ export class ListDragController {
         }
         // Keep the layout's ancestor styles, including kanban card formatting.
         row.parentElement?.appendChild(preview);
+        doc.body.addClass("tm-list-dragging");
+        // Placed over the row once; Obsidian panes can establish a containing block for fixed children,
+        // so correct for its displacement. From here on the copy only moves by transform.
+        preview.style.left = `${rect.left}px`;
+        preview.style.top = `${rect.top}px`;
+        const placed = preview.getBoundingClientRect();
+        preview.style.left = `${2 * rect.left - placed.left}px`;
+        preview.style.top = `${2 * rect.top - placed.top}px`;
+        previewBase = { left: rect.left, top: rect.top };
+        previewShift = { x: 0, y: 0 };
         listenForEscape();
         // The dragged rows' slots close, and the gap opens where the grabbed row was.
         const rows = moving.map(item => this.rows.get(item.id)).filter((item): item is HTMLElement => Boolean(item?.isConnected));
         if (!rows.includes(row)) rows.push(row);
         // The gap takes the grabbed row's place, so a single row lifts without anything moving.
         this.slide(row.closest(".tm-main-view") ?? doc, () => {
-          this.placeGap({ indicator: "none", gap: { element: row, where: "before", depth: depthOf(row) } }, rect.height, doc, false);
-          this.intent = undefined;
+          const lifted: DropIntent = { indicator: "none", gap: { element: row, where: "before", depth: depthOf(row) } };
+          this.placeGap(lifted, rect.height, doc, false);
+          // Moving right from its own slot nests it under the row above.
+          this.flat = lifted;
           this.home = { row, x: origin.x };
           this.sideways = true;
           this.liftSources(rows);
         });
+        dragging = true;
+        this.taskId = task.id;
+        this.original = task;
+        row.addClass("is-dragging");
       }
-      if (preview) {
-        const left = event.clientX - previewOffset.x;
-        const top = event.clientY - previewOffset.y;
-        preview.style.left = `${left}px`;
-        preview.style.top = `${top}px`;
-        // Obsidian panes can establish a containing block for fixed children.
-        // Correct its viewport displacement while retaining the card's styles.
-        const bounds = preview.getBoundingClientRect();
-        preview.style.left = `${left + (left - bounds.left)}px`;
-        preview.style.top = `${top + (top - bounds.top)}px`;
-      }
-      dragging = true;
-      this.taskId = task.id;
-      this.original = task;
-      row.addClass("is-dragging");
-      const side = sidebar ? dropTargetAt(doc, event.clientX, event.clientY) : undefined;
-      if (side?.element !== over?.element) {
-        highlightDropTarget(over?.element, false);
-        over = side;
-        highlightDropTarget(over?.element, true);
-      }
-      const bounds = (row.closest(".tm-main-view") ?? row.parentElement)?.getBoundingClientRect();
-      const outside = Boolean(bounds && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom));
-      if (outside) {
-        chip ??= doc.body.createDiv({ cls: "tm-drag-chip", text: label, attr: { "aria-hidden": "true" } });
-        chip.style.left = `${event.clientX + 12}px`;
-        chip.style.top = `${event.clientY + 8}px`;
-      } else {
-        chip?.remove();
-        chip = undefined;
-      }
-      preview?.toggleClass("is-outside", outside);
-      const found = hit(event);
-      // The gap marks the drop. Hovering the gap keeps it where it is, except that moving left over
-      // the grabbed row's own slot (or where earlier left moves took it) outdents it.
-      const height = sourceRect?.height ?? row.getBoundingClientRect().height;
-      if (found && found.element !== this.gap) { this.sideways = false; this.placeGap(found.target, height, doc); }
-      else if (found && this.sideways) { const beside = this.besideGap(event.clientX); if (beside) this.placeGap(beside, height, doc); }
+      latest = { clientX: event.clientX, clientY: event.clientY };
+      if (frameScheduled) return;
+      frameScheduled = true;
+      frameId = win().requestAnimationFrame(update);
     });
     const reset = (): void => {
+      cancelFrame();
+      row.ownerDocument.body.removeClass("tm-list-dragging");
       preview?.remove();
       preview = undefined;
       chip?.remove();
@@ -508,6 +661,7 @@ export class ListDragController {
     };
     /** No drop: the row flies back and its slot reopens. */
     const flyBack = (): void => {
+      cancelFrame();
       stopEscape?.();
       chip?.remove();
       chip = undefined;
@@ -537,6 +691,8 @@ export class ListDragController {
       // A long press let go without moving selects nothing.
       if (armed && !dragging) suppressClickUntil = Date.now() + 250;
       if (dragging) { event.preventDefault(); event.stopPropagation(); }
+      // The last move counts, even if its frame has not run yet.
+      if (dragging) flush();
       const target = dragging ? this.intent : undefined;
       if (dragging) suppressClickUntil = Date.now() + 250;
       const captured = dragging;

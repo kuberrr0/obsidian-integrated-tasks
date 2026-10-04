@@ -7,13 +7,21 @@ import { scanTasks } from "../src/parser";
 import type { Task } from "../src/types";
 
 beforeAll(() => installObsidianDom());
-// happy-dom lays nothing out: every element sits where its inline left/top put it, 300×40.
+/** How far an element's inline `translate3d` moves it. */
+const translation = (element: HTMLElement): { x: number; y: number } => {
+  const match = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(element.style.transform);
+  return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
+};
+// happy-dom lays nothing out: every element sits where its inline left/top (and translate) put it, 300×40.
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    const left = parseFloat(this.style.left) || 0, top = parseFloat(this.style.top) || 0;
+    const shift = translation(this);
+    const left = (parseFloat(this.style.left) || 0) + shift.x, top = (parseFloat(this.style.top) || 0) + shift.y;
     return { left, top, right: left + 300, bottom: top + 40, width: 300, height: 40, x: left, y: top, toJSON: () => ({}) } as DOMRect;
   });
   Object.assign(HTMLElement.prototype, { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() });
+  // Pointer moves are handled once per frame; here each frame runs at once.
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { callback(performance.now()); return 0; });
 });
 afterEach(() => { vi.restoreAllMocks(); document.body.empty(); });
 
@@ -95,6 +103,20 @@ it("lifts the row: a floating copy follows the pointer and the gap takes the row
   expect(gap()!.style.getPropertyValue("--tm-gap-height")).toBe("40px");
 });
 
+it("shows a closed hand for the whole drag, and settles the lifted row as it drops", async () => {
+  const { rows, drop, point } = list("- [ ] A\n- [ ] B");
+  fire(rows[0].row, "pointerdown", { clientY: 20 });
+  point(rows[1].row);
+  fire(rows[0].row, "pointermove", { clientY: 30 });
+  expect(document.body.classList.contains("tm-list-dragging")).toBe(true);
+  const lifted = preview()!;
+  expect(lifted.classList.contains("is-settling")).toBe(false);
+  fire(rows[0].row, "pointerup", { clientY: 30 });
+  expect(lifted.classList.contains("is-settling")).toBe(true);
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledOnce());
+  expect(document.body.classList.contains("tm-list-dragging")).toBe(false);
+});
+
 it("folds away every dragged row and its subtasks, and counts the dragged tasks by the pointer", () => {
   const { tasks, rows, point } = list("- [ ] A\n  - [ ] A child\n- [ ] B\n- [ ] C", { dragged: () => [tasks[0], tasks[2]] });
   point(null);
@@ -108,12 +130,14 @@ it("folds away every dragged row and its subtasks, and counts the dragged tasks 
 
 it("moves the gap to the drop position: after a row's subtasks, or nested one level deeper", () => {
   const { rows, point } = list("- [ ] A\n- [ ] B\n  - [ ] B child\n- [ ] C");
-  fire(rows[0].row, "pointerdown");
+  // Grabbed at its middle, so the pointer is where the lifted row's middle is.
+  fire(rows[0].row, "pointerdown", { clientY: 20 });
   point(rows[1].row);
   fire(rows[0].row, "pointermove", { clientX: 0, clientY: 30 });
   // After B means after B's whole subtree.
   expect(gap()!.previousElementSibling).toBe(rows[2].row);
   expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
+  // Moving right of where it was grabbed: under B, after B's subtasks.
   fire(rows[0].row, "pointermove", { clientX: 100, clientY: 30 });
   expect(gap()!.previousElementSibling).toBe(rows[2].row);
   expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("1");
@@ -201,7 +225,9 @@ it("starts the group when nothing is above its heading, and leaves board columns
   const board = sections(true);
   fire(board.rows[3], "pointerdown");
   fire(board.rows[3], "pointermove", { clientY: 50 });
-  expect(board.second.lastElementChild).toBe(gap());
+  // The end of the column, after its last row still shown (the dragged one is folded away): the gap stays put.
+  expect(gap()!.parentElement).toBe(board.second);
+  expect(gap()!.previousElementSibling).toBe(board.rows[2]);
   fire(board.rows[3], "pointercancel");
 });
 
@@ -279,7 +305,8 @@ it("corrects the floating copy inside a pane that offsets fixed elements", () =>
   rect.mockImplementation(function (this: HTMLElement) {
     // The pane shifts fixed children by (300, 80); rows themselves sit at (350, 100).
     const fixed = this.classList.contains("tm-drag-preview");
-    const left = fixed ? (parseFloat(this.style.left) || 0) + 300 : 350, top = fixed ? (parseFloat(this.style.top) || 0) + 80 : 100;
+    const shift = translation(this);
+    const left = fixed ? (parseFloat(this.style.left) || 0) + 300 + shift.x : 350, top = fixed ? (parseFloat(this.style.top) || 0) + 80 + shift.y : 100;
     return { left, top, width: 300, height: 40 } as DOMRect;
   });
   fire(rows[0].row, "pointerdown", { clientX: 375, clientY: 110 });
@@ -338,30 +365,66 @@ it("outdents a subtask dragged left over its own slot, a level per 24px", async 
   await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[1], undefined, tasks[0], "after"));
 });
 
-it("nests only over the title of the task to nest under, not elsewhere on its row or beside the slot", async () => {
+it("nests by moving right of where the row was grabbed, under the task above the slot, wherever its title is", async () => {
   const { tasks, rows, drop, point } = list("- [ ] A\n- [ ] B");
-  fire(rows[1].row, "pointerdown", { clientX: 100, clientY: 50 });
-  point(null);
-  fire(rows[1].row, "pointermove", { clientX: 100, clientY: 60 });
-  // Far right beside the slot: still a sibling.
+  fire(rows[1].row, "pointerdown", { clientX: 100, clientY: 20 });
   point(gap());
-  fire(rows[1].row, "pointermove", { clientX: 250, clientY: 60 });
+  fire(rows[1].row, "pointermove", { clientX: 100, clientY: 30 });
+  // A little right is still a sibling; 24px right of the grab nests B under A, over its own slot.
+  fire(rows[1].row, "pointermove", { clientX: 115, clientY: 30 });
   expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
-  // On A's row, left of its title: above or below A, not under it.
-  point(rows[0].row);
-  fire(rows[1].row, "pointermove", { clientX: 40, clientY: 30 });
+  fire(rows[1].row, "pointermove", { clientX: 124, clientY: 30 });
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("1");
+  // It stays nested until back within 16px, so a wobble at the edge does not flicker.
+  fire(rows[1].row, "pointermove", { clientX: 118, clientY: 30 });
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("1");
+  fire(rows[1].row, "pointermove", { clientX: 110, clientY: 30 });
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
+  // Over A's title without moving right: below A, not under it.
+  point(rows[0].title);
+  fire(rows[1].row, "pointermove", { clientX: 100, clientY: 30 });
   expect(gap()!.previousElementSibling).toBe(rows[0].row);
   expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("0");
-  // On A's title: under A.
-  fire(rows[1].row, "pointermove", { clientX: 120, clientY: 30 });
+  // Moving right over A's row, off its title: under A.
+  point(rows[0].row);
+  fire(rows[1].row, "pointermove", { clientX: 130, clientY: 30 });
   expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("1");
-  fire(rows[1].row, "pointerup", { clientX: 120, clientY: 30 });
+  fire(rows[1].row, "pointerup", { clientX: 130, clientY: 30 });
   await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[1], undefined, tasks[0], "child"));
+});
+
+it("puts the row back when nesting is undone over its own slot", async () => {
+  const { rows, drop, point } = list("- [ ] A\n- [ ] B");
+  fire(rows[1].row, "pointerdown", { clientX: 100, clientY: 20 });
+  point(gap());
+  fire(rows[1].row, "pointermove", { clientX: 130, clientY: 30 });
+  expect(gap()!.style.getPropertyValue("--tm-depth")).toBe("1");
+  fire(rows[1].row, "pointermove", { clientX: 100, clientY: 30 });
+  fire(rows[1].row, "pointerup", { clientX: 100, clientY: 30 });
+  await settle();
+  expect(drop).not.toHaveBeenCalled();
+});
+
+it("keeps above or below a row until the lifted row is a few pixels past its middle", () => {
+  const { rows, point } = list("- [ ] A\n- [ ] B\n- [ ] C");
+  fire(rows[2].row, "pointerdown", { clientY: 20 });
+  point(rows[1].row);
+  fire(rows[2].row, "pointermove", { clientY: 25 });
+  expect(gap()!.previousElementSibling).toBe(rows[1].row);
+  // B's middle is at 20: 17 is past it, but not by 4px.
+  fire(rows[2].row, "pointermove", { clientY: 17 });
+  expect(gap()!.previousElementSibling).toBe(rows[1].row);
+  fire(rows[2].row, "pointermove", { clientY: 15 });
+  expect(gap()!.nextElementSibling).toBe(rows[1].row);
+  fire(rows[2].row, "pointermove", { clientY: 23 });
+  expect(gap()!.nextElementSibling).toBe(rows[1].row);
+  fire(rows[2].row, "pointermove", { clientY: 25 });
+  expect(gap()!.previousElementSibling).toBe(rows[1].row);
 });
 
 it("leaves a gap placed by hovering a row alone when the pointer then rests on the gap", () => {
   const { rows, point } = list("- [ ] A\n- [ ] B\n  - [ ] B child\n- [ ] C");
-  fire(rows[3].row, "pointerdown", { clientX: 30 });
+  fire(rows[3].row, "pointerdown", { clientX: 30, clientY: 20 });
   point(rows[2].row);
   fire(rows[3].row, "pointermove", { clientX: 30, clientY: 10 });
   expect(gap()!.nextElementSibling).toBe(rows[2].row);
@@ -442,4 +505,109 @@ it("keeps a touch drag going when the pressed title hands its pointer capture to
     vi.useRealTimers();
     await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], undefined, tasks[1], "after"));
   } finally { vi.useRealTimers(); }
+});
+
+/**
+ * A list laid out by its order (rows 40px, the gap its height, folded rows nothing), whose slides stay at
+ * their start: each moved row is drawn where it was, as in the first frame of a slide.
+ */
+function laidOut(markdown: string) {
+  const made = list(markdown);
+  const slides = new Map<HTMLElement, { delta: number; playState: string }>();
+  const restTop = (element: HTMLElement): number => {
+    let top = 0;
+    for (const sibling of Array.from(element.parentElement!.children) as HTMLElement[]) {
+      if (sibling === element) return top;
+      if (sibling.classList.contains("tm-drag-preview") || sibling.classList.contains("tm-drag-source")) continue;
+      top += sibling.classList.contains("tm-drop-gap") ? parseFloat(sibling.style.getPropertyValue("--tm-gap-height")) || 40 : 40;
+    }
+    return top;
+  };
+  const holder = (element: HTMLElement): HTMLElement | null => element.closest<HTMLElement>(".tm-task-item:not(.tm-drag-preview), .tm-drop-gap");
+  const drawnTop = (element: HTMLElement): number => {
+    const row = holder(element)!;
+    const slide = slides.get(row);
+    return restTop(row) + (slide?.playState === "running" ? slide.delta : 0);
+  };
+  (HTMLElement.prototype.getBoundingClientRect as unknown as { mockImplementation(fn: (this: HTMLElement) => DOMRect): void }).mockImplementation(function (this: HTMLElement) {
+    const inList = holder(this) !== null && this.closest(".tm-task-list") !== null;
+    const shift = translation(this);
+    const left = (parseFloat(this.style.left) || 0) + shift.x, top = inList ? drawnTop(this) : (parseFloat(this.style.top) || 0) + shift.y;
+    return { left, top, right: left + 300, bottom: top + 40, width: 300, height: 40, x: left, y: top, toJSON: () => ({}) } as DOMRect;
+  });
+  HTMLElement.prototype.animate = function (this: HTMLElement, keyframes: Keyframe[]) {
+    const delta = parseFloat(/translateY\((-?[\d.]+)px\)/.exec(String(keyframes[0].transform))?.[1] ?? "0");
+    const slide = { delta, playState: "running" };
+    slides.set(this, slide);
+    return { get playState() { return slide.playState; }, effect: { getComputedTiming: () => ({ progress: 0 }) }, cancel() { slide.playState = "idle"; }, finished: Promise.resolve() } as unknown as Animation;
+  };
+  // What is drawn under a point: rows (and the gap) where they are drawn, then the list.
+  document.elementsFromPoint = (_x: number, y: number) => {
+    const drawn = (Array.from(made.element.children) as HTMLElement[]).filter(child =>
+      !child.classList.contains("tm-drag-preview") && !child.classList.contains("tm-drag-source") && y >= drawnTop(child) && y < drawnTop(child) + 40);
+    return [...drawn.reverse(), made.element];
+  };
+  return { ...made, slides };
+}
+
+it("aims at where rows will rest, not where they are drawn mid-slide", () => {
+  try {
+    const { rows, slides } = laidOut("- [ ] A\n- [ ] B\n- [ ] C\n- [ ] D");
+    fire(rows[3].row, "pointerdown", { clientX: 10, clientY: 140 });
+    // Over A's top half: the gap opens before A, and A, B and C start sliding down from where they were.
+    fire(rows[3].row, "pointermove", { clientX: 10, clientY: 10 });
+    expect(gap()!.nextElementSibling).toBe(rows[0].row);
+    expect(slides.get(rows[0].row)).toMatchObject({ delta: -40, playState: "running" });
+    // A is still drawn at 0–40, but rests at 40–80: the pointer at 25 is over the gap, which stays.
+    fire(rows[3].row, "pointermove", { clientX: 10, clientY: 25 });
+    expect(gap()!.nextElementSibling).toBe(rows[0].row);
+    // At 70 the pointer is over A's resting bottom half (though B is drawn there): after A.
+    fire(rows[3].row, "pointermove", { clientX: 10, clientY: 70 });
+    expect(gap()!.previousElementSibling).toBe(rows[0].row);
+  } finally { delete (HTMLElement.prototype as { animate?: unknown }).animate; delete (document as { elementsFromPoint?: unknown }).elementsFromPoint; }
+});
+
+it("keeps the gap, and rows sliding, when the target names the same slot another way", () => {
+  try {
+    const { rows, slides, tasks, drop } = laidOut("- [ ] A\n- [ ] B\n- [ ] C\n- [ ] D");
+    fire(rows[3].row, "pointerdown", { clientX: 10, clientY: 140 });
+    // Below A's middle: after A, which opens the gap between A and B; B and C slide down.
+    fire(rows[3].row, "pointermove", { clientX: 10, clientY: 30 });
+    const placed = gap()!;
+    expect(placed.previousElementSibling).toBe(rows[0].row);
+    const sliding = slides.get(rows[1].row);
+    expect(sliding?.playState).toBe("running");
+    // Over B's resting top half: before B, the same slot. Nothing moves and B's slide carries on.
+    fire(rows[3].row, "pointermove", { clientX: 10, clientY: 85 });
+    expect(gap()).toBe(placed);
+    expect(placed.previousElementSibling).toBe(rows[0].row);
+    expect(slides.get(rows[1].row)).toBe(sliding);
+    expect(sliding?.playState).toBe("running");
+    // The drop takes the latest description of the slot.
+    fire(rows[3].row, "pointerup", { clientX: 10, clientY: 85 });
+    return vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[3], undefined, tasks[1], "before"));
+  } finally { delete (HTMLElement.prototype as { animate?: unknown }).animate; delete (document as { elementsFromPoint?: unknown }).elementsFromPoint; }
+});
+
+it("handles pointer moves once per frame, and the last move before a drop", async () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.mocked(window.requestAnimationFrame).mockImplementation(callback => { frames.push(callback); return frames.length; });
+  const { tasks, rows, drop, point } = list("- [ ] A\n- [ ] B\n- [ ] C");
+  fire(rows[0].row, "pointerdown", { clientX: 10, clientY: 20 });
+  point(rows[1].row);
+  fire(rows[0].row, "pointermove", { clientX: 10, clientY: 20 });
+  fire(rows[0].row, "pointermove", { clientX: 10, clientY: 25 });
+  point(rows[2].row);
+  fire(rows[0].row, "pointermove", { clientX: 10, clientY: 30 });
+  // Three moves, one frame, nothing moved yet.
+  expect(frames).toHaveLength(1);
+  expect(preview()!.style.transform).toBe("");
+  frames.shift()!(0);
+  expect(gap()!.previousElementSibling).toBe(rows[2].row);
+  expect(preview()!.style.transform).toBe("translate3d(0px, 10px, 0px)");
+  // A move whose frame has not run still counts when the row is let go.
+  point(rows[1].row);
+  fire(rows[0].row, "pointermove", { clientX: 10, clientY: 15 });
+  fire(rows[0].row, "pointerup", { clientX: 10, clientY: 15 });
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledExactlyOnceWith(tasks[0], undefined, tasks[1], "before"));
 });
