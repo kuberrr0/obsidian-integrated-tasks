@@ -696,9 +696,7 @@ export class TaskSidebarView extends ItemView {
     checkbox.checked = done;
     checkbox.indeterminate = !done && tasks.some(task => task.completed);
     checkbox.addEventListener("change", () => view.setTaskStatus(view.getSelectedTasks(), checkbox.checked ? "done" : "todo"));
-    const name = head.createDiv({ cls: "tm-sidebar-selection-title" });
-    name.createDiv({ cls: "tm-sidebar-selection-name", text: "Multiple Tasks" });
-    name.createDiv({ cls: "tm-sidebar-selection-count", text: `${tasks.length} tasks selected` });
+    head.createDiv({ cls: "tm-sidebar-selection-name", text: "Multiple Tasks" });
     const close = head.createEl("button", { cls: "clickable-icon tm-sidebar-close", attr: { type: "button", "aria-label": "Close", title: "Close (Escape)", "data-tm-focus-key": "sidebar-close" } });
     setIcon(close, "x");
     close.addEventListener("click", () => this.closeDetails());

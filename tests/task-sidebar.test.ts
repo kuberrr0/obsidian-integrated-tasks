@@ -261,7 +261,7 @@ describe("what the Task Details sidebar shows", () => {
     rows(main()).find(row => row.textContent!.includes("Other"))!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
     // Several: Multiple Tasks in the title's place, the values they share (else Mixed), and no notes or subtasks.
     expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple Tasks");
-    expect(side().querySelector(".tm-sidebar-selection-count")!.textContent).toBe("2 tasks selected");
+    expect(side().querySelector(".tm-sidebar-head")!.textContent).not.toContain("selected");
     expect(side().querySelector(".tm-sidebar-title-field, .tm-sidebar-notes, .tm-sidebar-subtasks, .tm-sidebar-open-note")).toBeNull();
     expect(property("Priority").textContent).toBe("Mixed");
     expect(property("Project").textContent).toBe("A");
