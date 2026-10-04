@@ -63,6 +63,7 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
     dates.empty();
     for (const segment of segments) {
       const cell = dates.createDiv({ cls: "tm-gantt-date", text: segment.label, attr: { title: formatDate(segment.start, options.dateFormat) } });
+      if (segment.year) cell.createSpan({ cls: "tm-gantt-year", text: segment.year });
       cell.style.width = `${segment.days * width}px`;
       cell.style.flexBasis = `${segment.days * width}px`;
     }

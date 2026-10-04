@@ -41,9 +41,15 @@ export function ganttSelection(first: string, last: string): { scheduledDate: st
   return first <= last ? { scheduledDate: first, endDate: last } : { scheduledDate: last, endDate: first };
 }
 
-/** Calendar boundaries, clipped to the buffered timeline while retaining their labels. */
-export function ganttSegments(start: string, days: number, zoom: GanttZoom): Array<{ start: string; offset: number; days: number; label: string }> {
-  const segments: Array<{ start: string; offset: number; days: number; label: string }> = [];
+export interface GanttSegment { start: string; offset: number; days: number; label: string; year?: string }
+
+/**
+ * Calendar boundaries, clipped to the buffered timeline while retaining their labels. A year's first month (or, by
+ * weeks, its first week) also names the year.
+ */
+export function ganttSegments(start: string, days: number, zoom: GanttZoom): GanttSegment[] {
+  const segments: GanttSegment[] = [];
+  let lastYear: number | undefined;
   for (let offset = 0; offset < days; offset++) {
     const iso = addDays(start, offset), date = localDate(iso);
     const boundary = zoom === "month" ? date.getDay() === 1 : zoom === "five-year" ? date.getMonth() === 0 && date.getDate() === 1 : date.getDate() === 1;
@@ -51,7 +57,11 @@ export function ganttSegments(start: string, days: number, zoom: GanttZoom): Arr
       const weekStart = localDate(addDays(iso, -((date.getDay() + 6) % 7)));
       const label = zoom === "month" ? weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })
         : zoom === "five-year" ? String(date.getFullYear()) : date.toLocaleDateString("en-US", { month: "short" });
-      segments.push({ start: iso, offset, days: 0, label });
+      const year = (zoom === "month" ? weekStart : date).getFullYear();
+      const segment: GanttSegment = { start: iso, offset, days: 0, label };
+      if (zoom !== "five-year" && lastYear !== undefined && year !== lastYear) segment.year = String(year);
+      lastYear = year;
+      segments.push(segment);
     }
     segments[segments.length - 1].days++;
   }

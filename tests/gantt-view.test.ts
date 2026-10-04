@@ -15,6 +15,14 @@ it("groups month dates by Monday, quarter/year by month, and five years by year"
   expect(partial.map(s => [s.label, s.offset, s.days])).toEqual([["Sep 7", 0, 4], ["Sep 14", 4, 6]]);
 });
 
+it("names the year once, at its first month, or by weeks its first week", () => {
+  for (const zoom of ["quarter", "year"] as const) {
+    expect(ganttSegments("2026-11-01", 92, zoom).map(s => [s.label, s.year])).toEqual([["Nov", undefined], ["Dec", undefined], ["Jan", "2027"]]);
+  }
+  expect(ganttSegments("2026-12-21", 21, "month").map(s => [s.label, s.year])).toEqual([["Dec 21", undefined], ["Dec 28", undefined], ["Jan 4", "2027"]]);
+  expect(ganttSegments("2026-12-01", 62, "five-year").every(s => !s.year)).toBe(true);
+});
+
 class Element extends EventTarget {
   children: Element[] = [];
   cls = ""; text = ""; attrs: Record<string, string> = {};

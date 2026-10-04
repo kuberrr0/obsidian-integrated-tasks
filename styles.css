@@ -1279,6 +1279,8 @@ li.task-list-item { --tm-note-priority: initial; }
 .tm-main-view .tm-gantt-project button.tm-task-title { flex: 1 1 auto; width: auto; min-height: 0; padding-block: 0; }
 .tm-main-view .tm-gantt-project .tm-project-header-metadata { flex: 0 1 auto; min-width: 0; }
 .tm-gantt-date { font-size: var(--font-ui-medium); }
+/* A year's first month (or week) names the year beside it. */
+.tm-gantt-year { margin-left: 4px; font-weight: var(--font-semibold); color: var(--text-normal); }
 button.tm-gantt-bar { background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary)); color: var(--text-normal); border: 1px solid color-mix(in srgb, var(--interactive-accent) 40%, transparent); border-radius: 10px; padding-inline: 14px; font-size: var(--font-ui-small); }
 button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { top: 10px; height: 16px; width: 10px; background: transparent; border-radius: 2px; }
 button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: var(--interactive-accent); }
