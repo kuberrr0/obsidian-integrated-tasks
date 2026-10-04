@@ -35,9 +35,17 @@ import { groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "./query"
 import { markDropZone, startTaskDrag, type SidebarDrop } from "./sidebar-drop";
 import type TaskManagerPlugin from "./main";
 import type { OpenEditorState } from "./main";
-import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
+import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskDraft, TaskEditorPreset, TaskManagerSettings, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
+
+/**
+ * Whether opened tasks show their details only in the Task Details sidebar (three panes): always on phones and tablets,
+ * elsewhere as Task details says.
+ */
+export function tasksOpenInSidebar(settings: Pick<TaskManagerSettings, "taskDetails">): boolean {
+  return Platform.isMobile || settings.taskDetails === "sidebar";
+}
 /** The id a new task goes by until it is written (written tasks' ids are their note and line). */
 export const NEW_TASK_ID = "tm-new-task";
 
@@ -918,8 +926,8 @@ export class TaskMainView extends ItemView {
     this.plugin.refreshTaskSidebar?.();
   }
 
-  /** Task details › Three panes: an opened task shows only in the Task Details sidebar. */
-  private get detailsInSidebar(): boolean { return this.plugin.settings.taskDetails === "sidebar"; }
+  /** Three panes (Task details, or a phone or tablet): an opened task shows only in the Task Details sidebar. */
+  private get detailsInSidebar(): boolean { return tasksOpenInSidebar(this.plugin.settings); }
 
   /**
    * Three panes: selects the task (when the view lists it) and shows it in the Task Details sidebar, which opens if it is
@@ -2257,52 +2265,9 @@ export class TaskMainView extends ItemView {
     const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
     card?.querySelector<HTMLTextAreaElement>(".tm-things-card-title")?.focus({ preventScroll: true });
     const opened = card && from ? animateCardOpen(card, from) : Promise.resolve();
-    // Once it has grown: on phones the card moves to just above the keyboard; elsewhere, only when it is not all in
-    // view, just far enough to show it.
-    if (card) void opened.then(() => {
-      if (Platform.isMobile) this.revealCardAboveKeyboard(card);
-      else if (card.isConnected) card.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
-  }
-
-  /**
-   * On phones, scrolls an open card the keyboard covers until its bottom sits just above the keyboard (the bottom of
-   * the part of the list that can be seen), as far as the list scrolls; a card taller than that shows from its top,
-   * and one above the visible part scrolls down into it. A card in full view stays put. Again if the keyboard then
-   * opens for its title.
-   */
-  private revealCardAboveKeyboard(card: HTMLElement): void {
-    const win = card.ownerDocument.defaultView;
-    let scroller = card.parentElement;
-    while (scroller && !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(win?.getComputedStyle(scroller).overflowY ?? ""))) scroller = scroller.parentElement;
-    if (!win || !scroller) return;
-    const list = scroller;
-    // Obsidian's mobile app keeps the page full height under the keyboard and publishes the keyboard's height (and,
-    // with a toolbar above the keyboard, the toolbar's) as CSS variables; a browser shrinks its visual viewport instead.
-    const pixels = (element: Element, name: string): number => parseFloat(win.getComputedStyle(element).getPropertyValue(name)) || 0;
-    const reveal = (): void => {
-      if (!card.isConnected) return;
-      const area = list.getBoundingClientRect();
-      const viewport = win.visualViewport;
-      const doc = card.ownerDocument;
-      const toolbar = doc.body.hasClass("mod-toolbar-open") ? pixels(doc.body, "--mobile-toolbar-height") : 0;
-      const top = Math.max(area.top, viewport?.offsetTop ?? 0);
-      const bottom = Math.min(area.bottom, viewport ? viewport.offsetTop + viewport.height : win.innerHeight,
-        win.innerHeight - pixels(doc.documentElement, "--keyboard-height") - toolbar);
-      const rect = card.getBoundingClientRect();
-      const gap = 8;
-      const fits = rect.height + 2 * gap <= bottom - top;
-      const by = fits && rect.bottom > bottom - gap ? rect.bottom - (bottom - gap) : !fits || rect.top < top + gap ? rect.top - (top + gap) : 0;
-      if (by) list.scrollBy({ top: by, behavior: "smooth" });
-    };
-    reveal();
-    // The keyboard opens for the card's title a moment later: check again when it has (Obsidian's app announces it;
-    // a browser resizes its visual viewport), for a second and a half.
-    const targets: EventTarget[] = [win, ...(win.visualViewport ? [win.visualViewport] : [])];
-    const events = ["keyboardDidShow", "resize"];
-    const again = (): void => reveal();
-    for (const target of targets) for (const event of events) target.addEventListener(event, again);
-    win.setTimeout(() => { for (const target of targets) for (const event of events) target.removeEventListener(event, again); }, 1500);
+    // Once it has grown, only when it is not all in view, just far enough to show it. (Phones and tablets open tasks in
+    // the Task Details sidebar, never as a card.)
+    if (card) void opened.then(() => { if (card.isConnected) card.scrollIntoView({ block: "nearest", behavior: "smooth" }); });
   }
 
   /**

@@ -1,6 +1,6 @@
 import { ItemView, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
-import { NEW_TASK_ID, TaskMainView } from "./task-view";
+import { NEW_TASK_ID, TaskMainView, tasksOpenInSidebar } from "./task-view";
 import { splitDestination } from "./structure";
 import { renderCalendar } from "./calendar-view";
 import { ListDragController } from "./list-drag-view";
@@ -256,7 +256,7 @@ export class TaskSidebarView extends ItemView {
   /** A time clicked in Today's hours adds a task then: with three panes, here, as the view adds one; else in the task editor. */
   private addTask(preset: TaskEditorPreset): void {
     const view = this.taskView();
-    if (view && this.plugin.settings.taskDetails === "sidebar") view.newTask(preset);
+    if (view && tasksOpenInSidebar(this.plugin.settings)) view.newTask(preset);
     else this.plugin.openEditor({ mode: "all", preset });
   }
 

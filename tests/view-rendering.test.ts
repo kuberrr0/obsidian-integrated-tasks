@@ -81,6 +81,7 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
   const plugin = {
     settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
     openEditor: vi.fn(), openTaskView: vi.fn(), undoTaskChange: vi.fn(), redoTaskChange: vi.fn(), openQuickSwitcher: vi.fn(), saveSettings: vi.fn(),
+    showInTaskSidebar: vi.fn().mockResolvedValue(undefined),
     projectDraft: vi.fn(() => ({ name: "Site", date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "work", archived: false, color: "" })),
     updateProject: vi.fn().mockResolvedValue("Site.md"), deleteProject: vi.fn().mockResolvedValue(undefined)
   };
@@ -517,14 +518,15 @@ describe("today header, density and gestures", () => {
       plugin.settings.style = "griply";
       await view.setState({ mode: "all" });
       const tap = (row: HTMLElement) => { pointer(row, "pointerdown", 10, 10); pointer(row, "pointerup", 10, 10); row.click(); };
+      // (In the Task Details sidebar: phones and tablets always use three panes.)
       tap(rows(content())[0]);
-      expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ task: expect.objectContaining({ line: 0 }) }));
+      expect(plugin.showInTaskSidebar).toHaveBeenCalledExactlyOnceWith(rows(content())[0].getAttribute("data-task-id"), { focus: false });
       // The dblclick a browser may send after two taps opens nothing more.
       tap(rows(content())[0]);
       rows(content())[0].dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
-      expect(plugin.openEditor).toHaveBeenCalledTimes(2);
+      expect(plugin.showInTaskSidebar).toHaveBeenCalledTimes(2);
       // A click that ends a swipe, or a long press let go without moving, opens nothing.
-      plugin.openEditor.mockClear();
+      plugin.showInTaskSidebar.mockClear();
       view.clearSelection();
       swipe(rows(content())[1], 100);
       rows(content())[1].click();
@@ -533,6 +535,7 @@ describe("today header, density and gestures", () => {
       vi.advanceTimersByTime(400);
       pointer(rows(content())[0], "pointerup", 10, 10);
       rows(content())[0].click();
+      expect(plugin.showInTaskSidebar).not.toHaveBeenCalled();
       expect(plugin.openEditor).not.toHaveBeenCalled();
       expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
     } finally { platform.isMobile = false; vi.useRealTimers(); }
@@ -1163,46 +1166,25 @@ describe("opening a card on the desktop", () => {
   });
 });
 
-describe("opening a card on a phone", () => {
-  it("scrolls a card the keyboard covers until its bottom sits just above the keyboard, and leaves one in view alone", async () => {
+describe("on phones and tablets", () => {
+  it("opens tasks in the Task Details sidebar (three panes) whatever Task details says, new ones too, never as a card", async () => {
     const platform = Platform as { isMobile?: boolean };
     platform.isMobile = true;
     try {
-      const { view, content, plugin } = await setup([note("A.md", 3)]);
+      const { view, content, plugin } = await setup([note("A.md", 2)]);
       plugin.settings.style = "things";
+      plugin.settings.taskDetails = "view";
       await view.setState({ mode: "all" });
-      // The list spans 0–800px. As in Obsidian's iOS app, the page stays full height under the keyboard, whose height
-      // arrives as --keyboard-height with a keyboardDidShow event once it has opened.
-      const list = content().parentElement!;
-      list.style.overflowY = "auto";
-      Object.defineProperty(list, "scrollHeight", { configurable: true, value: 2000 });
-      Object.defineProperty(list, "clientHeight", { configurable: true, value: 800 });
-      const scrollBy = vi.fn();
-      list.scrollBy = scrollBy as never;
-      vi.stubGlobal("visualViewport", Object.assign(new EventTarget(), { offsetTop: 0, height: 800 }));
-      vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
-      let card = { top: 450, bottom: 650, height: 200 };
-      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-        return (this === list ? { top: 0, bottom: 800, height: 800 } : this.classList.contains("tm-things-card") ? card : { top: 0, bottom: 40, height: 40 }) as DOMRect;
-      });
-      rows(content())[2].click();
-      await new Promise(resolve => setTimeout(resolve, 300));
-      // Before the keyboard, the card is in view.
-      expect(scrollBy).not.toHaveBeenCalled();
-      document.documentElement.style.setProperty("--keyboard-height", "300px");
-      window.dispatchEvent(new Event("keyboardDidShow"));
-      // Its bottom (650px) goes to just above the keyboard (800 − 300 = 500px, less an 8px gap).
-      expect(scrollBy).toHaveBeenCalledWith({ top: 158, behavior: "smooth" });
-      await (view as unknown as { collapseCard(): Promise<void> }).collapseCard();
-      scrollBy.mockClear();
-      card = { top: 100, bottom: 300, height: 200 };
       rows(content())[1].click();
-      await new Promise(resolve => setTimeout(resolve, 300));
-      expect(scrollBy).not.toHaveBeenCalled();
+      expect(plugin.showInTaskSidebar).toHaveBeenCalledExactlyOnceWith(rows(content())[1].getAttribute("data-task-id"), { focus: false });
+      expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
+      (plugin as unknown as { newTaskDraft: () => object }).newTaskDraft = () => ({ title: "", completed: false, indent: 0, destination: "A.md" });
+      view.newTask();
+      await vi.waitFor(() => expect(plugin.showInTaskSidebar).toHaveBeenLastCalledWith("tm-new-task", { focus: true }));
+      expect(content().querySelector(".tm-things-card")).toBeNull();
+      expect(plugin.openEditor).not.toHaveBeenCalled();
     } finally {
       platform.isMobile = false;
-      document.documentElement.style.removeProperty("--keyboard-height");
-      vi.restoreAllMocks(); vi.unstubAllGlobals();
     }
   });
 });
