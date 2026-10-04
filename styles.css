@@ -2530,15 +2530,12 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
   padding: var(--size-4-3) var(--size-4-3) var(--size-4-6);
 }
 .tm-sidebar-pane { display: flex; flex-direction: column; gap: var(--size-4-3); }
-/* With Today or Upcoming open, the selected task's details are as tall as they need to be, and the tasks take the rest
-   (some of it at least, past which the details scroll); with no task selected, the tasks take it all. */
+/* With Today or Upcoming open, their tasks fill the sidebar, or with a task shown (and no drag of tasks under way), its
+   details do: one at a time. */
 .workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar:is(.is-today, .is-upcoming) { overflow: hidden; padding-bottom: var(--size-4-3); }
 .tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-planner { display: flex; flex: 1 1 0; flex-direction: column; min-height: 160px; overflow-y: auto; }
-.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane {
-  flex: 0 1 auto; min-height: 0; overflow-y: auto;
-  margin-top: var(--size-4-3); padding-top: var(--size-4-3); border-top: 1px solid var(--background-modifier-border);
-}
-.tm-sidebar-pane[hidden] { display: none; }
+.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.tm-task-sidebar .tm-sidebar-planner[hidden], .tm-sidebar-pane[hidden] { display: none; }
 .tm-task-sidebar.is-today .tm-sidebar-planner { overflow: hidden; }
 
 /* Today's hours fill their part, and scroll. */
@@ -2563,12 +2560,15 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 /* The title over rows of properties (a name at the left, its value at the right), then notes and subtasks. */
 .tm-sidebar-details { display: flex; flex-direction: column; }
 .tm-sidebar-head {
-  display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; align-items: start;
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 8px; align-items: start;
   padding-bottom: var(--size-4-3); border-bottom: 1px solid var(--background-modifier-border);
 }
 /* The checkbox sits in a box as tall as the title's first line, centred on it, whatever the style's checkbox size. */
 .tm-task-sidebar .tm-sidebar-head .tm-checkbox-target { display: flex; align-items: center; align-self: start; width: auto; height: calc(var(--font-ui-large) * 1.35); min-height: 0; margin: 0; padding: 0; }
 .tm-task-sidebar .tm-sidebar-head .tm-task-checkbox { margin: 0; }
+/* The close button, centred on the title's first line too. */
+.tm-task-sidebar .tm-sidebar-head .tm-sidebar-close { align-self: start; height: calc(var(--font-ui-large) * 1.35); padding: 0 4px; color: var(--text-faint); }
+.tm-task-sidebar .tm-sidebar-head .tm-sidebar-close:hover { color: var(--text-normal); }
 .tm-task-sidebar .tm-sidebar-head :is(.tm-things-card-title-backdrop, textarea.tm-things-card-title) { font-size: var(--font-ui-large); font-weight: var(--font-semibold); line-height: 1.35; }
 .tm-sidebar-properties { display: flex; flex-direction: column; padding: var(--size-4-2) 0; border-bottom: 1px solid var(--background-modifier-border); }
 .tm-sidebar-property {

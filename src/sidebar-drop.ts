@@ -36,6 +36,13 @@ const zones = new WeakMap<HTMLElement, DropZone>();
 export const TASK_DRAG_TYPE = "application/x-tm-task";
 
 let current: TaskDrag | undefined;
+const listeners = new Set<(drag: TaskDrag | undefined) => void>();
+
+/** Calls `listener` as a drag of tasks starts (with it) and ends (with nothing); returns how to stop listening. */
+export function onTaskDrag(listener: (drag: TaskDrag | undefined) => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
 
 /** Makes `element` a place to drop tasks on. */
 export function markDropTarget(element: HTMLElement, drop: SidebarDrop): void {
@@ -69,10 +76,13 @@ export function dropTargetAt(doc: Document, x: number, y: number): DropTarget | 
  * reads the drag first. */
 export function startTaskDrag(doc: Document, drag: TaskDrag): TaskDrag {
   current = drag;
+  for (const listener of listeners) listener(drag);
   const end = (): void => {
     doc.removeEventListener("dragend", end, true);
     doc.removeEventListener("pointerup", end, true);
-    if (current === drag) current = undefined;
+    if (current !== drag) return;
+    current = undefined;
+    for (const listener of listeners) listener(undefined);
   };
   doc.addEventListener("dragend", end, true);
   doc.addEventListener("pointerup", end, true);

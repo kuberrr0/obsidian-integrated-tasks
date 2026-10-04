@@ -4,7 +4,7 @@ import { NEW_TASK_ID, TaskMainView } from "./task-view";
 import { splitDestination } from "./structure";
 import { renderCalendar } from "./calendar-view";
 import { ListDragController } from "./list-drag-view";
-import { activeTaskDrag, markDropZone, startTaskDrag, TASK_DRAG_TYPE, type SidebarDrop, type TaskDrag } from "./sidebar-drop";
+import { activeTaskDrag, markDropZone, onTaskDrag, startTaskDrag, TASK_DRAG_TYPE, type SidebarDrop, type TaskDrag } from "./sidebar-drop";
 import { NEW_TASK_TITLE, taskTitleLabel } from "./task-title";
 import { renderThingsTaskDetails } from "./things-row-details";
 import { calendarDate, rescheduledDraft } from "./calendar";
@@ -66,6 +66,11 @@ export class TaskSidebarView extends ItemView {
   private localId?: string;
   /** The view's selection as last seen, to tell when it changes. */
   private viewSelection = "";
+  /** The task the details show, if any (Escape, or the close button, takes it away). */
+  private shownId?: string;
+  /** A drag of tasks in progress somewhere: Today's hours or the tasks without a date come back for it. */
+  private dragging = false;
+  private stopDragWatch?: () => void;
   private listRows = LIST_PAGE;
   private listDrag?: ListDragController;
   private indexVersion = 0;
@@ -84,6 +89,18 @@ export class TaskSidebarView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.unsubscribe = this.plugin.index.subscribe(() => { this.indexVersion++; this.scheduleRender(); });
+    // A drag shows Today's hours (or the tasks without a date) at once, to drop on; they give way to the task shown
+    // again once it ends, after the drop has read them.
+    this.stopDragWatch = onTaskDrag(drag => {
+      this.dragging = Boolean(drag);
+      if (drag) this.render(); else this.scheduleRender();
+    });
+    // Escape takes the task shown away (see closeDetails).
+    this.registerDomEvent(this.content, "keydown", event => {
+      if (event.key !== "Escape" || !this.shownId) return;
+      event.preventDefault();
+      this.closeDetails();
+    });
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.scheduleRender()));
     this.registerEvent(this.app.workspace.on("layout-change", () => this.scheduleRender()));
     this.render();
@@ -92,6 +109,7 @@ export class TaskSidebarView extends ItemView {
   async onClose(): Promise<void> {
     this.closed = true;
     this.unsubscribe?.();
+    this.stopDragWatch?.();
     if (this.renderFrame !== undefined) this.containerEl.win.cancelAnimationFrame(this.renderFrame);
     this.renderFrame = undefined;
     await this.saveDraft();
@@ -149,8 +167,13 @@ export class TaskSidebarView extends ItemView {
       for (const element of Array.from(planner.element.querySelectorAll<HTMLElement>("[data-task-id]"))) element.toggleClass("is-selected", element.getAttribute("data-task-id") === this.localId);
     }
     const details = this.details!;
-    // Below Today's hours or Upcoming's list, the details take room only for a selected task, and as much as it needs.
-    const shown = mode === "details" || Boolean(task);
+    // One at a time: a task shown has the sidebar to itself; without one (or after Escape), it shows Today's hours or
+    // the tasks without a date, as a drag of tasks also brings them back meanwhile, to drop on.
+    this.shownId = task?.id;
+    const alone = Boolean(task) && !(this.dragging && planner);
+    this.content.toggleClass("is-showing-task", alone);
+    if (planner) planner.element.hidden = alone;
+    const shown = mode === "details" || alone;
     details.element.hidden = !shown;
     // A new task redraws as its properties change (not as it is typed).
     this.draw(details, JSON.stringify([shown, Boolean(view), local ? "local" : selected.length, task?.id, entry && [entry.task, entry.destination], task?.raw, task?.description, task && this.children(task).map(child => child.raw)]), force,
@@ -197,6 +220,19 @@ export class TaskSidebarView extends ItemView {
     if (!target) return;
     target.focus({ preventScroll: true });
     if (range && isTextField(target)) target.setSelectionRange(range[0], range[1]);
+  }
+
+  /**
+   * Escape, or the close button: the task shown goes, and the sidebar shows what it shows for the view (Today's hours,
+   * the tasks without a date) or that no task is selected. What was typed in it is not saved; a new task is dropped.
+   */
+  private closeDetails(): void {
+    const view = this.taskView();
+    this.draft = undefined;
+    this.localId = undefined;
+    if (view?.newTaskInSidebar()) { void view.finishNewTask(false); return; }
+    if (view?.sidebarSelection().length) view.clearSelection();
+    this.render();
   }
 
   /** Shows a task of the day or the list in the details, until another is selected here or in the view. */
@@ -549,6 +585,10 @@ export class TaskSidebarView extends ItemView {
     const backdrop = titleBox.createDiv({ cls: "tm-things-card-title-backdrop", attr: { "aria-hidden": "true" } });
     const title = titleBox.createEl("textarea", { cls: "tm-things-card-title tm-sidebar-title-field", attr: { "aria-label": "Title", placeholder: isNew ? NEW_TASK_TITLE : "Title", rows: "1", "data-tm-focus-key": "sidebar-title" } });
     title.value = draft.title;
+    // Back to what the sidebar shows without a task, as Escape goes (where there is no Escape key, on phones, too).
+    const close = head.createEl("button", { cls: "clickable-icon tm-sidebar-close", attr: { type: "button", "aria-label": "Close", title: "Close (Escape)", "data-tm-focus-key": "sidebar-close" } });
+    setIcon(close, "x");
+    close.addEventListener("click", () => this.closeDetails());
     const paint = (): void => paintTokens(backdrop, title.value, taskInputRanges(title.value, task.title, now, dateFormat));
     paint();
 
@@ -604,8 +644,7 @@ export class TaskSidebarView extends ItemView {
     });
     notes.addEventListener("input", () => { autosize(notes); change(); });
     // Enter in the title or notes confirms what was typed (Shift+Enter starts a line of notes): it is saved as the
-    // field is left, and a new task is written once titled. Escape cancels it: the task's own text comes back, and a new
-    // task is dropped.
+    // field is left, and a new task is written once titled. Escape (see closeDetails) cancels it and closes the task.
     panel.addEventListener("keydown", event => {
       const target = event.target as HTMLElement;
       if (target !== title && target !== notes) return;
@@ -613,12 +652,6 @@ export class TaskSidebarView extends ItemView {
         event.preventDefault();
         if (!isNew) target.blur();
         else if (title.value.trim()) void view.finishNewTask();
-      } else if (event.key === "Escape") {
-        event.preventDefault(); event.stopPropagation();
-        if (isNew) { void view.finishNewTask(false); return; }
-        this.draft = { id: task.id, dirty: false, title: task.title, notes: cardNotes(task.description), subtask: this.draft?.subtask };
-        target.blur();
-        this.render(true);
       }
     });
     const fit = (): void => { autosize(title); autosize(notes); };
@@ -651,7 +684,8 @@ export class TaskSidebarView extends ItemView {
       name.addEventListener("blur", commit);
       name.addEventListener("keydown", event => {
         if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); name.blur(); }
-        else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); name.value = child.title; name.blur(); }
+        // Escape puts the name back, and goes on to close the task.
+        else if (event.key === "Escape") { name.value = child.title; name.blur(); }
       });
     }
     const adding = list.createDiv({ cls: "tm-sidebar-subtask is-new" });

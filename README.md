@@ -33,12 +33,12 @@ Today and Upcoming consider both the scheduled date and the deadline, using whic
 
 The **Task Details sidebar** opens in Obsidian's right sidebar (drag its tab to move it, or run **Open Task Details sidebar** to bring it back). What it shows follows the task view in front:
 
-- With **Today** open, today's hours, with the selected task's details below them when a task is selected. Drag a task from Today's list onto an hour to schedule it then, drag one to another time, or click a time to add a task there.
-- With **Upcoming** open, your tasks with no date (no scheduled date and no deadline) as a list, with the selected task's details below it when a task is selected. Drag one onto a day in the view to give it that date, or drag a task from the view into the list to take its dates off.
+- With **Today** open, today's hours. Drag a task from Today's list onto an hour to schedule it then, drag one to another time, or click a time to add a task there.
+- With **Upcoming** open, your tasks with no date (no scheduled date and no deadline) as a list. Drag one onto a day in the view to give it that date, or drag a task from the view into the list to take its dates off.
 - With any view in its calendar layout, that view's own tasks with no date, as a list to drag onto its days: a project's, a tag's, or a smart list's, through the view's filters (except those on dates). All Tasks, Today and Upcoming list every task with no date.
 - Anywhere else, the selected task's details.
 
-The details show the task selected in the view, or the one you last clicked in the sidebar, and you can edit them in place: its title, a list of its properties, its notes, and its subtasks. What you type is saved when you press Enter (Shift+Enter starts a new line of notes), leave the field, or select another task; Escape undoes it.
+Select a task, in the view or in the sidebar, and its details take the sidebar's place; press Escape (or click **×**) to go back to the hours, the list, or **No task selected**. While you drag a task, the hours or the list come back so you can drop it there. You can edit the details in place: the title, a list of the task's properties, its notes, and its subtasks. What you type is saved when you press Enter (Shift+Enter starts a new line of notes), leave the field, or select another task; Escape discards it.
 
 To work in three panes, set **Task details** to **Three panes: in the sidebar** in the plugin's settings. Tasks then never open as a card in the list or in the task editor: double-clicking a task (or pressing Enter on it) selects it and puts the cursor in its title in the Task Details sidebar, opening the sidebar if it's closed. On phones and tablets, tapping a task slides the sidebar in with its details, without bringing up the keyboard. New tasks open in the sidebar too, with the title empty to type, and are only added to your note once you give them a title and press Enter; Escape cancels one. The default, **Two panes: in the view**, opens tasks as before.
 

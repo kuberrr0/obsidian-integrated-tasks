@@ -26,7 +26,7 @@ import { Platform, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { TaskSidebarView } from "../src/task-sidebar";
-import { TASK_DRAG_TYPE } from "../src/sidebar-drop";
+import { startTaskDrag, TASK_DRAG_TYPE } from "../src/sidebar-drop";
 import { DEFAULT_SETTINGS, type Task, type TaskDraft } from "../src/types";
 import { todayIso } from "../src/date";
 import type TaskManagerPlugin from "../src/main";
@@ -192,24 +192,49 @@ describe("what the Task Details sidebar shows", () => {
     expect(planner.querySelector(".tm-drop-gap")).toBeNull();
   });
 
-  it("shows the details of a task selected in the sidebar's day or list, until the view's selection changes", async () => {
+  it("shows one thing at a time: a task picked here or in the view has the sidebar to itself, until Escape or Close", async () => {
     const today = todayIso();
-    const { view, main, side } = await setup([["A.md", [`- [ ] At nine ${today} 09:00`, `- [ ] Later ${today}`, "- [ ] No date"].join("\n")]]);
+    const { view, main, side, store } = await setup([["A.md", [`- [ ] At nine ${today} 09:00`, `- [ ] Later ${today}`, "- [ ] No date"].join("\n")]]);
     await view.setState({ mode: "today" });
-    expect(side().querySelector<HTMLElement>(".tm-sidebar-pane")!.hidden).toBe(true);
+    const planner = () => side().querySelector<HTMLElement>(".tm-sidebar-planner")!;
+    const pane = () => side().querySelector<HTMLElement>(".tm-sidebar-pane")!;
+    const title = () => side().querySelector<HTMLTextAreaElement>(".tm-sidebar-pane .tm-sidebar-title-field");
+    const escape = (target: HTMLElement) => target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    const later = () => rows(main()).find(row => row.textContent!.includes("Later"))!;
+    expect([planner().hidden, pane().hidden]).toEqual([false, true]);
+    // A task picked in the day: its details alone.
     side().querySelector<HTMLElement>(".tm-calendar-lane .tm-calendar-task")!.click();
-    // A selected task's details appear below the hours.
-    expect(side().querySelector<HTMLElement>(".tm-sidebar-pane")!.hidden).toBe(false);
-    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-pane .tm-sidebar-title-field")!.value).toBe("At nine");
-    expect(side().querySelector(".tm-calendar-task.is-selected")).not.toBeNull();
-    rows(main()).find(row => row.textContent!.includes("Later"))!.click();
-    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-pane .tm-sidebar-title-field")!.value).toBe("Later");
-    expect(side().querySelector(".tm-calendar-task.is-selected")).toBeNull();
+    expect([planner().hidden, pane().hidden]).toEqual([true, false]);
+    expect(title()!.value).toBe("At nine");
+    // Escape brings the hours back; what was typed is not saved.
+    title()!.focus();
+    title()!.value = "At ten";
+    title()!.dispatchEvent(new Event("input", { bubbles: true }));
+    escape(title()!);
+    await settle();
+    expect([planner().hidden, pane().hidden]).toEqual([false, true]);
+    expect(store.update).not.toHaveBeenCalled();
 
+    // One selected in the view, as well; Close (as Escape) clears the view's selection.
+    later().click();
+    expect([planner().hidden, title()!.value]).toEqual([true, "Later"]);
+    side().querySelector<HTMLElement>(".tm-sidebar-close")!.click();
+    expect(view.getSelectedTasks()).toEqual([]);
+    expect([planner().hidden, pane().hidden]).toEqual([false, true]);
+    // A drag of tasks brings the hours back meanwhile, to drop on.
+    later().click();
+    startTaskDrag(document, { tasks: view.getSelectedTasks(), drop: vi.fn() });
+    expect(planner().hidden).toBe(false);
+    document.dispatchEvent(new Event("dragend"));
+    await vi.waitFor(() => expect(planner().hidden).toBe(true));
+
+    // Upcoming's tasks without a date, likewise.
     await view.setState({ mode: "upcoming" });
     side().querySelector<HTMLElement>(".tm-sidebar-planner .tm-task-item .tm-task-title")!.click();
-    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-pane .tm-sidebar-title-field")!.value).toBe("No date");
-    expect(side().querySelector(".tm-sidebar-planner .tm-task-item.is-selected")).not.toBeNull();
+    expect([planner().hidden, title()!.value]).toEqual([true, "No date"]);
+    escape(side().querySelector<HTMLElement>(".tm-sidebar-property")!);
+    expect(planner().hidden).toBe(false);
+    expect(side().querySelector(".tm-sidebar-planner .tm-task-item .tm-task-title")!.textContent).toBe("No date");
   });
 
   it("shows the selected task as a list of its properties in either style, and a count for several", async () => {
@@ -239,7 +264,7 @@ describe("what the Task Details sidebar shows", () => {
 });
 
 describe("editing in the Task Details sidebar", () => {
-  it("confirms typing with Enter in the title or notes (Shift+Enter starts a line of notes), and cancels it with Escape", async () => {
+  it("confirms typing with Enter in the title or notes (Shift+Enter starts a line of notes); Escape cancels it, closing the task", async () => {
     const { view, main, side, store, contents } = await setup([["A.md", "- [ ] Draft the brief\n- [ ] Other"]]);
     await view.setState({ mode: "all" });
     rows(main())[0].click();
@@ -255,8 +280,11 @@ describe("editing in the Task Details sidebar", () => {
     title().dispatchEvent(new Event("input", { bubbles: true }));
     key(title(), { key: "Escape" });
     await settle();
-    expect(title().value).toBe("Draft the brief");
+    // Escape closes the task, saving nothing; opened again, it reads as it did.
+    expect(side().querySelector(".tm-sidebar-empty h3")!.textContent).toBe("No task selected");
     expect(store.update).not.toHaveBeenCalled();
+    rows(main())[0].click();
+    expect(title().value).toBe("Draft the brief");
 
     notes().focus();
     expect(key(notes(), { key: "Enter", shiftKey: true }).defaultPrevented).toBe(false);
