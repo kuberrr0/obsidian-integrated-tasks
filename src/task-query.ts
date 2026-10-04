@@ -125,6 +125,11 @@ export function parseTaskQuery(source: string, context: TaskQueryContext): Parse
         const list = context.smartLists.find(item => item.name.toLowerCase() === value.toLowerCase());
         if (!list) { fail(`There's no smart list named "${value}".`); break; }
         filters.push(...list.filters);
+        // A list made from a view filters that view's tasks.
+        const scope = list.scope;
+        if (scope?.mode === "project") { result.query.mode = "project"; result.query.projectPath = scope.path; }
+        else if (scope?.mode === "tag") { result.query.mode = "tags"; result.query.tag = scope.tag; result.query.tagPath = scope.path; }
+        else if (scope) result.query.mode = scope.mode;
         result.sort = list.sort; result.descending = list.descending;
         result.grouping = list.grouping === "default" ? "none" : list.grouping;
         result.opens = { mode: "smartLists", smartListId: list.id };

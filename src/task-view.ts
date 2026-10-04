@@ -33,7 +33,7 @@ import { groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "./query"
 import { startTaskDrag, type SidebarDrop } from "./sidebar-drop";
 import type TaskManagerPlugin from "./main";
 import type { OpenEditorState } from "./main";
-import type { TaskFilter, Project, SmartList, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
+import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskDraft, TaskEditorPreset, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 /** What a new task's card is called in its note until a title is typed, as Things names a new to-do. */
@@ -176,6 +176,36 @@ export class TaskMainView extends ItemView {
   getIcon(): string { return this.state.mode === "projects" ? "target" : "circle-check-big"; }
   getState(): Record<string, unknown> { return { ...this.state, folded: [...this.folded], layout: this.layout, projectLayout: this.projectLayout, ganttAnchor: this.ganttAnchor, ganttZoom: this.ganttZoom, calendar: this.layout === "calendar", calendarScope: this.calendarScope, calendarAnchor: this.calendarAnchor, showProjects: this.showProjects }; }
 
+  /** Which view's options this page keeps: a list's, a project's or a tag's (by its note when it has one). Smart lists keep theirs in their own definition. */
+  private get optionsKey(): string | undefined {
+    const { mode, tag } = this.state;
+    if (this.pagePath) return `${mode === "tags" ? "tag" : "project"}:${this.pagePath}`;
+    if (mode === "tags") return tag ? `tag:${tag}` : undefined;
+    return mode === "inbox" || mode === "today" || mode === "upcoming" || mode === "all" ? mode : undefined;
+  }
+
+  /** The page's kept View options, or the defaults. */
+  private restoreViewOptions(showProjects?: boolean): void {
+    const key = this.optionsKey;
+    const saved = key ? this.plugin.settings?.viewOptions?.[key] : undefined;
+    this.propertyFilters = saved ? cloneTaskFilters(saved.filters) : [];
+    this.sort = saved?.sort ?? "date";
+    this.descending = saved?.descending ?? false;
+    this.grouping = saved?.grouping ?? "default";
+    this.showProjects = saved ? saved.showProjects !== false : showProjects ?? true;
+  }
+
+  /** Keeps the page's View options for its next visit; back at the defaults, nothing is kept. */
+  private saveViewOptions(): void {
+    const key = this.optionsKey;
+    if (!key) return;
+    const defaults = !this.propertyFilters.length && this.sort === "date" && !this.descending && this.grouping === "default" && this.showProjects;
+    this.plugin.saveViewOptions?.(key, defaults ? undefined : {
+      filters: cloneTaskFilters(this.propertyFilters), sort: this.sort, descending: this.descending, grouping: this.grouping,
+      ...(this.showProjects ? {} : { showProjects: false })
+    });
+  }
+
   /**
    * `result`: Obsidian's; moving to another page (a project, tag, list or smart list) records the page left in the
    * tab's history, as a note does when its file changes, so Back and Forward step through task pages too. Obsidian
@@ -191,22 +221,17 @@ export class TaskMainView extends ItemView {
     else if (typeof state.calendar === "boolean") this.layout = state.calendar ? "calendar" : "list";
     if (["day", "four-day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
-    if (this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId) {
+    const newPage = this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId;
+    if (newPage) {
       // A new page, not the first one this view opens with (a new view is recorded as it replaces the last).
       if (this.stateSet && result) result.history = true;
       this.smartListVersion = undefined;
-      this.showProjects = true;
       this.selection.clear();
-      this.propertyFilters = [];
-      this.sort = "date";
-      this.descending = false;
-      this.grouping = "default";
       this.filtersExpanded = false;
       this.listRows.clear();
       this.folded.clear();
     }
     if (Array.isArray(state.folded)) this.folded = new Set(state.folded.filter((key): key is string => typeof key === "string"));
-    if (typeof state.showProjects === "boolean") this.showProjects = state.showProjects;
     if (typeof mode === "string" && mode in TITLES) this.state.mode = mode as TaskViewMode;
     this.state.smartListId = typeof state.smartListId === "string" ? state.smartListId : undefined;
     this.state.tag = typeof state.tag === "string" && state.tag ? state.tag : undefined;
@@ -215,6 +240,8 @@ export class TaskMainView extends ItemView {
     this.state.projectPath = typeof state.projectPath === "string" ? state.projectPath : undefined;
     // File-backed task views must participate in normal same-tab navigation.
     this.navigation = Boolean(this.pagePath);
+    // Each view opens with the View options it was left with (a tab saved before they were kept may still say whether it showed projects).
+    if (newPage || !this.stateSet) this.restoreViewOptions(typeof state.showProjects === "boolean" ? state.showProjects : undefined);
     this.stateSet = true;
     this.render();
     this.refreshTitle();
@@ -421,19 +448,42 @@ export class TaskMainView extends ItemView {
     this.preserveView(() => this.renderTaskResultsNow(container));
   }
 
+  /** A smart list's scope, when it was made from a view (View options › Convert to smart list). */
+  private get smartListScope(): SmartListScope | undefined {
+    return this.state.mode === "smartLists" ? this.plugin.settings.smartLists.find(list => list.id === this.state.smartListId)?.scope : undefined;
+  }
+
+  /**
+   * The view whose defaults (its grouping, its sections) apply: this page's, or for a smart list made from a view,
+   * that view's: a project's note, Today, a tag…
+   */
+  private get defaults(): { mode: TaskViewMode; path?: string } {
+    const scope = this.smartListScope;
+    if (!scope) return { mode: this.state.mode, path: this.taskSourcePath };
+    return scope.mode === "project" ? { mode: "all", path: scope.path } : scope.mode === "tag" ? { mode: "tags" } : { mode: scope.mode };
+  }
+
+  /** What the view lists: its own tasks, or a smart list's, within the view it was made from. */
+  private baseQuery(): TaskQuery {
+    const scope = this.smartListScope;
+    const { mode, path } = this.defaults;
+    const tags = mode === "tags";
+    return {
+      mode: path ? "project" : this.layout === "calendar" && (mode === "today" || mode === "upcoming") ? "all" : mode,
+      showCompleted: this.showCompleted,
+      projectPath: path,
+      tag: scope?.mode === "tag" ? scope.tag : tags && !this.pagePath ? this.state.tag : undefined,
+      tagPath: scope?.mode === "tag" ? scope.path : tags ? this.pagePath : undefined,
+      filters: this.propertyFilters,
+    };
+  }
+
   private renderTaskResultsNow(container: HTMLElement): void {
     container.empty();
     this.resetRows();
     this.updateSelection();
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", task => this.prepareDrag(task));
-    const query: TaskQuery = {
-      mode: this.taskSourcePath ? "project" : this.layout === "calendar" && (this.state.mode === "today" || this.state.mode === "upcoming") ? "all" : this.state.mode,
-      showCompleted: this.showCompleted,
-      projectPath: this.taskSourcePath,
-      tag: this.state.mode === "tags" && !this.pagePath ? this.state.tag : undefined,
-      tagPath: this.state.mode === "tags" ? this.pagePath : undefined,
-      filters: this.propertyFilters,
-    };
+    const query = this.baseQuery();
     const tasks = sortTasks([...this.plugin.index.query(query), ...this.projectItems(query)], this.sort, this.descending);
     this.selection.retain(tasks);
     this.renderTaskLayouts(container, tasks);
@@ -511,8 +561,9 @@ export class TaskMainView extends ItemView {
       return;
     }
     if (!tasks.length) {
-      if (this.taskSourcePath && this.grouping === "default" && !this.propertyFilters.length) {
-        this.renderProjectSections(container, this.taskSourcePath, tasks);
+      const { path } = this.defaults;
+      if (path && this.grouping === "default" && !this.propertyFilters.length) {
+        this.renderProjectSections(container, path, tasks);
       } else this.renderEmpty(container);
       return;
     }
@@ -531,17 +582,18 @@ export class TaskMainView extends ItemView {
       }
       return;
     }
-    if (this.taskSourcePath) {
-      this.renderProjectSections(container, this.taskSourcePath, tasks);
+    const defaults = this.defaults;
+    if (defaults.path) {
+      this.renderProjectSections(container, defaults.path, tasks);
       return;
     }
-    if (this.state.mode === "today") {
+    if (defaults.mode === "today") {
       const today = todayIso();
       this.renderSection(container, "Overdue", tasks.filter((task) => (actionDate(task) ?? today) < today), "alert", { property: "date", value: addDays(today, -1) });
       this.renderSection(container, "Today", tasks.filter((task) => actionDate(task) === today), undefined, { property: "date", value: today });
-    } else if (this.state.mode === "upcoming") {
+    } else if (defaults.mode === "upcoming") {
       for (const [date, group] of groupTasks(tasks, "date")) this.renderSection(container, formatDate(date, this.plugin.dateFormat()), group, undefined, taskGroupTarget("date", group[0]));
-    } else if (this.state.mode === "all") {
+    } else if (defaults.mode === "all") {
       for (const [path, group] of groupTasks(tasks, "source")) {
         this.renderSection(container, path.replace(/\.md$/i, ""), group, undefined, { destination: path });
       }
@@ -556,16 +608,17 @@ export class TaskMainView extends ItemView {
    */
   private kanbanColumns(tasks: Task[]): KanbanColumn[] {
     if (this.grouping !== "default") return kanbanColumns(tasks, this.grouping);
-    if (this.taskSourcePath) return kanbanColumns(tasks, "section");
-    if (this.state.mode === "today") {
+    const defaults = this.defaults;
+    if (defaults.path) return kanbanColumns(tasks, "section");
+    if (defaults.mode === "today") {
       const today = todayIso();
       return [
         { title: "Overdue", tasks: tasks.filter(task => (actionDate(task) ?? today) < today), target: { property: "date", value: addDays(today, -1) } },
         { title: "Today", tasks: tasks.filter(task => actionDate(task) === today), target: { property: "date", value: today } }
       ];
     }
-    if (this.state.mode === "upcoming") return kanbanColumns(tasks, "date");
-    if (this.state.mode === "all") return kanbanColumns(tasks, "source");
+    if (defaults.mode === "upcoming") return kanbanColumns(tasks, "date");
+    if (defaults.mode === "all") return kanbanColumns(tasks, "source");
     return kanbanColumns(tasks, "none");
   }
 
@@ -788,7 +841,7 @@ export class TaskMainView extends ItemView {
         } },
         { kind: "item", label: "Update View Options", icon: "refresh-cw", key: "u", run: () => {
           const draft: SmartListDraft = { name: list.name, filters: cloneTaskFilters(this.propertyFilters), sort: this.sort, descending: this.descending, grouping: this.grouping,
-            ...(this.showProjects ? {} : { showProjects: false }) };
+            ...(this.showProjects ? {} : { showProjects: false }), ...(list.scope ? { scope: list.scope } : {}) };
           if (JSON.stringify(draft) === JSON.stringify(smartListDraft(list))) { new Notice(`“${list.name}” already has these view options`); return; }
           save(draft, `Updated “${list.name}” with the current view options`);
         } },
@@ -894,10 +947,11 @@ export class TaskMainView extends ItemView {
   /** What the View default grouping groups this view's tasks by (see renderTaskLayouts and kanbanColumns). */
   private defaultGroupLabel(): string {
     if (this.layout === "calendar") return "None";
-    if (this.taskSourcePath) return "Section";
-    if (this.state.mode === "today") return "Overdue and today";
-    if (this.state.mode === "upcoming") return "Action date";
-    if (this.state.mode === "all") return "Note";
+    const { mode, path } = this.defaults;
+    if (path) return "Section";
+    if (mode === "today") return "Overdue and today";
+    if (mode === "upcoming") return "Action date";
+    if (mode === "all") return "Note";
     return "None";
   }
 
@@ -916,17 +970,43 @@ export class TaskMainView extends ItemView {
         if (change.grouping !== undefined) this.grouping = change.grouping;
         if (change.filters !== undefined) this.propertyFilters = change.filters;
         if (change.showProjects !== undefined) this.showProjects = change.showProjects;
+        this.saveViewOptions();
         this.renderTaskResults();
       },
       clear: () => {
         this.propertyFilters = [];
         this.sort = "date"; this.descending = false; this.grouping = "default"; this.showProjects = true;
+        this.saveViewOptions();
         this.renderTaskResults();
       },
       // Read lazily: the panel outlives task changes, so choices must reflect the current tasks.
       tasks: () => this.plugin.index.allTasks(),
       expanded: () => this.filtersExpanded,
-      setExpanded: open => { this.filtersExpanded = open; }
+      setExpanded: open => { this.filtersExpanded = open; },
+      // A smart list already is one: its own options are saved from its title's menu.
+      ...(this.state.mode === "smartLists" ? {} : { convert: (anchor: HTMLElement) => this.convertToSmartList(anchor) })
+    });
+  }
+
+  /**
+   * View options › Convert to smart list: a smart list with the view's filters, sorting, grouping and projects that
+   * filters this view's tasks (Today's, a project's…), as the view shows them; named in a popover, then opened.
+   */
+  private convertToSmartList(anchor: HTMLElement): void {
+    const { mode, tag } = this.state;
+    const scope: SmartListScope | undefined = mode === "tags" ? this.pagePath ? { mode: "tag", path: this.pagePath } : tag ? { mode: "tag", tag } : undefined
+      : this.pagePath ? { mode: "project", path: this.pagePath }
+      : mode === "inbox" || mode === "today" || mode === "upcoming" ? { mode } : undefined;
+    openChoicePopover({
+      anchor, label: "Convert to smart list", choices: [],
+      input: { placeholder: "Name the smart list", invalid: "", parse: text => text ? { value: text, label: `Create smart list “${text}”` } : undefined },
+      choose: name => {
+        const draft: SmartListDraft = { name, filters: cloneTaskFilters(this.propertyFilters), sort: this.sort, descending: this.descending, grouping: this.grouping,
+          ...(this.showProjects ? {} : { showProjects: false }), ...(scope ? { scope } : {}) };
+        void this.plugin.saveSmartList(draft)
+          .then(list => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }))
+          .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not create the smart list."); });
+      }
     });
   }
 
@@ -1228,7 +1308,7 @@ export class TaskMainView extends ItemView {
       const moved = selected.every(task => kept.some(item => item.id === task.id));
       const paths = await this.plugin.store.bulkDrop(selected, group, anchor, placement);
       const resort = Boolean(anchor && placement) && (this.sort !== "source" || this.descending);
-      if (anchor && placement) { this.sort = "source"; this.descending = false; }
+      if (anchor && placement) { this.sort = "source"; this.descending = false; this.saveViewOptions(); }
       for (const path of paths) await this.plugin.index.refreshPath(path);
       const moveTo = anchor ? anchor.path : group?.destination ? group.destination.split("#")[0] : undefined;
       if (moved) this.reselect(kept, moveTo);
@@ -1776,9 +1856,10 @@ export class TaskMainView extends ItemView {
   private get metadataGrouping(): TaskGrouping {
     if (this.layout === "calendar") return "none";
     if (this.grouping !== "default") return this.grouping;
-    if (this.taskSourcePath) return "section";
-    if (this.state.mode === "all") return "source";
-    if (this.state.mode === "upcoming") return "date";
+    const { mode, path } = this.defaults;
+    if (path) return "section";
+    if (mode === "all") return "source";
+    if (mode === "upcoming") return "date";
     return "none";
   }
 

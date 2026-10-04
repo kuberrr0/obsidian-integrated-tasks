@@ -2535,3 +2535,12 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
 .tm-things-card-project-icon svg { width: 14px; height: 14px; }
 .tm-things-card-project-chevron svg { width: 12px; height: 12px; color: var(--text-faint); }
 .tm-things-card-project-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* View options' footer: Convert to smart list, below the options, always in view. */
+.tm-options-footer { flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--background-modifier-border); }
+button.tm-options-convert {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: auto; padding: 8px 10px;
+  border: 0; border-radius: 8px; box-shadow: none; background: transparent;
+  color: var(--text-accent); font-size: var(--font-ui-small); font-weight: var(--font-medium); cursor: pointer;
+}
+button.tm-options-convert:hover, button.tm-options-convert:focus-visible { background: var(--background-modifier-hover); }

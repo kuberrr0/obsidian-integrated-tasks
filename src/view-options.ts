@@ -21,6 +21,8 @@ export interface ViewOptionsHost {
   tasks(): Task[];
   expanded(): boolean;
   setExpanded(open: boolean): void;
+  /** Makes a smart list of the view as its options now show it, named in a popover beside `anchor`; the panel's footer offers it. */
+  convert?(anchor: HTMLElement): void;
 }
 
 type Property = typeof TASK_PROPERTIES[number];
@@ -204,6 +206,14 @@ export class ViewOptionsPanel {
         const property = TASK_PROPERTIES.find(item => item.key === key);
         if (property) this.filterRow(section, property, label, icon);
       }
+    }
+    const convert = host.convert;
+    if (convert) {
+      const footer = this.panel.createDiv({ cls: "tm-options-footer" });
+      const button = footer.createEl("button", { cls: "tm-options-convert", attr: { type: "button", "data-tm-focus-key": "option-convert" } });
+      setIcon(button.createSpan({ cls: "tm-options-icon", attr: { "aria-hidden": "true" } }), "list-plus");
+      button.createSpan({ text: "Convert to smart list" });
+      button.addEventListener("click", () => { this.setOpen(false); convert.call(host, this.toggle); });
     }
     this.sync();
   }

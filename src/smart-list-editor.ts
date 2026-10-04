@@ -1,4 +1,4 @@
-import { smartListDraft, type SmartListDraft } from "./task-filters";
+import { smartListDraft, smartListScopeLabel, type SmartListDraft } from "./task-filters";
 import { Modal, type App } from "obsidian";
 import { renderPropertyFilter } from "./filter-editor";
 import { TASK_PROPERTIES } from "./task-properties";
@@ -36,7 +36,7 @@ export class SmartListEditorModal extends Modal {
     for (const item of [{ key: "default", label: "View default" }, { key: "none", label: "None" }, { key: "date", label: "Action date" }, ...TASK_PROPERTIES]) grouping.createEl("option", { value: item.key, text: item.label });
     grouping.value = draft.grouping;
     content.createEl("h3", { text: "Filters" });
-    content.createDiv({ cls: "tm-filter-hint", text: "Match all properties. AND is evaluated before OR. Use Status to include completed tasks." });
+    content.createDiv({ cls: "tm-filter-hint", text: `${draft.scope ? `Filters the tasks of ${smartListScopeLabel(draft.scope)}. ` : ""}Match all properties. AND is evaluated before OR. Use Status to include completed tasks.` });
     const filters = content.createDiv({ cls: "tm-smart-list-filters" });
     for (const property of TASK_PROPERTIES) {
       const row = filters.createDiv({ cls: "tm-property-submenu" });
