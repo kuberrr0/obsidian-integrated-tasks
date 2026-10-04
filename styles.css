@@ -1163,12 +1163,60 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-main-view .tm-task-item :is(.tm-task-due, .tm-task-schedule, .tm-task-source, .tm-task-tag) > span { font-size: inherit; }
 .tm-task-schedule:hover, .tm-task-source:hover, .tm-task-tag:hover { color: var(--text-normal); }
 
-/* Griply style: group headings over a divider. */
+/* Griply style, after Griply: group headings over a divider, with the collapse chevron at the right (pointing down
+   while open); a faint "Add task" row closes each group; a slightly larger detail line; a tinted deadline pill. */
 .tm-main-view.tm-style-griply .tm-section h2 {
   padding-bottom: var(--size-4-2);
   margin-bottom: var(--size-4-1);
   border-bottom: 1px solid var(--background-modifier-border);
 }
+.tm-main-view.tm-style-griply button.tm-group-fold {
+  position: static;
+  order: 99;
+  margin-inline-start: auto;
+  opacity: 1;
+  transform: none;
+}
+.tm-main-view.tm-style-griply .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content { font-size: var(--font-ui-small); }
+.tm-main-view.tm-style-griply .tm-task-due {
+  padding: 1px 8px 1px 7px;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+.tm-main-view.tm-style-griply .tm-task-due .tm-task-detail-icon svg { fill: currentColor; }
+.tm-main-view.tm-style-griply button.tm-add-task-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 7px 0;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-normal);
+  text-align: start;
+  cursor: pointer;
+}
+.tm-main-view.tm-style-griply button.tm-add-task-row:hover { color: var(--text-muted); }
+.tm-add-task-box {
+  justify-self: center;
+  box-sizing: border-box;
+  width: var(--checkbox-size, 15px);
+  height: var(--checkbox-size, 15px);
+  border: 1px dashed currentColor;
+  border-radius: var(--checkbox-radius, 4px);
+}
+@media (max-width: 700px) { .tm-main-view.tm-style-griply button.tm-add-task-row { grid-template-columns: 44px minmax(0, 1fr); } }
+/* A repeat is an icon beside the title, its rule in the tooltip. */
+.tm-task-primary > .tm-task-repeat { color: var(--text-faint); }
+.tm-task-primary > .tm-task-repeat:hover { color: var(--text-normal); }
 .tm-task-checkbox.is-p1 { --tm-priority-color: var(--text-error); }
 .tm-task-checkbox.is-p2 { --tm-priority-color: var(--color-orange); }
 .tm-task-checkbox.is-p3 { --tm-priority-color: var(--color-blue); }

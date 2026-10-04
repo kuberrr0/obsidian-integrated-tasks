@@ -491,6 +491,25 @@ describe("today header, density and gestures", () => {
     expect(store.toggle).not.toHaveBeenCalled();
   });
 
+  it("closes each Griply group with an Add task row in place of the heading's +, adding to that group", async () => {
+    const { view, content, plugin } = await setup([note("A.md", 2), note("B.md", 1)]);
+    plugin.settings.style = "griply";
+    await view.setState({ mode: "all" });
+    expect(content().classList.contains("tm-style-griply")).toBe(true);
+    const [, second] = sections(content());
+    expect(sections(content()).map(section => section.lastElementChild?.className)).toEqual(["tm-add-task-row", "tm-add-task-row"]);
+    expect(content().querySelector(".tm-group-add-task")).toBeNull();
+    second.querySelector<HTMLButtonElement>(".tm-add-task-row")!.click();
+    expect(plugin.openEditor).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ preset: expect.objectContaining({ destination: "B.md" }) }));
+    // Boards, and the Things style, keep the heading's + instead.
+    await view.setState({ mode: "all", layout: "kanban" } as never);
+    expect(content().querySelector(".tm-add-task-row")).toBeNull();
+    plugin.settings.style = "things";
+    await view.setState({ mode: "all", layout: "list" } as never);
+    expect(content().querySelector(".tm-add-task-row")).toBeNull();
+    expect(content().querySelector(".tm-group-add-task")).not.toBeNull();
+  });
+
   it("opens a task on a double tap, once even when the browser also sends dblclick", async () => {
     const { view, content, plugin } = await setup([note("A.md", 2)]);
     plugin.settings.style = "griply";

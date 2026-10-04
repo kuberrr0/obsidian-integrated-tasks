@@ -22,14 +22,16 @@ function row(line: string, options: { grouping?: TaskGrouping; show?: (property:
   const task = scanTasks("Note.md", line, now)[0];
   const edit = vi.fn();
   renderTaskDetails(primary, metadata, task, { now, grouping: options.grouping ?? "none", show: options.show, dateFormat: "MMM D, YYYY", tags: task.tags ?? [], edit, openSource: vi.fn() });
-  return { metadata, edit, repeat: metadata.querySelector<HTMLElement>(".tm-task-repeat"), done: metadata.querySelector<HTMLElement>(".tm-task-done") };
+  return { primary, metadata, edit, repeat: primary.querySelector<HTMLElement>(".tm-task-repeat"), done: metadata.querySelector<HTMLElement>(".tm-task-done") };
 }
 
 describe("task row pills", () => {
-  it("shows an editable repeat pill after the schedule", () => {
-    const { metadata, repeat, edit } = row("- [ ] Water 2026-09-28 every week #[[home]]");
-    expect(Array.from(metadata.children).map(child => child.className)).toEqual(["tm-task-schedule", "tm-task-repeat", "tm-task-tag"]);
-    expect(repeat!.textContent).toBe("Every week");
+  it("shows an editable repeat icon beside the title, before the deadline, with its rule in the tooltip", () => {
+    const { primary, metadata, repeat, edit } = row("- [ ] Water 2026-09-28 every week {2026-10-02} #[[home]]");
+    expect(Array.from(primary.children).map(child => child.className)).toEqual(["tm-task-repeat", "tm-task-due"]);
+    expect(Array.from(metadata.children).map(child => child.className)).toEqual(["tm-task-schedule", "tm-task-tag"]);
+    expect(repeat!.textContent).toBe("");
+    expect(repeat!.getAttribute("title")).toBe("Repeats every week");
     expect(repeat!.getAttribute("data-tm-focus-key")).toBe("repeat");
     repeat!.click();
     expect(edit).toHaveBeenCalledWith("repeat");

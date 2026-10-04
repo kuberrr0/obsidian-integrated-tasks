@@ -1,11 +1,15 @@
 import { expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
-import { deadlineIsOverdue, renderTaskDetails, taskScheduleLabel, taskDeadlineLabel, taskDayDistance, taskTimeLabel, taskTimeDurationLabel } from "../src/task-row-details";
+import { deadlineIsOverdue, renderTaskDetails, taskScheduleLabel, taskDeadlineLabel, taskDeadlineCountdown, taskDayDistance, taskTimeLabel, taskTimeDurationLabel } from "../src/task-row-details";
 import { scanTasks } from "../src/parser";
 
 const now = new Date(2026, 8, 19, 12);
 it("formats relative schedules, countdowns, and calendar dates across years", () => {
     expect(taskScheduleLabel("2026-08-07", now)).toBe("43d ago");
+    expect(taskDeadlineCountdown("2026-09-12", now)).toBe("-7d");
+    expect(taskDeadlineCountdown("2026-09-23", now)).toBe("4d");
+    expect(taskDeadlineCountdown("2026-09-19", now)).toBe("Today");
+    expect(taskDeadlineCountdown("2026-06-01", now)).toBe("-3m");
     expect(taskScheduleLabel("2026-09-19", now)).toBe("Today");
     expect(taskScheduleLabel("2026-09-20", now)).toBe("Tomorrow");
     expect(taskScheduleLabel("2026-10-01", now)).toBe("Oct 1");

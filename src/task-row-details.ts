@@ -19,12 +19,21 @@ export function taskScheduleLabel(date: string, now = new Date()): string {
     return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "MMM D" : "MMM D, YYYY");
 }
 
+/** "4d", "2m" or "1y": how far off a deadline is, either way. */
+function deadlineDistance(days: number): string {
+    const count = Math.abs(days);
+    return count >= 365 ? `${Math.floor(count / 365)}y` : count >= 30 ? `${Math.floor(count / 30)}m` : `${count}d`;
+}
+
 export function taskDeadlineLabel(date: string, now = new Date()): string {
     const days = taskDayDistance(date, now);
-    if (days === 0) return "Today";
-    const count = Math.abs(days);
-    const value = count >= 365 ? `${Math.floor(count / 365)}y` : count >= 30 ? `${Math.floor(count / 30)}m` : `${count}d`;
-    return `${value}${days < 0 ? " ago" : ""}`;
+    return days === 0 ? "Today" : `${deadlineDistance(days)}${days < 0 ? " ago" : ""}`;
+}
+
+/** A task row's deadline countdown, as Griply shows it: "4d" to go, "-7d" overdue, or "Today". */
+export function taskDeadlineCountdown(date: string, now = new Date()): string {
+    const days = taskDayDistance(date, now);
+    return days === 0 ? "Today" : `${days < 0 ? "-" : ""}${deadlineDistance(days)}`;
 }
 
 /** "Sep 27", or "Sep 27, 2025" outside the current year. */
@@ -111,7 +120,15 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
             editable(timeLabel, `Edit ${hasTime ? "scheduled date and time" : "duration"}: ${time}`, "time", () => options.edit(hasTime ? "scheduledDate" : "durationMinutes"));
         }
     }
-    const due = task.deadline && showDate("deadline") ? taskDeadlineLabel(task.deadline, now) : "";
+    // A repeat shows as an icon beside the title, its rule in the tooltip; the deadline pill follows.
+    if (task.repeat && show("repeat") && grouping !== "repeat") {
+        const label = repeatLabel(task.repeat);
+        const repeat = primary.createSpan({ cls: "tm-task-repeat", attr: { title: `Repeats ${label.toLowerCase()}` } });
+        const icon = repeat.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
+        setIcon(icon, "repeat");
+        editable(repeat, `Edit repeat: ${label}`, "repeat", () => options.edit("repeat"));
+    }
+    const due = task.deadline && showDate("deadline") ? taskDeadlineCountdown(task.deadline, now) : "";
     const dueTime = task.deadlineTime && show("deadlineTime") && grouping !== "deadlineTime" ? taskTimeLabel(task.deadlineTime) : "";
     if (due || dueTime) {
         const badge = primary.createSpan({ cls: `tm-task-due${deadlineIsDistant(task.deadline, now) ? " is-distant" : ""}${!task.completed && deadlineIsOverdue(task.deadline, task.deadlineTime, now) ? " is-overdue" : ""}`, attr: { title: [task.deadline && formatDate(task.deadline, options.dateFormat), task.deadlineTime].filter(Boolean).join(", ") } });
@@ -127,14 +144,6 @@ export function renderTaskDetails(primary: HTMLElement, metadata: HTMLElement, t
         setIcon(icon, "eye-off");
         defer.createSpan({ text: label });
         editable(defer, `Edit hidden until: ${label}`, "defer", () => options.edit("defer"));
-    }
-    if (task.repeat && show("repeat") && grouping !== "repeat") {
-        const label = repeatLabel(task.repeat);
-        const repeat = metadata.createSpan({ cls: "tm-task-repeat", attr: { title: `Repeats ${task.repeat}` } });
-        const icon = repeat.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } });
-        setIcon(icon, "repeat");
-        repeat.createSpan({ text: label });
-        editable(repeat, `Edit repeat: ${label}`, "repeat", () => options.edit("repeat"));
     }
     if (task.status === "done" && task.completedDate && show("completed") && grouping !== "completed") {
         metadata.createSpan({ cls: "tm-task-done", text: `Done ${taskDoneDateLabel(task.completedDate, now)}`, attr: { title: `Completed ${formatDate(task.completedDate, options.dateFormat)}` } });
