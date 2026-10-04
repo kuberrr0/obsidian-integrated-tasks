@@ -44,7 +44,13 @@ export function propertyValue(task: Task, property: TaskProperty): string | numb
   return task[property];
 }
 
+/** The priority filter's value for tasks without a priority. */
+export const NO_PRIORITY = "none";
+/** Priority filter choices: P1–P3, then tasks without one. */
+export const PRIORITY_FILTER_VALUES = ["1", "2", "3", NO_PRIORITY];
+
 export function propertyLabel(property: TaskProperty, value: string | number): string {
+  if (property === "priority" && String(value).toLowerCase() === NO_PRIORITY) return "No priority";
   return property === "priority" ? `P${value}` : property === "duration" ? formatDuration(Number(value)) : property === "repeat" ? repeatLabel(String(value)) : String(value);
 }
 
@@ -89,7 +95,8 @@ function matchesCondition(task: Task, filter: TaskFilter): boolean {
   const present = value !== undefined && value !== "";
   if (filter.operator === "has") return present;
   if (filter.operator === "missing") return !present;
-  if (!present) return false;
+  // "No priority" picks out tasks without one; otherwise a task without the property matches no value.
+  if (!present) return filter.operator === "is" && filter.property === "priority" && filter.values.some(item => item.toLowerCase() === NO_PRIORITY);
   const normalized = String(value).toLocaleLowerCase();
   const values = filter.values.map(item => (DATE_PROPERTIES.has(filter.property) ? resolveDateToken(item) : item).toLocaleLowerCase());
   if (filter.operator === "is") return values.includes(normalized);

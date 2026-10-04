@@ -237,7 +237,9 @@ export class TaskNavigationView extends ItemView {
         if (entry.mode !== "all" || !folder(row, "smartLists", "smart lists")) continue;
         const children = lists.createDiv({ cls: "tree-item-children nav-folder-children tm-nav-children" });
         const smartLists = this.plugin.settings.smartLists;
-        for (const list of smartLists) item(children, `list:${list.id}`, list.name, this.activeSmartList === list.id, () => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }), "list-filter", "orange");
+        // Indented a step under All Tasks, as a subproject is under its parent.
+        for (const list of smartLists) item(children, `list:${list.id}`, list.name, this.activeSmartList === list.id, () => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }), "list-filter", "orange")
+          .style.setProperty("--tm-nav-depth", "1");
         if (!smartLists.length) children.createDiv({ cls: "tm-nav-empty", text: "No smart lists yet" });
       }
     }

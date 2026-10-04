@@ -17,6 +17,12 @@ describe("property filters", () => {
     expect(matchesFilter(task, filter("deadline", "between", ["2026-09-10", "2026-09-12"]))).toBe(true);
     expect(matchesFilter(task, filter("deadline", "before", ["2026-09-10"]))).toBe(false);
     expect(matchesFilter({ ...task, deadline: undefined }, filter("deadline", "missing"))).toBe(true);
+    // "No priority" picks out tasks without one, alone or with priorities.
+    expect(matchesFilter({ ...task, priority: undefined }, filter("priority", "is", ["none"]))).toBe(true);
+    expect(matchesFilter({ ...task, priority: undefined }, filter("priority", "is", ["1", "none"]))).toBe(true);
+    expect(matchesFilter(task, filter("priority", "is", ["none"]))).toBe(false);
+    expect(matchesFilter(task, filter("priority", "is", ["2", "none"]))).toBe(true);
+    expect(matchesFilter({ ...task, priority: undefined }, filter("priority", "is", ["1"]))).toBe(false);
     expect(matchesFilter({ ...task, deadline: undefined }, filter("deadline", "after", ["2026-09-01"]))).toBe(false);
   });
   it("supports times, numeric duration comparisons, and case-insensitive text", () => {

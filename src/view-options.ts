@@ -1,6 +1,6 @@
 import { setIcon } from "obsidian";
 import { renderPropertyFilter } from "./filter-editor";
-import { propertyValue, resolveDateToken, TASK_PROPERTIES } from "./task-properties";
+import { PRIORITY_FILTER_VALUES, propertyLabel, propertyValue, resolveDateToken, TASK_PROPERTIES } from "./task-properties";
 import { OPEN_STATUSES, STATUS_LABELS, TASK_STATUSES } from "./task-status";
 import type { Task, TaskFilter, TaskGrouping, TaskProperty, TaskSort } from "./types";
 
@@ -106,7 +106,7 @@ function dateText(value: string): string {
 }
 
 function choiceLabel(property: TaskProperty, value: string): string {
-  if (property === "priority") return `P${value}`;
+  if (property === "priority") return propertyLabel(property, value);
   if (property === "source") return value.replace(/\.md$/i, "").split("/").pop() ?? value;
   return value;
 }
@@ -313,7 +313,7 @@ export class ViewOptionsPanel {
         const labels = TASK_STATUSES.map(status => STATUS_LABELS[status]);
         return [...labels, ...(current()?.values ?? []).filter(value => !labels.includes(value))];
       }
-      if (property.key === "priority") return ["1", "2", "3"];
+      if (property.key === "priority") return PRIORITY_FILTER_VALUES;
       if (property.key === "tags") return [...new Set(this.host.tasks().flatMap(task => task.tags ?? []))].sort((a, b) => a.localeCompare(b));
       return [...new Set(this.host.tasks().map(task => propertyValue(task, property.key)).filter(value => value !== undefined && value !== "").map(String))]
         .sort((a, b) => choiceLabel(property.key, a).localeCompare(choiceLabel(property.key, b)));

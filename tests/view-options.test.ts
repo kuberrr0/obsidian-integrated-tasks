@@ -97,6 +97,13 @@ describe("view options panel", () => {
     expect(select("status").textContent).toBe("In progress, Waiting");
     option("Any").click();
     expect(state.filters).toEqual([]);
+    select("priority").click();
+    expect(Array.from(panel.panel.querySelectorAll("[role=option]")).map(item => item.textContent)).toEqual(["Any", "P1", "P2", "P3", "No priority", "More conditions…"]);
+    option("P1").click();
+    option("No priority").click();
+    expect(state.filters).toEqual([{ property: "priority", operator: "is", values: ["1", "none"] }]);
+    expect(select("priority").textContent).toBe("P1, No priority");
+    option("Any").click();
     select("tags").click();
     expect(Array.from(panel.panel.querySelectorAll("[role=option]")).map(item => item.textContent)).toEqual(["Any", "design", "web", "More conditions…"]);
     option("web").click();
@@ -139,6 +146,7 @@ it("summarises filters in a few words", () => {
   const property = (key: string) => TASK_PROPERTIES.find(item => item.key === key)!;
   expect(filterSummary(property("priority"), undefined)).toBe("Any");
   expect(filterSummary(property("priority"), { property: "priority", operator: "is", values: ["1", "2"] })).toBe("P1, P2");
+  expect(filterSummary(property("priority"), { property: "priority", operator: "is", values: ["none"] })).toBe("No priority");
   expect(filterSummary(property("source"), { property: "source", operator: "is", values: ["A.md", "B.md", "Projects/C.md"] })).toBe("3 notes");
   expect(filterSummary(property("deadline"), { property: "deadline", operator: "before", values: ["today"] })).toBe("Overdue");
   expect(filterSummary(property("deadline"), { property: "deadline", operator: "after", values: ["today+3"] })).toBe("After in 3 days");

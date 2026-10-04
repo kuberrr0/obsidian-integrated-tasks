@@ -1,4 +1,4 @@
-import { filterOperators, propertyLabel, propertyValue, type TASK_PROPERTIES } from "./task-properties";
+import { filterOperators, PRIORITY_FILTER_VALUES, propertyLabel, propertyValue, type TASK_PROPERTIES } from "./task-properties";
 import { STATUS_LABELS, TASK_STATUSES } from "./task-status";
 import type { FilterOperator, Task, TaskFilter } from "./types";
 
@@ -59,7 +59,7 @@ export function renderPropertyFilter(container: HTMLElement, property: typeof TA
         if (property.kind === "choice") {
           // Older smart lists may hold "Open" or "Completed"; keep them listed so they can be cleared.
           const statuses = TASK_STATUSES.map(status => STATUS_LABELS[status]);
-          const choices = property.key === "priority" ? ["1", "2", "3"] : property.key === "status" ? [...statuses, ...clause.values.filter(value => !statuses.includes(value))]
+          const choices = property.key === "priority" ? PRIORITY_FILTER_VALUES : property.key === "status" ? [...statuses, ...clause.values.filter(value => !statuses.includes(value))]
             : [...new Set((typeof tasks === "function" ? tasks() : tasks).map(task => propertyValue(task, property.key)).filter(value => value !== undefined && value !== "").map(String))].sort();
           for (const value of choices) {
             const label = inputs.createEl("label");

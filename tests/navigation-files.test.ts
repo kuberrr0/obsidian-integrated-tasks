@@ -91,6 +91,15 @@ function setup() {
   return { view, settings, container, labels, row, app, getLeaf, openFile, renameFile, create, root, work };
 }
 
+it("indents smart lists a step under All Tasks, as subprojects are under their parent", () => {
+  const { view, settings, row } = setup();
+  settings.smartLists = [{ id: "work", name: "Work", filters: [], sort: "date", descending: false, grouping: "default" }];
+  view.setActive("smartLists", undefined, undefined, "work");
+  view.refresh();
+  expect(row("mode:all").style.getPropertyValue("--tm-nav-depth")).toBe("");
+  expect(row("list:work").style.getPropertyValue("--tm-nav-depth")).toBe("1");
+});
+
 it("lists the vault's files below everything else only when the setting is on", () => {
   const { view, settings, container, labels } = setup();
   view.refresh();
