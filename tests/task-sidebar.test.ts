@@ -108,15 +108,16 @@ describe("what the task sidebar shows", () => {
     expect(Array.from(side().querySelectorAll(".tm-calendar-lane .tm-calendar-task-title")).map(title => title.textContent)).toEqual(["At nine"]);
     // Only the hours: no heading, no calendar controls, no all-day row, no tray for tasks without a date.
     expect(side().querySelector("h4, .tm-calendar-toolbar, .tm-calendar-allday, .tm-calendar-unscheduled")).toBeNull();
-    // The details sit below.
-    expect(side().querySelector(".tm-sidebar-pane .tm-sidebar-empty h3")!.textContent).toBe("No task selected");
+    // With no task selected, the hours have the sidebar to themselves.
+    expect(side().querySelector<HTMLElement>(".tm-sidebar-pane")!.hidden).toBe(true);
+    expect(side().querySelector(".tm-sidebar-pane")!.childElementCount).toBe(0);
 
     await view.setState({ mode: "upcoming" });
     expect(side().classList.contains("is-upcoming")).toBe(true);
     // As a list's rows, subtasks with their task.
     expect(Array.from(side().querySelectorAll(".tm-sidebar-planner .tm-task-item .tm-task-title")).map(title => title.textContent)).toEqual(["No date", "Another undated"]);
     expect(side().querySelector("h4, .tm-calendar, .tm-calendar-task")).toBeNull();
-    expect(side().querySelector(".tm-sidebar-pane .tm-sidebar-empty")).not.toBeNull();
+    expect(side().querySelector<HTMLElement>(".tm-sidebar-pane")!.hidden).toBe(true);
     contents.set("A.md", `- [ ] Due today ${today}`);
     await (view as unknown as { plugin: { index: { refreshPath(path: string): Promise<void> } } }).plugin.index.refreshPath("A.md");
     sidebar.render();
@@ -136,7 +137,10 @@ describe("what the task sidebar shows", () => {
     const today = todayIso();
     const { view, main, side } = await setup([["A.md", [`- [ ] At nine ${today} 09:00`, `- [ ] Later ${today}`, "- [ ] No date"].join("\n")]]);
     await view.setState({ mode: "today" });
+    expect(side().querySelector<HTMLElement>(".tm-sidebar-pane")!.hidden).toBe(true);
     side().querySelector<HTMLElement>(".tm-calendar-lane .tm-calendar-task")!.click();
+    // A selected task's details appear below the hours.
+    expect(side().querySelector<HTMLElement>(".tm-sidebar-pane")!.hidden).toBe(false);
     expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-pane .tm-sidebar-title-field")!.value).toBe("At nine");
     expect(side().querySelector(".tm-calendar-task.is-selected")).not.toBeNull();
     rows(main()).find(row => row.textContent!.includes("Later"))!.click();

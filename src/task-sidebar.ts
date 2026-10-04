@@ -50,8 +50,8 @@ const LIST_PAGE = 100;
 
 /**
  * The task sidebar (in the right sidebar by default). Its content follows the task view in front: with Today open, the
- * day's hours; with Upcoming open, the tasks with no date; and below them (or, anywhere else, filling it) the selected
- * task's details, editable in place. Only the tasks show: no headings or calendar controls. Tasks drag between it and
+ * day's hours; with Upcoming open, the tasks with no date; and below them when a task is selected (or, anywhere else,
+ * filling it) the selected task's details, editable in place. Only the tasks show: no headings or calendar controls. Tasks drag between it and
  * the view: onto an hour to schedule them then, from the tasks without a date onto a day.
  */
 export class TaskSidebarView extends ItemView {
@@ -144,11 +144,14 @@ export class TaskSidebarView extends ItemView {
       for (const element of Array.from(planner.element.querySelectorAll<HTMLElement>("[data-task-id]"))) element.toggleClass("is-selected", element.getAttribute("data-task-id") === this.localId);
     }
     const details = this.details!;
-    this.draw(details, JSON.stringify([Boolean(view), local ? "local" : selected.length, task?.id, task?.raw, task?.description, task && this.children(task).map(child => child.raw)]), force,
-      () => this.renderDetails(details.element, view, local ? [local] : selected, task));
+    // Below Today's hours or Upcoming's list, the details take room only for a selected task, and as much as it needs.
+    const shown = mode === "details" || Boolean(task);
+    details.element.hidden = !shown;
+    this.draw(details, JSON.stringify([shown, Boolean(view), local ? "local" : selected.length, task?.id, task?.raw, task?.description, task && this.children(task).map(child => child.raw)]), force,
+      () => { if (shown) this.renderDetails(details.element, view, local ? [local] : selected, task); });
   }
 
-  /** Lays the sidebar out for a mode: in Today and Upcoming, their tasks over the details (the bottom third); else the details alone. */
+  /** Lays the sidebar out for a mode: in Today and Upcoming, their tasks over the selected task's details; else the details alone. */
   private build(mode: SidebarMode, skeleton: string): void {
     const container = this.content;
     const settings = this.plugin.settings;

@@ -2537,7 +2537,7 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
 .tm-things-card-project-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Task sidebar (the right sidebar by default): Today's hours or Upcoming's tasks with no date over the selected task's
-   details (its bottom third), or elsewhere the details alone; only the tasks, with no headings or calendar controls.
+   details (when a task is selected), or elsewhere the details alone; only the tasks, with no headings or calendar controls.
    It shares the task views' styles through .tm-main-view. */
 .workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar {
   display: flex;
@@ -2545,13 +2545,15 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
   padding: var(--size-4-3) var(--size-4-3) var(--size-4-6);
 }
 .tm-sidebar-pane { display: flex; flex-direction: column; gap: var(--size-4-3); }
-/* With Today or Upcoming open, each part scrolls on its own: the tasks in two thirds, the details in the last. */
+/* With Today or Upcoming open, the selected task's details are as tall as they need to be, and the tasks take the rest
+   (some of it at least, past which the details scroll); with no task selected, the tasks take it all. */
 .workspace-leaf-content[data-type="task-manager-sidebar"] .view-content.tm-task-sidebar:is(.is-today, .is-upcoming) { overflow: hidden; padding-bottom: var(--size-4-3); }
-.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-planner { display: flex; flex: 2 1 0; flex-direction: column; min-height: 0; overflow-y: auto; }
+.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-planner { display: flex; flex: 1 1 0; flex-direction: column; min-height: 160px; overflow-y: auto; }
 .tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane {
-  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  flex: 0 1 auto; min-height: 0; overflow-y: auto;
   margin-top: var(--size-4-3); padding-top: var(--size-4-3); border-top: 1px solid var(--background-modifier-border);
 }
+.tm-sidebar-pane[hidden] { display: none; }
 .tm-task-sidebar.is-today .tm-sidebar-planner { overflow: hidden; }
 
 /* Today's hours fill their part, and scroll. */
@@ -2563,8 +2565,6 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
 
 /* The selected task. */
 .tm-task-sidebar .tm-sidebar-empty { flex: 1; min-height: 240px; padding: 0 var(--size-4-4); }
-.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane .tm-sidebar-empty { min-height: 0; padding-block: var(--size-4-2); }
-.tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane .tm-empty-icon { display: none; }
 .tm-sidebar-footer { display: flex; }
 button.tm-sidebar-open-note {
   display: inline-flex; align-items: center; gap: 6px; height: auto; padding: 4px 8px;
