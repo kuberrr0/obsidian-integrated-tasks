@@ -438,7 +438,7 @@ export class TaskIndex {
     return true;
   }
 
-  /** Returns whether the note was parsed; unchanged content is skipped unless forced. */
+  /** Returns whether the note's tasks or headings changed; unchanged content is not parsed again unless forced. */
   private async scanFile(file: TFile, force = false): Promise<boolean> {
     const path = file.path;
     const token = ++this.scanCount;
@@ -461,17 +461,22 @@ export class TaskIndex {
     const now = new Date();
     const headings = scanSections(content, level);
     const tasks = scanTasks(path, content, now, dateFormat, level);
+    // Typing in a note's prose changes nothing the views show: no redraw.
+    const same = this.tasksByPath.has(path) && JSON.stringify(tasks) === JSON.stringify(this.tasksByPath.get(path))
+      && JSON.stringify(headings) === JSON.stringify(this.headingsByPath.get(path));
     this.indexedContent.set(path, { content, day });
-    this.headingsByPath.set(path, headings);
-    this.tasksByPath.set(path, tasks);
-    this.visibleByPath.delete(path);
-    this.invalidateTasks();
+    if (!same) {
+      this.headingsByPath.set(path, headings);
+      this.tasksByPath.set(path, tasks);
+      this.visibleByPath.delete(path);
+      this.invalidateTasks();
+    }
     if (this.cache && mtime !== undefined && size !== undefined) {
       this.unsavedDeletes.delete(path);
       this.unsaved.set(path, { mtime, size, dateFormat, tagFormat: tagFormat(), sectionHeadingLevel: level, day: formatLocalDate(now) });
       this.scheduleSave();
     }
-    return true;
+    return !same;
   }
 
   private queueDelete(paths: string[]): void {

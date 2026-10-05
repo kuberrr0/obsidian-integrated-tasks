@@ -105,9 +105,16 @@ describe("duplicate rescans", () => {
       expect(scan).toHaveBeenCalledOnce();
       expect(listener).toHaveBeenCalledOnce();
 
+      // Parsed again, to the same tasks: nothing to redraw.
       await index.refreshPath("A.md", { force: true });
       expect(scan).toHaveBeenCalledTimes(2);
-      expect(listener).toHaveBeenCalledTimes(2);
+      expect(listener).toHaveBeenCalledOnce();
+
+      // Typing prose below the tasks changes the note, not its tasks.
+      text.set("A.md", "- [ ] Changed\n\nSome notes");
+      await index.refreshPath("A.md");
+      expect(scan).toHaveBeenCalledTimes(3);
+      expect(listener).toHaveBeenCalledOnce();
     } finally { scan.mockRestore(); }
   });
 
