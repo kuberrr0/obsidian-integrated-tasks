@@ -1,7 +1,7 @@
 import { setIcon } from "obsidian";
 import { addDays } from "./calendar";
 import { nextWeek } from "./date-popover";
-import { pinPopoverToTop, placePopover, popoverHost, registerDismiss } from "./choice-popover";
+import { pinPopoverToTop, placePopover, popoverHost, registerDismiss, whileOpen } from "./choice-popover";
 
 type Priority = 1 | 2 | 3;
 
@@ -200,18 +200,10 @@ export function openActionMenu(options: ActionMenuOptions): TaskMenu {
     element.style.top = `${Math.max(margin, Math.min(top, win.innerHeight - box.height - margin))}px`;
   }
 
-  const outside = (event: PointerEvent): void => {
-    const target = event.target as HTMLElement | null;
-    if (!element.contains(target) && !target?.closest?.(SUBMENUS)) close();
-  };
-  doc.addEventListener("pointerdown", outside, true);
-  win.addEventListener("blur", close);
-  let closed = false;
+  // A press in one of its submenus' popovers counts as inside it.
+  const stop = whileOpen(element, () => close(), { inside: target => element.contains(target) || Boolean(target?.closest?.(SUBMENUS)), also: [[win, "blur", () => close()]] });
   function close(): void {
-    if (closed) return;
-    closed = true;
-    doc.removeEventListener("pointerdown", outside, true);
-    win.removeEventListener("blur", close);
+    if (!stop()) return;
     const hadFocus = element.contains(doc.activeElement);
     element.remove();
     if (open === menu) open = undefined;
@@ -247,7 +239,6 @@ export interface TagsPopoverOptions {
  * changes; Escape or a click outside closes it.
  */
 export function openTagsPopover(options: TagsPopoverOptions): { element: HTMLElement; close(): void } {
-  const doc = options.anchor.ownerDocument;
   const element = popoverHost(options.anchor).createDiv({ cls: "tm-options-dropdown tm-choice-popover tm-tags-popover", attr: { role: "dialog", "aria-label": "Tags" } });
   const input = element.createEl("input", { type: "text", cls: "tm-options-input", attr: { placeholder: "Add or find a tag", "aria-label": "Tag", spellcheck: "false" } });
   input.value = options.query ?? "";
@@ -295,13 +286,9 @@ export function openTagsPopover(options: TagsPopoverOptions): { element: HTMLEle
   paint();
   placePopover(element, options.anchor, options.beside);
 
-  const outside = (event: PointerEvent): void => { if (!element.contains(event.target as Node)) close(); };
-  doc.addEventListener("pointerdown", outside, true);
-  let closed = false;
+  const stop = whileOpen(element, () => close());
   function close(): void {
-    if (closed) return;
-    closed = true;
-    doc.removeEventListener("pointerdown", outside, true);
+    if (!stop()) return;
     element.remove();
     if (options.anchor.isConnected) options.anchor.focus({ preventScroll: true });
   }

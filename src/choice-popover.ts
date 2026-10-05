@@ -52,7 +52,6 @@ let open: { close(): void } | undefined;
  */
 export function openChoicePopover(options: ChoicePopoverOptions): { element: HTMLElement; close(): void } {
   open?.close();
-  const doc = options.anchor.ownerDocument;
   const typed = options.input;
   const element = popoverHost(options.anchor).createDiv({ cls: "tm-options-dropdown tm-choice-popover", attr: { role: typed ? "dialog" : "listbox", "aria-label": options.label } });
   const input = typed && element.createEl("input", { type: "text", cls: "tm-options-input", attr: { placeholder: typed.placeholder, "aria-label": typed.placeholder, spellcheck: "false" } });
@@ -147,13 +146,9 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
 
   placePopover(element, options.anchor, options.beside);
 
-  const outside = (event: PointerEvent): void => { if (!element.contains(event.target as Node)) close(); };
-  doc.addEventListener("pointerdown", outside, true);
-  let closed = false;
+  const stop = whileOpen(element, () => close());
   function close(): void {
-    if (closed) return;
-    closed = true;
-    doc.removeEventListener("pointerdown", outside, true);
+    if (!stop()) return;
     element.remove();
     if (open === handle) open = undefined;
     if (options.anchor.isConnected) options.anchor.focus({ preventScroll: true });
@@ -164,6 +159,28 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
   if (input) input.focus();
   else (items.find(item => item.getAttribute("aria-selected") === "true") ?? items[0])?.focus();
   return handle;
+}
+
+/**
+ * What every popover and menu listens for while open: a press outside it (as `inside` tells) calls `outside`, and so do
+ * any `also` events (a menu closes when the window loses focus; a popover moves when it resizes, with its own listener).
+ * Returns the popover's stop: it removes the listeners and answers true the first time, so closing runs once.
+ */
+export function whileOpen(element: HTMLElement, outside: () => void, options: { inside?: (target: Element | null) => boolean; also?: Array<[EventTarget, string, () => void]> } = {}): () => boolean {
+  const doc = element.ownerDocument;
+  const inside = options.inside ?? (target => element.contains(target));
+  const press = (event: PointerEvent): void => { if (!inside(event.target as Element | null)) outside(); };
+  const also = options.also ?? [];
+  doc.addEventListener("pointerdown", press, true);
+  for (const [target, type, listener] of also) target.addEventListener(type, listener);
+  let open = true;
+  return () => {
+    if (!open) return false;
+    open = false;
+    doc.removeEventListener("pointerdown", press, true);
+    for (const [target, type, listener] of also) target.removeEventListener(type, listener);
+    return true;
+  };
 }
 
 /** How each open popover closes on Escape, so a modal can close it the same way without sending a key. */

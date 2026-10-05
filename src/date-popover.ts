@@ -1,5 +1,5 @@
 import { setIcon } from "obsidian";
-import { placePopover, popoverHost, registerDismiss } from "./choice-popover";
+import { placePopover, popoverHost, registerDismiss, whileOpen } from "./choice-popover";
 import { addDays } from "./calendar";
 import { formatDate, parseDateExpression, parseDateTimeExpression, parseTimeExpression, todayIso } from "./date";
 import { durationToMinutes, formatDuration } from "./parser";
@@ -212,19 +212,11 @@ export function openDatePopover(options: DatePopoverOptions): DatePopover {
   place();
 
   // A click outside saves what was typed and closes.
-  const outside = (event: PointerEvent): void => {
-    if (!element.contains(event.target as Node)) close(true);
-  };
-  doc.addEventListener("pointerdown", outside, true);
-  win.addEventListener("resize", place);
+  const stop = whileOpen(element, () => close(true), { also: [[win, "resize", place]] });
 
-  let closed = false;
   /** `typed` reads the input first (off when a date was just picked, which is what counts). */
   function close(commit = true, typed = true): void {
-    if (closed) return;
-    closed = true;
-    doc.removeEventListener("pointerdown", outside, true);
-    win.removeEventListener("resize", place);
+    if (!stop()) return;
     if (commit && typed && input.value.trim()) Object.assign(pending, read() ?? {});
     element.remove();
     if (open === popover) open = undefined;
