@@ -52,6 +52,21 @@ describe("property filters", () => {
   });
 });
 
+it("matches tasks without the property on \"is not\"", () => {
+  const bare: Task = { ...task, priority: undefined, tags: undefined, section: undefined, durationMinutes: undefined, deadline: undefined };
+  expect(matchesFilter(bare, filter("tags", "isNot", ["work"]))).toBe(true);
+  expect(matchesFilter(bare, filter("priority", "isNot", ["1"]))).toBe(true);
+  expect(matchesFilter(bare, filter("section", "isNot", ["Work"]))).toBe(true);
+  expect(matchesFilter(bare, filter("duration", "isNot", ["30"]))).toBe(true);
+  expect(matchesFilter(bare, filter("deadline", "isNot", ["2026-09-10"]))).toBe(true);
+  // A task without a priority has "No priority".
+  expect(matchesFilter(bare, filter("priority", "isNot", ["none"]))).toBe(false);
+  expect(matchesFilter(bare, filter("priority", "is", ["none"]))).toBe(true);
+  // Other comparisons still need a value.
+  expect(matchesFilter(bare, filter("tags", "is", ["work"]))).toBe(false);
+  expect(matchesFilter(bare, filter("duration", "before", ["30"]))).toBe(false);
+});
+
 it("combines conditions within one property using AND and OR", () => {
   const bothTags: TaskFilter = { ...filter("tags", "is", ["work"]), conditions: [{ join: "and", operator: "is", values: ["client notes"] }] };
   expect(matchesFilter(task, bothTags)).toBe(true);

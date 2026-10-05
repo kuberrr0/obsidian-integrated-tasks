@@ -79,7 +79,8 @@ function matchesCondition(task: Task, filter: TaskFilter): boolean {
     const values = filter.values.map(value => value.replace(/^#\[\[|\]\]$/g, "").trim().toLocaleLowerCase());
     if (filter.operator === "has") return tags.length > 0;
     if (filter.operator === "missing") return tags.length === 0;
-    if (!tags.length) return false;
+    // A task without tags has none of the tags "is not" names.
+    if (!tags.length) return filter.operator === "isNot";
     if (filter.operator === "is") return tags.some(tag => values.includes(tag));
     if (filter.operator === "isNot") return tags.every(tag => !values.includes(tag));
     if (filter.operator === "contains") return tags.some(tag => tag.includes(values[0] ?? ""));
@@ -95,8 +96,12 @@ function matchesCondition(task: Task, filter: TaskFilter): boolean {
   const present = value !== undefined && value !== "";
   if (filter.operator === "has") return present;
   if (filter.operator === "missing") return !present;
-  // "No priority" picks out tasks without one; otherwise a task without the property matches no value.
-  if (!present) return filter.operator === "is" && filter.property === "priority" && filter.values.some(item => item.toLowerCase() === NO_PRIORITY);
+  // A task without the property matches "is not" (it has none of those values) and nothing else, but for "No priority",
+  // which is what a task without a priority has.
+  if (!present) {
+    const none = filter.property === "priority" && filter.values.some(item => item.toLowerCase() === NO_PRIORITY);
+    return filter.operator === "is" ? none : filter.operator === "isNot" ? !none : false;
+  }
   const normalized = String(value).toLocaleLowerCase();
   const values = filter.values.map(item => (DATE_PROPERTIES.has(filter.property) ? resolveDateToken(item) : item).toLocaleLowerCase());
   if (filter.operator === "is") return values.includes(normalized);
