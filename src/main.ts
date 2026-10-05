@@ -61,7 +61,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.registerEditorExtension(noteDateInput(() => this.dateFormat(), () => this.settings.taskMode, () => this.settings.linkDates));
     this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => !this.settings.taskMode && isRepeatingTask(this.app, task),
       (task, outcome) => { this.completeRecurringTaskFromNote(task, outcome); }, undefined,
-      { enabled: () => this.settings.completionDates, linkDates: () => this.settings.linkDates }));
+      { enabled: () => this.settings.completionDates, linkDates: () => this.settings.linkDates }, () => this.settings.sectionHeadingLevel));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel, task => this.completeRecurringTaskFromNote(task)));
     this.registerMarkdownPostProcessor((element, context) => {

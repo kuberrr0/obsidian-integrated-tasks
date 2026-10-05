@@ -60,3 +60,14 @@ it("ignores disabled recurrence, unchecking, pasted tasks and fenced examples", 
         expect(state.update({ changes }).effects).toHaveLength(0);
     }
 });
+
+it("reads sections at the configured heading level", async () => {
+    const complete = vi.fn();
+    const doc = "## Morning\n- [ ] [[Habit]] 2026-09-19\n## Evening\n- [ ] [[Habit]] 2026-09-19";
+    const state = EditorState.create({ doc, extensions: noteRecurringCompletion(() => "YYYY-MM-DD", task => task.title === "[[Habit]]", complete, () => "Project.md", undefined, () => 2) });
+    const line = state.doc.line(4);
+    const transaction = state.update({ changes: { from: line.from + 3, to: line.from + 4, insert: "x" } });
+    for (const listener of transaction.state.facet(EditorView.updateListener)) listener({ transactions: [transaction] } as never);
+    await Promise.resolve();
+    expect(complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ line: 3, section: "Evening" }), "COMPLETED");
+});

@@ -65,7 +65,8 @@ export function noteRecurringCompletion(
     isRecurring: (task: Task) => boolean,
     complete: (task: Task, outcome: RecurringOutcome) => void,
     getPath: (state: EditorState) => string | undefined = state => state.field(editorInfoField, false)?.file?.path,
-    completionDates?: NoteCompletionDates
+    completionDates?: NoteCompletionDates,
+    getSectionHeadingLevel: () => number = () => 1
 ): Extension {
     return [
         EditorState.transactionFilter.of(transaction => {
@@ -87,10 +88,10 @@ export function noteRecurringCompletion(
             const tasks: ClosedRecurring[] = [];
             const changes: ChangeSpec[] = [];
             const reverted = new Set<number>();
-            const previous = recurringLines.size ? scanTasks(path, transaction.startState.doc.toString(), reference, getDateFormat())
+            const previous = recurringLines.size ? scanTasks(path, transaction.startState.doc.toString(), reference, getDateFormat(), getSectionHeadingLevel())
                 .filter(task => recurringLines.has(task.line)) : [];
             if (previous.length) {
-                const current = new Map(scanTasks(path, transaction.newDoc.toString(), reference, getDateFormat())
+                const current = new Map(scanTasks(path, transaction.newDoc.toString(), reference, getDateFormat(), getSectionHeadingLevel())
                     .filter(candidate => candidate.completed).map(candidate => [candidate.line, candidate]));
                 for (const task of previous) {
                     if (task.completed) continue;
