@@ -1,4 +1,5 @@
 import { formatTags, normalizeTags, tagFormat, trailingTag } from "./task-tags";
+import { indentWidth } from "./task-indentation";
 import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
 import { findInputDate, findInputDeadline, findInputTime, formatDate, formatLocalDate, parseDateTimeExpression, parseTimeExpression, removeSpans } from "./date";
 import { STATUS_CHARS, draftStatus, isClosedStatus, statusFromChar } from "./task-status";
@@ -128,9 +129,6 @@ function normalizeDestination(value: string): string | undefined {
   } catch { return undefined; }
 }
 
-function indentWidth(value: string): number {
-  return [...value].reduce((total, character) => total + (character === "\t" ? 4 : 1), 0);
-}
 
 export function durationToMinutes(value: string): number | undefined {
   if (!value || !/^((\d+)h)?((\d+)m)?$/i.test(value)) return undefined;

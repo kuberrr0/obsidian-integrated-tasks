@@ -16,7 +16,7 @@ export function taskScheduleLabel(date: string, now = new Date()): string {
     if (days < 0) return `${-days}d ago`;
     if (days === 0) return "Today";
     if (days === 1) return "Tomorrow";
-    return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "MMM D" : "MMM D, YYYY");
+    return taskDoneDateLabel(date, now);
 }
 
 /** "4d", "2m" or "1y": how far off a deadline is, either way. */

@@ -1,9 +1,8 @@
 import { findLiveLine, lineContext, lineEnding, type LineContext } from "./markdown";
 import { rewriteTaskLine, scanTasks } from "./parser";
-import { TASK_INDENT } from "./task-indentation";
+import { indentWidth, TASK_INDENT } from "./task-indentation";
 import type { Task, TaskDraft } from "./types";
 
-const indentation = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((width, char) => width + (char === "\t" ? 4 : 1), 0);
 
 /** One parse of a note's current content, shared by every task located in it. */
 export interface NoteSnapshot extends LineContext { lines: string[]; tasks: Map<number, Task> }
@@ -26,7 +25,7 @@ export function liveTaskBlock(source: string | NoteSnapshot, task: Task, dateFor
   let end = start + 1;
   for (let cursor = end; cursor < lines.length; cursor++) {
     if (!lines[cursor].trim()) continue;
-    if (indentation(lines[cursor]) <= live.indent) break;
+    if (indentWidth(lines[cursor]) <= live.indent) break;
     end = cursor + 1;
   }
   if (live.endLine >= end) throw new Error("Task structure changed. Check its indentation in the note before moving it.");
@@ -111,6 +110,6 @@ export function insertAfterTask(content: string, task: Task, lines: string[], da
 export function rewriteBlock(block: TaskBlock, draft: TaskDraft, indent: number, dateFormat?: string, linkDates = true): string[] {
   return [rewriteTaskLine(block.lines[0], { ...draft, indent }, dateFormat, linkDates), ...block.lines.slice(1).map(line => {
     if (!line.trim() || indent === block.indent) return line;
-    return " ".repeat(Math.max(0, indentation(line) - block.indent + indent)) + line.replace(/^[ \t]*/, "");
+    return " ".repeat(Math.max(0, indentWidth(line) - block.indent + indent)) + line.replace(/^[ \t]*/, "");
   })];
 }

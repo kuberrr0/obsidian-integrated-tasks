@@ -1,4 +1,4 @@
-import { TASK_INDENT } from "./task-indentation";
+import { indentWidth } from "./task-indentation";
 import { replaceDescription } from "./task-description";
 import { insertIntoDestination, lineEnding } from "./markdown";
 import { liveTaskBlock, noteSnapshot, rewriteBlock, subtaskIndent, type NoteSnapshot } from "./task-block";
@@ -73,7 +73,7 @@ export function planBulkTasks(contents: Map<string, string>, changes: BulkTaskCh
     }
   }
   // A subtask lines up with the anchor's other subtasks, however the note indents them.
-  const childIndent = anchor ? [...subtaskIndent(anchor)].reduce((width, char) => width + (char === "\t" ? TASK_INDENT : 1), 0) : 0;
+  const childIndent = anchor ? indentWidth(subtaskIndent(anchor)) : 0;
   const payloads = roots.map(entry => ({
     entry,
     lines: options.delete ? [] : rewriteBlock({ ...entry.block, lines: lines.get(entry.task.path)!.slice(entry.block.start, entry.block.end).flat() },

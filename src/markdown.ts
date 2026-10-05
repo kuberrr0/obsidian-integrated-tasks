@@ -1,5 +1,6 @@
 import { bodyLines, nonBodyLines, scanSections, type NoteHeading } from "./structure";
 import { rewriteTaskLine } from "./parser";
+import { indentWidth as width } from "./task-indentation";
 import type { Task, TaskDraft, TaskManagerSettings } from "./types";
 
 export function lineEnding(content: string): string {
@@ -87,7 +88,6 @@ export function insertIntoDestination(content: string, block: string[], heading?
   if (firstTask) {
     insertion = firstTask.line;
     const indent = /^[ \t]*/.exec(firstTask.text)![0];
-    const width = (value: string): number => [...value].reduce((sum, char) => sum + (char === "\t" ? 4 : 1), 0);
     const rootWidth = width(indent);
     block = block.map((line) => indent + line);
     if (position === "bottom") {

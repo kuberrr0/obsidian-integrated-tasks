@@ -2,13 +2,12 @@ import { setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { thingsDeadlineLabel } from "./things-row-details";
 import { longDate } from "./things-task-card";
-import { deadlineIsDistant, deadlineIsOverdue, taskDeadlineLabel, taskTimeLabel } from "./task-row-details";
+import { deadlineIsDistant, deadlineIsOverdue, taskDeadlineLabel, taskDoneDateLabel, taskTimeLabel } from "./task-row-details";
 import type { ProjectDraft } from "./project-creator";
 import type { Project } from "./types";
 
-export function projectDateLabel(date: string, now = new Date()): string {
-    return formatDate(date, date.slice(0, 4) === String(now.getFullYear()) ? "MMM D" : "MMM D, YYYY");
-}
+/** "Sep 27", or "Sep 27, 2025" outside the current year, as a task's dates read. */
+export const projectDateLabel = taskDoneDateLabel;
 
 /** `showParent`: the parent project, shown on a project's page but not in the Projects list. */
 export function renderProjectHeaderDetails(parent: HTMLElement, project: Project, edit: (field: keyof ProjectDraft) => void, dateFormat: string, now = new Date(), deadlineParent = parent, things = false, showParent = true): void {

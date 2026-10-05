@@ -1,8 +1,8 @@
 import { findInputDate, findInputDeadline, findInputTime, removeSpans } from "./date";
 import { parseTaskInput, parseTaskLine, serializeTask, taskTextRanges, type ParsedTaskLine, type ParsedTokenRange } from "./parser";
+import { indentWidth as width } from "./task-indentation";
 import type { TaskDraft } from "./types";
 
-const width = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((total, char) => total + (char === "\t" ? 4 : 1), 0);
 
 /** Parse a new task batch, retaining description bullets and relative indentation. */
 export function parseTaskTreeInput(input: string, destination: string, reference = new Date(), dateFormat?: string, linkDates = true): TaskDraft {
