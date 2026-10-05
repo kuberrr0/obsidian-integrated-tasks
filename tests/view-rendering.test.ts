@@ -500,15 +500,15 @@ describe("today header, density and gestures", () => {
   });
 
   it("opens a task on a single tap on mobile, where a right swipe selects; on desktop a click selects", async () => {
-    const platform = Platform as { isMobile?: boolean };
-    platform.isMobile = true;
+    const platform = Platform as { isMobile?: boolean; isPhone?: boolean };
+    platform.isMobile = platform.isPhone = true;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const { view, content, plugin } = await setup([note("A.md", 2)]);
       plugin.settings.style = "griply";
       await view.setState({ mode: "all" });
       const tap = (row: HTMLElement) => { pointer(row, "pointerdown", 10, 10); pointer(row, "pointerup", 10, 10); row.click(); };
-      // (In the Task Details sidebar: phones and tablets always use three panes.)
+      // (In the Task Details sidebar: phones always use three panes.)
       tap(rows(content())[0]);
       expect(plugin.showInTaskSidebar).toHaveBeenCalledExactlyOnceWith(rows(content())[0].getAttribute("data-task-id"), { focus: false });
       // The dblclick a browser may send after two taps opens nothing more.
@@ -528,7 +528,7 @@ describe("today header, density and gestures", () => {
       expect(plugin.showInTaskSidebar).not.toHaveBeenCalled();
       expect(plugin.openEditor).not.toHaveBeenCalled();
       expect(view.getSelectedTasks().map(task => task.line)).toEqual([1]);
-    } finally { platform.isMobile = false; vi.useRealTimers(); }
+    } finally { platform.isMobile = platform.isPhone = false; vi.useRealTimers(); }
     // On desktop a click selects; a double-click opens.
     const { view, content, plugin } = await setup([note("A.md", 2)]);
     plugin.settings.style = "griply";
@@ -1174,10 +1174,10 @@ describe("opening a card on the desktop", () => {
   });
 });
 
-describe("on phones and tablets", () => {
+describe("on phones", () => {
   it("opens tasks in the Task Details sidebar (three panes) whatever Task details says, new ones too, never as a card", async () => {
-    const platform = Platform as { isMobile?: boolean };
-    platform.isMobile = true;
+    const platform = Platform as { isMobile?: boolean; isPhone?: boolean };
+    platform.isMobile = platform.isPhone = true;
     try {
       const { view, content, plugin } = await setup([note("A.md", 2)]);
       plugin.settings.style = "things";
@@ -1191,6 +1191,24 @@ describe("on phones and tablets", () => {
       await vi.waitFor(() => expect(plugin.showInTaskSidebar).toHaveBeenLastCalledWith("tm-new-task", { focus: true }));
       expect(content().querySelector(".tm-things-card")).toBeNull();
       expect(plugin.openEditor).not.toHaveBeenCalled();
+    } finally {
+      platform.isMobile = platform.isPhone = false;
+    }
+  });
+});
+
+describe("on tablets", () => {
+  it("opens a tapped task as Task details says, as on desktop", async () => {
+    const platform = Platform as { isMobile?: boolean; isPhone?: boolean };
+    platform.isMobile = true;
+    try {
+      const { view, content, plugin } = await setup([note("A.md", 2)]);
+      plugin.settings.style = "things";
+      plugin.settings.taskDetails = "view";
+      await view.setState({ mode: "all" });
+      rows(content())[1].click();
+      await vi.waitFor(() => expect(content().querySelector(".tm-things-card")).not.toBeNull());
+      expect(plugin.showInTaskSidebar).not.toHaveBeenCalled();
     } finally {
       platform.isMobile = false;
     }

@@ -157,8 +157,8 @@ describe("popover placement", () => {
   }
 
   it("opens at the top of the screen, centred, on phones", () => {
-    const platform = Platform as { isMobile?: boolean };
-    platform.isMobile = true;
+    const platform = Platform as { isPhone?: boolean };
+    platform.isPhone = true;
     try {
       const popover = document.body.createDiv();
       vi.spyOn(popover, "getBoundingClientRect").mockReturnValue(rect(0, 200, 0, 240));
@@ -167,7 +167,7 @@ describe("popover placement", () => {
       expect(popover.style.left).toBe("80px");
       expect(popover.classList.contains("tm-popover-top")).toBe(true);
       expect(popover.style.getPropertyValue("--tm-popover-top")).toBe("8px");
-    } finally { platform.isMobile = false; }
+    } finally { platform.isPhone = false; }
   });
 
   it("opens below its anchor when there is room, but rises from it in a bottom sheet", () => {

@@ -1768,7 +1768,7 @@ button.tm-options-direction { flex: none; width: 34px; height: 34px; }
 /* On phones popovers and menus open at the top of the screen, below any notch, wherever they were opened from. */
 .tm-popover-top { top: calc(var(--tm-popover-top, 8px) + env(safe-area-inset-top, 0px)); }
 /* On phones it opens at the top of the screen, as every popover does there. */
-body.is-mobile .tm-options-panel { position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); right: 8px; bottom: auto; left: 8px; width: auto; max-height: 80vh; }
+body.is-phone .tm-options-panel { position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); right: 8px; bottom: auto; left: 8px; width: auto; max-height: 80vh; }
 @media (prefers-reduced-motion: no-preference) {
   .tm-options-panel:not([hidden]) { animation: tm-options-in 120ms ease-out; }
 }
@@ -1857,10 +1857,10 @@ body.is-mobile .tm-options-panel { position: fixed; top: calc(8px + env(safe-are
   cursor: pointer;
 }
 /* Dates, times and the deadline sit together at the end of the line. */
-/* On phones and tablets, and in narrow windows, list rows leave tags out for room; an open card (and its checklist)
-   still shows them. 700px is where the rest of the layout switches to its narrow form too. */
-body.is-mobile .tm-main-view.tm-style-things .tm-task-row .tm-things-tag,
-body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > .tm-things-tag.is-long { display: none; }
+/* On phones, and in narrow windows, list rows leave tags out for room; an open card (and its checklist) still shows
+   them. 700px is where the rest of the layout switches to its narrow form too. */
+body.is-phone .tm-main-view.tm-style-things .tm-task-row .tm-things-tag,
+body.is-phone .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > .tm-things-tag.is-long { display: none; }
 @media (max-width: 700px) {
   .tm-main-view.tm-style-things .tm-task-row .tm-things-tag,
   .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary > .tm-things-tag.is-long { display: none; }

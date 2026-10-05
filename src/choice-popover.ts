@@ -230,7 +230,7 @@ export function placePopover(element: HTMLElement, anchorElement: HTMLElement, b
 
 /** On phones a popover (or menu) opens at the top of the screen, centred, wherever it was opened from. */
 export function pinPopoverToTop(element: HTMLElement): boolean {
-  if (!Platform.isMobile) return false;
+  if (!Platform.isPhone) return false;
   const win = element.ownerDocument.defaultView ?? window;
   const width = element.getBoundingClientRect().width;
   // The stylesheet adds the safe area (a notch) to this offset.

@@ -430,10 +430,10 @@ describe("three panes (Task details › Three panes: in the sidebar)", () => {
     expect(plugin.showInTaskSidebar).toHaveBeenCalledWith(expect.any(String), { focus: true });
   });
 
-  it("on phones and tablets, shows a tapped task in the sidebar (its drawer slides in), without the keyboard", async () => {
-    const platform = Platform as { isMobile?: boolean };
-    platform.isMobile = true;
-    onTestFinished(() => { platform.isMobile = false; });
+  it("on phones, shows a tapped task in the sidebar (its drawer slides in), without the keyboard", async () => {
+    const platform = Platform as { isMobile?: boolean; isPhone?: boolean };
+    platform.isMobile = platform.isPhone = true;
+    onTestFinished(() => { platform.isMobile = platform.isPhone = false; });
     const { view, plugin, main, side } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
     plugin.settings.taskDetails = "sidebar";
     await view.setState({ mode: "all" });

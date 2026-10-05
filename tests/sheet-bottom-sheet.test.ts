@@ -11,7 +11,7 @@ vi.mock("obsidian", async importOriginal => {
     open(): void { document.body.appendChild(this.containerEl); (this as unknown as { onOpen(): void }).onOpen(); }
     close(): void { (this as unknown as { onClose(): void }).onClose(); this.containerEl.remove(); }
   }
-  return { ...await importOriginal<typeof import("./obsidian-mock")>(), Modal, Notice: class {}, setIcon: vi.fn(), Platform: { isMobile: false } };
+  return { ...await importOriginal<typeof import("./obsidian-mock")>(), Modal, Notice: class {}, setIcon: vi.fn(), Platform: { isMobile: false, isPhone: false } };
 });
 vi.mock("../src/task-line-editor", async original => ({
   ...await original<typeof import("../src/task-line-editor")>(),
@@ -32,7 +32,7 @@ import { DEFAULT_SETTINGS } from "../src/types";
 
 beforeAll(() => installObsidianDom());
 afterEach(() => {
-  (Platform as { isMobile: boolean }).isMobile = false;
+  (Platform as { isPhone: boolean }).isPhone = false;
   vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
@@ -55,7 +55,7 @@ describe("bottom sheet presentation", () => {
     expect(desktop.containerEl.classList.contains("tm-bottom-sheet-container")).toBe(false);
     desktop.close();
 
-    (Platform as { isMobile: boolean }).isMobile = true;
+    (Platform as { isPhone: boolean }).isPhone = true;
     const mobile = create();
     mobile.open();
     expect(mobile.modalEl.classList.contains("tm-bottom-sheet")).toBe(true);
@@ -68,7 +68,7 @@ describe("bottom sheet presentation", () => {
     mobile.close();
     expect(mobile.modalEl.classList.contains("tm-bottom-sheet")).toBe(false);
 
-    (Platform as { isMobile: boolean }).isMobile = false;
+    (Platform as { isPhone: boolean }).isPhone = false;
     vi.restoreAllMocks();
     narrow(true);
     const small = create();

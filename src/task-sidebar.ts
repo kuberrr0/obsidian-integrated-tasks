@@ -390,7 +390,7 @@ export class TaskSidebarView extends ItemView {
       openSource: () => void this.openSource(task)
     };
     if (lead) {
-      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: true, subtaskMark: true, datesBelow: Platform.isMobile });
+      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: true, subtaskMark: true, datesBelow: Platform.isPhone });
       if (!lead.childElementCount) lead.remove();
     } else renderTaskDetails(primary, metadata, task, details);
     if (!metadata.childElementCount) metadata.remove();

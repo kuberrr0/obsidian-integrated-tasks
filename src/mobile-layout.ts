@@ -48,7 +48,7 @@ const SHEET_DISMISS_DISTANCE = 80;
  */
 export function presentAsBottomSheet(modal: HTMLElement, close: () => void, atTop = false): () => void {
   const win = modal.ownerDocument?.defaultView;
-  if (!win || !(Platform.isMobile || win.matchMedia?.("(max-width: 600px)").matches)) return () => {};
+  if (!win || !(Platform.isPhone || win.matchMedia?.("(max-width: 600px)").matches)) return () => {};
   const container = modal.parentElement;
   modal.classList.add("tm-bottom-sheet");
   modal.classList.toggle("is-top", atTop);

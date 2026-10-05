@@ -72,7 +72,7 @@ export class TaskEditorModal extends Modal {
   onOpen(): void {
     this.modalEl.addClass("tm-editor-modal");
     // On phones the editor hangs from the top of the screen, clear of the keyboard, with its popovers above it.
-    this.stopBottomSheet = presentAsBottomSheet(this.modalEl, () => this.close(), Platform.isMobile);
+    this.stopBottomSheet = presentAsBottomSheet(this.modalEl, () => this.close(), Platform.isPhone);
     const { contentEl } = this;
     contentEl.empty();
     this.modalEl.setAttribute("aria-label", this.options.task ? "Edit task" : "New task");

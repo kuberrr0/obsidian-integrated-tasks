@@ -40,11 +40,11 @@ import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskDraft, T
 export const TASK_MAIN_VIEW = "task-manager-main";
 
 /**
- * Whether opened tasks show their details only in the Task Details sidebar (three panes): always on phones and tablets,
- * elsewhere as Task details says.
+ * Whether opened tasks show their details only in the Task Details sidebar (three panes): always on phones, elsewhere
+ * (tablets too) as Task details says.
  */
 export function tasksOpenInSidebar(settings: Pick<TaskManagerSettings, "taskDetails">): boolean {
-  return Platform.isMobile || settings.taskDetails === "sidebar";
+  return Platform.isPhone || settings.taskDetails === "sidebar";
 }
 /** The id a new task goes by until it is written (written tasks' ids are their note and line). */
 export const NEW_TASK_ID = "tm-new-task";
@@ -1355,7 +1355,7 @@ export class TaskMainView extends ItemView {
     if (lead) {
       const secondary = content.createDiv({ cls: "tm-things-secondary" });
       // On phones, and in a board's narrow columns, the dates go below the name, which would otherwise have no room.
-      renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field), datesBelow: Platform.isMobile || board });
+      renderThingsProjectDetails({ lead, inline: primary, secondary }, project, { dateFormat: this.plugin.dateFormat(), edit: field => this.openProjectProperty(project, field), datesBelow: Platform.isPhone || board });
       if (!lead.childElementCount) lead.remove();
       if (!secondary.childElementCount) secondary.remove();
       return row;
@@ -2215,7 +2215,7 @@ export class TaskMainView extends ItemView {
     if (board) this.renderBoardCard(primary, metadata, task, details);
     else if (lead) {
       // With subtasks listed as rows, the mark saying a task has them would only repeat what is in view.
-      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today", subtaskMark: !this.plugin.settings.showSubtasks, datesBelow: Platform.isMobile });
+      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today", subtaskMark: !this.plugin.settings.showSubtasks, datesBelow: Platform.isPhone });
       if (!lead.childElementCount) lead.remove();
     } else renderTaskDetails(primary, metadata, task, details);
     if (!metadata.childElementCount) metadata.remove();
@@ -2292,8 +2292,8 @@ export class TaskMainView extends ItemView {
     const card = this.content?.querySelector<HTMLElement>(".tm-things-card");
     card?.querySelector<HTMLTextAreaElement>(".tm-things-card-title")?.focus({ preventScroll: true });
     const opened = card && from ? animateCardOpen(card, from) : Promise.resolve();
-    // Once it has grown, only when it is not all in view, just far enough to show it. (Phones and tablets open tasks in
-    // the Task Details sidebar, never as a card.)
+    // Once it has grown, only when it is not all in view, just far enough to show it. (Phones open tasks in the Task
+    // Details sidebar, never as a card.)
     if (card) void opened.then(() => { if (card.isConnected) card.scrollIntoView({ block: "nearest", behavior: "smooth" }); });
   }
 
