@@ -1,5 +1,5 @@
 import { findInputDate, findInputDeadline, findInputTime, removeSpans } from "./date";
-import { parseTaskInput, parseTaskLine, serializeTask, serializeTaskInput, taskTextRanges, type ParsedTaskLine, type ParsedTokenRange } from "./parser";
+import { parseTaskInput, parseTaskLine, serializeTask, taskTextRanges, type ParsedTaskLine, type ParsedTokenRange } from "./parser";
 import type { TaskDraft } from "./types";
 
 const width = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((total, char) => total + (char === "\t" ? 4 : 1), 0);
@@ -101,13 +101,6 @@ export function tokenHighlightClass(kind: InputTokenKind, text: string): string 
     : kind === "destination" ? "is-project"
     : "is-other";
   return `tm-nlp-token ${look}`;
-}
-
-/** A property's token as a task line writes it: `[[2026-10-01]] 09:00 30m`, `{…}`, `p1`, `#[[tag]]`, `every week`, `~[[Project]]`. */
-export function taskTokenText(values: Partial<TaskDraft>, dateFormat?: string, linkDates = true): string {
-  const draft: TaskDraft = { title: "", completed: false, indent: 0, destination: "", ...values };
-  const line = values.destination ? serializeTaskInput(draft, dateFormat, linkDates) : serializeTask(draft, dateFormat, linkDates);
-  return line.replace(/^\s*-\s+\[.\]\s*/, "").trim();
 }
 
 /**

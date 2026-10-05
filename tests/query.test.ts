@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupByActionDate, groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "../src/query";
+import { groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "../src/query";
 import type { Task } from "../src/types";
 
 const now = new Date(2026, 8, 4, 12, 0, 0);
@@ -55,16 +55,6 @@ describe("task queries", () => {
     const completed = task({ completed: true });
     expect(taskMatchesQuery(completed, { mode: "all", showCompleted: false }, "Inbox.md", now)).toBe(false);
     expect(taskMatchesQuery(completed, { mode: "all", showCompleted: true }, "Inbox.md", now)).toBe(true);
-  });
-
-  it("groups future tasks by their earliest actionable date", () => {
-    const groups = groupByActionDate([
-      task({ id: "a", scheduledDate: "2026-09-08" }),
-      task({ id: "b", scheduledDate: "2026-09-10", deadline: "2026-09-08" }),
-      task({ id: "c", scheduledDate: "2026-09-09" })
-    ]);
-    expect([...groups.keys()]).toEqual(["2026-09-08", "2026-09-09"]);
-    expect(groups.get("2026-09-08")).toHaveLength(2);
   });
 });
 
@@ -144,12 +134,12 @@ describe("date and time sorting", () => {
     expect(sortTasks(values, "deadline").map(task => task.id)).toEqual(["deadline-first", "scheduled-first"]);
     expect(sortTasks(values, "date").map(task => task.id)).toEqual(["deadline-first", "scheduled-first"]);
   });
-  it("uses the earlier date's time for action sorting and groups by day", () => {
+  it("uses the earlier date's time for action sorting", () => {
     const values = [
       task({ id: "later", scheduledDate: "2026-09-07", scheduledTime: "15:00", deadline: "2026-09-08", deadlineTime: "01:00" }),
       task({ id: "earlier", scheduledDate: "2026-09-09", scheduledTime: "23:00", deadline: "2026-09-07", deadlineTime: "09:00" })
     ];
-    expect([...groupByActionDate(values).entries()].map(([date, tasks]) => [date, tasks.map(task => task.id)])).toEqual([["2026-09-07", ["earlier", "later"]]]);
+    expect(sortTasks(values).map(task => task.id)).toEqual(["earlier", "later"]);
   });
   it.each(["scheduledDate", "deadline"] as const)("keeps missing %s values last in both directions", sort => {
     const values = [task({ id: "missing" }), task({ id: "dated", [sort]: "2026-09-07" })];

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TFile, type App } from "obsidian";
 import * as parser from "../src/parser";
-import { CACHE_SCHEMA, MemoryIndexCache, type CachedNote, type IndexCache } from "../src/index-cache";
+import { CACHE_SCHEMA, type CachedNote, type IndexCache } from "../src/index-cache";
+import { MemoryIndexCache } from "./helpers/memory-index-cache";
 import { TaskIndex } from "../src/task-index";
 import { DEFAULT_SETTINGS } from "../src/types";
 import { FakeEvents, flush } from "./core-events";

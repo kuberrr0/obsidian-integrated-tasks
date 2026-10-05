@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setTagFormat } from "../src/task-tags";
-import { replaceTaskTokens, taskInputRanges, taskTokenText } from "../src/task-input";
+import { replaceTaskTokens, taskInputRanges } from "../src/task-input";
 
 // Tuesday, Sep 29 2026.
 const now = new Date(2026, 8, 29, 12);
@@ -40,13 +40,6 @@ describe("rewriting one property's token", () => {
     expect(replace("", ["priority"], "p1")).toBe(" p1");
     expect(replace(" #[[x]]", ["tags"], "#[[x]] #[[y]]")).toBe(" #[[x]] #[[y]]");
     expect(replace("Main p3\n  - [ ] Child p3", ["priority"], "p1")).toBe("Main p1\n  - [ ] Child p3");
-  });
-
-  it("writes each property's token as a task line would", () => {
-    expect(taskTokenText({ scheduledDate: "2026-10-01", scheduledTime: "09:00", durationMinutes: 30 }, "YYYY-MM-DD")).toBe("[[2026-10-01]] 09:00 30m");
-    expect(taskTokenText({ deadline: "2026-10-02" }, "YYYY-MM-DD", false)).toBe("{2026-10-02}");
-    expect(taskTokenText({ tags: ["open house"], repeat: "every week" })).toBe("every week #[[open house]]");
-    expect(taskTokenText({ destination: "Projects/Work.md" })).toBe("~[[Projects/Work]]");
   });
 });
 
@@ -88,7 +81,6 @@ describe("tags in the #tag format", () => {
     expect(spans("Call mom p1 #family #errand")).toEqual(["priority:p1", "tags:#family", "tags:#errand"]);
     expect(spans("Call #mom about dinner")).toEqual([]);
     expect(spans("Call mom #[[family]]")).toEqual([]);
-    expect(taskTokenText({ tags: ["open house", "work"] })).toBe("#open-house #work");
     expect(replaceTaskTokens("Call mom #family p1", ["priority"], "p2", "", now, "YYYY-MM-DD")).toBe("Call mom #family p2");
   });
 });

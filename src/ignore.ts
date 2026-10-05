@@ -1,13 +1,6 @@
 import type { Task } from "./types";
 
 /** Folders, notes and tags whose tasks the plugin leaves out of every view. */
-export interface IgnoreRules {
-  /** Folders ("Templates" or "Templates/") and notes ("Journal/Private" or "Journal/Private.md"). */
-  paths: string[];
-  /** Tag names, with or without "#"; "archive" also covers "archive/2025". */
-  tags: string[];
-}
-
 export function normalizeIgnoredPath(value: string): string {
   return value.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/{2,}/g, "/");
 }

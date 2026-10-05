@@ -71,18 +71,6 @@ export function sortTasks(tasks: Task[], sort: TaskSort = "date", descending = f
   });
 }
 
-export function groupByActionDate(tasks: Task[]): Map<string, Task[]> {
-  const groups = new Map<string, Task[]>();
-  for (const task of sortTasks(tasks)) {
-    const date = actionDate(task);
-    if (!date) continue;
-    const group = groups.get(date) ?? [];
-    group.push(task);
-    groups.set(date, group);
-  }
-  return groups;
-}
-
 const MISSING_GROUP: Partial<Record<Exclude<TaskGrouping, "default" | "none">, string>> = {
   scheduledDate: "scheduled date", scheduledTime: "scheduled time", deadlineTime: "deadline time", completed: "completion date"
 };

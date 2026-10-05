@@ -3,7 +3,6 @@ import { formatDate, parseStrictDateExpression } from "./date";
 import type { Priority, ProjectProperties } from "./types";
 
 export const PROJECT_COLORS = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink", "gray"] as const;
-export type ProjectColorName = typeof PROJECT_COLORS[number];
 
 /** The canonical frontmatter value: a lowercase colour name or hex, or undefined when invalid. */
 export function projectColorName(raw: unknown): string | undefined {

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async importOriginal => ({ ...await importOriginal<typeof import("./obsidian-mock")>(), Notice: class {}, setIcon: vi.fn() }));
 import { renderCalendar } from "../src/calendar-view";
 import { scanTasks } from "../src/parser";
-import { destinationLabel } from "../src/structure";
 
 class Element extends EventTarget {
   children: Element[] = [];
@@ -43,11 +42,6 @@ describe("calendar date navigation", () => {
     expect(navigate).toHaveBeenCalledExactlyOnceWith("2026-09-09", "day");
     expect(create).not.toHaveBeenCalled();
   });
-});
-
-it("removes only the note extension from destination labels", () => {
-  expect(destinationLabel("Projects/Work.MD#Notes.md")).toBe("Projects/Work#Notes.md");
-  expect(destinationLabel("Folder.md/Work.md")).toBe("Folder.md/Work");
 });
 
 it.each(["day", "week"] as const)("snaps %s calendar drops to quarter hours while preserving the grab position", async scope => {

@@ -248,6 +248,3 @@ export function parseDateTimeExpression(value: string, reference = new Date(), d
   return result ? { date: formatLocalDate(result.start.date()), ...(resultTime(result) ? { time: resultTime(result) } : {}) } : undefined;
 }
 
-export function formatDateTime(date: string, time?: string, dateFormat?: string): string {
-  return `${formatDate(date, dateFormat)}${time ? ` ${time}` : ""}`;
-}
