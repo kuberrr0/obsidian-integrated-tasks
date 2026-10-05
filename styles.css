@@ -166,6 +166,9 @@
 .tm-section {
   margin-bottom: var(--size-4-8);
 }
+/* A note's tasks above its first heading are a list of their own, not a group: the heading after them keeps the space a
+   group leaves below it. (The empty list waiting above a first heading for drops takes none.) */
+.tm-task-list:not(.tm-drop-only) + .tm-section { margin-top: var(--size-4-8); }
 
 .tm-section h2 {
   display: flex;
@@ -1521,6 +1524,7 @@ button.tm-project-color-swatch:focus-visible { outline: 2px solid var(--interact
 .tm-density-compact .tm-task-metadata,
 .tm-density-compact .tm-project-header-metadata { gap: 2px 6px; }
 .tm-density-compact .tm-section { margin-bottom: var(--size-4-4); }
+.tm-density-compact .tm-task-list:not(.tm-drop-only) + .tm-section { margin-top: var(--size-4-4); }
 .tm-density-compact .tm-section h2 { margin-bottom: var(--size-4-1); }
 .tm-density-compact .tm-kanban { gap: 10px; }
 .tm-density-compact .tm-kanban-column { padding: 8px; }
@@ -1877,6 +1881,7 @@ body.is-phone .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-pr
 
 /* Headings: accent text over a thin rule. */
 .tm-main-view.tm-style-things .tm-section { margin-bottom: var(--size-4-6); }
+.tm-main-view.tm-style-things .tm-task-list:not(.tm-drop-only) + .tm-section { margin-top: var(--size-4-6); }
 .tm-main-view.tm-style-things .tm-section h2 {
   margin-bottom: 4px;
   padding: 0 8px 5px;
