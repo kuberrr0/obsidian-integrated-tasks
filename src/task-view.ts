@@ -1947,12 +1947,19 @@ export class TaskMainView extends ItemView {
       const selected = this.getSelectedTasks();
       void this.endNewTask().then(task => { if (task) this.reselect(selected); });
     }
+    const selectedRows = new Set<Element>();
     for (const task of this.visibleTasks) for (const row of this.selectionRows.get(task.id) ?? []) {
       const selected = this.selection.has(task);
       row.classList.toggle("is-selected", selected);
+      if (selected) selectedRows.add(row);
       // A hidden marker, not an aria-label: a label would replace the row's dates and tags for screen readers.
       const marker = row.querySelector?.(".tm-selected-marker");
       if (marker) marker.textContent = selected ? "Selected" : "";
+    }
+    // A selected row that the next row's selection continues squares off where they meet (in the Things style).
+    for (const rows of this.selectionRows.values()) for (const row of rows) {
+      const next = row.nextElementSibling;
+      row.classList.toggle("is-selection-continues", selectedRows.has(row) && Boolean(next && selectedRows.has(next)));
     }
     // The Task Details sidebar shows the selected task.
     this.plugin.refreshTaskSidebar?.();

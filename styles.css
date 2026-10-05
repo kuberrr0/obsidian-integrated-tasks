@@ -38,7 +38,7 @@
 .tm-nav-group + .tm-nav-group { margin-top: var(--size-4-4); }
 /* Folded Projects and Tags sit one under the other as a group's lists do; an open one keeps the gap after its items.
    Files, the vault rather than tasks, always stands apart. */
-.tm-nav-section:not(:has(> .tm-nav-children)) + .tm-nav-section:not(.tm-nav-files) { margin-top: 0; }
+.tm-nav-section.is-folded + .tm-nav-section:not(.tm-nav-files) { margin-top: 0; }
 .tm-navigation .tm-nav-item {
   --tm-nav-color: var(--text-muted);
   display: flex;
@@ -776,17 +776,8 @@ body.tm-list-dragging, body.tm-list-dragging * { cursor: grabbing !important; }
 /* On touch screens a long press lifts the row, ready to drag; it holds no text selection or callout. */
 .tm-main-view .tm-task-item.is-drag-armed { background: var(--background-modifier-hover); box-shadow: 0 4px 14px rgb(0 0 0 / 22%); }
 body.is-mobile .tm-main-view .tm-task-item { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-/* Dragging lifts the rows out (their slots fold away) and a grey gap shows where they will land.
-   The fold is a transient state that must beat every layout's row sizing, hence !important. */
-.tm-task-item.tm-drag-source {
-  height: 0 !important;
-  min-height: 0 !important;
-  padding-block: 0 !important;
-  margin-block: 0 !important;
-  border-width: 0 !important;
-  overflow: hidden !important;
-  opacity: 0 !important;
-}
+/* Dragging lifts the rows out (their slots fold away, set on the rows themselves: see FOLDED in list-drag-view.ts)
+   and a grey gap shows where they will land. */
 /* The drop slot: a faint accent placeholder, inset a little from its neighbours, indented to the depth the
    task will land at; nesting or outdenting slides it sideways. */
 .tm-drop-gap {
@@ -1485,7 +1476,7 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 
 /* Visually hidden text that stays available to assistive technology. */
 .tm-sr-only {
-  position: absolute !important;
+  position: absolute;
   width: 1px;
   height: 1px;
   padding: 0;
@@ -1955,7 +1946,7 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
   background: var(--text-selection);
   border-radius: 6px;
 }
-.tm-main-view.tm-style-things .tm-task-row.tm-task-item.is-selected:has(+ .tm-task-row.is-selected) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.tm-main-view.tm-style-things .tm-task-row.tm-task-item.is-selected.is-selection-continues { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .tm-main-view.tm-style-things .tm-task-row.is-selected + .tm-task-row.tm-task-item.is-selected { border-top-left-radius: 0; border-top-right-radius: 0; }
 
 /* Things style: a task opened in place as a card. */

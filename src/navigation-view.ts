@@ -243,7 +243,7 @@ export class TaskNavigationView extends ItemView {
     for (const { section, label, icon, open } of NAV_SECTIONS) {
       const group = nav.createDiv({ cls: "tree-item nav-folder tm-nav-group tm-nav-section" });
       const heading = item(group, `mode:${open}`, label, listActive(open), () => this.plugin.openTaskView({ mode: open }), icon, "section");
-      if (!folder(heading, section, label)) continue;
+      if (!folder(heading, section, label)) { group.addClass("is-folded"); continue; }
       const children = group.createDiv({ cls: "tree-item-children nav-folder-children tm-nav-children" });
       if (section === "projects") {
         const projects = activeProjects(this.plugin.index.projects());
@@ -296,7 +296,7 @@ export class TaskNavigationView extends ItemView {
         const children = group.createDiv({ cls: "tree-item-children nav-folder-children tm-nav-children" });
         this.renderFolder(children, root, 0, item);
         if (!root.children.length) children.createDiv({ cls: "tm-nav-empty", text: "No files yet" });
-      }
+      } else group.addClass("is-folded");
     }
     container.scrollTop = scrollTop;
     this.rebuilding = false;

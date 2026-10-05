@@ -414,6 +414,10 @@ describe("undo and snooze", () => {
     key(rows(content())[1], "a", { metaKey: true });
     expect(view.getSelectedTasks().map(task => task.line)).toEqual([0, 1, 2]);
     expect(rows(content()).every(row => row.classList.contains("is-selected"))).toBe(true);
+    // Each selected row the next one's selection continues is marked, to square off where they meet.
+    expect(rows(content()).map(row => row.classList.contains("is-selection-continues"))).toEqual([true, true, false]);
+    rows(content())[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
+    expect(rows(content()).map(row => row.classList.contains("is-selection-continues"))).toEqual([false, false, false]);
   });
 
   it("snoozes from the Shift+S list, offering Stop snoozing only for a snoozed task, which stays visible in All Tasks", async () => {

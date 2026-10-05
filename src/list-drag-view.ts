@@ -4,6 +4,13 @@ import { isStructuralGroup, type ListDropGroup, type ListPlacement } from "./lis
 import { taskTitleLabel } from "./task-title";
 import { activeTaskDrag, dropTargetAt, highlightDropTarget, TASK_DRAG_TYPE, type DropPoint, type DropTarget, type TaskDrag } from "./sidebar-drop";
 
+/**
+ * A lifted row folds out of the list (its slot closing) while the gap shows where it will land: set on the row itself,
+ * as the fold must win over every layout's row sizing, and taken off again as it returns.
+ */
+const FOLDED: Partial<CSSStyleDeclaration> = { height: "0", minHeight: "0", paddingBlock: "0", marginBlock: "0", borderWidth: "0", overflow: "hidden", opacity: "0" };
+const UNFOLDED: Partial<CSSStyleDeclaration> = { height: "", minHeight: "", paddingBlock: "", marginBlock: "", borderWidth: "", overflow: "", opacity: "" };
+
 export interface DropIntent {
   group?: ListDropGroup;
   anchor?: Task;
@@ -350,14 +357,14 @@ export class ListDragController {
       }
     }
     this.sources = [...all];
-    for (const row of this.sources) row.addClass("tm-drag-source");
+    for (const row of this.sources) { row.addClass("tm-drag-source"); row.setCssStyles(FOLDED); }
   }
 
   /** Brings the folded rows back: sliding open after a cancelled drag, at once when the drop redraws them anyway. */
   private restoreSources(animated: boolean): void {
     const rows = this.sources.filter(row => row.isConnected);
     this.sources = [];
-    const show = (): void => { for (const row of rows) row.removeClass("tm-drag-source"); };
+    const show = (): void => { for (const row of rows) { row.removeClass("tm-drag-source"); row.setCssStyles(UNFOLDED); } };
     if (animated && rows.length) this.slide(rows[0].closest(".tm-main-view") ?? rows[0].ownerDocument, show);
     else show();
   }

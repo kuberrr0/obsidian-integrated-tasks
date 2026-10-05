@@ -108,6 +108,9 @@ it("lists the vault's files below everything else only when the setting is on", 
   view.refresh();
   const sections = Array.from(container.querySelectorAll(".tm-nav-section"));
   expect(sections[sections.length - 1].classList.contains("tm-nav-files")).toBe(true);
+  // A folded section says so, for the spacing after it.
+  for (const section of sections) expect(section.classList.contains("is-folded")).toBe(!Array.from(section.children).some(child => child.classList.contains("tm-nav-children")));
+  expect(sections.some(section => section.classList.contains("is-folded"))).toBe(true);
   // Folders first, then files by name, numbers in number order; notes without “.md”.
   expect(labels()).toEqual(["Work", "Notes 2", "Notes 10"]);
 });

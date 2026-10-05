@@ -99,6 +99,8 @@ it("lifts the row: a floating copy follows the pointer and the gap takes the row
   expect([copy.style.width, copy.style.height]).toEqual(["300px", "40px"]);
   expect(copy.getBoundingClientRect()).toMatchObject({ left: 30, top: 20 });
   expect(rows[0].row.classList.contains("tm-drag-source")).toBe(true);
+  // Its slot folds away, set on the row itself so that no layout's row sizing outweighs it.
+  expect([rows[0].row.style.height, rows[0].row.style.opacity]).toEqual(["0px", "0"]);
   expect(gap()!.nextElementSibling).toBe(rows[0].row);
   expect(gap()!.style.getPropertyValue("--tm-gap-height")).toBe("40px");
 });
@@ -259,6 +261,7 @@ it("cleans up after a drop that redraws nothing", async () => {
   await vi.waitFor(() => expect(gap()).toBeNull());
   expect(preview()).toBeNull();
   expect(rows[0].row.classList.contains("tm-drag-source")).toBe(false);
+  expect([rows[0].row.style.height, rows[0].row.style.opacity]).toEqual(["", ""]);
 });
 
 it("puts the row back without dropping when released away from any target", async () => {
