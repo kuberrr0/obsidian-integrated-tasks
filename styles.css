@@ -1109,13 +1109,15 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-main-view .tm-task-item :is(.tm-task-due, .tm-task-schedule, .tm-task-source, .tm-task-tag) > span { font-size: inherit; }
 .tm-task-schedule:hover, .tm-task-source:hover, .tm-task-tag:hover { color: var(--text-normal); }
 
-/* Griply style, after Griply: group headings over a divider, with the collapse chevron at the right (pointing down
+/* Griply style, after Griply: accent group headings over a divider, with the collapse chevron at the right (pointing down
    while open); a slightly larger detail line; a tinted deadline pill. */
 .tm-main-view.tm-style-griply .tm-section h2 {
   padding-bottom: var(--size-4-2);
   margin-bottom: var(--size-4-1);
   border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-accent);
 }
+.tm-main-view.tm-style-griply .tm-section.is-alert h2 { color: var(--text-error); }
 .tm-main-view.tm-style-griply button.tm-group-fold {
   position: static;
   order: 99;
