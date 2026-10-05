@@ -56,7 +56,9 @@ it.each(["2026-09-19", "[[2026-09-19]]", "19/09/2026", "[[19/09/2026]]"])("prese
 it.each([
     ["- [ ] [[Habit]] do this Oct 1, 2026 {Oct 5, 2026}", "- [ ] [[Habit]] do this Oct 2, 2026 {Oct 6, 2026}"],
     ["- [ ] [[Habit]] [[Oct 1, 2026]] 09:00 {[[Oct 5, 2026]] 18:00} p1", "- [ ] [[Habit]] [[Oct 2, 2026]] 09:00 {[[Oct 6, 2026]] 18:00} p1"],
-    ["- [ ] [[Habit]] {2026-10-05} 2026-10-01", "- [ ] [[Habit]] {2026-10-06} 2026-10-02"]
+    ["- [ ] [[Habit]] {2026-10-05} 2026-10-01", "- [ ] [[Habit]] {2026-10-06} 2026-10-02"],
+    ["- [ ] [[Habit]] [[2026-10-01]] p1 09:00 {2026-10-05}", "- [ ] [[Habit]] [[2026-10-02]] p1 09:00 {2026-10-06}"],
+    ["- [ ] [[Habit]] 2026-10-01 {Oct 5, 2026 6pm}", "- [ ] [[Habit]] 2026-10-02 {Oct 6, 2026 6pm}"]
 ])("moves the deadline by as many days as the schedule: %s", (line, expected) => {
     const task = scanTasks("Project.md", line, new Date(), "MMM D, YYYY")[0];
     expect(advanceRecurringTask(line, task, "2026-10-02", "MMM D, YYYY")).toBe(expected);

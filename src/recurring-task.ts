@@ -133,10 +133,13 @@ export function nextRepeatDate(rules: string[], scheduled: string, anchor?: stri
     return dates.sort()[0];
 }
 
+// A time after a date in the same token: 21:30, 9am, at 9:30pm.
+const TRAILING_TIME = /\s+(?:at\s+)?(?:(?:[01]?\d|2[0-3]):[0-5]\d(?:\s?[ap]m)?|(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s?[ap]m)\s*$/i;
+
 /** A date token's date rewritten to `next`, keeping its link brackets, ISO or display format, and any trailing time. */
-function redate(token: string, next: string, dateFormat: string, hasTime: boolean): string {
+function redate(token: string, next: string, dateFormat: string): string {
     const linked = token.startsWith("[[");
-    const original = linked ? /^\[\[([^\]]+)\]\]/.exec(token)![1] : token.slice(0, hasTime ? token.search(/\s+\d{1,2}:\d{2}\s*$/) : token.length);
+    const original = linked ? /^\[\[([^\]]+)\]\]/.exec(token)![1] : token.replace(TRAILING_TIME, "");
     const label = formatDate(next, isIsoDate(original) ? "YYYY-MM-DD" : dateFormat);
     return (linked ? `[[${label}]]` : label) + token.slice(linked ? original.length + 4 : original.length);
 }
@@ -148,15 +151,16 @@ export function advanceRecurringTask(content: string, task: Task, next: string, 
     const raw = lines[line * 2];
     const ranges: ParsedTokenRange[] = [];
     const parsed = parseTaskLine(raw, new Date(), dateFormat, false, ranges);
-    const scheduled = ranges.find(range => range.kind === "scheduledDate");
+    // A time written apart from its date ("[[2026-10-05]] p1 09:00") is a range of its own; the date is the leftmost.
+    const scheduled = ranges.filter(range => range.kind === "scheduledDate").sort((a, b) => a.from - b.from)[0];
     if (!parsed || parsed.completed || !scheduled || !parsed.scheduledDate) throw new Error("Select an open recurring task with a scheduled date.");
-    const edits = [{ range: scheduled, text: redate(raw.slice(scheduled.from, scheduled.to), next, dateFormat, Boolean(parsed.scheduledTime)) }];
+    const edits = [{ range: scheduled, text: redate(raw.slice(scheduled.from, scheduled.to), next, dateFormat) }];
     const deadline = ranges.find(range => range.kind === "deadline");
     if (deadline && parsed.deadline) {
         const inner = raw.slice(deadline.from + 1, deadline.to - 1);
         const lead = inner.length - inner.trimStart().length;
         const moved = addDays(parsed.deadline, dayDistance(parsed.scheduledDate, next));
-        edits.push({ range: deadline, text: `{${inner.slice(0, lead)}${redate(inner.slice(lead), moved, dateFormat, Boolean(parsed.deadlineTime))}}` });
+        edits.push({ range: deadline, text: `{${inner.slice(0, lead)}${redate(inner.slice(lead), moved, dateFormat)}}` });
     }
     let text = raw;
     for (const { range, text: replacement } of edits.sort((a, b) => b.range.from - a.range.from)) text = text.slice(0, range.from) + replacement + text.slice(range.to);
