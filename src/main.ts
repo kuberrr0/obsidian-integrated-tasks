@@ -1,3 +1,4 @@
+import { todayIso } from "./date";
 import { parseIgnoreList } from "./ignore";
 import { noteRecurringCompletion } from "./note-recurring-completion";
 import { isRepeatingTask, recurringFile, type RecurringOutcome } from "./recurring-task";
@@ -200,6 +201,14 @@ export default class TaskManagerPlugin extends Plugin {
       void this.index.initialize()
         .then(() => { if (!this.unloaded) this.startTaskMode(); })
         .catch(error => new Notice(String(error)));
+      // A new day moves Today and Upcoming, and gives "tomorrow" or "{friday}" a new date: notes parsed on an
+      // earlier day are parsed again.
+      let day = todayIso();
+      this.registerInterval(window.setInterval(() => {
+        if (todayIso() === day) return;
+        day = todayIso();
+        void this.index.rescanAll({ force: false }).catch(error => new Notice(String(error)));
+      }, 60_000));
     });
   }
 

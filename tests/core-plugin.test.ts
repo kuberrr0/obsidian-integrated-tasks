@@ -16,6 +16,7 @@ vi.mock("obsidian", async importOriginal => {
     addRibbonIcon() { return { setAttribute() {}, classList: { toggle() {} } }; }
     addCommand(command: unknown) { return command; }
     register(callback: () => void): void { this.cleanups.push(callback); }
+    registerInterval(id: number): number { this.cleanups.push(() => window.clearInterval(id)); return id; }
     registerEvent(ref: { e: { offref(ref: unknown): void } }): void { this.cleanups.push(() => ref.e.offref(ref)); }
     onunload(): void {}
     /** Like Obsidian: onunload first, then everything registered through the component. */
@@ -165,6 +166,20 @@ describe("plugin lifecycle", () => {
     expect(env.vault.listenerCount()).toBe(0);
     expect(env.metadataCache.listenerCount()).toBe(0);
     expect(env.workspace.listenerCount()).toBe(0);
+  });
+
+  it("parses notes again once a new day starts", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date(2026, 9, 5, 23, 59));
+    const { plugin } = await loaded();
+    const rescan = vi.spyOn(plugin.index, "rescanAll");
+    vi.advanceTimersByTime(30_000);
+    expect(rescan).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(60_000);
+    expect(rescan).toHaveBeenCalledExactlyOnceWith({ force: false });
+    vi.advanceTimersByTime(60_000);
+    expect(rescan).toHaveBeenCalledOnce();
+    plugin.unload();
   });
 
   it("does nothing on layout ready after an early unload", async () => {
