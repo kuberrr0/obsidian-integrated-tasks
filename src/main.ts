@@ -525,11 +525,11 @@ export default class TaskManagerPlugin extends Plugin {
     await this.app.fileManager.trashFile(file);
   }
 
-  async openProject(path: string, existing?: WorkspaceLeaf): Promise<void> {
+  async openProject(path: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) throw new Error("Project note no longer exists.");
-    const leaf = existing ?? this.app.workspace.getLeaf("tab");
-    if (!existing) await leaf.openFile(file);
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.openFile(file);
     if (!this.settings.taskMode) await this.setTaskMode(true);
     else await this.taskModeController?.sync();
     await this.app.workspace.revealLeaf(leaf);

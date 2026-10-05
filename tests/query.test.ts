@@ -61,11 +61,11 @@ describe("task queries", () => {
 describe("shared task view controls", () => {
   it.each(["inbox", "today", "upcoming", "all", "project"] as const)("combines search and filters with the %s scope", (mode) => {
     const candidate = task({ path: "Inbox.md", title: "Write proposal", priority: 2, scheduledDate: mode === "upcoming" ? "2026-09-06" : "2026-09-04" });
-    const query = { mode, projectPath: mode === "project" ? "Inbox.md" : undefined, showCompleted: false, search: "PROPOSAL", priority: 2 as const, dateFilter: "dated" as const };
+    const priority = (value: string) => [{ property: "priority" as const, operator: "is" as const, values: [value] }];
+    const query = { mode, projectPath: mode === "project" ? "Inbox.md" : undefined, showCompleted: false, search: "PROPOSAL", filters: priority("2") };
     expect(taskMatchesQuery(candidate, query, "Inbox.md", now)).toBe(true);
     expect(taskMatchesQuery(candidate, { ...query, search: "missing" }, "Inbox.md", now)).toBe(false);
-    expect(taskMatchesQuery(candidate, { ...query, priority: 1 }, "Inbox.md", now)).toBe(false);
-    expect(taskMatchesQuery(candidate, { ...query, sourcePath: "Other.md" }, "Inbox.md", now)).toBe(false);
+    expect(taskMatchesQuery(candidate, { ...query, filters: priority("1") }, "Inbox.md", now)).toBe(false);
   });
 
   it("scopes an ordinary page without project metadata", () => {

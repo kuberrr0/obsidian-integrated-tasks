@@ -599,7 +599,7 @@ export class TaskMainView extends ItemView {
     const calendar = this.layout === "calendar";
     const today = todayIso();
     const page = this.taskSourcePath;
-    const scope: TaskQuery = page ? { ...query, mode: "all", projectPath: undefined, sourcePath: undefined } : query;
+    const scope: TaskQuery = page ? { ...query, mode: "all", projectPath: undefined } : query;
     const items: Task[] = [];
     const projects = this.plugin.index.projects();
     const statuses = projectStatuses(projects);
@@ -1315,10 +1315,10 @@ export class TaskMainView extends ItemView {
     await this.plugin.index.refreshPath(project.path);
   }
 
-  private renderProjectGroup(container: HTMLElement, title: string, projects: Project[], heading = true): void {
+  private renderProjectGroup(container: HTMLElement, title: string, projects: Project[]): void {
     if (!projects.length) return;
-    const section = heading ? container.createEl("section", { cls: "tm-section" }) : container;
-    if (heading) section.createEl("h2", { text: title }).createSpan({ cls: "tm-section-count", text: String(projects.length) });
+    const section = container.createEl("section", { cls: "tm-section" });
+    section.createEl("h2", { text: title }).createSpan({ cls: "tm-section-count", text: String(projects.length) });
     const list = section.createDiv({ cls: "tm-task-list", attr: { role: "list" } });
     for (const { project, depth } of projectHierarchy(projects)) this.renderProjectRow(list, project, depth);
   }

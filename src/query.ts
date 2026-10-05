@@ -12,15 +12,11 @@ export function taskMatchesQuery(task: Task, query: TaskQuery, inboxPath: string
   if (query.tag !== undefined && !task.tags?.includes(query.tag)) return false;
   if (query.filters?.some(filter => !matchesFilter(task, filter))) return false;
   if (!query.showCompleted && !query.filters?.some(filter => filter.property === "status") && task.completed) return false;
-  if (query.sourcePath && task.path !== query.sourcePath) return false;
   if (query.projectPath && task.path !== query.projectPath) return false;
-  if (query.priority && task.priority !== query.priority) return false;
   if (query.search && !`${task.title}\n${task.description ?? ""}\n${(task.tags ?? []).join("\n")}`.toLocaleLowerCase().includes(query.search.toLocaleLowerCase())) return false;
 
   const today = todayIso(now);
   const date = actionDate(task);
-  if (query.dateFilter === "dated" && !date) return false;
-  if (query.dateFilter === "undated" && date) return false;
   if (query.dateFilter === "overdue" && (!date || date >= today)) return false;
   // A defer filter asks for these tasks explicitly.
   if ((query.mode === "inbox" || query.mode === "today" || query.mode === "upcoming") && isDeferred(task, today)

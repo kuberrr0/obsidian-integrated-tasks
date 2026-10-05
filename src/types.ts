@@ -90,11 +90,9 @@ export interface TaskQuery {
   mode: TaskViewMode | "project";
   showCompleted: boolean;
   projectPath?: string;
-  sourcePath?: string;
-  priority?: Priority;
   search?: string;
   filters?: TaskFilter[];
-  dateFilter?: "dated" | "undated" | "overdue";
+  dateFilter?: "overdue";
 }
 
 export interface TaskDraft extends ParsedTaskMetadata {
