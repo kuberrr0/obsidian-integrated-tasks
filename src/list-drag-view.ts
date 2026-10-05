@@ -33,8 +33,8 @@ const MOVERS = ".tm-task-item:not(.tm-drag-preview), .tm-drop-gap, .tm-section >
 /** What the pointer can rest on mid-slide: a row, the gap or a group heading. */
 const HOLDERS = ".tm-task-item, .tm-drop-gap, .tm-section > h2";
 /** On touch screens a row lifts for dragging after a press held this long (and within PRESS_SLOP px of where it began). */
-const LONG_PRESS_MS = 350;
-const PRESS_SLOP = 8;
+export const LONG_PRESS_MS = 350;
+export const PRESS_SLOP = 8;
 
 function motion(doc: Document): number {
   return doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : DRAG_MOTION_MS;

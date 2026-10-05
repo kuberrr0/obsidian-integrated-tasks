@@ -626,7 +626,7 @@ button.tm-calendar-count { display: block; margin: 0 auto; height: 16px; padding
 .tm-calendar-day-scroll { max-height: 65vh; overflow-y: auto; border: 1px solid var(--background-modifier-border); }
 .tm-calendar-timeline { position: relative; height: 1152px; margin: 8px 8px 8px 0; }
 .tm-calendar-hour { position: absolute; width: 52px; text-align: center; font-size: 11px; color: var(--text-muted); }
-.tm-calendar-lane { position: absolute; left: 56px; right: 0; height: 1152px; touch-action: none; }
+.tm-calendar-lane { position: absolute; left: 56px; right: 0; height: 1152px; touch-action: pan-x pan-y; }
 button.tm-calendar-slot { display: block; width: 100%; height: 12px; min-height: 0; box-sizing: border-box; padding: 0; margin: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 button.tm-calendar-slot.is-hour-start { border-top: 1px solid var(--background-modifier-border); }
 button.tm-calendar-slot:hover { background: var(--background-modifier-hover); }

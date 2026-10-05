@@ -1,6 +1,7 @@
 import { taskTimeLabel, taskTimeDurationLabel } from "./task-row-details";
 import { taskTitleLabel } from "./task-title";
 import { activeTaskDrag, markDropZone, TASK_DRAG_TYPE, type TaskDrag } from "./sidebar-drop";
+import { LONG_PRESS_MS, PRESS_SLOP } from "./list-drag-view";
 import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
@@ -317,16 +318,43 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       selection.style.height = `${preset.durationMinutes! / 15 * 12}px`;
       selection.setText(`${preset.scheduledTime} · ${formatDuration(preset.durationMinutes!)}`);
     };
-    lane.addEventListener("pointerdown", event => {
-      if (event.button !== 0 || !(event.target instanceof HTMLElement) || !event.target.hasClass("tm-calendar-slot")) return;
-      event.preventDefault();
-      start = slotAt(event.clientY);
-      lane.setPointerCapture(event.pointerId);
+    const select = (pointerId: number, clientY: number): void => {
+      start = slotAt(clientY);
+      lane.setPointerCapture(pointerId);
       selection = lane.createDiv({ cls: "tm-calendar-selection" });
       paint(start);
+    };
+    // On touch a swipe scrolls the day and a tap adds a task; a press held still selects a range of time instead.
+    let press: { timer: number; x: number; y: number } | undefined;
+    const cancelPress = (): void => {
+      if (press) lane.win.clearTimeout(press.timer);
+      press = undefined;
+    };
+    lane.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || !(event.target instanceof HTMLElement) || !event.target.hasClass("tm-calendar-slot")) return;
+      if (event.pointerType === "touch") {
+        cancelPress();
+        const { pointerId, clientX: x, clientY: y } = event;
+        press = { x, y, timer: lane.win.setTimeout(() => {
+          press = undefined;
+          select(pointerId, y);
+          lane.win.navigator.vibrate?.(10);
+        }, LONG_PRESS_MS) };
+        return;
+      }
+      event.preventDefault();
+      select(event.pointerId, event.clientY);
     });
-    lane.addEventListener("pointermove", event => paint(slotAt(event.clientY)));
+    lane.addEventListener("pointermove", event => {
+      if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > PRESS_SLOP) cancelPress();
+      paint(slotAt(event.clientY));
+    });
     lane.addEventListener("pointerup", event => {
+      if (press) {
+        cancelPress();
+        options.create(selectionPreset(day, slotAt(event.clientY), slotAt(event.clientY)));
+        return;
+      }
       if (start === undefined) return;
       const preset = selectionPreset(day, start, slotAt(event.clientY));
       start = undefined;
@@ -334,7 +362,10 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
       lane.releasePointerCapture(event.pointerId);
       options.create(preset);
     });
-    lane.addEventListener("pointercancel", () => { start = undefined; selection?.remove(); });
+    lane.addEventListener("pointercancel", () => { cancelPress(); start = undefined; selection?.remove(); });
+    // While a range is being selected, the finger draws it rather than scrolling the day.
+    lane.addEventListener("touchmove", event => { if (start !== undefined) event.preventDefault(); }, { passive: false });
+    lane.addEventListener("contextmenu", event => { if (start !== undefined) event.preventDefault(); });
     dropTarget(lane, day, event => {
       const start = Math.round((minutesAt(event.clientY) - grabOffsetMinutes) / SLOT_MINUTES) * SLOT_MINUTES;
       return minuteTime(Math.max(0, Math.min(1440 - SLOT_MINUTES, start)));
