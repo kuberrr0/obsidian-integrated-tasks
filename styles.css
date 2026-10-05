@@ -1029,6 +1029,10 @@ button.tm-gantt-handle.is-finish:focus-visible,
   column-gap: 8px;
 }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
+/* Griply, as Things: the checkbox sits in the middle of the whole row, however many lines it takes; board cards keep it
+   at the top. */
+.tm-main-view.tm-style-griply .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: center; padding-top: 0; }
+.tm-main-view.tm-style-griply .tm-kanban .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content {
   font-family: var(--font-interface);
   font-size: var(--font-ui-smaller);
@@ -1902,8 +1906,9 @@ body.is-mobile .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-p
   background: var(--text-selection);
   border-radius: 6px;
 }
-.tm-main-view.tm-style-things .tm-task-row.tm-task-item.is-selected.is-selection-continues { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.tm-main-view.tm-style-things .tm-task-row.is-selected + .tm-task-row.tm-task-item.is-selected { border-top-left-radius: 0; border-top-right-radius: 0; }
+/* In either style, consecutive selected rows join into one block; a board's cards stay apart. */
+.tm-main-view .tm-task-row.tm-task-item.is-selected.is-selection-continues:not(.tm-kanban *) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.tm-main-view .tm-task-row.is-selected + .tm-task-row.tm-task-item.is-selected:not(.tm-kanban *) { border-top-left-radius: 0; border-top-right-radius: 0; }
 
 /* Things style: a task opened in place as a card. */
 .tm-things-card {

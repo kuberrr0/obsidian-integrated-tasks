@@ -1965,7 +1965,7 @@ export class TaskMainView extends ItemView {
       const marker = row.querySelector?.(".tm-selected-marker");
       if (marker) marker.textContent = selected ? "Selected" : "";
     }
-    // A selected row that the next row's selection continues squares off where they meet (in the Things style).
+    // A selected row that the next row's selection continues squares off where they meet.
     for (const rows of this.selectionRows.values()) for (const row of rows) {
       const next = row.nextElementSibling;
       row.classList.toggle("is-selection-continues", selectedRows.has(row) && Boolean(next && selectedRows.has(next)));
