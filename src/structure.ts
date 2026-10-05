@@ -38,7 +38,12 @@ function classifyLines(lines: Iterable<string>, visit: (text: string, line: numb
       visit(text, current, false);
       continue;
     }
-    if (marker) { fence = marker; visit(text, current, false); continue; }
+    // A backtick fence's info string holds no backtick: "```npm i``` first" is inline code.
+    if (marker && !(marker[0] === "`" && text.slice(text.indexOf(marker) + marker.length).includes("`"))) {
+      fence = marker;
+      visit(text, current, false);
+      continue;
+    }
     visit(text, current, true);
   }
 }

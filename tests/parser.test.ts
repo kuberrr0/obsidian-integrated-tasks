@@ -175,6 +175,11 @@ describe("task scanner", () => {
     expect(tasks.map((task) => task.title)).toEqual(["Real task"]);
   });
 
+  it("reads a line that starts with inline code as prose, not a fence", () => {
+    const tasks = scanTasks("Setup.md", "```npm i``` first\n- [ ] Install\n~~~\n- [ ] Example\n~~~\n- [ ] Ship", reference);
+    expect(tasks.map((task) => task.title)).toEqual(["Install", "Ship"]);
+  });
+
   it("constructs parent-child relationships and subtree ranges", () => {
     const tasks = scanTasks("Project.md", [
       "- [ ] Parent",
