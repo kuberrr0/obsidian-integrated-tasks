@@ -125,6 +125,7 @@ export class TaskMainView extends ItemView {
   private unsubscribe?: () => void;
   private taskResults?: HTMLElement;
   private listDrag?: ListDragController;
+  private renderAfterDrag = false;
   private selection = new TaskSelection();
   /** The task open as a card in the Things style, with its unsaved title and notes. */
   private expanded?: { id: string } & TaskCardDraft;
@@ -370,6 +371,8 @@ export class TaskMainView extends ItemView {
 
   /** Coalesce bursts of index updates into one refresh per frame. */
   private scheduleRender(): void {
+    // A row dragged in the list stays under the pointer: the list redraws once the drag ends.
+    if (this.listDrag?.dragging) { this.renderAfterDrag = true; return; }
     // A closing card refreshes the view itself once its animation ends.
     if (this.renderFrame !== undefined || this.closed || this.cardClosing) return;
     this.renderFrame = this.containerEl.win.requestAnimationFrame(() => {
@@ -547,6 +550,11 @@ export class TaskMainView extends ItemView {
     this.resetRows();
     this.updateSelection();
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", task => this.prepareDrag(task));
+    this.listDrag.onIdle = () => {
+      if (!this.renderAfterDrag) return;
+      this.renderAfterDrag = false;
+      this.scheduleRender();
+    };
     const query = this.baseQuery();
     // A new task's card shows where the task would go, among the rest.
     const entry = this.newTaskEntry?.host === "card" ? [this.newTaskEntry.task] : [];

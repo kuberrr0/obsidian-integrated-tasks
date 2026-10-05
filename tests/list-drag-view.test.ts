@@ -75,6 +75,24 @@ it.each(["title", "body"] as const)("drags an unselected task from its %s and su
   expect(click.defaultPrevented).toBe(true);
 });
 
+it("says when a drag is in progress, and when it ends, so a redraw can wait for it", async () => {
+  const { rows, controller, drop, point } = list("- [ ] A\n- [ ] B");
+  const idle = vi.fn();
+  controller.onIdle = idle;
+  fire(rows[0].row, "pointerdown");
+  expect(controller.dragging).toBe(false);
+  point(rows[1].row);
+  fire(rows[0].row, "pointermove", { clientY: 30 });
+  expect(controller.dragging).toBe(true);
+  // Another row's reset (the pointer leaving it) does not end this drag.
+  fire(rows[1].row, "pointerleave");
+  expect(controller.dragging).toBe(true);
+  fire(rows[0].row, "pointerup", { clientY: 30 });
+  await vi.waitFor(() => expect(drop).toHaveBeenCalledOnce());
+  expect(controller.dragging).toBe(false);
+  expect(idle).toHaveBeenCalledOnce();
+});
+
 it("keeps title clicks available if the pointer never starts a drag", () => {
   const { rows, drop, start } = list("- [ ] A");
   fire(rows[0].title, "pointerdown");

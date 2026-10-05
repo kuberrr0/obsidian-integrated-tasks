@@ -84,6 +84,9 @@ export class ListDragController {
   /** Identifies drop targets so the gap only moves when the drop position changes. */
   private keys = new WeakMap<HTMLElement, number>();
   private lastKey = 0;
+  /** A row is being dragged: a redraw now would take it from under the pointer, so the list waits for `onIdle`. */
+  dragging = false;
+  onIdle?: () => void;
   /** `reorder`: false for a list whose rows only drag elsewhere (to another pane or a sidebar list), taking no drops themselves. */
   constructor(private readonly getTask: (id: string) => Task | undefined,
     private readonly drop: (task: Task, group?: ListDropGroup, anchor?: Task, placement?: ListPlacement) => Promise<void>, private readonly allowNesting = true,
@@ -700,6 +703,7 @@ export class ListDragController {
           this.liftSources(rows);
         });
         dragging = true;
+        this.dragging = true;
         this.taskId = task.id;
         this.original = task;
         row.addClass("is-dragging");
@@ -710,6 +714,7 @@ export class ListDragController {
       frameId = win().requestAnimationFrame(update);
     });
     const reset = (): void => {
+      const ended = dragging;
       cancelFrame();
       row.ownerDocument.body.removeClass("tm-list-dragging");
       preview?.remove();
@@ -724,6 +729,7 @@ export class ListDragController {
       armed = false;
       row.removeClass("is-drag-armed");
       pointer = undefined; dragging = false; row.draggable = true; row.removeClass("is-dragging"); this.taskId = undefined; this.clear();
+      if (ended) { this.dragging = false; this.onIdle?.(); }
     };
     const cancelDrag = (): void => {
       this.removeGap(false);
