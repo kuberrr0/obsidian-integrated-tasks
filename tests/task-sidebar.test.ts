@@ -4,22 +4,7 @@ import { installObsidianDom } from "./helpers/obsidian-dom";
 
 vi.mock("obsidian", async importOriginal => {
   const original = await importOriginal<typeof import("./obsidian-mock")>();
-  class ItemView {
-    app: unknown;
-    containerEl: HTMLElement;
-    navigation = false;
-    constructor(leaf: { app?: unknown }) {
-      this.app = leaf.app;
-      this.containerEl = document.createElement("div");
-      this.containerEl.appendChild(document.createElement("div"));
-      this.containerEl.appendChild(document.createElement("div"));
-      document.body.appendChild(this.containerEl);
-    }
-    registerDomEvent(target: EventTarget, type: string, callback: EventListener, options?: boolean): void { target.addEventListener(type, callback, options); }
-    registerEvent(): void {}
-    register(): void {}
-  }
-  return { ...original, ItemView, Menu: class {}, Notice: class {}, setIcon: vi.fn() };
+  return { ...original, Menu: class {}, Notice: class {}, setIcon: vi.fn() };
 });
 
 import { Platform, TFile, type App, type WorkspaceLeaf } from "obsidian";

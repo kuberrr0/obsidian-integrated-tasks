@@ -3,18 +3,7 @@ import { beforeAll, expect, it, vi } from "vitest";
 import { installObsidianDom } from "./helpers/obsidian-dom";
 
 vi.mock("obsidian", async importOriginal => {
-  class ItemView {
-    app: unknown;
-    containerEl: HTMLElement;
-    constructor(leaf: { app?: unknown }) {
-      this.app = leaf.app;
-      this.containerEl = document.createElement("div");
-      this.containerEl.append(document.createElement("div"), document.createElement("div"));
-      document.body.appendChild(this.containerEl);
-    }
-    registerEvent(): void {}
-  }
-  return { ...await importOriginal<typeof import("./obsidian-mock")>(), ItemView, Notice: class {}, setIcon: vi.fn() };
+  return { ...await importOriginal<typeof import("./obsidian-mock")>(), Notice: class {}, setIcon: vi.fn() };
 });
 
 import type { WorkspaceLeaf } from "obsidian";

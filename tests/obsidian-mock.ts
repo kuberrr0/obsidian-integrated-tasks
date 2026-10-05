@@ -29,6 +29,24 @@ export class FuzzySuggestModal {
 }
 export const renderResults = (): void => {};
 
+// A view whose container holds its header and its content, as Obsidian's does, attached to the document.
+export class ItemView {
+  app: unknown;
+  containerEl: HTMLElement;
+  navigation = false;
+  constructor(leaf?: { app?: unknown }) {
+    this.app = leaf?.app;
+    this.containerEl = document.createElement("div");
+    this.containerEl.append(document.createElement("div"), document.createElement("div"));
+    document.body.appendChild(this.containerEl);
+  }
+  registerDomEvent(target: EventTarget, type: string, callback: EventListener, options?: boolean): void { target.addEventListener(type, callback, options); }
+  registerEvent(): void {}
+  register(): void {}
+  getState(): Record<string, unknown> { return {}; }
+  async setState(): Promise<void> {}
+}
+
 // Minimal lifecycle for Markdown render children (task query blocks, note checkboxes).
 export class MarkdownRenderChild {
   private cleanups: Array<() => unknown> = [];

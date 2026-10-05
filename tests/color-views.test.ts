@@ -4,23 +4,13 @@ import { installObsidianDom } from "./helpers/obsidian-dom";
 
 vi.mock("obsidian", async importOriginal => {
   const original = await importOriginal<typeof import("./obsidian-mock")>();
-  class ItemView {
-    app: unknown;
-    containerEl: HTMLElement;
-    constructor() {
-      this.containerEl = document.createElement("div");
-      this.containerEl.append(document.createElement("div"), document.createElement("div"));
-      document.body.appendChild(this.containerEl);
-    }
-    registerEvent(): void {}
-  }
   class Modal {
     contentEl = document.createElement("div");
     modalEl = document.createElement("div");
     constructor() { this.modalEl.appendChild(this.contentEl); document.body.appendChild(this.modalEl); }
     close(): void { (this as unknown as { onClose(): void }).onClose(); }
   }
-  return { ...original, ItemView, Modal, Notice: class {}, setIcon: vi.fn() };
+  return { ...original, Modal, Notice: class {}, setIcon: vi.fn() };
 });
 
 import type { App, WorkspaceLeaf } from "obsidian";
