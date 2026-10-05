@@ -135,12 +135,18 @@ describe("persisted task index", () => {
   it("reuses relative dates only on the day they were parsed", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 8, 27, 10));
-    const w = world({ "R.md": "- [ ] Call {tomorrow}", "D.md": "- [ ] Later >fri", "S.md": "- [ ] Strict {2026-10-05} [[2026-10-01]]" });
+    const w = world({
+      "R.md": "- [ ] Call {tomorrow}", "D.md": "- [ ] Later >fri", "S.md": "- [ ] Strict {2026-10-05} [[2026-10-01]]",
+      "W.md": "- [ ] Renew {in two weeks}", "Y.md": "- [ ] File {oct 30} #[[tax 2026]]", "T.md": "- [ ] Ship {2026-10-05 6pm} >someday"
+    });
     const cache = new MemoryIndexCache();
     await shutdown(await boot(w, cache));
     expect(cache.notes.get("R.md")?.day).toBe("2026-09-27");
     expect(cache.notes.get("D.md")?.day).toBe("2026-09-27");
+    expect(cache.notes.get("W.md")?.day).toBe("2026-09-27");
+    expect(cache.notes.get("Y.md")?.day).toBe("2026-09-27");
     expect(cache.notes.get("S.md")?.day).toBeUndefined();
+    expect(cache.notes.get("T.md")?.day).toBeUndefined();
 
     w.vault.cachedRead.mockClear();
     vi.setSystemTime(new Date(2026, 8, 27, 23));
@@ -151,7 +157,7 @@ describe("persisted task index", () => {
 
     vi.setSystemTime(new Date(2026, 8, 28, 9));
     index = await boot(w, cache);
-    expect(readPaths(w)).toEqual(["D.md", "R.md"]);
+    expect(readPaths(w)).toEqual(["D.md", "R.md", "W.md", "Y.md"]);
     expect(index.tasksForPath("R.md")[0].deadline).toBe("2026-09-29");
     expect(index.tasksForPath("S.md")[0]).toMatchObject({ deadline: "2026-10-05", scheduledDate: "2026-10-01" });
     await shutdown(index);

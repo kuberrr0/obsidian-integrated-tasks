@@ -1,9 +1,11 @@
 import type { App } from "obsidian";
+import { parseDateTimeExpression } from "./date";
+import { taskLineRanges } from "./parser";
 import type { NoteHeading } from "./structure";
 import type { Task } from "./types";
 
 /** Bump whenever the Task shape or note parsing changes, so older records are parsed again. */
-export const CACHE_SCHEMA = 2;
+export const CACHE_SCHEMA = 3;
 
 /** A task without its path-derived fields; parent and children are stored as line numbers. */
 export type CachedTask = Omit<Task, "id" | "path" | "parentId" | "childIds"> & { parentId?: number; childIds?: number[] };
@@ -41,20 +43,19 @@ export interface NoteScan {
   day: string;
 }
 
-const RELATIVE = /\b(?:today|tomorrow|yesterday|tonight|next|last|this|ago|in\s+\d+|noon|midnight|morning|evening|weekends?|sun(?:day)?|mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:rs?|rsday)?|fri(?:day)?|sat(?:urday)?)\b/i;
-// Year-less dates such as "Oct 30", "30th" or "10/30" resolve to their next occurrence.
-const YEARLESS = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|\b\d{1,2}(?:st|nd|rd|th)\b|\b\d{1,2}[/.-]\d{1,2}\b(?![/.-]\d)/i;
-
-/** Whether any task's dates depend on the day they were parsed. */
+/** Whether any task's dates depend on the day they were parsed: a deadline or defer date that is not an exact date. */
 function usesRelativeDates(tasks: readonly Task[], dateFormat: string): boolean {
   const yearlessFormat = dateFormat !== "" && !/[YyGg]/.test(dateFormat);
+  const now = new Date();
   for (const task of tasks) {
     if (yearlessFormat && (task.scheduledDate || task.deadline || task.deferDate || task.completedDate)) return true;
-    if (!task.deadline && !task.deferDate && !task.completedDate) continue;
-    const start = task.raw.search(/[{>✓]/);
-    if (start < 0) continue;
-    const tokens = task.raw.slice(start);
-    if (RELATIVE.test(tokens) || (YEARLESS.test(tokens) && !/\d{4}/.test(tokens))) return true;
+    if (!task.deadline && !task.deferDate) continue;
+    for (const range of taskLineRanges(task.raw, now, dateFormat)) {
+      if (range.kind !== "deadline" && range.kind !== "defer") continue;
+      const token = task.raw.slice(range.from, range.to);
+      const value = range.kind === "deadline" ? token.slice(1, -1) : token.slice(1);
+      if (!/^someday$/i.test(value.trim()) && !parseDateTimeExpression(value, now, dateFormat, true)) return true;
+    }
   }
   return false;
 }
