@@ -22,18 +22,18 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ marks
     lines: DecorationSet = Decoration.none;
     // Only visible lines are parsed; results are reused while the line text and date format are unchanged.
     private readonly cache = new Map<string, NoteLineHighlights | undefined>();
-    private nonBody: Set<number>;
+    /** Frontmatter and code lines; worked out when Live Preview next draws, not on every keystroke in Source mode. */
+    private nonBody?: Set<number>;
     private format = getDateFormat();
 
     constructor(view: EditorView) {
-      this.nonBody = nonBodyLines(view.state.doc.iterLines());
       this.decorate(view);
     }
 
     update(update: ViewUpdate): void {
       const formatChanged = this.format !== getDateFormat();
       if (formatChanged) { this.format = getDateFormat(); this.cache.clear(); }
-      if (update.docChanged) this.nonBody = nonBodyLines(update.state.doc.iterLines());
+      if (update.docChanged) this.nonBody = undefined;
       if (update.docChanged || update.viewportChanged || formatChanged || update.transactions.length) this.decorate(update.view);
     }
 
@@ -53,13 +53,14 @@ export function noteTokenEditor(getDateFormat: () => string): ViewPlugin<{ marks
       const marks: Range<Decoration>[] = [];
       const lines: Range<Decoration>[] = [];
       const doc = view.state.doc;
+      const nonBody = this.nonBody ??= nonBodyLines(doc.iterLines());
       let done = 0;
       for (const range of view.visibleRanges) {
         // Ranges split by a fold may share a line; decorate it once.
         const last = doc.lineAt(range.to).number;
         for (let number = Math.max(doc.lineAt(range.from).number, done + 1); number <= last; number++) {
           done = number;
-          if (this.nonBody.has(number - 1)) continue;
+          if (nonBody.has(number - 1)) continue;
           const line = doc.line(number);
           const found = this.highlights(line.text);
           if (!found) continue;
