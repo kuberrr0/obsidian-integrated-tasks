@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { installObsidianDom } from "./helpers/obsidian-dom";
 import { renderNoteTokens } from "../src/note-token-reading";
+
+beforeAll(() => installObsidianDom());
 
 function item(html: string, status = " "): HTMLElement {
   const root = document.createElement("div");

@@ -22,7 +22,7 @@ export interface ViewOptionsHost {
   expanded(): boolean;
   setExpanded(open: boolean): void;
   /** Makes a smart list of the view as its options now show it, named in a popover beside `anchor`; the panel's footer offers it. */
-  convert?(anchor: HTMLElement): void;
+  convert?: (anchor: HTMLElement) => void;
 }
 
 type Property = typeof TASK_PROPERTIES[number];
@@ -400,8 +400,7 @@ export class ViewOptionsPanel {
     let editor = this.editors.get(property.key);
     if (editor && !editor.isConnected) editor = undefined;
     if (!editor) {
-      editor = row.ownerDocument.createElement("div");
-      editor.className = "tm-options-conditions";
+      editor = createDiv({ cls: "tm-options-conditions" });
       row.after(editor);
       this.editors.set(property.key, editor);
     }

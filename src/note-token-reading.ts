@@ -14,8 +14,7 @@ function wrapHighlights(document: Document, segments: Segment[], highlights: Not
     const range = document.createRange();
     if (first.atomic) range.setStartBefore(first.node); else range.setStart(first.node, highlight.from - first.from);
     if (last.atomic) range.setEndAfter(last.node); else range.setEnd(last.node, highlight.to - last.from);
-    const span = document.createElement("span");
-    span.className = highlight.cls;
+    const span = createSpan({ cls: highlight.cls });
     span.appendChild(range.extractContents());
     range.insertNode(span);
   }

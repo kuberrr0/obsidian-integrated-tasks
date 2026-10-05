@@ -107,7 +107,7 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   let gap: HTMLElement | undefined;
   const hideGap = (): void => { gap?.remove(); gap = undefined; };
   const showGap = (element: HTMLElement, task: Task, time?: string): void => {
-    gap ??= root.ownerDocument.createElement("div");
+    gap ??= createDiv();
     gap.className = `tm-calendar-drop-gap${time ? " is-timed" : ""}`;
     gap.setAttribute("aria-hidden", "true");
     if (time) {

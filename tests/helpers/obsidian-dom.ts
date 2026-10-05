@@ -51,6 +51,7 @@ export function installObsidianDom(): void {
   element.toggleClass = function (this: HTMLElement, name: string, value: boolean) { this.classList.toggle(name, value); };
   element.hasClass = function (this: HTMLElement, name: string) { return this.classList.contains(name); };
   element.setCssStyles = function (this: HTMLElement, styles: Partial<CSSStyleDeclaration>) { Object.assign(this.style, styles); };
+  element.setCssProps = function (this: HTMLElement, props: Record<string, string>) { for (const [name, value] of Object.entries(props)) this.style.setProperty(name, value); };
   element.setAttr = function (this: HTMLElement, name: string, value: string) { this.setAttribute(name, value); };
   for (const proto of [HTMLElement.prototype, Document.prototype] as unknown as object[]) {
     Object.defineProperty(proto, "win", { configurable: true, get(this: Node) { return (this as Document).defaultView ?? this.ownerDocument?.defaultView ?? window; } });

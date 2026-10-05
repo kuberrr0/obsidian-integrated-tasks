@@ -237,9 +237,7 @@ export class ListDragController {
     this.gapKey = key;
     const move = (): void => {
       if (!this.gap) {
-        this.gap = doc.createElement("div");
-        this.gap.className = "tm-drop-gap";
-        this.gap.setAttribute("aria-hidden", "true");
+        this.gap = createDiv({ cls: "tm-drop-gap", attr: { "aria-hidden": "true" } });
         this.targets.set(this.gap, () => this.intent ?? { indicator: "none" });
       }
       this.gap.style.setProperty("--tm-gap-height", `${height}px`);

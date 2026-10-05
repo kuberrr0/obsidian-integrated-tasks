@@ -161,7 +161,15 @@ describe("multiline modal interactions", () => {
     expect(key({ shiftKey: true }).preventDefault).not.toHaveBeenCalled();
     key({ metaKey: true, isComposing: true });
     key({ ctrlKey: true, repeat: true });
+    // Safari's Enter that ends a composition no longer says it is composing: until the composition has ended, Enter
+    // only confirms the composed text.
+    fields.contentEl.dispatchEvent(new Event("compositionstart"));
+    key();
+    fields.contentEl.dispatchEvent(new Event("compositionend"));
+    key();
     expect(onSave).not.toHaveBeenCalled();
+    const timers = (window.setTimeout as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    (timers[timers.length - 1][0] as () => void)();
     expect(key().preventDefault).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   });

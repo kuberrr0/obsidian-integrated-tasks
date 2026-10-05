@@ -139,8 +139,13 @@ export class TaskEditorModal extends Modal {
     };
     deleteButton?.addEventListener("click", () => { void deleteTask(); });
 
+    // Safari ends an IME composition with an Enter whose keydown no longer says it is composing: until the
+    // composition's end has passed, Enter only confirms the composed text.
+    let composing = false;
+    contentEl.addEventListener("compositionstart", () => { composing = true; }, true);
+    contentEl.addEventListener("compositionend", () => { window.setTimeout(() => { composing = false; }, 0); }, true);
     this.handleKeydown = (event: KeyboardEvent): void => {
-      if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing || event.keyCode === 229) return;
+      if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing || composing) return;
       // Keep native keyboard activation for explicit action buttons.
       if (event.target instanceof HTMLButtonElement) return;
       event.preventDefault();

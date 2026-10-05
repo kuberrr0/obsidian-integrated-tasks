@@ -637,7 +637,8 @@ export default class TaskManagerPlugin extends Plugin {
    */
   private redirectProjectNotes(controller: TaskModeController): void {
     const prototype = WorkspaceLeaf.prototype;
-    const original = prototype.setViewState;
+    // Read as a plain function: it is called for each leaf (as `this`), never bound to the prototype.
+    const original = Reflect.get(prototype, "setViewState") as (this: WorkspaceLeaf, viewState: ViewState, eState?: unknown) => Promise<void>;
     let active = true;
     const wrapper = function (this: WorkspaceLeaf, viewState: ViewState, eState?: unknown): Promise<void> {
       return original.call(this, active ? controller.redirect(this, viewState) : viewState, eState);

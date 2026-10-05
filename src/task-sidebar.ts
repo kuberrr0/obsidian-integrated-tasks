@@ -331,8 +331,7 @@ export class TaskSidebarView extends ItemView {
   private takeUndatedDrops(element: HTMLElement): void {
     let gap: HTMLElement | undefined;
     const show = (drag: TaskDrag): void => {
-      gap ??= element.ownerDocument.createElement("div");
-      gap.className = "tm-drop-gap";
+      gap ??= createDiv({ cls: "tm-drop-gap" });
       gap.style.setProperty("--tm-gap-height", `${drag.height ?? 32}px`);
       const host = element.querySelector(".tm-task-list") ?? element;
       if (host.firstElementChild !== gap) host.prepend(gap);
@@ -369,7 +368,7 @@ export class TaskSidebarView extends ItemView {
   private renderRow(list: HTMLElement, task: Task): void {
     const things = this.plugin.settings.style === "things";
     const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}`, attr: { role: "listitem", tabindex: "0", "data-task-id": task.id } });
-    row.style.setProperty("--tm-depth", "0");
+    row.setCssProps({ "--tm-depth": "0" });
     const repeating = things && isRepeatingTask(this.app, task);
     const target = row.createEl("label", { cls: `tm-checkbox-target${repeating ? ` tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` : ""}` });
     const checkbox = target.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task) } });
