@@ -8,7 +8,7 @@ vi.mock("obsidian", async importOriginal => {
 
 import type { WorkspaceLeaf } from "obsidian";
 import { TaskNavigationView } from "../src/navigation-view";
-import { DEFAULT_SETTINGS } from "../src/types";
+import { DEFAULT_SETTINGS, type TaskManagerSettings } from "../src/types";
 import type TaskManagerPlugin from "../src/main";
 
 beforeAll(() => installObsidianDom());
@@ -31,12 +31,12 @@ it("marks the navigation container compact only in compact density", () => {
 
 it("shows Today with calendar-x in the Griply style, and a star in the Things style", async () => {
   const { setIcon } = await import("obsidian");
-  const settings = { ...DEFAULT_SETTINGS, style: "griply" as const };
+  const settings: TaskManagerSettings = { ...DEFAULT_SETTINGS, style: "griply" };
   const plugin = { settings, index: { projects: () => [], tagSummaries: () => [], query: () => [] } } as unknown as TaskManagerPlugin;
   const view = new TaskNavigationView({} as WorkspaceLeaf, plugin);
   const todayIcon = (): string | undefined => {
     const row = view.containerEl.querySelector<HTMLElement>("[data-nav-key='mode:today'], [data-key='mode:today']")
-      ?? [...view.containerEl.querySelectorAll<HTMLElement>(".tm-nav-item")].find(item => item.textContent?.includes("Today"));
+      ?? Array.from(view.containerEl.querySelectorAll<HTMLElement>(".tm-nav-item")).find(item => item.textContent?.includes("Today"));
     const call = vi.mocked(setIcon).mock.calls.find(([element]) => row?.contains(element));
     return call?.[1];
   };

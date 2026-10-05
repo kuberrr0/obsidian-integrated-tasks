@@ -703,7 +703,12 @@ export class TaskMainView extends ItemView {
   private kanbanColumns(tasks: Task[]): KanbanColumn[] {
     if (this.grouping !== "default") return kanbanColumns(tasks, this.grouping);
     const defaults = this.defaults;
-    if (defaults.path) return kanbanColumns(tasks, "section");
+    if (defaults.path) {
+      // Subprojects are a column of their own, before the note's sections.
+      const projects = tasks.filter(task => this.shownProjects.has(task.id));
+      const columns = kanbanColumns(tasks.filter(task => !this.shownProjects.has(task.id)), "section");
+      return projects.length ? [{ title: "Projects", tasks: projects }, ...columns] : columns;
+    }
     if (defaults.mode === "today") {
       const today = todayIso();
       return [
@@ -734,8 +739,12 @@ export class TaskMainView extends ItemView {
     }
   }
 
-  private renderProjectSections(container: HTMLElement, path: string, tasks: Task[]): void {
+  private renderProjectSections(container: HTMLElement, path: string, items: Task[]): void {
     const headings = this.plugin.index.headingsForPath(path);
+    // Subprojects (View options › Projects) are a group of their own, above the note's tasks.
+    const projects = items.filter(item => this.shownProjects.has(item.id));
+    if (projects.length) this.renderSection(container, "Projects", projects);
+    const tasks = items.filter(item => !this.shownProjects.has(item.id));
     // One pass: filtering per heading is quadratic in notes with hundreds of sections.
     const bySection = new Map<number | undefined, Task[]>();
     for (const task of tasks) {
@@ -757,7 +766,7 @@ export class TaskMainView extends ItemView {
       this.addMoveTarget(heading.name, target);
       if (!this.renderGroupFold(section, title, `group:${path}#${heading.name}`, heading.name)) this.renderTaskList(section, group, target);
     }
-    if (!tasks.length && !headings.length) this.renderEmpty(container);
+    if (!items.length && !headings.length) this.renderEmpty(container);
   }
 
   private renderHeader(container: HTMLElement): HTMLButtonElement {

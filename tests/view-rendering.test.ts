@@ -782,6 +782,24 @@ describe("View options › Projects", () => {
   });
 });
 
+describe("a project page's subprojects", () => {
+  it("are a Projects group above the note's tasks, or a Projects column first on a board", async () => {
+    const { view, content, plugin } = await setup(
+      [["Site.md", "- [ ] Loose\n## Build\n- [ ] Code"], note("Sub.md", 1)],
+      { "Site.md": { tags: ["project"] }, "Sub.md": { tags: ["project"], parent: "[[Site]]" } }
+    );
+    Object.assign(plugin, { projectDraft: () => ({ tags: "" }) });
+    await view.setState({ mode: "all", pagePath: "Site.md" });
+    const first = content().querySelector<HTMLElement>(".tm-section")!;
+    expect(first.querySelector("h2")!.textContent).toContain("Projects");
+    expect(Array.from(first.querySelectorAll(".tm-task-title")).map(title => title.textContent)).toEqual(["Sub"]);
+    // The note's own tasks follow, and none of them is in the Projects group.
+    expect(Array.from(content().querySelectorAll(".tm-task-item .tm-task-title")).map(title => title.textContent)).toEqual(["Loose", "Code"]);
+    await view.setState({ mode: "all", pagePath: "Site.md", layout: "kanban" } as never);
+    expect(Array.from(content().querySelectorAll(".tm-kanban-column-header h2")).map(title => title.textContent)[0]).toBe("Projects");
+  });
+});
+
 describe("the Tags list", () => {
   it("lists the tags, with no search box, and says there are none only when there are none", async () => {
     const { view, content } = await setup([["A.md", "- [ ] Call #[[work]]\n- [ ] Plan #[[home]]"]]);
