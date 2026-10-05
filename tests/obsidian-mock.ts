@@ -47,6 +47,14 @@ export class ItemView {
   async setState(): Promise<void> {}
 }
 
+// A note open in the editor: its file, its mode, and an editor with its lines and selections.
+export class MarkdownView {
+  file: TFile | null = null;
+  mode: "source" | "preview" = "source";
+  editor = { getLine: (_line: number): string => "", listSelections: (): Array<{ anchor: { line: number; ch: number }; head: { line: number; ch: number } }> => [] };
+  getMode(): "source" | "preview" { return this.mode; }
+}
+
 // Minimal lifecycle for Markdown render children (task query blocks, note checkboxes).
 export class MarkdownRenderChild {
   private cleanups: Array<() => unknown> = [];

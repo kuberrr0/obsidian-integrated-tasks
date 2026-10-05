@@ -19,6 +19,7 @@ import { noteDateInput } from "./note-date-input";
 import { noteTokenEditor } from "./note-token-editor";
 import { noteTaskEditEditor, registerNoteTaskEdit } from "./note-task-edit";
 import { renderNoteTokens } from "./note-token-reading";
+import { EditorView } from "@codemirror/view";
 import { MarkdownView, Notice, Plugin, TFile, TFolder, WorkspaceLeaf, type Editor, type TAbstractFile, type ViewState } from "obsidian";
 import { TaskEditorModal, initialDraft, type TaskEditorOptions } from "./task-editor";
 import { TaskIndex, type RefreshOptions } from "./task-index";
@@ -27,7 +28,7 @@ import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
 import { TaskStore, type TaskChange } from "./task-store";
 import { TasksImportModal } from "./tasks-import-modal";
 import { TASK_QUERY_LANGUAGE, TASK_QUERY_TEMPLATE, TaskQueryBlock } from "./task-query-block";
-import { TaskMainView, TASK_MAIN_VIEW } from "./task-view";
+import { TaskMainView, TASK_MAIN_VIEW, tasksOpenInSidebar } from "./task-view";
 import { DEFAULT_SETTINGS, type Project, type SavedViewOptions, type SmartList, type ViewLayout, type Task, type TaskDraft, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
@@ -71,6 +72,8 @@ export default class TaskManagerPlugin extends Plugin {
       (task, outcome) => { this.completeRecurringTaskFromNote(task, outcome); }, undefined,
       { enabled: () => this.settings.completionDates, linkDates: () => this.settings.linkDates }, () => this.settings.sectionHeadingLevel));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
+    // The Task Details sidebar follows the caret in a note, showing the task it is on.
+    this.registerEditorExtension(EditorView.updateListener.of(update => { if (update.selectionSet || update.docChanged) this.refreshTaskSidebar(); }));
     this.registerEditorExtension(noteTaskEditEditor(() => this.dateFormat(), task => this.openEditor({ mode: "all", task }), () => this.settings.sectionHeadingLevel, task => this.completeRecurringTaskFromNote(task)));
     this.registerMarkdownPostProcessor((element, context) => {
       renderNoteTokens(element, this.dateFormat());
@@ -692,9 +695,18 @@ export default class TaskManagerPlugin extends Plugin {
     if (view instanceof TaskMainView) { view.newTask(); return; }
     const path = view instanceof MarkdownView ? view.file?.path : undefined;
     const tag = path ? this.index.tagForPath(path) : undefined;
-    if (path && this.index.isProject(path)) this.openEditor({ mode: "all", projectPath: path });
-    else if (path && tag) this.openEditor({ mode: "tags", tag, pagePath: path });
-    else this.openEditor({ mode: "inbox" });
+    const state: OpenEditorState = path && this.index.isProject(path) ? { mode: "all", projectPath: path }
+      : path && tag ? { mode: "tags", tag, pagePath: path } : { mode: "inbox" };
+    // With three panes it starts in the Task Details sidebar, as a task view's new task does.
+    if (tasksOpenInSidebar(this.settings)) void this.newTaskInSidebar(state).catch(error => new Notice(String(error)));
+    else this.openEditor(state);
+  }
+
+  private async newTaskInSidebar(state: OpenEditorState): Promise<void> {
+    await this.activateTaskSidebar(true);
+    const sidebar = this.app.workspace.getLeavesOfType(TASK_SIDEBAR_VIEW)[0]?.view;
+    if (sidebar instanceof TaskSidebarView) await sidebar.startNewTask(state);
+    else this.openEditor(state);
   }
 
   /** A new task as a view would start it: its tag, its project, or today's (or tomorrow's) date. */

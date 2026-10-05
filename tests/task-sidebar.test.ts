@@ -7,7 +7,7 @@ vi.mock("obsidian", async importOriginal => {
   return { ...original, Menu: class {}, Notice: class {}, setIcon: vi.fn() };
 });
 
-import { Platform, TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, Platform, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { TaskSidebarView } from "../src/task-sidebar";
@@ -90,6 +90,17 @@ async function setup(notes: Array<[string, string]>) {
 }
 
 const rows = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>(".tm-task-item[data-task-id]"));
+
+/** A note open in the editor, as the sidebar sees it: its lines as the note now reads, and where the caret is. */
+function noteView(file: TFile, contents: Map<string, string>, caret: { from: number; to?: number }) {
+  return Object.assign(new (MarkdownView as unknown as new () => object)(), {
+    file,
+    editor: {
+      getLine: (line: number) => contents.get(file.path)!.split("\n")[line] ?? "",
+      listSelections: () => [{ anchor: { line: caret.from, ch: 0 }, head: { line: caret.to ?? caret.from, ch: 0 } }]
+    }
+  });
+}
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe("what the Task Details sidebar shows", () => {
@@ -121,10 +132,10 @@ describe("what the Task Details sidebar shows", () => {
     expect(side().classList.contains("is-details")).toBe(true);
     expect(side().querySelector(".tm-sidebar-planner")).toBeNull();
     expect(side().querySelector(".tm-sidebar-empty h3")!.textContent).toBe("No task selected");
-    // With a note (not a task view) in front, there is nothing to show either.
+    // With neither a task view nor a note in front, there is nothing to show either.
     setActive(undefined);
     sidebar.render();
-    expect(side().querySelector(".tm-sidebar-empty p")!.textContent).toBe("Select a task in a task view to see its details here.");
+    expect(side().querySelector(".tm-sidebar-empty p")!.textContent).toBe("Select a task in a task view, or put the cursor on a checklist in a note, to see its details here.");
   });
 
   it("lists the tasks without a date beside any view's calendar, as for Upcoming, under the plugin's icon", async () => {
@@ -562,5 +573,70 @@ describe("dragging between the Task Details sidebar and the view", () => {
     const [tasks, draft] = store.bulkChange.mock.calls[0] as unknown as [Task[], (task: Task) => TaskDraft];
     expect(draft(tasks[0])).toMatchObject({ scheduledDate: undefined, deadline: undefined });
     expect(planner.querySelector(".tm-drop-gap")).toBeNull();
+  });
+});
+
+describe("beside a note (no task view in front)", () => {
+  it("lists the note's tasks, nested, and shows the task (or tasks) the caret is on until Escape", async () => {
+    const { sidebar, side, setActive, files, contents } = await setup([["A.md", ["# Plan", "- [ ] First p2", "  - [ ] Its subtask", "Prose", "- [ ] Second"].join("\n")]]);
+    const caret = { from: 3 } as { from: number; to?: number };
+    setActive(noteView(files.get("A.md")!, contents, caret));
+    sidebar.render();
+    expect(side().classList.contains("is-note")).toBe(true);
+    const listed = () => Array.from(side().querySelectorAll<HTMLElement>(".tm-sidebar-planner .tm-task-item"));
+    expect(listed().map(row => [row.querySelector(".tm-task-title")!.textContent, row.style.getPropertyValue("--tm-depth")])).toEqual([["First", "0"], ["Its subtask", "1"], ["Second", "0"]]);
+    expect(side().querySelector<HTMLElement>(".tm-sidebar-pane")!.hidden).toBe(true);
+
+    // The caret on a checklist: that task's details, with the list out of the way.
+    caret.from = 1;
+    sidebar.render();
+    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("First");
+    expect(side().querySelector<HTMLElement>(".tm-sidebar-planner")!.hidden).toBe(true);
+    // A selection over several: Multiple Tasks.
+    Object.assign(caret, { from: 1, to: 4 });
+    sidebar.render();
+    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple Tasks");
+    // Escape puts the list back until the caret moves.
+    side().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    sidebar.render();
+    expect(side().querySelector<HTMLElement>(".tm-sidebar-planner")!.hidden).toBe(false);
+    Object.assign(caret, { from: 4, to: undefined });
+    sidebar.render();
+    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Second");
+  });
+
+  it("finds the caret's task by its text while the note is ahead of the index", async () => {
+    const { sidebar, side, setActive, files, contents } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
+    setActive(noteView(files.get("A.md")!, contents, { from: 2 }));
+    // A line typed above the tasks, not yet read by the index.
+    contents.set("A.md", "Typed\n- [ ] First\n- [ ] Second");
+    sidebar.render();
+    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Second");
+  });
+
+  it("edits the caret's task: a property from its popover, written to the note", async () => {
+    const { sidebar, side, setActive, files, contents, store } = await setup([["A.md", "- [ ] First"]]);
+    setActive(noteView(files.get("A.md")!, contents, { from: 0 }));
+    sidebar.render();
+    side().querySelector<HTMLElement>("[data-tm-focus-key='sidebar-priority']")!.click();
+    await settle();
+    document.querySelector<HTMLElement>(".tm-choice-popover [role=option]")!.click();
+    await vi.waitFor(() => expect(store.bulkUpdate).toHaveBeenCalledOnce());
+    expect(contents.get("A.md")).toBe("- [ ] First p1");
+  });
+
+  it("starts a new task here (Create new task with three panes), written on Enter once titled", async () => {
+    const { sidebar, side, setActive, files, contents, store } = await setup([["A.md", "- [ ] Existing"]]);
+    setActive(noteView(files.get("A.md")!, contents, { from: 0 }));
+    await sidebar.startNewTask({ mode: "inbox" });
+    const title = side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
+    expect(title.value).toBe("");
+    expect(document.activeElement).toBe(title);
+    title.value = "Call the venue";
+    title.dispatchEvent(new Event("input"));
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(store.create).toHaveBeenCalledOnce());
+    expect(contents.get("A.md")).toBe("- [ ] Call the venue\n- [ ] Existing");
+    await vi.waitFor(() => expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")?.value).toBe("Call the venue"));
   });
 });

@@ -210,6 +210,20 @@ describe("plugin lifecycle", () => {
     expect(today.setViewState).not.toHaveBeenCalled();
   });
 
+  it("starts Create new task in the Task Details sidebar with three panes, else in the task editor", async () => {
+    const { plugin } = await loaded();
+    const inSidebar = vi.spyOn(plugin as unknown as { newTaskInSidebar(state: unknown): Promise<void> }, "newTaskInSidebar").mockResolvedValue();
+    const editor = vi.spyOn(plugin, "openEditor").mockImplementation(() => {});
+    plugin.newTask();
+    expect(editor).toHaveBeenCalledExactlyOnceWith({ mode: "inbox" });
+    expect(inSidebar).not.toHaveBeenCalled();
+    plugin.settings.taskDetails = "sidebar";
+    plugin.newTask();
+    expect(inSidebar).toHaveBeenCalledExactlyOnceWith({ mode: "inbox" });
+    expect(editor).toHaveBeenCalledOnce();
+    plugin.unload();
+  });
+
   it("does nothing on layout ready after an early unload", async () => {
     const env = environment();
     const plugin = new TaskManagerPlugin(env.app, {} as never);

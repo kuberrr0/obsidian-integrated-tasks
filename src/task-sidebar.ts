@@ -18,13 +18,17 @@ import { taskInputRanges } from "./task-input";
 import { deadlineIsDistant, deadlineIsOverdue, editable, renderTaskDetails, taskDeadlineCountdown, taskTimeDurationLabel, taskTimeLabel } from "./task-row-details";
 import { STATUS_ICONS, STATUS_LABELS, checkboxLabel, statusClass } from "./task-status";
 import { PRIORITY_NAMES, cardNotes, longDate, paintTokens, repeatIcon, type TaskCardDraft } from "./things-task-card";
+import { NoteTaskHost } from "./note-task-host";
+import type { OpenEditorState } from "./main";
 import type { Task, TaskEditorPreset } from "./types";
 
 export const TASK_SIDEBAR_VIEW = "task-manager-sidebar";
 
 /** What the sidebar shows for the task view in front: Today's calendar, Upcoming's tasks with no date, or the selected
- * task. */
-type SidebarMode = "today" | "upcoming" | "details";
+ * task; or for a note in front, its tasks. */
+type SidebarMode = "today" | "upcoming" | "details" | "note";
+/** What the details edit through: the task view in front, or beside a note, the note's (see NoteTaskHost). */
+type DetailsHost = Pick<TaskMainView, "editTaskProperty" | "setTaskStatus" | "changeTask" | "newTaskInSidebar" | "typeNewTask" | "finishNewTask" | "getSelectedTasks" | "clearSelection" | "sidebarSelection">;
 /** A property the sidebar edits through the task view showing the task (see TaskMainView.editTaskProperty). */
 type SidebarProperty = TaskEditorProperty | "status" | "project";
 
@@ -77,10 +81,13 @@ export class TaskSidebarView extends ItemView {
   private renderFrame?: number;
   private closed = false;
   private unsubscribe?: () => void;
+  /** Beside a note: its tasks, the ones its caret is on, and a new task started there. */
+  private readonly note: NoteTaskHost;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) {
     super(leaf);
     this.navigation = false;
+    this.note = new NoteTaskHost(plugin, this.app, () => this.scheduleRender(), task => { this.localId = task.id; this.render(); });
   }
 
   getViewType(): string { return TASK_SIDEBAR_VIEW; }
@@ -133,14 +140,21 @@ export class TaskSidebarView extends ItemView {
     return view instanceof TaskMainView ? view : undefined;
   }
 
+  /** What the details edit through: the task view in front, else beside a note (or with a new task started there), the note's. */
+  private host(): DetailsHost | undefined {
+    return this.taskView() ?? (this.note.noteView() || this.note.newTaskInSidebar() ? this.note : undefined);
+  }
+
   /** `force`: redraw both parts, even unchanged. */
   render(force = false): void {
     const view = this.taskView();
+    const host = this.host();
     const state = view?.getState();
-    // A calendar, like Upcoming, has the tasks without a date beside it, to drag onto a day.
-    const mode: SidebarMode = !view ? "details" : view.hasCalendar ? "upcoming"
+    const notePath = !view ? this.note.noteView()?.file?.path : undefined;
+    // A calendar, like Upcoming, has the tasks without a date beside it, to drag onto a day. A note has its tasks.
+    const mode: SidebarMode = !view ? notePath ? "note" : "details" : view.hasCalendar ? "upcoming"
       : !view.pagePath && (state?.mode === "today" || state?.mode === "upcoming") ? state.mode : "details";
-    const selected = view?.sidebarSelection() ?? [];
+    const selected = host?.sidebarSelection() ?? [];
     // A task selected in the view takes over from one selected here.
     const viewSelection = selected.map(task => task.id).join("\n");
     if (viewSelection !== this.viewSelection) {
@@ -151,7 +165,7 @@ export class TaskSidebarView extends ItemView {
     const local = this.localId ? this.plugin.index.taskById(this.localId) : undefined;
     if (!local) this.localId = undefined;
     // A new task the view started here (three panes) comes first, until it is written or dropped.
-    const entry = view?.newTaskInSidebar();
+    const entry = host?.newTaskInSidebar();
     const task = entry?.task ?? local ?? (selected.length === 1 ? selected[0] : undefined);
     this.followTask(task, entry);
     const settings = this.plugin.settings;
@@ -159,7 +173,10 @@ export class TaskSidebarView extends ItemView {
     if (skeleton !== this.skeleton || !this.details?.element.isConnected) this.build(mode, skeleton);
     this.mode = mode;
     const planner = this.planner;
-    if (planner && view && mode !== "details") {
+    if (planner && mode === "note") {
+      this.draw(planner, JSON.stringify([notePath, this.indexVersion, this.listRows, settings.calendarProjectColors]), force, () => this.renderNoteTasks(planner.element, notePath!));
+      for (const element of Array.from(planner.element.querySelectorAll<HTMLElement>("[data-task-id]"))) element.toggleClass("is-selected", element.getAttribute("data-task-id") === this.localId);
+    } else if (planner && view && mode !== "details") {
       // The tasks without a date are the view's own: a project's, a tag's, a smart list's…
       const undated = mode === "upcoming" ? view.undatedQuery() : undefined;
       this.draw(planner, JSON.stringify([todayIso(), this.indexVersion, this.listRows, undated, settings.calendarProjectColors, settings.calendarPriorityColors]), force,
@@ -177,8 +194,8 @@ export class TaskSidebarView extends ItemView {
     const shown = mode === "details" || alone;
     details.element.hidden = !shown;
     // A new task redraws as its properties change (not as it is typed).
-    this.draw(details, JSON.stringify([shown, Boolean(view), local ? "local" : selected.length, task?.id, entry && [entry.task, entry.destination], task?.raw, task?.description, task && this.children(task).map(child => child.raw), several && selected.map(item => item.raw)]), force,
-      () => { if (shown) this.renderDetails(details.element, view, entry ? [] : local ? [local] : selected, task, entry?.destination); });
+    this.draw(details, JSON.stringify([shown, Boolean(view), Boolean(host), local ? "local" : selected.length, task?.id, entry && [entry.task, entry.destination], task?.raw, task?.description, task && this.children(task).map(child => child.raw), several && selected.map(item => item.raw)]), force,
+      () => { if (shown) this.renderDetails(details.element, host, entry ? [] : local ? [local] : selected, task, entry?.destination); });
   }
 
   /** Lays the sidebar out for a mode: in Today and Upcoming, their tasks over the selected task's details; else the details alone. */
@@ -191,7 +208,7 @@ export class TaskSidebarView extends ItemView {
     container.toggleClass("tm-style-things", settings.style === "things");
     container.toggleClass("tm-style-griply", settings.style === "griply");
     container.toggleClass("tm-density-compact", settings.density === "compact");
-    for (const name of ["today", "upcoming", "details"] as const) container.toggleClass(`is-${name}`, mode === name);
+    for (const name of ["today", "upcoming", "details", "note"] as const) container.toggleClass(`is-${name}`, mode === name);
     this.planner = mode === "details" ? undefined : { element: container.createDiv({ cls: "tm-sidebar-planner", attr: { "data-tm-scroll-key": "sidebar-planner" } }) };
     if (mode === "upcoming") this.takeUndatedDrops(this.planner!.element);
     this.details = { element: container.createDiv({ cls: "tm-sidebar-pane", attr: { "data-tm-scroll-key": "sidebar-details" } }) };
@@ -228,11 +245,11 @@ export class TaskSidebarView extends ItemView {
    * the tasks without a date) or that no task is selected. What was typed in it is not saved; a new task is dropped.
    */
   private closeDetails(): void {
-    const view = this.taskView();
+    const host = this.host();
     this.draft = undefined;
     this.localId = undefined;
-    if (view?.newTaskInSidebar()) { void view.finishNewTask(false); return; }
-    if (view?.sidebarSelection().length) view.clearSelection();
+    if (host?.newTaskInSidebar()) { void host.finishNewTask(false); return; }
+    if (host?.sidebarSelection().length) host.clearSelection();
     this.render();
   }
 
@@ -252,6 +269,16 @@ export class TaskSidebarView extends ItemView {
     if (id !== NEW_TASK_ID) this.localId = id;
     this.render();
     if (options.focus) this.content.querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")?.focus();
+  }
+
+  /**
+   * Starts a new task here beside a note, with three panes (Create new task with no task view in front), its title
+   * empty to type; Enter writes it once titled, as a task view's.
+   */
+  async startNewTask(state: OpenEditorState): Promise<void> {
+    await this.note.startNewTask(state);
+    this.render();
+    this.content.querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")?.focus();
   }
 
   /** A time clicked in Today's hours adds a task then: with three panes, here, as the view adds one; else in the task editor. */
@@ -324,6 +351,27 @@ export class TaskSidebarView extends ItemView {
     }
   }
 
+  /** Beside a note: its tasks, in order and nested as in the note; a click shows one's details, as the caret on it does. */
+  private renderNoteTasks(element: HTMLElement, path: string): void {
+    const tasks = this.note.noteTasks();
+    if (!tasks.length) {
+      const empty = element.createDiv({ cls: "tm-empty tm-sidebar-empty" });
+      setIcon(empty.createDiv({ cls: "tm-empty-icon" }), "list-checks");
+      empty.createEl("h3", { text: "No tasks in this note" });
+      empty.createEl("p", { text: "Put the cursor on a checklist to see its details here." });
+      return;
+    }
+    // Its rows drag to a task view or a sidebar list, as a view's do.
+    this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), async () => {}, false, task => this.startDrag([task]), false);
+    const list = element.createDiv({ cls: "tm-task-list", attr: { role: "list", "aria-label": `Tasks in ${noteName(path)}` } });
+    for (const { task, depth } of tasks.slice(0, this.listRows)) this.renderRow(list, task, depth);
+    const hidden = tasks.length - this.listRows;
+    if (hidden > 0) {
+      const more = element.createEl("button", { cls: "tm-show-more-tasks", text: `Show ${Math.min(LIST_PAGE, hidden)} more (${hidden} hidden)`, attr: { type: "button", "data-tm-focus-key": "sidebar-show-more" } });
+      more.addEventListener("click", () => { this.listRows += LIST_PAGE; this.render(); });
+    }
+  }
+
   /**
    * Tasks dragged here from the view (its list's rows, or its calendar's cards) take their dates off; a slot opens at the
    * top of the list meanwhile.
@@ -365,10 +413,10 @@ export class TaskSidebarView extends ItemView {
   }
 
   /** A task's row, as a list shows it in the chosen style: its checkbox, title and properties; a click shows its details. */
-  private renderRow(list: HTMLElement, task: Task): void {
+  private renderRow(list: HTMLElement, task: Task, depth = 0): void {
     const things = this.plugin.settings.style === "things";
     const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}`, attr: { role: "listitem", tabindex: "0", "data-task-id": task.id } });
-    row.setCssProps({ "--tm-depth": "0" });
+    row.setCssProps({ "--tm-depth": String(depth) });
     const repeating = things && isRepeatingTask(this.app, task);
     const target = row.createEl("label", { cls: `tm-checkbox-target${repeating ? ` tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` : ""}` });
     const checkbox = target.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task) } });
@@ -383,10 +431,10 @@ export class TaskSidebarView extends ItemView {
     const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
     primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title), "data-tm-focus-key": `sidebar-row:${task.id}` } });
     const metadata = content.createDiv({ cls: things ? "tm-things-secondary" : "tm-task-metadata" });
-    const view = this.taskView();
+    const host = this.host();
     const details = {
       grouping: "none" as const, dateFormat: this.plugin.dateFormat(), show: (property: string) => property !== "defer", source: task.path, tags: task.tags ?? [],
-      edit: (property: TaskEditorProperty) => { if (view) void this.edit(view, [task], property); },
+      edit: (property: TaskEditorProperty) => { if (host) void this.edit(host, [task], property); },
       openSource: () => void this.openSource(task)
     };
     if (lead) {
@@ -425,7 +473,7 @@ export class TaskSidebarView extends ItemView {
   private typed(task: Task, next: TaskCardDraft): void {
     if (this.draft?.id !== task.id) return;
     // A new task's typing is the view's to keep until it is written.
-    if (task.id === NEW_TASK_ID) { this.draft = { ...next, id: task.id, dirty: false }; this.taskView()?.typeNewTask(next.title, next.notes); return; }
+    if (task.id === NEW_TASK_ID) { this.draft = { ...next, id: task.id, dirty: false }; this.host()?.typeNewTask(next.title, next.notes); return; }
     const dirty = this.draft.dirty || next.title !== this.draft.title || next.notes !== this.draft.notes;
     this.draft = { ...next, id: task.id, dirty };
   }
@@ -468,8 +516,8 @@ export class TaskSidebarView extends ItemView {
 
   /** Writes a change to the shown task through its view, which keeps it selected (and so shown here). */
   private async change(task: Task, write: () => Promise<string[]>, moveTo?: string): Promise<void> {
-    const view = this.taskView();
-    if (view) await view.changeTask(task, write, moveTo);
+    const host = this.host();
+    if (host) await host.changeTask(task, write, moveTo);
     else for (const path of await write()) await this.plugin.index.refreshPath(path);
   }
 
@@ -483,14 +531,14 @@ export class TaskSidebarView extends ItemView {
    * Edits a property in its popover, as the task's row would (for several tasks, as their menu would); the typing is
    * saved first, so it edits the task as it now reads.
    */
-  private async edit(view: TaskMainView, tasks: Task[], property: SidebarProperty, anchor = this.popoverAnchor()): Promise<void> {
+  private async edit(host: DetailsHost, tasks: Task[], property: SidebarProperty, anchor = this.popoverAnchor()): Promise<void> {
     const key = anchor?.getAttribute("data-tm-focus-key");
     await this.saveDraft();
     // Saving redraws: open beside the same control in the new drawing.
     const target = anchor?.isConnected ? anchor : (key ? this.content.querySelector<HTMLElement>(`[data-tm-focus-key="${CSS.escape(key)}"]`) : null) ?? this.content;
     // Several are the view's selection as it now reads; one, as saved.
-    const current = tasks.length > 1 ? view.getSelectedTasks() : tasks.map(task => this.plugin.index.taskById(task.id) ?? task);
-    view.editTaskProperty(current, property, target);
+    const current = tasks.length > 1 ? host.getSelectedTasks() : tasks.map(task => this.plugin.index.taskById(task.id) ?? task);
+    host.editTaskProperty(current, property, target);
   }
 
   /** The shown task's checkbox keeps it selected (completing a recurring task moves its dates); a subtask's just toggles. */
@@ -535,16 +583,16 @@ export class TaskSidebarView extends ItemView {
   }
 
   /** `destination`: for a new task, the note it will go to. */
-  private renderDetails(container: HTMLElement, view: TaskMainView | undefined, selected: Task[], task: Task | undefined, destination?: string): void {
-    if (view && !task && selected.length > 1) { this.renderSelectionDetails(container, view, selected); return; }
-    if (!view || !task) {
+  private renderDetails(container: HTMLElement, host: DetailsHost | undefined, selected: Task[], task: Task | undefined, destination?: string): void {
+    if (host && !task && selected.length > 1) { this.renderSelectionDetails(container, host, selected); return; }
+    if (!host || !task) {
       const empty = container.createDiv({ cls: "tm-empty tm-sidebar-empty" });
       setIcon(empty.createDiv({ cls: "tm-empty-icon" }), "mouse-pointer-click");
       empty.createEl("h3", { text: "No task selected" });
-      empty.createEl("p", { text: view ? "Select a task to see its details here." : "Select a task in a task view to see its details here." });
+      empty.createEl("p", { text: host ? "Select a task to see its details here." : "Select a task in a task view, or put the cursor on a checklist in a note, to see its details here." });
       return;
     }
-    this.renderTaskDetails(container, view, task, destination);
+    this.renderTaskDetails(container, host, task, destination);
     // A new task is in no note yet.
     if (task.id === NEW_TASK_ID) return;
     const footer = container.createDiv({ cls: "tm-sidebar-footer" });
@@ -567,7 +615,7 @@ export class TaskSidebarView extends ItemView {
    * The title over a list of the task's properties, each a row that opens its editor, then its notes and subtasks; in
    * either style, drawn in its colours and checkboxes.
    */
-  private renderTaskDetails(container: HTMLElement, view: TaskMainView, task: Task, destination?: string): void {
+  private renderTaskDetails(container: HTMLElement, host: DetailsHost, task: Task, destination?: string): void {
     const draft = this.draft!;
     // A new task, not yet written: Enter writes it (once titled), Escape drops it.
     const isNew = task.id === NEW_TASK_ID;
@@ -596,7 +644,7 @@ export class TaskSidebarView extends ItemView {
     const paint = (): void => paintTokens(backdrop, title.value, taskInputRanges(title.value, task.title, now, dateFormat));
     paint();
 
-    this.renderProperties(panel, view, [task], destination);
+    this.renderProperties(panel, host, [task], destination);
 
     panel.createEl("h5", { cls: "tm-sidebar-section-title", text: "Notes" });
     const notes = panel.createEl("textarea", { cls: "tm-sidebar-notes", attr: { "aria-label": "Notes", placeholder: "Add notes", rows: "2", "data-tm-focus-key": "sidebar-notes" } });
@@ -615,7 +663,7 @@ export class TaskSidebarView extends ItemView {
       if (event.key === "Enter" && !event.isComposing && (!event.shiftKey || event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         if (!isNew) target.blur();
-        else if (title.value.trim()) void view.finishNewTask();
+        else if (title.value.trim()) void host.finishNewTask();
       }
     });
     const fit = (): void => { autosize(title); autosize(notes); };
@@ -631,7 +679,7 @@ export class TaskSidebarView extends ItemView {
    * The property rows, each a name and a value that opens its editor: one task's values, or for several the value they
    * share (else Mixed), set for all of them at once. `destination`: a new task's note to be.
    */
-  private renderProperties(panel: HTMLElement, view: TaskMainView, tasks: Task[], destination?: string): void {
+  private renderProperties(panel: HTMLElement, host: DetailsHost, tasks: Task[], destination?: string): void {
     const [task] = tasks;
     const now = new Date();
     const today = todayIso(now);
@@ -647,7 +695,7 @@ export class TaskSidebarView extends ItemView {
       if (shared) fill(value);
       else { value.addClass("is-mixed"); value.setText("Mixed"); }
       if (!value.childElementCount && !value.textContent) { value.addClass("is-empty"); value.setText("None"); }
-      editable(element, `${name}: ${value.textContent}`, `sidebar-${property}`, () => void this.edit(view, tasks, property, element));
+      editable(element, `${name}: ${value.textContent}`, `sidebar-${property}`, () => void this.edit(host, tasks, property, element));
     };
     const status = (item: Task) => item.status;
     row(shares(status) ? STATUS_ICONS[task.status] : "circle-dashed", "Status", "status", status, value => { value.setText(STATUS_LABELS[task.status]); }, `is-status${statusClass(task.status)}`);
@@ -686,7 +734,7 @@ export class TaskSidebarView extends ItemView {
    * Several tasks selected: Multiple Tasks in place of a title, a checkbox that completes (or reopens) them all, and
    * their properties, set for all of them at once; no notes or subtasks, which are each task's own.
    */
-  private renderSelectionDetails(container: HTMLElement, view: TaskMainView, tasks: Task[]): void {
+  private renderSelectionDetails(container: HTMLElement, host: DetailsHost, tasks: Task[]): void {
     const panel = container.createDiv({ cls: "tm-sidebar-details is-selection" });
     const head = panel.createDiv({ cls: "tm-sidebar-head" });
     const done = tasks.every(task => task.completed);
@@ -694,12 +742,12 @@ export class TaskSidebarView extends ItemView {
     const checkbox = box.createEl("input", { type: "checkbox", cls: "tm-task-checkbox", attr: { "aria-label": done ? `Reopen ${tasks.length} tasks` : `Complete ${tasks.length} tasks`, "data-tm-focus-key": "sidebar-checkbox" } });
     checkbox.checked = done;
     checkbox.indeterminate = !done && tasks.some(task => task.completed);
-    checkbox.addEventListener("change", () => view.setTaskStatus(view.getSelectedTasks(), checkbox.checked ? "done" : "todo"));
+    checkbox.addEventListener("change", () => host.setTaskStatus(host.getSelectedTasks(), checkbox.checked ? "done" : "todo"));
     head.createDiv({ cls: "tm-sidebar-selection-name", text: "Multiple Tasks" });
     const close = head.createEl("button", { cls: "clickable-icon tm-sidebar-close", attr: { type: "button", "aria-label": "Close", title: "Close (Escape)", "data-tm-focus-key": "sidebar-close" } });
     setIcon(close, "x");
     close.addEventListener("click", () => this.closeDetails());
-    this.renderProperties(panel, view, tasks);
+    this.renderProperties(panel, host, tasks);
   }
 
   /** The subtasks: each checks off and renames in place; the last line adds one, and Enter starts the next. */
