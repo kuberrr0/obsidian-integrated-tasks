@@ -15,6 +15,11 @@ export function addDays(iso: string, days: number): string {
   date.setDate(date.getDate() + days);
   return formatLocalDate(date);
 }
+/** Calendar days from `start` to `end`, the same across daylight-saving changes. */
+export function daysBetween(start: string, end: string): number {
+  const utc = (iso: string): number => { const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((utc(end) - utc(start)) / 86400000);
+}
 export function calendarDate(task: Task): string | undefined { return task.scheduledDate ?? task.deadline; }
 export function calendarTime(task: Task): string | undefined { return task.scheduledDate ? task.scheduledTime : task.deadlineTime; }
 export function timeMinutes(time: string): number {

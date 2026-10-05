@@ -30,10 +30,6 @@ export function shiftGantt(anchor: string, zoom: GanttZoom, direction: number): 
   return addDays(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`, date.getDate() - 1);
 }
 
-export function daysBetween(start: string, end: string): number {
-  const utc = (iso: string): number => { const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d); };
-  return Math.round((utc(end) - utc(start)) / 86400000);
-}
 export function ganttRange(project: ProjectProperties): { start: string; end: string } | undefined {
   const start = project.scheduledDate;
   const end = project.endDate;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { daysBetween, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate } from "../src/gantt";
+import { daysBetween } from "../src/calendar";
+import { ganttDateAt, ganttSelection, ganttRange, resizeProjectDate } from "../src/gantt";
 import { parseProjectProperties, updateProjectDate, updateProjectDates } from "../src/project-properties";
 const project = { scheduledDate: "2026-09-06", endDate: "2026-09-09", deadline: "2026-09-10" };
 describe("project Gantt", () => {

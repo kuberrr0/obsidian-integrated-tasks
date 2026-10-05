@@ -1,4 +1,5 @@
 import { parseYaml, type App, TFile } from "obsidian";
+import { addDays, daysBetween } from "./calendar";
 import { formatDate, formatLocalDate, todayIso } from "./date";
 import { findLiveLine } from "./markdown";
 import { parseTaskLine, repeatRuleList, type ParsedTokenRange } from "./parser";
@@ -36,14 +37,6 @@ export function isRepeatingTask(app: App, task: Task): boolean {
     try { return Boolean(recurringFile(app, task)); } catch { return false; }
 }
 
-const addDays = (date: string, days: number): string => {
-    const [year, month, day] = date.split("-").map(Number);
-    return formatLocalDate(new Date(year, month - 1, day + days, 12));
-};
-const dayDistance = (from: string, to: string): number => {
-    const utc = (date: string): number => { const [year, month, day] = date.split("-").map(Number); return Date.UTC(year, month - 1, day); };
-    return Math.round((utc(to) - utc(from)) / 86400000);
-};
 
 /** An inline repeat keeps no anchor, so a date on its month's last day stays there: Jan 31 goes to Feb 28, then Mar 31. */
 const monthEndAnchor = (date: string): string | undefined => {
@@ -62,7 +55,7 @@ export function advanceInlineRepeat(task: Pick<Task, "repeat" | "scheduledDate" 
     if (!task.scheduledDate && task.deadline) return { scheduledDate: undefined, deadline: nextRepeatDate(rules, task.deadline, monthEndAnchor(task.deadline)) };
     const from = task.scheduledDate ?? today;
     const next = nextRepeatDate(rules, from, monthEndAnchor(from));
-    return { scheduledDate: next, deadline: task.deadline ? addDays(task.deadline, dayDistance(from, next)) : undefined };
+    return { scheduledDate: next, deadline: task.deadline ? addDays(task.deadline, daysBetween(from, next)) : undefined };
 }
 
 function frontmatter(content: string): unknown {
@@ -165,7 +158,7 @@ export function advanceRecurringTask(content: string, task: Task, next: string, 
     if (deadline && parsed.deadline) {
         const inner = raw.slice(deadline.from + 1, deadline.to - 1);
         const lead = inner.length - inner.trimStart().length;
-        const moved = addDays(parsed.deadline, dayDistance(parsed.scheduledDate, next));
+        const moved = addDays(parsed.deadline, daysBetween(parsed.scheduledDate, next));
         edits.push({ range: deadline, text: `{${inner.slice(0, lead)}${redate(inner.slice(lead), moved, dateFormat)}}` });
     }
     let text = raw;

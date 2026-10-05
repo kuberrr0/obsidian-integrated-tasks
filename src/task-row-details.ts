@@ -1,5 +1,6 @@
 import { formatDuration, repeatLabel } from "./parser";
 import { setIcon } from "obsidian";
+import { daysBetween } from "./calendar";
 import { formatDate, todayIso } from "./date";
 import { isDeferred } from "./query";
 import type { TaskEditorProperty } from "./task-editor";
@@ -7,8 +8,7 @@ import type { Task, TaskGrouping, TaskProperty } from "./types";
 
 /** Calendar-day differences avoid daylight-saving-hour rounding. */
 export function taskDayDistance(date: string, now = new Date()): number {
-    const [year, month, day] = date.split("-").map(Number);
-    return Math.round((Date.UTC(year, month - 1, day) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+    return daysBetween(todayIso(now), date);
 }
 
 export function taskScheduleLabel(date: string, now = new Date()): string {

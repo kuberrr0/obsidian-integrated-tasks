@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 vi.mock("obsidian", async importOriginal => ({ ...await importOriginal<typeof import("./obsidian-mock")>(), Notice: class {}, setIcon: vi.fn() }));
 import { renderGantt } from "../src/gantt-view";
 import { addDays } from "../src/calendar";
-import { daysBetween } from "../src/gantt";
+import { daysBetween } from "../src/calendar";
 import { ganttSegments, shiftGantt } from "../src/gantt";
 
 it("moves the arrows by a calendar month, quarter, year or five years, keeping the day where the month has it", () => {

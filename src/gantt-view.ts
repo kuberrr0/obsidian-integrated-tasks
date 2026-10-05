@@ -1,8 +1,8 @@
 import { Notice, setIcon } from "obsidian";
-import { addDays } from "./calendar";
+import { addDays, daysBetween } from "./calendar";
 import { formatDate, todayIso } from "./date";
 import { projectHierarchy } from "./project-hierarchy";
-import { ganttSegments, ganttZoomFor, shiftGantt, daysBetween, GANTT_MAX_SCALE, GANTT_MIN_SCALE, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate, GANTT_ZOOMS, type GanttZoom, type GanttHandle, type ProjectDateField } from "./gantt";
+import { ganttSegments, ganttZoomFor, shiftGantt, GANTT_MAX_SCALE, GANTT_MIN_SCALE, ganttDateAt, ganttSelection, ganttRange, resizeProjectDate, GANTT_ZOOMS, type GanttZoom, type GanttHandle, type ProjectDateField } from "./gantt";
 import type { Project } from "./types";
 import type { ProjectDraft } from "./project-creator";
 import { projectStatuses, renderProjectProgress, type ProjectStatus } from "./project-progress";
