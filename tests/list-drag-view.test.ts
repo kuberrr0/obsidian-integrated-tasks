@@ -58,7 +58,8 @@ function list(markdown: string, options: { dragged?: (task: Task) => Task[]; all
 }
 const gap = () => document.querySelector<HTMLElement>(".tm-drop-gap");
 const preview = () => document.querySelector<HTMLElement>(".tm-drag-preview");
-const settle = () => new Promise(resolve => setTimeout(resolve, 50));
+// Past the 150ms glide back into place.
+const settle = () => new Promise(resolve => setTimeout(resolve, 200));
 
 it.each(["title", "body"] as const)("drags an unselected task from its %s and suppresses the post-drag edit click", async surface => {
   const { tasks, rows, drop, start, point } = list("- [ ] A\n- [ ] B");
