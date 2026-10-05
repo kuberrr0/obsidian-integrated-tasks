@@ -158,6 +158,7 @@ export class TaskNavigationView extends ItemView {
     container.empty();
     container.addClass("tm-navigation");
     container.classList.toggle("tm-density-compact", this.plugin.settings.density === "compact");
+    container.classList.toggle("tm-style-things", this.plugin.settings.style === "things");
     const header = container.createDiv({ cls: "nav-header tm-nav-header" });
     const toolbar = header.createDiv({ cls: "nav-buttons-container", attr: { role: "toolbar", "aria-label": "Task actions" } });
     const buttons: HTMLButtonElement[] = [];

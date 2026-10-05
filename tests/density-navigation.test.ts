@@ -42,8 +42,11 @@ it("shows Today with calendar-x in the Griply style, and a star in the Things st
   };
   view.refresh();
   expect(todayIcon()).toBe("calendar-x");
+  // Only the Things style fills it (see styles.css).
+  expect(view.containerEl.querySelector(".tm-navigation")!.classList.contains("tm-style-things")).toBe(false);
   vi.mocked(setIcon).mockClear();
   settings.style = "things";
   view.refresh();
   expect(todayIcon()).toBe("star");
+  expect(view.containerEl.querySelector(".tm-navigation")!.classList.contains("tm-style-things")).toBe(true);
 });

@@ -58,8 +58,8 @@
 .tm-navigation .tm-nav-item.is-muted, .tm-navigation .tm-nav-item.is-section { --tm-nav-color: var(--text-faint); }
 .tm-nav-icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 16px; color: var(--tm-nav-color); }
 .tm-nav-icon svg { width: 16px; height: 16px; }
-/* Today's star is filled, as Things draws it. */
-.tm-navigation .tm-nav-item.is-yellow .tm-nav-icon svg { fill: currentColor; }
+/* In the Things style Today's star is filled, as Things draws it; the Griply style's calendar stays an outline. */
+.tm-navigation.tm-style-things .tm-nav-item.is-yellow .tm-nav-icon svg { fill: currentColor; }
 .tm-navigation button.tm-nav-label {
   display: block;
   flex: 1;
@@ -960,10 +960,8 @@ button.tm-gantt-handle.is-finish:focus-visible,
   background: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 12%, var(--background-primary));
 }
 
-/* No separate "active" row: the arrow keys move the selection, so a focused row looks like any other. A focused row
-   with nothing selected (after Escape, or on tabbing into the list) is outlined, so the keyboard's place shows. */
+/* No separate "active" row: the arrow keys move the selection, so a focused row looks like any other. */
 .tm-main-view .tm-task-item:focus-visible { outline: none; }
-.tm-main-view .tm-task-item:focus-visible:not(.is-selected) { outline: 2px solid var(--background-modifier-border-focus, var(--interactive-accent)); outline-offset: -2px; }
 
 /* Titles never wrap, in any layout: a long one ends with an ellipsis, clipped within the title only. */
 .tm-main-view .tm-kanban button.tm-task-title {
