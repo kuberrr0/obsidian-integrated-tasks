@@ -138,6 +138,15 @@ describe("date parser", () => {
   it("normalizes dates written in the Daily Notes format", () => {
     expect(parseDateExpression("Sep 5, 2026", reference, "MMM D, YYYY")).toBe("2026-09-05");
   });
+
+  it("reads unpadded numeric dates day-first when the format is", () => {
+    for (const format of ["DD/MM/YYYY", "DD.MM.YYYY", "DD-MM-YYYY"]) {
+      const separator = format[2];
+      expect(parseDateExpression(`5${separator}10${separator}2026`, reference, format)).toBe("2026-10-05");
+      expect(parseTaskLine(`- [ ] Pay {5${separator}10${separator}2026}`, reference, format)?.deadline).toBe("2026-10-05");
+    }
+    expect(parseDateExpression("5/10/2026", reference, "MM/DD/YYYY")).toBe("2026-05-10");
+  });
 });
 
 describe("Daily Notes settings", () => {

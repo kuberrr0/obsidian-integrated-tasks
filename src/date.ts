@@ -47,6 +47,13 @@ export function parseStrictDateExpression(value: string, dateFormat: string | st
   return formatted.isValid() ? formatted.format(DEFAULT_DATE_FORMAT) : undefined;
 }
 
+/** Chrono reads 5/10/2026 day-first when the date format puts the day before the month, as in DD/MM/YYYY. */
+function chronoFor(dateFormat: string | string[]): chrono.Chrono {
+  const format = [dateFormat].flat()[0] ?? DEFAULT_DATE_FORMAT;
+  const day = format.indexOf("D");
+  return day >= 0 && day < format.indexOf("M") ? chrono.en.GB : chrono.casual;
+}
+
 export function parseDateExpression(
   value: string,
   reference = new Date(),
@@ -58,7 +65,7 @@ export function parseDateExpression(
   const strict = parseStrictDateExpression(trimmed, dateFormat);
   if (strict) return strict;
 
-  const parsed = chrono.parse(trimmed, reference, { forwardDate: true }).find((result) =>
+  const parsed = chronoFor(dateFormat).parse(trimmed, reference, { forwardDate: true }).find((result) =>
     result.index === 0 && result.text.length === trimmed.length
   );
   return parsed ? formatLocalDate(parsed.start.date()) : undefined;
@@ -234,7 +241,7 @@ export function parseDateTimeExpression(value: string, reference = new Date(), d
     if (!suffix || time) return { date: strict.format(DEFAULT_DATE_FORMAT), ...(time ? { time } : {}) };
   }
   if (strict) return undefined;
-  const result = chrono.parse(text, reference, { forwardDate: true }).find((match) =>
+  const result = chronoFor(dateFormat).parse(text, reference, { forwardDate: true }).find((match) =>
     match.index === 0 && match.text.length === text.length && !match.end &&
     (match.start.isCertain("day") || match.start.isCertain("weekday"))
   );
