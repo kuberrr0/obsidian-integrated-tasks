@@ -181,6 +181,8 @@ export interface TaskManagerSettings {
   ignoredPaths: string[];
   /** Tags whose notes (frontmatter) and tasks are left out of every view. */
   ignoredTags: string[];
+  /** Set once the task sidebar and Task Details have opened on first run; closed later, they stay closed. */
+  panelsPlaced: boolean;
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
@@ -205,7 +207,8 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   viewOptions: {},
   viewLayouts: {},
   ignoredPaths: [],
-  ignoredTags: []
+  ignoredTags: [],
+  panelsPlaced: false
 };
 
 export type TaskEditorPreset = Partial<Omit<TaskDraft, "indent">>;

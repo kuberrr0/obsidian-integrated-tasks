@@ -88,7 +88,8 @@ function environment(paths: string[] = ["A.md"]) {
   const workspace = Object.assign(new FakeEvents(), {
     onLayoutReady: (callback: () => void) => { layoutReady = callback; },
     getLeavesOfType: (type: string) => leaves.filter(leaf => leaf.type === type),
-    getLeftLeaf: () => null,
+    getLeftLeaf: vi.fn(() => null),
+    getRightLeaf: vi.fn(() => null),
     getLeaf: vi.fn(),
     getMostRecentLeaf: () => null,
     revealLeaf: vi.fn(async () => {}),
@@ -180,6 +181,33 @@ describe("plugin lifecycle", () => {
     vi.advanceTimersByTime(60_000);
     expect(rescan).toHaveBeenCalledOnce();
     plugin.unload();
+  });
+
+  it("opens the task sidebar and Task Details on first run only, so a closed one stays closed", async () => {
+    const { env, plugin } = await loaded();
+    await flush();
+    expect(env.workspace.getLeftLeaf).toHaveBeenCalledOnce();
+    expect(env.workspace.getRightLeaf).toHaveBeenCalledOnce();
+    expect(plugin.settings.panelsPlaced).toBe(true);
+    plugin.unload();
+    const again = environment();
+    const next = new TaskManagerPlugin(again.app, {} as never);
+    vi.spyOn(next, "loadData").mockResolvedValue({ panelsPlaced: true });
+    await next.onload();
+    again.layoutReady();
+    await flush();
+    expect(again.workspace.getLeftLeaf).not.toHaveBeenCalled();
+    expect(again.workspace.getRightLeaf).not.toHaveBeenCalled();
+    next.unload();
+  });
+
+  it("turns notes open as task views back into notes on unload, leaving lists such as Today", async () => {
+    const { env, plugin } = await loaded(["A.md"]);
+    const page = env.addLeaf(TASK_MAIN_VIEW, { mode: "all", pagePath: "A.md", markdownState: { file: "A.md", mode: "source" } });
+    const today = env.addLeaf(TASK_MAIN_VIEW, { mode: "today" });
+    plugin.unload();
+    expect(page.setViewState).toHaveBeenCalledExactlyOnceWith({ type: "markdown", state: { file: "A.md", mode: "source" } });
+    expect(today.setViewState).not.toHaveBeenCalled();
   });
 
   it("does nothing on layout ready after an early unload", async () => {

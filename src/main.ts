@@ -202,8 +202,12 @@ export default class TaskManagerPlugin extends Plugin {
 
     this.app.workspace.onLayoutReady(() => {
       if (this.unloaded) return;
-      void this.activateNavigation(false).catch(error => new Notice(String(error)));
-      void this.activateTaskSidebar(false).catch(error => new Notice(String(error)));
+      // The task sidebar and Task Details open on first run; after that each stays as it was left, closed too.
+      if (!this.settings.panelsPlaced) {
+        void Promise.all([this.activateNavigation(false), this.activateTaskSidebar(false)])
+          .then(async () => { this.settings.panelsPlaced = true; await this.saveSettings(); })
+          .catch(error => new Notice(String(error)));
+      }
       // Index after the workspace loads, so a large vault does not delay startup. Views
       // restored meanwhile show what is indexed so far and refresh when it finishes.
       void this.index.initialize()
@@ -300,6 +304,14 @@ export default class TaskManagerPlugin extends Plugin {
     this.taskModeController?.dispose();
     this.index.destroy();
     dismissPopovers();
+    // A note open as its task view (in task mode) goes back to the note, so a disabled plugin leaves no dead tab.
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
+      const state = leaf.getViewState().state ?? {};
+      const path = typeof state.pagePath === "string" ? state.pagePath : undefined;
+      if (!path || !(this.app.vault.getAbstractFileByPath(path) instanceof TFile)) continue;
+      const markdownState = state.markdownState && typeof state.markdownState === "object" ? state.markdownState as Record<string, unknown> : {};
+      void leaf.setViewState({ type: "markdown", state: { ...markdownState, file: path } });
+    }
   }
 
   async loadSettings(): Promise<void> {
@@ -309,6 +321,7 @@ export default class TaskManagerPlugin extends Plugin {
     for (const key of LEGACY_SETTINGS) delete (this.settings as unknown as Record<string, unknown>)[key];
     this.settings.smartLists = Array.isArray(this.settings.smartLists) ? this.settings.smartLists : [];
     this.settings.taskMode = this.settings.taskMode === true;
+    this.settings.panelsPlaced = this.settings.panelsPlaced === true;
     if (this.settings.tagFormat !== "hash" && this.settings.tagFormat !== "wikilink") this.settings.tagFormat = DEFAULT_SETTINGS.tagFormat;
     useTagFormat(this.settings.tagFormat);
     if (typeof this.settings.dateFormat !== "string") this.settings.dateFormat = DEFAULT_SETTINGS.dateFormat;
