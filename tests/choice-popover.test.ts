@@ -3,7 +3,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", async original => ({ ...await original<typeof import("./obsidian-mock")>(), setIcon: vi.fn() }));
 import { Platform } from "obsidian";
 import { installObsidianDom } from "./helpers/obsidian-dom";
-import { openChoicePopover, placePopover, PRIORITY_CHOICES, type ChoiceInput } from "../src/choice-popover";
+import { dismissPopovers, openChoicePopover, placePopover, PRIORITY_CHOICES, type ChoiceInput } from "../src/choice-popover";
+import { openDatePopover } from "../src/date-popover";
 import { parseRepeatInput } from "../src/parser";
 
 beforeAll(() => installObsidianDom());
@@ -50,6 +51,22 @@ describe("priority popover", () => {
     document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     expect(second.handle.element.isConnected).toBe(false);
     expect(second.choose).not.toHaveBeenCalled();
+  });
+});
+
+describe("closing with their view", () => {
+  it("closes, without saving, the popovers opened from inside a view, then every one", () => {
+    const view = document.body.createDiv();
+    const save = vi.fn();
+    const date = openDatePopover({ anchor: view.createEl("button"), kind: "deadline", value: {}, dateFormat: "YYYY-MM-DD", save });
+    (date.element.querySelector("input") as HTMLInputElement).value = "2026-10-05";
+    const other = priority();
+    dismissPopovers(view);
+    expect(date.element.isConnected).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(other.handle.element.isConnected).toBe(true);
+    dismissPopovers();
+    expect(other.handle.element.isConnected).toBe(false);
   });
 });
 

@@ -160,26 +160,37 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
   }
   const handle = { element, close };
   open = handle;
-  registerDismiss(element, close);
+  registerDismiss(element, close, options.anchor);
   if (input) input.focus();
   else (items.find(item => item.getAttribute("aria-selected") === "true") ?? items[0])?.focus();
   return handle;
 }
 
 /** How each open popover closes on Escape, so a modal can close it the same way without sending a key. */
-const dismissers = new WeakMap<HTMLElement, () => void>();
+const dismissers = new Map<HTMLElement, { dismiss: () => void; anchor?: HTMLElement }>();
 
-export function registerDismiss(element: HTMLElement, dismiss: () => void): void {
-  dismissers.set(element, dismiss);
+/** `anchor` is what the popover opened from; closing the view that holds it closes the popover too. */
+export function registerDismiss(element: HTMLElement, dismiss: () => void, anchor?: HTMLElement): void {
+  // Popovers closed since by a click or a pick are let go here.
+  for (const open of dismissers.keys()) if (!open.isConnected) dismissers.delete(open);
+  dismissers.set(element, { dismiss, anchor });
 }
 
 /** Close `element` as its Escape would; false when it is not an open popover. */
 export function dismissPopover(element: HTMLElement): boolean {
-  const dismiss = dismissers.get(element);
-  if (!dismiss) return false;
+  const entry = dismissers.get(element);
+  if (!entry) return false;
   dismissers.delete(element);
-  dismiss();
+  entry.dismiss();
   return true;
+}
+
+/** Close, without saving, the open popovers opened from inside `container`, or every one without it. */
+export function dismissPopovers(container?: HTMLElement): void {
+  for (const [element, { anchor }] of [...dismissers]) {
+    if (!element.isConnected) dismissers.delete(element);
+    else if (!container || (anchor && container.contains(anchor))) dismissPopover(element);
+  }
 }
 
 /**

@@ -235,7 +235,7 @@ export function openDatePopover(options: DatePopoverOptions): DatePopover {
 
   const popover: DatePopover = { element, close: commit => close(commit) };
   open = popover;
-  registerDismiss(element, () => close(false));
+  registerDismiss(element, () => close(false), options.anchor);
   input.focus();
   return popover;
 }

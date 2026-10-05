@@ -15,7 +15,7 @@ import { draftFromTask, draftFromTitle, draftMatchesTask, draftWithTitle } from 
 import { nextWeek, openDatePopover } from "./date-popover";
 import { openActionMenu, openTagsPopover, openTaskMenu, priorityIcons } from "./task-menu";
 import { openConfirm } from "./confirm-modal";
-import { openChoicePopover, PRIORITY_CHOICES, projectChoices, repeatChoices, REPEAT_INPUT, type Choice, type ChoiceInput } from "./choice-popover";
+import { dismissPopovers, openChoicePopover, PRIORITY_CHOICES, projectChoices, repeatChoices, REPEAT_INPUT, type Choice, type ChoiceInput } from "./choice-popover";
 import type { BulkTaskPatch } from "./bulk-tasks";
 import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
@@ -356,6 +356,7 @@ export class TaskMainView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    dismissPopovers(this.containerEl);
     await this.endNewTask();
     await this.saveCard();
     this.expanded = undefined;

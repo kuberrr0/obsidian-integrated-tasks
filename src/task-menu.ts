@@ -220,6 +220,7 @@ export function openActionMenu(options: ActionMenuOptions): TaskMenu {
   }
   const menu: TaskMenu = { element, close };
   open = menu;
+  registerDismiss(element, close, options.returnFocus);
   focusable()[0]?.focus();
   return menu;
 }
@@ -304,7 +305,7 @@ export function openTagsPopover(options: TagsPopoverOptions): { element: HTMLEle
     element.remove();
     if (options.anchor.isConnected) options.anchor.focus({ preventScroll: true });
   }
-  registerDismiss(element, close);
+  registerDismiss(element, close, options.anchor);
   input.focus();
   return { element, close };
 }

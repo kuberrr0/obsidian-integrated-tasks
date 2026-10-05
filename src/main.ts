@@ -1,3 +1,4 @@
+import { dismissPopovers } from "./choice-popover";
 import { todayIso } from "./date";
 import { parseIgnoreList } from "./ignore";
 import { noteRecurringCompletion } from "./note-recurring-completion";
@@ -291,6 +292,7 @@ export default class TaskManagerPlugin extends Plugin {
     if (this.viewOptionsSave !== undefined) void this.saveSettings();
     this.taskModeController?.dispose();
     this.index.destroy();
+    dismissPopovers();
   }
 
   async loadSettings(): Promise<void> {
