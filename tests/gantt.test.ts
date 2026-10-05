@@ -4,11 +4,11 @@ import { parseProjectProperties, updateProjectDate, updateProjectDates } from ".
 const project = { scheduledDate: "2026-09-06", endDate: "2026-09-09", deadline: "2026-09-10" };
 describe("project Gantt", () => {
   it("spans start to end independently of the deadline", () => {
-    expect(ganttRange(project)).toEqual({ start: project.scheduledDate, end: project.endDate, finishField: "endDate" });
+    expect(ganttRange(project)).toEqual({ start: project.scheduledDate, end: project.endDate });
     expect(ganttRange({ ...project, endDate: undefined })).toBeUndefined();
   });
   it("uses the end date without a deadline", () => {
-    expect(ganttRange({ ...project, deadline: undefined })).toEqual({ start: project.scheduledDate, end: project.endDate, finishField: "endDate" });
+    expect(ganttRange({ ...project, deadline: undefined })).toEqual({ start: project.scheduledDate, end: project.endDate });
   });
   it("does not invent ranges for missing or reversed dates", () => {
     expect(ganttRange({ deadline: "2026-09-10" })).toBeUndefined();
@@ -19,14 +19,12 @@ describe("project Gantt", () => {
     expect(resizeProjectDate(project, "start", -2)).toEqual({ field: "scheduledDate", value: "2026-09-04" });
     expect(resizeProjectDate(project, "finish", 2)).toEqual({ field: "endDate", value: "2026-09-11" });
     expect(resizeProjectDate({ ...project, deadline: undefined }, "finish", 2)).toEqual({ field: "endDate", value: "2026-09-11" });
-    expect(resizeProjectDate(project, "end", 3)).toEqual({ field: "endDate", value: "2026-09-12" });
     expect(project.deadline).toBe("2026-09-10");
   });
   it("prevents crossing start/end boundaries while allowing end dates after deadlines", () => {
     expect(resizeProjectDate(project, "start", 20).value).toBe("2026-09-09");
     expect(resizeProjectDate(project, "finish", -20).value).toBe("2026-09-06");
-    expect(resizeProjectDate(project, "end", -20).value).toBe("2026-09-06");
-    expect(resizeProjectDate(project, "end", 5).value).toBe("2026-09-14");
+    expect(resizeProjectDate(project, "finish", 5).value).toBe("2026-09-14");
   });
   it("counts local calendar days across daylight-saving and leap-year boundaries", () => {
     expect(daysBetween("2026-03-07", "2026-03-09")).toBe(2);

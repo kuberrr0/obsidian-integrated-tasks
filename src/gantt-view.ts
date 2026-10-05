@@ -325,13 +325,13 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       bar.style.left = `${Math.max(0, from) * width + 2}px`;
       bar.style.width = `${Math.max(8, (Math.min(days, to) - Math.max(0, from)) * width - 4)}px`;
       bar.setText(`${formatDate(span.start, options.dateFormat)} – ${formatDate(span.end, options.dateFormat)}`);
-      bar.setAttribute("title", `${project.name}: ${formatDate(span.start, options.dateFormat)} – ${formatDate(span.end, options.dateFormat)} (${span.finishField === "deadline" ? "deadline" : "end date"})`);
+      bar.setAttribute("title", `${project.name}: ${formatDate(span.start, options.dateFormat)} – ${formatDate(span.end, options.dateFormat)} (end date)`);
       for (const [handle, button] of handles) {
         const date = candidate[fieldFor(handle)]!;
         const offset = daysBetween(start, date);
         button.hidden = offset < 0 || offset >= days;
-        button.style.left = `${offset * width + (handle === "finish" ? width - 10 : handle === "end" ? width / 2 - 6 : 2)}px`;
-        button.setAttribute("title", `${handle === "start" ? "Start" : fieldFor(handle) === "deadline" ? "Deadline" : "End"}: ${formatDate(date, options.dateFormat)} — drag or use arrow keys`);
+        button.style.left = `${offset * width + (handle === "finish" ? width - 10 : 2)}px`;
+        button.setAttribute("title", `${handle === "start" ? "Start" : "End"}: ${formatDate(date, options.dateFormat)} — drag or use arrow keys`);
       }
     };
     if (project.color) {

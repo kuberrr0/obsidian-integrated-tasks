@@ -3,7 +3,7 @@ import type { ProjectProperties } from "./types";
 
 export type GanttZoom = "month" | "quarter" | "year" | "five-year";
 export type ProjectDateField = "scheduledDate" | "endDate" | "deadline";
-export type GanttHandle = "start" | "finish" | "end";
+export type GanttHandle = "start" | "finish";
 export const GANTT_ZOOMS: Record<GanttZoom, { days: number; width: number }> = {
   month: { days: 35, width: 32 }, quarter: { days: 91, width: 12 },
   year: { days: 366, width: 3 }, "five-year": { days: 1827, width: 0.7 }
@@ -34,17 +34,17 @@ export function daysBetween(start: string, end: string): number {
   const utc = (iso: string): number => { const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d); };
   return Math.round((utc(end) - utc(start)) / 86400000);
 }
-export function ganttRange(project: ProjectProperties): { start: string; end: string; finishField: "deadline" | "endDate"; marker?: string } | undefined {
+export function ganttRange(project: ProjectProperties): { start: string; end: string } | undefined {
   const start = project.scheduledDate;
   const end = project.endDate;
   if (!start || !end || end < start) return undefined;
-  return { start, end, finishField: "endDate" };
+  return { start, end };
 }
 /** Start/end dates snap to days independently of the deadline. */
 export function resizeProjectDate(project: ProjectProperties, handle: GanttHandle, delta: number): { field: ProjectDateField; value: string } {
   const range = ganttRange(project);
   if (!range) throw new Error("Set a start date and a valid end date first.");
-  const field = handle === "start" ? "scheduledDate" : handle === "end" ? "endDate" : range.finishField;
+  const field = handle === "start" ? "scheduledDate" : "endDate";
   const original = project[field];
   if (!original) throw new Error("This project has no end date to move.");
   let value = addDays(original, Math.round(delta));
