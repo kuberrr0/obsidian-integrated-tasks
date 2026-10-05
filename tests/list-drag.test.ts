@@ -34,8 +34,10 @@ describe("list task dragging", () => {
     await store.bulkDrop([tasks[0]], undefined, tasks[2], "child");
     tasks = scanTasks("Work.md", files["Work.md"]);
     const parent = tasks.find(task => task.title === "Parent")!;
-    expect(parent.indent).toBe(4);
-    expect(tasks.find(task => task.title === "Child")?.indent).toBe(6);
+    // In line with Other's own subtask, so it is Other's child rather than Other child's.
+    expect(parent.indent).toBe(2);
+    expect(parent.parentId).toBe(tasks.find(task => task.title === "Other")!.id);
+    expect(tasks.find(task => task.title === "Child")?.indent).toBe(4);
     await store.bulkDrop([parent], undefined, tasks[0], "after");
     expect(scanTasks("Work.md", files["Work.md"]).find(task => task.title === "Parent")?.parentId).toBeUndefined();
     expect(files["Work.md"]).toContain("- [ ] Other\n  - [ ] Other child\n- [ ] Parent\n  - [ ] Child\n    Child notes");
@@ -67,6 +69,13 @@ describe("list task dragging", () => {
     const tasks = scanTasks("Work.md", text);
     const changed = planBulkTasks(new Map([["Work.md", text]]), [{ task: tasks[0], draft: draftForGroup(tasks[0]) }], { anchor: tasks[2], placement: "child" });
     expect(changed.get("Work.md")).toBe("- [ ] B\r\n    - [ ] A\r\n        - [ ] Nested\r\n");
+  });
+  it("nests a task at the indentation of the anchor's other subtasks", () => {
+    const text = "- [ ] A\n  - [ ] A1\n- [ ] X\n";
+    const tasks = scanTasks("Work.md", text);
+    const changed = planBulkTasks(new Map([["Work.md", text]]), [{ task: tasks[2], draft: draftForGroup(tasks[2]) }], { anchor: tasks[0], placement: "child" });
+    expect(changed.get("Work.md")).toBe("- [ ] A\n  - [ ] A1\n  - [ ] X\n");
+    expect(scanTasks("Work.md", changed.get("Work.md")!)[2].parentId).toBe("Work.md:0");
   });
   it("recomputes moved block boundaries after new subtasks are added", async () => {
     const old = "- [ ] A\n- [ ] B\n";

@@ -71,6 +71,13 @@ describe("adding subtasks", () => {
     await store.addSubtask(parent, { title: "One and a half" }, one);
     expect(read()).toBe("- [ ] Parent\n\t- [ ] One\n\t\t- [ ] One child\n\t- [ ] One and a half\n\t- [ ] Two\n");
   });
+
+  it("lines a new last subtask up with the others, and keeps CRLF", async () => {
+    const content = "- [ ] Parent\r\n  - [ ] One\r\n- [ ] Next\r\n";
+    const { store, read } = setup(content);
+    await store.addSubtask(scanTasks("Project.md", content)[0], { title: "Two" });
+    expect(read()).toBe("- [ ] Parent\r\n  - [ ] One\r\n  - [ ] Two\r\n- [ ] Next\r\n");
+  });
 });
 
 it("writes a subtask's typed properties with it", async () => {

@@ -5,15 +5,15 @@ import { updateTaskDateTokens } from "./task-date-update";
 import { newTaskLines } from "./task-description";
 import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from "./bulk-tasks";
 import { draftForGroup, type ListDropGroup } from "./list-drag";
-import { copiedTaskText, duplicateTaskBlocks, insertAfterTask, liveTaskBlock, pastedTaskLines } from "./task-block";
+import { copiedTaskText, duplicateTaskBlocks, insertAfterTask, liveTaskBlock, pastedTaskLines, subtaskIndent } from "./task-block";
 import { parseTaskLine, scanTasks, serializeTask } from "./parser";
-import { TASK_INDENT } from "./task-indentation";
 import type { ListPlacement } from "./list-drag";
 import { splitDestination } from "./structure";
 import { normalizePath, type App, TFile, TFolder } from "obsidian";
 import {
   findLiveLine,
   insertIntoDestination,
+  lineEnding,
   removeLinesFromContent,
   toggleTaskInContent,
   updateTaskInContent
@@ -206,12 +206,11 @@ export class TaskStore {
       const file = this.requireFile(parent.path);
       await this.process(file, content => {
         const anchor = liveTaskBlock(content, after ?? parent, this.getDateFormat(), this.getSectionHeadingLevel());
-        const leading = /^[ \t]*/.exec(anchor.lines[0])![0];
-        const indent = after ? leading : leading + " ".repeat(TASK_INDENT);
+        const indent = after ? /^[ \t]*/.exec(anchor.lines[0])![0] : subtaskIndent(anchor);
         const line = indent + serializeTask({ ...subtask, status: "todo", completed: false, destination: parent.path, indent: 0 }, this.getDateFormat(), this.getLinkDates());
-        const lines = content.split("\n");
+        const lines = content.split(/\r?\n/);
         lines.splice(anchor.end, 0, line);
-        return lines.join("\n");
+        return lines.join(lineEnding(content));
       });
     });
   }

@@ -1,5 +1,6 @@
-import { findLiveLine, lineContext, type LineContext } from "./markdown";
+import { findLiveLine, lineContext, lineEnding, type LineContext } from "./markdown";
 import { rewriteTaskLine, scanTasks } from "./parser";
+import { TASK_INDENT } from "./task-indentation";
 import type { Task, TaskDraft } from "./types";
 
 const indentation = (line: string): number => [...(/^[ \t]*/.exec(line)?.[0] ?? "")].reduce((width, char) => width + (char === "\t" ? 4 : 1), 0);
@@ -30,6 +31,12 @@ export function liveTaskBlock(source: string | NoteSnapshot, task: Task, dateFor
   }
   if (live.endLine >= end) throw new Error("Task structure changed. Check its indentation in the note before moving it.");
   return { start, end, indent: live.indent, lines: lines.slice(start, end), description: live.description, descriptionLines: live.descriptionLines };
+}
+
+/** The indentation a new subtask takes: its first subtask's (2 spaces, a tab…), or one level deeper with none. */
+export function subtaskIndent(block: TaskBlock): string {
+  const child = block.lines.slice(1).find(line => CHECKLIST.test(line));
+  return child ? /^[ \t]*/.exec(child)![0] : /^[ \t]*/.exec(block.lines[0])![0] + " ".repeat(TASK_INDENT);
 }
 
 /**
@@ -95,9 +102,9 @@ export function pastedTaskLines(text: string): string[] | undefined {
 export function insertAfterTask(content: string, task: Task, lines: string[], dateFormat?: string, sectionHeadingLevel = 1): { content: string; line: number } {
   const block = liveTaskBlock(content, task, dateFormat, sectionHeadingLevel);
   const lead = /^[ \t]*/.exec(block.lines[0])![0];
-  const all = content.split("\n");
+  const all = content.split(/\r?\n/);
   all.splice(block.end, 0, ...lines.map(line => line.trim() ? lead + line : line));
-  return { content: all.join("\n"), line: block.end };
+  return { content: all.join(lineEnding(content)), line: block.end };
 }
 
 /** Rewrite the task line in place and shift the rest of the block; unchanged indentation (tabs included) is kept. */
