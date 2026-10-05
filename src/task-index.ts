@@ -137,7 +137,7 @@ export class TaskIndex {
     this.eventRefs.length = 0;
     this.pendingRefreshes.clear();
     this.listeners.clear();
-    void this.saveCache();
+    void this.saveCache().finally(() => this.cache?.close?.());
   }
 
   subscribe(listener: IndexListener): () => void {

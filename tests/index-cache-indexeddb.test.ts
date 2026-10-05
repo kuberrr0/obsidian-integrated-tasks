@@ -32,6 +32,18 @@ describe("IndexedDB index cache", () => {
     expect((await cache.load()).size).toBe(0);
   });
 
+  it("closes its connection, and opens it again for a later write", async () => {
+    const cache = new IndexedDbCache(app("v"), new IDBFactory());
+    await cache.load();
+    const db = (await (cache as unknown as { database: Promise<IDBDatabase> }).database);
+    const close = vi.spyOn(db, "close");
+    cache.close();
+    await flush();
+    expect(close).toHaveBeenCalledOnce();
+    await cache.put([record("A.md")]);
+    expect((await cache.load()).size).toBe(1);
+  });
+
   it("lets a second startup skip reading unchanged notes", async () => {
     const factory = new IDBFactory();
     const files = ["A.md", "B.md"].map(path => Object.assign(new TFile(), { path, extension: "md", stat: { ctime: 0, mtime: 1, size: 20 } }));

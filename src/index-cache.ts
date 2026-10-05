@@ -30,6 +30,8 @@ export interface IndexCache {
   put(notes: CachedNote[]): Promise<void>;
   delete(paths: string[]): Promise<void>;
   clear(): Promise<void>;
+  /** Lets go of the store once the plugin unloads; writes already started still finish. */
+  close?(): void;
 }
 
 export interface NoteScan {
@@ -159,6 +161,11 @@ export class IndexedDbCache implements IndexCache {
 
   clear(): Promise<void> {
     return this.write((store) => store.clear());
+  }
+
+  close(): void {
+    void this.database?.then(db => db?.close());
+    this.database = undefined;
   }
 
   private open(): Promise<IDBDatabase | undefined> {
