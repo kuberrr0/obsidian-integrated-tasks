@@ -1,5 +1,5 @@
 import { formatTags, normalizeTags, tagFormat, trailingTag } from "./task-tags";
-import { indentWidth } from "./task-indentation";
+import { indentText, indentWidth } from "./task-indentation";
 import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
 import { findInputDate, findInputDeadline, findInputTime, formatDate, formatLocalDate, parseDateTimeExpression, parseTimeExpression, removeSpans } from "./date";
 import { STATUS_CHARS, draftStatus, isClosedStatus, statusFromChar } from "./task-status";
@@ -364,7 +364,7 @@ export function parseTaskInput(
 }
 
 export function serializeTask(draft: TaskDraft, dateFormat?: string, linkDates = true): string {
-  const indent = " ".repeat(Math.max(0, draft.indent));
+  const indent = indentText(draft.indent);
   const title = draft.title.trim();
   const dateText = (date: string): string => linkDates ? `[[${formatDate(date, dateFormat)}]]` : formatDate(date, dateFormat);
   const metadata = [
@@ -395,7 +395,7 @@ export function rewriteTaskLine(raw: string, draft: TaskDraft, dateFormat?: stri
   if (!checkbox || !parsed) return serializeTask(draft, dateFormat, linkDates);
   const offset = raw.length - checkbox[3].length;
   const leading = checkbox[1];
-  const indent = indentWidth(leading) === draft.indent ? leading : " ".repeat(Math.max(0, draft.indent));
+  const indent = indentWidth(leading) === draft.indent ? leading : indentText(draft.indent);
   let marker = raw.slice(leading.length, offset);
   const status = draftStatus(draft);
   if (parsed.status !== status) marker = marker.replace(/\[.\]/, `[${STATUS_CHARS[status]}]`);
@@ -530,7 +530,7 @@ export function scanTasks(path: string, content: string, reference = new Date(),
           for (let blank = previous + 1; blank < lineNumber; blank++) { entry.lines.push(""); entry.lineNumbers.push(blank); }
         }
         entry.lineNumbers.push(lineNumber);
-        entry.lines.push(" ".repeat(indent) + line.trimStart());
+        entry.lines.push(indentText(indent) + line.trimStart());
         if (bullet) entry.bulletIndent = indent;
         descriptions.set(owner, entry);
       }

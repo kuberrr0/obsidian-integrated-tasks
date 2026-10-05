@@ -1,6 +1,6 @@
 import { findLiveLine, lineContext, lineEnding, type LineContext } from "./markdown";
 import { rewriteTaskLine, scanTasks } from "./parser";
-import { indentWidth, TASK_INDENT } from "./task-indentation";
+import { indentText, indentUnit, indentWidth } from "./task-indentation";
 import type { Task, TaskDraft } from "./types";
 
 
@@ -35,7 +35,7 @@ export function liveTaskBlock(source: string | NoteSnapshot, task: Task, dateFor
 /** The indentation a new subtask takes: its first subtask's (2 spaces, a tab…), or one level deeper with none. */
 export function subtaskIndent(block: TaskBlock): string {
   const child = block.lines.slice(1).find(line => CHECKLIST.test(line));
-  return child ? /^[ \t]*/.exec(child)![0] : /^[ \t]*/.exec(block.lines[0])![0] + " ".repeat(TASK_INDENT);
+  return child ? /^[ \t]*/.exec(child)![0] : /^[ \t]*/.exec(block.lines[0])![0] + indentUnit();
 }
 
 /**
@@ -110,6 +110,6 @@ export function insertAfterTask(content: string, task: Task, lines: string[], da
 export function rewriteBlock(block: TaskBlock, draft: TaskDraft, indent: number, dateFormat?: string, linkDates = true): string[] {
   return [rewriteTaskLine(block.lines[0], { ...draft, indent }, dateFormat, linkDates), ...block.lines.slice(1).map(line => {
     if (!line.trim() || indent === block.indent) return line;
-    return " ".repeat(Math.max(0, indentWidth(line) - block.indent + indent)) + line.replace(/^[ \t]*/, "");
+    return indentText(indentWidth(line) - block.indent + indent) + line.replace(/^[ \t]*/, "");
   })];
 }

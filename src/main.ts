@@ -1,5 +1,6 @@
 import { dismissPopovers } from "./choice-popover";
 import { todayIso } from "./date";
+import { useIndentation } from "./task-indentation";
 import { parseIgnoreList } from "./ignore";
 import { noteRecurringCompletion } from "./note-recurring-completion";
 import { isRepeatingTask, recurringFile, type RecurringOutcome } from "./recurring-task";
@@ -52,6 +53,12 @@ export default class TaskManagerPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    // Subtasks are indented as Obsidian's editor indents lists: Settings › Editor › Indent using tabs and Tab indent size.
+    const vault = this.app.vault as typeof this.app.vault & { getConfig?(key: string): unknown };
+    useIndentation(() => {
+      const size = Number(vault.getConfig?.("tabSize"));
+      return { useTab: vault.getConfig ? vault.getConfig("useTab") !== false : false, tabSize: Number.isInteger(size) && size > 0 ? size : 4 };
+    });
     this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat(), new IndexedDbCache(this.app));
     this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates, () => this.settings.sectionHeadingLevel, () => this.settings.completionDates);
     this.store.onChange = change => this.offerUndo(change);

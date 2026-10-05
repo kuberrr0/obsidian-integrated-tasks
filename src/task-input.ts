@@ -1,6 +1,6 @@
 import { findInputDate, findInputDeadline, findInputTime, removeSpans } from "./date";
 import { parseTaskInput, parseTaskLine, serializeTask, taskTextRanges, type ParsedTaskLine, type ParsedTokenRange } from "./parser";
-import { indentWidth as width } from "./task-indentation";
+import { indentText, indentWidth as width } from "./task-indentation";
 import type { TaskDraft } from "./types";
 
 
@@ -24,7 +24,7 @@ export function parseTaskTreeInput(input: string, destination: string, reference
     const checkbox = /^[-+*]\s+\[[ xX/?-]\](?:\s|$)/.test(text);
     const bullet = /^[-+*]\s+/.test(text);
     if (!checkbox && ((bullet && indent > 0) || (descriptionIndent !== undefined && indent > descriptionIndent))) {
-      additionalLines.push(" ".repeat(indent) + text);
+      additionalLines.push(indentText(indent) + text);
       if (bullet) descriptionIndent = indent;
       continue;
     }

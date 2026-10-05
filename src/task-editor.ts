@@ -1,5 +1,6 @@
 import { TaskLineEditor } from "./task-line-editor";
 import { parseTaskTreeInput, replaceTaskTokens, type InputTokenKind } from "./task-input";
+import { indentText } from "./task-indentation";
 import type { TaskEditorPreset } from "./types";
 import { presentAsBottomSheet, trackModalViewport } from "./mobile-layout";
 import { draftFromTask, draftWithTitle } from "./task-draft";
@@ -80,7 +81,7 @@ export class TaskEditorModal extends Modal {
     const taskLine = rawField.createDiv({ cls: "tm-editor-task-line tm-note-task-line" });
     // The status is the last property button, below the text.
     this.chosenStatus = draftStatus(this.draft);
-    this.taskIndent = " ".repeat(this.draft.indent);
+    this.taskIndent = indentText(this.draft.indent);
     // The field holds the title alone, as a card's does (empty for a new task): the task's properties, a new one's
     // from its view (a tag, date, project or group), are on the buttons below, and a token typed into the title sets
     // its property.
