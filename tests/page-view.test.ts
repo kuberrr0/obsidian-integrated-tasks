@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, onTestFinished } from "vitest";
 import { MarkdownView, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 vi.mock("obsidian", async (importOriginal) => ({
@@ -22,6 +22,7 @@ import { openChoicePopover, type ChoicePopoverOptions } from "../src/choice-popo
 
 import TaskManagerPlugin from "../src/main";
 import { TaskMainView } from "../src/task-view";
+import { TaskPropertyEditors } from "../src/task-property-editors";
 import { scanTasks } from "../src/parser";
 import { setTagFormat } from "../src/task-tags";
 import type { Task, TaskViewState } from "../src/types";
@@ -535,9 +536,10 @@ it("opens the editor for one task, the menu for several, and clears the selectio
   expect(openEditor).toHaveBeenLastCalledWith(expect.objectContaining({ task: tasks[2] }));
 });
 
-it.each([["tags", "openTagsEditor"], ["repeat", "openRepeatEditor"], ["defer", "openSnoozeEditor"]])("property clicks edit %s in a popover for the selection", (property, editor) => {
+it.each([["tags", "tags"], ["repeat", "repeat"], ["defer", "snooze"]] as const)("property clicks edit %s in a popover for the selection", (property, editor) => {
   const { view, internals, rows, tasks, openEditor } = selectionView();
-  const popover = vi.spyOn(view as unknown as Record<string, (tasks: Task[]) => void>, editor).mockImplementation(() => {});
+  const popover = vi.spyOn(TaskPropertyEditors.prototype, editor).mockImplementation(() => {});
+  onTestFinished(() => popover.mockRestore());
   rows[0].contextmenu(); rows[1].contextmenu(undefined, { metaKey: true });
   internals.editTask(tasks[0], property);
   expect(popover).toHaveBeenCalledOnce();
@@ -547,13 +549,14 @@ it.each([["tags", "openTagsEditor"], ["repeat", "openRepeatEditor"], ["defer", "
 });
 
 it.each(["scheduledDate", "deadline", "durationMinutes", "priority"])("edits %s in a popover, for the whole selection, instead of a modal", property => {
-  const { view, internals, rows, tasks, openEditor } = selectionView();
-  const popover = vi.spyOn(view as unknown as { openDateEditor(tasks: Task[], property: string): boolean }, "openDateEditor").mockReturnValue(true);
+  const { internals, rows, tasks, openEditor } = selectionView();
+  const popover = vi.spyOn(TaskPropertyEditors.prototype, "date").mockReturnValue(true);
+  onTestFinished(() => popover.mockRestore());
   rows[0].contextmenu(); rows[1].contextmenu(undefined, { metaKey: true });
   internals.editTask(tasks[0], property);
-  expect(popover).toHaveBeenCalledExactlyOnceWith([tasks[0], tasks[1]], property, undefined);
+  expect(popover).toHaveBeenCalledExactlyOnceWith([tasks[0], tasks[1]], property, expect.anything());
   internals.editTask(tasks[2], property);
-  expect(popover).toHaveBeenLastCalledWith([tasks[2]], property, undefined);
+  expect(popover).toHaveBeenLastCalledWith([tasks[2]], property, expect.anything());
   expect(openEditor).not.toHaveBeenCalled();
 });
 
@@ -691,8 +694,9 @@ it("Mod-clicking a selected title deselects only that task without opening an ed
 });
 
 it.each([false, true])("lets property controls handle clicks before opening an editor (selected: %s)", selected => {
-  const { view, internals, rows, tasks, openEditor } = selectionView();
-  const repeat = vi.spyOn(view as unknown as { openRepeatEditor(tasks: Task[]): void }, "openRepeatEditor").mockImplementation(() => {});
+  const { internals, rows, tasks, openEditor } = selectionView();
+  const repeat = vi.spyOn(TaskPropertyEditors.prototype, "repeat").mockImplementation(() => {});
+  onTestFinished(() => repeat.mockRestore());
   if (selected) rows[0].contextmenu();
   const property = { role: "button" };
   const target = { closest: (selectors: string) => selectors.split(", ").includes("[role=button]") ? property : undefined };

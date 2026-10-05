@@ -9,13 +9,14 @@ import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardPropertie
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { cloneTaskFilters, smartListDraft, undatedFilters, type SmartListDraft } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
+import { TaskPropertyEditors } from "./task-property-editors";
 import type { TaskEditorProperty } from "./task-editor";
 import type { ProjectDraft } from "./project-creator";
 import { draftFromTask, draftFromTitle, draftMatchesTask, draftWithTitle } from "./task-draft";
-import { nextWeek, openDatePopover } from "./date-popover";
+import { openDatePopover } from "./date-popover";
 import { openActionMenu, openTagsPopover, openTaskMenu, priorityIcons } from "./task-menu";
 import { openConfirm } from "./confirm-modal";
-import { dismissPopovers, openChoicePopover, PRIORITY_CHOICES, projectChoices, repeatChoices, REPEAT_INPUT, type Choice, type ChoiceInput } from "./choice-popover";
+import { dismissPopovers, openChoicePopover, PRIORITY_CHOICES, type Choice } from "./choice-popover";
 import type { BulkTaskPatch } from "./bulk-tasks";
 import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
@@ -125,6 +126,7 @@ export class TaskMainView extends ItemView {
   private unsubscribe?: () => void;
   private taskResults?: HTMLElement;
   private listDrag?: ListDragController;
+  private propertyEditors?: TaskPropertyEditors;
   private renderAfterDrag = false;
   private selection = new TaskSelection();
   /** The task open as a card in the Things style, with its unsaved title and notes. */
@@ -1571,7 +1573,7 @@ export class TaskMainView extends ItemView {
    */
   editTaskProperty(tasks: Task[], property: TaskEditorProperty | "status" | "project", anchor: HTMLElement): void {
     if (!tasks.length) return;
-    if (property === "project") this.openProjectChoice(tasks, anchor);
+    if (property === "project") this.editors.project(tasks, anchor);
     else if (property === "status") {
       openChoicePopover({
         anchor, label: "Status", selected: tasks.every(task => task.status === tasks[0].status) ? tasks[0].status : undefined, cycleKey: "s",
@@ -1635,15 +1637,15 @@ export class TaskMainView extends ItemView {
       scheduled: shared(item => item.scheduledDate), priority: shared(item => item.priority),
       complete: () => this.setStatus(task, tasks.every(item => item.completed) ? "todo" : "done", tasks),
       schedule: date => void this.commit(() => this.plugin.store.bulkUpdate(tasks, { scheduledDate: date })),
-      pickDate: anchor => void this.openDateEditor(tasks, "scheduledDate", anchor, true, () => menu.close()),
+      pickDate: anchor => void this.editors.date(tasks, "scheduledDate", anchor, true, () => menu.close()),
       setPriority: priority => void this.commit(() => this.plugin.store.bulkUpdate(tasks.filter(item => item.priority !== priority), { priority })),
       submenus: [
-        { label: "Project", icon: "folder-input", key: "g", open: anchor => this.openProjectChoice(tasks, anchor, true, () => menu.close()) },
-        { label: "Deadline", icon: "flag", key: "D", open: anchor => void this.openDateEditor(tasks, "deadline", anchor, true, () => menu.close()) },
-        { label: "Tags", icon: "tag", key: "t", open: anchor => this.openTagsEditor(tasks, anchor, true) },
-        { label: "Repeat", icon: "repeat", key: "r", open: anchor => this.openRepeatEditor(tasks, anchor, true, () => menu.close()) },
-        { label: "Snooze", icon: "alarm-clock-off", key: "S", open: anchor => this.openSnoozeEditor(tasks, anchor, true, () => menu.close()) },
-        { label: "Status", icon: "circle-dot", key: "s", open: anchor => this.openStatusEditor(task, tasks, anchor, () => menu.close()) }
+        { label: "Project", icon: "folder-input", key: "g", open: anchor => this.editors.project(tasks, anchor, true, () => menu.close()) },
+        { label: "Deadline", icon: "flag", key: "D", open: anchor => void this.editors.date(tasks, "deadline", anchor, true, () => menu.close()) },
+        { label: "Tags", icon: "tag", key: "t", open: anchor => this.editors.tags(tasks, anchor, true) },
+        { label: "Repeat", icon: "repeat", key: "r", open: anchor => this.editors.repeat(tasks, anchor, true, () => menu.close()) },
+        { label: "Snooze", icon: "alarm-clock-off", key: "S", open: anchor => this.editors.snooze(tasks, anchor, true, () => menu.close()) },
+        { label: "Status", icon: "circle-dot", key: "s", open: anchor => this.editors.status(task, tasks, anchor, () => menu.close()) }
       ],
       duplicate: () => void this.commit(() => this.plugin.store.duplicate(tasks), "Could not duplicate the task."),
       delete: () => void this.commit(async () => {
@@ -1713,131 +1715,6 @@ export class TaskMainView extends ItemView {
     }
     this.selection.select(chosen);
     this.updateSelection();
-  }
-
-  /** A property's popover: dates, times and durations, priority, tags, repeat or snooze. False for anything else. */
-  private openPropertyEditor(tasks: Task[], property: TaskEditorProperty, anchor = this.popoverAnchor()): boolean {
-    if (this.openDateEditor(tasks, property, anchor)) return true;
-    const target = anchor ?? (tasks[0] && this.selectionRows.get(tasks[0].id)?.[0]) ?? this.content;
-    if (!target || !tasks.length) return false;
-    if (property === "tags") this.openTagsEditor(tasks, target);
-    else if (property === "repeat") this.openRepeatEditor(tasks, target);
-    else if (property === "defer") this.openSnoozeEditor(tasks, target);
-    else return false;
-    return true;
-  }
-
-  /** Inbox and the active projects; choosing one moves the tasks (with their subtasks) there. */
-  private openProjectChoice(tasks: Task[], anchor: HTMLElement, beside = false, done?: () => void): void {
-    // The new task's note is the one it will go to.
-    const pathOf = (task: Task): string => task.id === NEW_TASK_ID && this.newTaskEntry ? splitDestination(this.newTaskEntry.draft.destination).path : task.path;
-    const current = tasks.every(task => pathOf(task) === pathOf(tasks[0])) ? pathOf(tasks[0]) : undefined;
-    const move = (path: string): void => {
-      done?.();
-      const moving = tasks.filter(task => pathOf(task) !== path);
-      if (moving.length) void this.updateTasks(moving, { destination: path }, "Could not move the task.", { moveTo: path });
-    };
-    openChoicePopover({
-      anchor, beside, label: "Move to project", choices: this.projectChoices(current), selected: current,
-      input: this.projectSearch(path => move(path)), choose: move
-    });
-  }
-
-  /** Searches the projects; typed text that names none can become a new project, which `use` then receives. */
-  private projectSearch(use: (path: string) => void): ChoiceInput {
-    return {
-      placeholder: "Find or create a project", filter: true,
-      create: {
-        label: text => `Create project “${text}”`, icon: "folder-plus",
-        run: text => {
-          this.plugin.createProjectNote({ name: text }).then(path => {
-            new Notice(`Created project ${text}`);
-            use(path);
-          }).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not create the project."); });
-        }
-      }
-    };
-  }
-
-  /** Inbox, the given note when it is not a project, then the active projects by name. */
-  private projectChoices(current?: string): Choice[] {
-    return projectChoices(this.plugin.index.projects(), this.plugin.settings.inboxPath, current);
-  }
-
-  /**
-   * Tags on the tasks (checked, or a dash when only some have one), then the vault's other tags. Each change
-   * writes at once, one after another, to the tasks as they then read.
-   */
-  private openTagsEditor(tasks: Task[], anchor: HTMLElement, beside = false): void {
-    const ids = tasks.map(task => task.id);
-    const counts = new Map<string, number>();
-    for (const task of tasks) for (const tag of task.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-    const own = [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => ({ name, state: count === tasks.length ? "all" as const : "some" as const }));
-    const others = this.plugin.index.tagSummaries().map(tag => tag.name).filter(name => !counts.has(name)).map(name => ({ name, state: "none" as const }));
-    let queue = Promise.resolve();
-    const change = (next: (tags: string[]) => string[]): void => {
-      queue = queue.then(() => {
-        const current = ids.map(id => this.liveTask(id)).filter((task): task is Task => Boolean(task));
-        const changed = current.filter(task => next(task.tags ?? []).join("\n") !== (task.tags ?? []).join("\n"));
-        return changed.length ? this.updateTasks(changed, task => ({ tags: next(task.tags ?? []) })) : undefined;
-      });
-    };
-    openTagsPopover({
-      anchor, beside, tags: [...own, ...others],
-      toggle: (tag, on) => change(tags => on ? [...new Set([...tags, tag])] : tags.filter(item => item !== tag)),
-      add: added => change(tags => [...new Set([...tags, ...added])])
-    });
-  }
-
-  private openRepeatEditor(tasks: Task[], anchor: HTMLElement, beside = false, done?: () => void): void {
-    const current = tasks.every(task => task.repeat === tasks[0].repeat) ? tasks[0].repeat ?? "" : undefined;
-    openChoicePopover({
-      anchor, beside, label: "Repeat", choices: repeatChoices(current), selected: current, input: REPEAT_INPUT,
-      choose: value => {
-        done?.();
-        const repeat = value || undefined;
-        const changed = tasks.filter(task => task.repeat !== repeat);
-        if (changed.length) void this.updateTasks(changed, { repeat });
-      }
-    });
-  }
-
-  /** Snoozing hides a task from Inbox, Today and Upcoming until the date (see isDeferred). */
-  private openSnoozeEditor(tasks: Task[], anchor: HTMLElement, beside = false, done?: () => void): void {
-    const today = todayIso();
-    const choices: Choice[] = [
-      { value: addDays(today, 1), label: "Until tomorrow", icon: "sunrise" },
-      { value: nextWeek(today), label: "Until next week", icon: "square-arrow-right" },
-      { value: "someday", label: "Someday", icon: "archive" }
-    ];
-    if (tasks.some(task => task.deferDate || task.someday)) choices.push({ value: "", label: "Stop snoozing", icon: "alarm-clock", separated: true });
-    const current = tasks.every(task => task.someday) ? "someday" : tasks.every(task => task.deferDate && task.deferDate === tasks[0].deferDate) ? tasks[0].deferDate : undefined;
-    openChoicePopover({
-      anchor, beside, label: "Snooze", choices, selected: current,
-      input: {
-        placeholder: "Snooze until, e.g. next fri", invalid: "Not a date",
-        parse: text => {
-          if (/^some ?day$/i.test(text)) return { value: "someday", label: "Someday" };
-          const date = parseDateExpression(text, new Date(), this.plugin.dateFormat());
-          return date ? { value: date, label: `Until ${formatDate(date, "ddd, MMM D, YYYY")}` } : undefined;
-        }
-      },
-      choose: value => {
-        done?.();
-        const patch: BulkTaskPatch = value === "someday" ? { deferDate: undefined, someday: true } : { deferDate: value || undefined, someday: undefined };
-        void this.updateTasks(tasks, patch);
-      }
-    });
-  }
-
-  private openStatusEditor(task: Task, tasks: Task[], anchor: HTMLElement, done?: () => void, beside = true): void {
-    const current = tasks.every(item => item.status === tasks[0].status) ? tasks[0].status : undefined;
-    openChoicePopover({
-      // S, which opens the list, moves on to the next status; Enter or a click sets it.
-      anchor, beside, label: "Status", selected: current, cycleKey: "s",
-      choices: TASK_STATUSES.map(status => ({ value: status, label: STATUS_LABELS[status], icon: STATUS_ICONS[status] })),
-      choose: value => { done?.(); this.setStatus(task, value as TaskStatus, tasks); }
-    });
   }
 
   /** A selected task drags the whole selection along; returns what moves. */
@@ -2071,14 +1948,14 @@ export class TaskMainView extends ItemView {
       m: (task, row) => this.openMoveMenu(task, row),
       e: (task, row) => { const rect = row.getBoundingClientRect(); this.openTaskMenu(task, row, { x: rect.left + 24, y: rect.bottom }); },
       "shift+t": task => void this.commit(() => this.plugin.store.bulkUpdate(tasks(task), { scheduledDate: todayIso() })),
-      d: (task, row) => void this.openDateEditor(tasks(task), "scheduledDate", row),
-      "shift+d": (task, row) => void this.openDateEditor(tasks(task), "deadline", row),
-      p: (task, row) => void this.openDateEditor(tasks(task), "priority", row),
-      t: (task, row) => this.openTagsEditor(tasks(task), row),
-      g: (task, row) => this.openProjectChoice(tasks(task), row),
-      r: (task, row) => this.openRepeatEditor(tasks(task), row),
-      s: (task, row) => this.openStatusEditor(task, tasks(task), row, undefined, false),
-      "shift+s": (task, row) => this.openSnoozeEditor(tasks(task), row),
+      d: (task, row) => void this.editors.date(tasks(task), "scheduledDate", row),
+      "shift+d": (task, row) => void this.editors.date(tasks(task), "deadline", row),
+      p: (task, row) => void this.editors.priority(tasks(task), row),
+      t: (task, row) => this.editors.tags(tasks(task), row),
+      g: (task, row) => this.editors.project(tasks(task), row),
+      r: (task, row) => this.editors.repeat(tasks(task), row),
+      s: (task, row) => this.editors.status(task, tasks(task), row, undefined, false),
+      "shift+s": (task, row) => this.editors.snooze(tasks(task), row),
       c: task => { const all = tasks(task); this.setStatus(task, all.every(item => item.completed) ? "todo" : "done", all); }
     };
     return shortcuts[shift ? `shift+${letter}` : letter];
@@ -2421,7 +2298,7 @@ export class TaskMainView extends ItemView {
       addTags: added => this.patchNewTask({ tags: [...new Set([...tags(), ...added])] }),
       removeTag: tag => this.patchNewTask({ tags: tags().filter(item => item !== tag) }),
       // As a card names a note typed into its title: "Site › Copy".
-      project: { label: entry.draft.destination.replace(/\.md(?=#|$)/i, "").split("/").pop()!.replace("#", " › "), choose: anchor => this.openProjectChoice([task], anchor) },
+      project: { label: entry.draft.destination.replace(/\.md(?=#|$)/i, "").split("/").pop()!.replace("#", " › "), choose: anchor => this.editors.project([task], anchor) },
       tagSuggestions: this.plugin.index.tagSummaries().map(tag => tag.name)
     });
   }
@@ -2444,8 +2321,8 @@ export class TaskMainView extends ItemView {
     const task = this.plugin.index.taskById(id);
     if (!task) return;
     openChoicePopover({
-      anchor, label: "Move to project", choices: this.projectChoices(task.path), selected: task.path,
-      input: this.projectSearch(path => void this.moveCardTask(id, path)), choose: path => void this.moveCardTask(id, path)
+      anchor, label: "Move to project", choices: this.editors.projectChoices(task.path), selected: task.path,
+      input: this.editors.projectSearch(path => void this.moveCardTask(id, path)), choose: path => void this.moveCardTask(id, path)
     });
   }
 
@@ -2525,60 +2402,28 @@ export class TaskMainView extends ItemView {
     if (task && !this.openPropertyEditor([task], property, anchor) && id !== NEW_TASK_ID) this.plugin.openEditor({ ...this.state, task, focusProperty: property });
   }
 
-  /** Priority edits in a small list beside the property: P1–P3 or none, for every task given. */
-  private openPriorityEditor(tasks: Task[], anchor = this.popoverAnchor(), beside = false): boolean {
-    const first = tasks[0];
-    const target = anchor ?? (first && this.selectionRows.get(first.id)?.[0]) ?? this.content;
-    if (!first || !target) return false;
-    const shared = tasks.every(task => task.priority === first.priority);
-    openChoicePopover({
-      // P, which opens the list, moves on to the next priority; Enter or a click sets it.
-      anchor: target, beside, label: "Priority", choices: PRIORITY_CHOICES, cycleKey: "p", selected: shared ? String(first.priority ?? "") : undefined,
-      choose: value => {
-        const priority = value ? Number(value) as Task["priority"] : undefined;
-        const changed = tasks.filter(task => task.priority !== priority);
-        if (changed.length) void this.updateTasks(changed, { priority });
-      }
+  /** The property popovers, writing through this view (a new task not yet written takes their changes into it). */
+  private get editors(): TaskPropertyEditors {
+    return this.propertyEditors ??= new TaskPropertyEditors({
+      plugin: this.plugin,
+      liveTask: id => this.liveTask(id),
+      updateTasks: (tasks, patch, failure, keep) => this.updateTasks(tasks, patch, failure, keep),
+      setStatus: (task, status, tasks) => this.setStatus(task, status, tasks),
+      // The new task's note is the one it will go to.
+      pathOf: task => task.id === NEW_TASK_ID && this.newTaskEntry ? splitDestination(this.newTaskEntry.draft.destination).path : task.path
     });
-    return true;
+  }
+
+  /** A property's popover, beside `anchor` (else the task's row): dates, times and durations, priority, tags, repeat or snooze. False for anything else. */
+  private openPropertyEditor(tasks: Task[], property: TaskEditorProperty, anchor = this.popoverAnchor()): boolean {
+    const target = anchor ?? (tasks[0] && this.selectionRows.get(tasks[0].id)?.[0]) ?? this.content;
+    return Boolean(target) && this.editors.open(tasks, property, target);
   }
 
   /** The property just clicked or focused, for a popover to open beside; else the view. */
   private popoverAnchor(): HTMLElement | undefined {
     const active = this.content?.ownerDocument.activeElement as HTMLElement | null | undefined;
     return active && this.content?.contains(active) ? active : undefined;
-  }
-
-  /**
-   * Opens the date popover for a schedule (with its time and duration) or a deadline (with its time),
-   * saving to every task given. Returns false for properties it does not edit.
-   */
-  private openDateEditor(tasks: Task[], property: TaskEditorProperty, anchor = this.popoverAnchor(), beside = false, saved?: () => void): boolean {
-    if (property === "priority") return this.openPriorityEditor(tasks, anchor, beside);
-    const kind = property === "deadline" ? "deadline" : property === "scheduledDate" || property === "durationMinutes" ? "scheduled" : undefined;
-    const first = tasks[0];
-    if (!kind || !first) return false;
-    const target = anchor ?? this.selectionRows.get(first.id)?.[0] ?? this.content;
-    if (!target) return false;
-    openDatePopover({
-      anchor: target, kind, beside, dateFormat: this.plugin.dateFormat(),
-      value: kind === "deadline" ? { date: first.deadline, time: first.deadlineTime } : { date: first.scheduledDate, time: first.scheduledTime, duration: first.durationMinutes },
-      save: value => {
-        saved?.();
-        // Only what changed is written, so a multi-selection keeps each task's other values.
-        const patch: BulkTaskPatch = {};
-        if (kind === "deadline") {
-          if (value.date !== first.deadline) patch.deadline = value.date;
-          if (value.time !== first.deadlineTime) patch.deadlineTime = value.time;
-        } else {
-          if (value.date !== first.scheduledDate) patch.scheduledDate = value.date;
-          if (value.time !== first.scheduledTime) patch.scheduledTime = value.time;
-          if (value.duration !== first.durationMinutes) patch.durationMinutes = value.duration;
-        }
-        void this.updateTasks(tasks, patch);
-      }
-    });
-    return true;
   }
 
   /**
