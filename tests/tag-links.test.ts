@@ -53,5 +53,8 @@ describe("converting notes' task tags", () => {
   it("changes nothing already in the format", () => {
     expect(convertTagFormat("- [ ] Plan #work", "hash")).toBe("- [ ] Plan #work");
     expect(convertTagFormat("- [ ] Plan #[[work]]", "wikilink")).toBe("- [ ] Plan #[[work]]");
+    // Examples in code blocks and frontmatter stay as written.
+    const fenced = "---\r\nx: - [ ] #[[a b]]\r\n---\r\n```md\r\n- [ ] Example #[[open house]]\r\n```\r\n- [ ] Real #[[open house]]\r\n";
+    expect(convertTagFormat(fenced, "hash")).toBe(fenced.replace("Real #[[open house]]", "Real #open-house"));
   });
 });
