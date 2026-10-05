@@ -39,6 +39,12 @@ describe("advancing inline repeats", () => {
     expect(advanceInlineRepeat({ repeat: "every monday every friday", scheduledDate: "2026-10-01" })).toEqual({ scheduledDate: "2026-10-02", deadline: undefined });
     expect(advanceInlineRepeat({ repeat: "every monday every friday", scheduledDate: "2026-10-02" })).toEqual({ scheduledDate: "2026-10-05", deadline: undefined });
     expect(advanceInlineRepeat({ repeat: "every month", scheduledDate: "2026-01-31", deadline: "2026-02-02" })).toEqual({ scheduledDate: "2026-02-28", deadline: "2026-03-02" });
+    // A month's last day stays the last day, rather than drifting to the 28th.
+    expect(advanceInlineRepeat({ repeat: "every month", scheduledDate: "2026-02-28" })).toEqual({ scheduledDate: "2026-03-31", deadline: undefined });
+    expect(advanceInlineRepeat({ repeat: "every month", deadline: "2026-04-30" })).toEqual({ scheduledDate: undefined, deadline: "2026-05-31" });
+    expect(advanceInlineRepeat({ repeat: "every year", scheduledDate: "2029-02-28" }).scheduledDate).toBe("2030-02-28");
+    expect(advanceInlineRepeat({ repeat: "every 3 years", scheduledDate: "2029-02-28" }).scheduledDate).toBe("2032-02-29");
+    expect(advanceInlineRepeat({ repeat: "every month", scheduledDate: "2026-03-15" }).scheduledDate).toBe("2026-04-15");
     // Only a deadline: repeat from it, without adding a schedule.
     expect(advanceInlineRepeat({ repeat: "every month", deadline: "2026-10-01" })).toEqual({ scheduledDate: undefined, deadline: "2026-11-01" });
   });

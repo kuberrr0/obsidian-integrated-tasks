@@ -45,6 +45,12 @@ const dayDistance = (from: string, to: string): number => {
     return Math.round((utc(to) - utc(from)) / 86400000);
 };
 
+/** An inline repeat keeps no anchor, so a date on its month's last day stays there: Jan 31 goes to Feb 28, then Mar 31. */
+const monthEndAnchor = (date: string): string | undefined => {
+    const [year, month, day] = date.split("-").map(Number);
+    return day === monthLength(year, month) ? `${date.slice(0, 8)}31` : undefined;
+};
+
 /**
  * The next instance of an inline repeat: the scheduled date (or today, when unscheduled) moves to the
  * next occurrence and a deadline moves by the same number of days; times are kept. A task with only
@@ -53,9 +59,9 @@ const dayDistance = (from: string, to: string): number => {
 export function advanceInlineRepeat(task: Pick<Task, "repeat" | "scheduledDate" | "deadline">, today = todayIso()): Pick<Task, "scheduledDate" | "deadline"> {
     if (!task.repeat) throw new Error("Task has no repeat rule.");
     const rules = repeatRuleList(task.repeat);
-    if (!task.scheduledDate && task.deadline) return { scheduledDate: undefined, deadline: nextRepeatDate(rules, task.deadline) };
+    if (!task.scheduledDate && task.deadline) return { scheduledDate: undefined, deadline: nextRepeatDate(rules, task.deadline, monthEndAnchor(task.deadline)) };
     const from = task.scheduledDate ?? today;
-    const next = nextRepeatDate(rules, from);
+    const next = nextRepeatDate(rules, from, monthEndAnchor(from));
     return { scheduledDate: next, deadline: task.deadline ? addDays(task.deadline, dayDistance(from, next)) : undefined };
 }
 
