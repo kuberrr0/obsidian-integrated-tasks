@@ -715,7 +715,7 @@ button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var
   opacity: 1;
   border-radius: 8px;
   background: var(--background-primary);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 10px 28px rgb(0 0 0 / 24%);
+  box-shadow: var(--shadow-l);
   scale: 1.02;
   transition: none;
   animation: tm-drag-lift 150ms cubic-bezier(0.2, 0, 0, 1);
@@ -725,7 +725,7 @@ button.tm-list-drag-handle { flex: 0 0 20px; width: 20px; padding: 0; color: var
 }
 .tm-main-view .tm-task-row.tm-drag-preview.is-settling {
   scale: 1;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 10%), 0 2px 6px rgb(0 0 0 / 8%);
+  box-shadow: var(--shadow-s);
   transition: scale 150ms cubic-bezier(0.2, 0, 0, 1), box-shadow 150ms cubic-bezier(0.2, 0, 0, 1);
 }
 /* It looks selected, but solid: the selection's tint over the view's background, so rows beneath never show through. */
@@ -747,7 +747,7 @@ body.tm-list-dragging, body.tm-list-dragging * { cursor: grabbing !important; }
   overflow: hidden;
   border-radius: var(--radius-m, 6px);
   background: var(--background-primary);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 24%), 0 1px 3px rgb(0 0 0 / 18%);
+  box-shadow: var(--shadow-l);
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   text-overflow: ellipsis;
@@ -755,7 +755,7 @@ body.tm-list-dragging, body.tm-list-dragging * { cursor: grabbing !important; }
   pointer-events: none;
 }
 /* On touch screens a long press lifts the row, ready to drag; it holds no text selection or callout. */
-.tm-main-view .tm-task-item.is-drag-armed { background: var(--background-modifier-hover); box-shadow: 0 4px 14px rgb(0 0 0 / 22%); }
+.tm-main-view .tm-task-item.is-drag-armed { background: var(--background-modifier-hover); box-shadow: var(--shadow-l); }
 body.is-mobile .tm-main-view .tm-task-item { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 /* Dragging lifts the rows out (their slots fold away, set on the rows themselves: see FOLDED in list-drag-view.ts)
    and a grey gap shows where they will land. */
@@ -791,7 +791,7 @@ body.is-mobile .tm-main-view .tm-task-item { -webkit-touch-callout: none; -webki
   padding: 0 4px;
   border-radius: 8px;
   background: var(--color-red);
-  color: #fff;
+  color: var(--text-on-accent);
   font-size: 10px;
   font-weight: var(--font-bold);
   line-height: 16px;
@@ -839,7 +839,7 @@ button.tm-list-drag-handle { touch-action: none; }
 .tm-layout-controls button.clickable-icon[aria-pressed="true"] {
   background: var(--background-primary);
   color: var(--text-normal);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-s);
 }
 .tm-layout-controls button.clickable-icon:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 1px; }
 .workspace-leaf-content[data-type="task-manager-main"] .view-content.tm-main-view.is-kanban-view { max-width: none; width: 100%; }
@@ -1271,7 +1271,7 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-calendar-cell { border-color: var(--background-modifier-border); padding: 3px; }
 .tm-calendar-cell.is-outside { background: transparent; }
 .tm-calendar-cell > .tm-calendar-date { display: block; margin-left: auto; font-size: var(--font-ui-medium); }
-.tm-calendar-cell.is-today > .tm-calendar-date { background: var(--text-error); color: white; border-radius: 5px; }
+.tm-calendar-cell.is-today > .tm-calendar-date { background: var(--text-error); color: var(--text-on-accent); border-radius: 5px; }
 .tm-calendar.is-month-scope .tm-calendar-cell.is-today > .tm-calendar-date { background: transparent; color: var(--text-error); }
 .tm-calendar-weekday { font-size: var(--font-ui-medium); color: var(--text-muted); padding: 12px 2px; }
 .tm-calendar .tm-calendar-week { min-width: 700px; }
@@ -1918,7 +1918,7 @@ body.is-phone .tm-main-view.tm-style-things .tm-task-row.tm-task-item:not(.tm-pr
   border-radius: 10px;
   /* The main area's own background, set off by its shadow and a faint outline. */
   background: var(--background-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 6px 18px rgba(0, 0, 0, 0.16), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
+  box-shadow: var(--shadow-l), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
   font-family: var(--font-interface);
 }
 .tm-things-card-head { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 10px; align-items: start; padding-left: 0; }
@@ -2144,10 +2144,10 @@ button.tm-editor-property.is-p3 .tm-editor-property-icon { color: var(--color-bl
   border: 0;
   border-radius: 10px;
   background: var(--background-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.12), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
+  box-shadow: var(--shadow-s), inset 0 0 0 1px color-mix(in srgb, var(--text-normal) 5%, transparent);
 }
 .tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card.has-project-color {
-  box-shadow: inset 3px 0 0 var(--tm-project-color), 0 1px 2px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: inset 3px 0 0 var(--tm-project-color), var(--shadow-s);
 }
 /* The selection colour is laid over the card, which keeps its own background beneath. */
 .tm-main-view.tm-style-things .tm-kanban .tm-task-row.tm-things-board-card.is-selected {
@@ -2230,7 +2230,7 @@ button.tm-fold-toggle:focus-visible { opacity: 1; }
   border: 1px solid var(--background-modifier-border);
   border-radius: 12px;
   background: var(--background-primary);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 30%), 0 2px 6px rgb(0 0 0 / 20%);
+  box-shadow: var(--shadow-l);
   color: var(--text-normal);
   font-family: var(--font-interface);
   font-size: var(--font-ui-medium);
@@ -2386,7 +2386,7 @@ button.tm-things-tag-remove:hover { color: var(--text-error); border-color: var(
   border: 1px solid var(--background-modifier-border);
   border-radius: 12px;
   background: var(--background-primary);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 30%), 0 2px 6px rgb(0 0 0 / 20%);
+  box-shadow: var(--shadow-l);
   color: var(--text-normal);
   font-family: var(--font-interface);
   font-size: var(--font-ui-medium);
