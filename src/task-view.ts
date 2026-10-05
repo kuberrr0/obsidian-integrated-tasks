@@ -4,11 +4,12 @@ import { activeProjects, projectStatuses, renderProjectProgress } from "./projec
 import { renderProjectHeaderDetails } from "./project-header-details";
 import { editable, renderTaskDetails } from "./task-row-details";
 import { renderThingsProjectDetails, renderThingsTaskDetails } from "./things-row-details";
-import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardProperties, renderThingsTaskCard, repeatIcon, type TaskCardDraft } from "./things-task-card";
+import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardProperties, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { cloneTaskFilters, smartListDraft, undatedFilters, type SmartListDraft } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import { TaskPropertyEditors } from "./task-property-editors";
+import { createTaskRow, dropEmptyRowParts } from "./task-row";
 import { NEW_TASK_ID, patchPendingTask, startPendingTask, writePendingTask, type PendingTask } from "./pending-task";
 export { NEW_TASK_ID };
 import type { TaskEditorProperty } from "./task-editor";
@@ -30,7 +31,7 @@ import { ListDragController } from "./list-drag-view";
 import { draftForGroup, isStructuralGroup, taskGroupTarget, type ListDropGroup, type ListPlacement } from "./list-drag";
 import { renderCalendar } from "./calendar-view";
 import { addDays, daysBetween, rescheduledDraft, type CalendarScope } from "./calendar";
-import { STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, checkboxLabel, isClosedStatus, statusClass } from "./task-status";
+import { STATUS_ICONS, STATUS_LABELS, TASK_STATUSES, isClosedStatus } from "./task-status";
 import { ItemView, Menu, Notice, Platform, setIcon, TFile, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
 import { actionDate, formatDate, parseDateExpression, todayIso } from "./date";
 import { groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "./query";
@@ -2003,16 +2004,16 @@ export class TaskMainView extends ItemView {
     const project = this.shownProjects.get(task.id);
     if (project) { this.renderProjectRow(list, project, depth, this.layout === "kanban"); return; }
     if (this.expanded?.id === task.id && this.plugin.settings.style === "things") { this.renderTaskCard(list, task, depth); return; }
-    const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem" } });
-    row.style.setProperty("--tm-depth", String(depth));
     const things = this.plugin.settings.style === "things";
-    // In the Things style a recurring task's checkbox is its repeat icon (the checkbox stays, unseen, beneath it).
-    const repeating = things && isRepeatingTask(this.app, task);
-    const checkboxTarget = row.createEl("label", { cls: `tm-checkbox-target${repeating ? ` tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` : ""}` });
-    const checkbox = checkboxTarget.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task), "data-tm-focus-key": "checkbox" } });
-    if (repeating) repeatIcon(checkboxTarget);
-    // A cancelled task shows checked, so clicking it reopens it (to do).
-    checkbox.checked = task.completed;
+    // Things board cards read like an open task card; list rows are one line.
+    const board = things && this.layout === "kanban";
+    // A project's colour marks its tasks' source label and board card; its own page needs no marker.
+    const color = this.plugin.index.projectColor(task.path);
+    const parts = createTaskRow(list, task, {
+      cls: `tm-task-item${board ? " tm-things-board-card" : ""}`, depth, repeatCheckbox: things && isRepeatingTask(this.app, task), things, lead: things && !board,
+      color: task.path !== this.taskSourcePath ? color : undefined, markColor: true, focusKeys: { checkbox: "checkbox", title: "title" }
+    });
+    const { row, checkbox, primary, title, lead, metadata } = parts;
     // Not `disabled`: disabling the focused checkbox would drop keyboard focus before the re-render restores it.
     let pending = false;
     checkbox.addEventListener("change", () => {
@@ -2027,20 +2028,7 @@ export class TaskMainView extends ItemView {
         new Notice(cause instanceof Error ? cause.message : "Could not update the task.");
       });
     });
-    const content = row.createDiv({ cls: "tm-task-content" });
-    const primary = content.createDiv({ cls: "tm-task-primary" });
     this.listDrag?.row(row, primary, task, target);
-    // A project's colour marks its tasks' source label and board card; its own page needs no marker.
-    const color = this.plugin.index.projectColor(task.path);
-    if (color && task.path !== this.taskSourcePath) {
-      row.addClass("has-project-color");
-      row.style.setProperty("--tm-project-color", color);
-    }
-    // Things board cards read like an open task card; list rows are one line.
-    const board = things && this.layout === "kanban";
-    if (board) row.addClass("tm-things-board-card");
-    const lead = things && !board ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
-    const title = primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title), "data-tm-focus-key": "title" } });
     title.addEventListener("click", () => this.editTask(task));
     try {
       // Routine-note repeats get an icon; inline `every …` repeats show a Repeat pill in the details instead.
@@ -2051,7 +2039,6 @@ export class TaskMainView extends ItemView {
       }
     } catch { /* Ambiguous recurring links remain editable through the task editor. */ }
 
-    const metadata = content.createDiv({ cls: things ? "tm-things-secondary" : "tm-task-metadata" });
     const implicitSource = this.taskSourcePath ?? (this.state.mode === "inbox" ? this.plugin.settings.inboxPath : undefined);
     const tags = this.rowTags(task);
     const details = {
@@ -2064,9 +2051,8 @@ export class TaskMainView extends ItemView {
     else if (lead) {
       // With subtasks listed as rows, the mark saying a task has them would only repeat what is in view.
       renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today", subtaskMark: !this.plugin.settings.showSubtasks, datesBelow: Platform.isPhone });
-      if (!lead.childElementCount) lead.remove();
     } else renderTaskDetails(primary, metadata, task, details);
-    if (!metadata.childElementCount) metadata.remove();
+    dropEmptyRowParts(parts);
     if (foldable) {
       // A chevron in the row's left gutter folds the subtasks away; it stays visible while folded.
       const key = this.taskFoldKey(task);

@@ -4,8 +4,8 @@ import { formatDate } from "./date";
 import { groupTasks, orderTaskTree, sortTasks } from "./query";
 import { parseTaskQuery, QUERY_KEYS } from "./task-query";
 import { renderTaskDetails } from "./task-row-details";
-import { taskTitleLabel } from "./task-title";
-import { checkboxLabel, statusClass } from "./task-status";
+import { createTaskRow, dropEmptyRowParts } from "./task-row";
+import { checkboxLabel } from "./task-status";
 import type { Task } from "./types";
 
 type QueryHost = Pick<TaskManagerPlugin, "app" | "index" | "store" | "settings" | "dateFormat" | "openEditor" | "openTaskView">;
@@ -96,25 +96,18 @@ export class TaskQueryBlock extends MarkdownRenderChild {
   }
 
   private renderRow(list: HTMLElement, task: Task, depth: number, grouping: Parameters<typeof renderTaskDetails>[3]["grouping"]): void {
-    const row = list.createDiv({ cls: `tm-task-row tm-query-row${task.completed ? " is-completed" : ""}${task.status === "cancelled" ? " is-cancelled" : ""}`, attr: { role: "listitem", "data-task-id": task.id } });
-    row.style.setProperty("--tm-depth", String(depth));
-    const color = this.plugin.index.projectColor(task.path);
-    if (color) row.style.setProperty("--tm-project-color", color);
-    const checkbox = row.createEl("label", { cls: "tm-checkbox-target" }).createEl("input", {
-      type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel({ ...task, priority: undefined }) }
+    const parts = createTaskRow(list, task, {
+      cls: "tm-query-row", depth, checkboxLabel: checkboxLabel({ ...task, priority: undefined }),
+      color: this.plugin.index.projectColor(task.path), attr: { "data-task-id": task.id }
     });
-    checkbox.checked = task.completed;
+    const { checkbox, primary, title, metadata } = parts;
     checkbox.addEventListener("change", () => {
       void this.plugin.store.toggle(task, checkbox.checked).catch((error: unknown) => {
         checkbox.checked = !checkbox.checked;
         new Notice(error instanceof Error ? error.message : "Could not update the task.");
       });
     });
-    const content = row.createDiv({ cls: "tm-task-content" });
-    const primary = content.createDiv({ cls: "tm-task-primary" });
-    primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title) } })
-      .addEventListener("click", () => this.plugin.openEditor({ mode: "all", task }));
-    const metadata = content.createDiv({ cls: "tm-task-metadata" });
+    title.addEventListener("click", () => this.plugin.openEditor({ mode: "all", task }));
     renderTaskDetails(primary, metadata, task, {
       grouping: grouping === "default" ? "none" : grouping, dateFormat: this.plugin.dateFormat(),
       source: task.path !== this.sourcePath ? task.path : undefined, tags: task.tags ?? [],
@@ -124,6 +117,6 @@ export class TaskQueryBlock extends MarkdownRenderChild {
         if (file instanceof TFile) void this.plugin.app.workspace.getLeaf("tab").openFile(file, { eState: { line: task.line } });
       }
     });
-    if (!metadata.childElementCount) metadata.remove();
+    dropEmptyRowParts(parts);
   }
 }

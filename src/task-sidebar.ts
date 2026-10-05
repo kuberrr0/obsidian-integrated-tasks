@@ -5,7 +5,7 @@ import { splitDestination } from "./structure";
 import { renderCalendar } from "./calendar-view";
 import { ListDragController } from "./list-drag-view";
 import { activeTaskDrag, markDropZone, onTaskDrag, startTaskDrag, TASK_DRAG_TYPE, type SidebarDrop, type TaskDrag } from "./sidebar-drop";
-import { NEW_TASK_TITLE, taskTitleLabel } from "./task-title";
+import { NEW_TASK_TITLE } from "./task-title";
 import { renderThingsTaskDetails } from "./things-row-details";
 import { calendarDate, rescheduledDraft } from "./calendar";
 import { todayIso } from "./date";
@@ -19,6 +19,7 @@ import { deadlineIsDistant, deadlineIsOverdue, editable, renderTaskDetails, task
 import { STATUS_ICONS, STATUS_LABELS, checkboxLabel, statusClass } from "./task-status";
 import { PRIORITY_NAMES, cardNotes, longDate, paintTokens, repeatIcon, type TaskCardDraft } from "./things-task-card";
 import { NoteTaskHost } from "./note-task-host";
+import { createTaskRow, dropEmptyRowParts } from "./task-row";
 import type { OpenEditorState } from "./main";
 import type { Task, TaskEditorPreset } from "./types";
 
@@ -415,33 +416,22 @@ export class TaskSidebarView extends ItemView {
   /** A task's row, as a list shows it in the chosen style: its checkbox, title and properties; a click shows its details. */
   private renderRow(list: HTMLElement, task: Task, depth = 0): void {
     const things = this.plugin.settings.style === "things";
-    const row = list.createDiv({ cls: `tm-task-row tm-task-item${task.completed ? " is-completed" : ""}`, attr: { role: "listitem", tabindex: "0", "data-task-id": task.id } });
-    row.setCssProps({ "--tm-depth": String(depth) });
-    const repeating = things && isRepeatingTask(this.app, task);
-    const target = row.createEl("label", { cls: `tm-checkbox-target${repeating ? ` tm-repeat-target${task.priority ? ` is-p${task.priority}` : ""}` : ""}` });
-    const checkbox = target.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${task.priority ? ` is-p${task.priority}` : ""}${statusClass(task.status)}`, attr: { "aria-label": checkboxLabel(task) } });
-    checkbox.checked = task.completed;
+    const parts = createTaskRow(list, task, {
+      cls: "tm-task-item", depth, repeatCheckbox: things && isRepeatingTask(this.app, task), things, lead: things,
+      color: this.plugin.index.projectColor(task.path), markColor: true, attr: { tabindex: "0", "data-task-id": task.id }, focusKeys: { title: `sidebar-row:${task.id}` }
+    });
+    const { row, checkbox, primary, lead, metadata } = parts;
     checkbox.addEventListener("change", () => this.toggle(task, checkbox.checked, task.id === this.draft?.id));
-    if (repeating) repeatIcon(target);
-    const content = row.createDiv({ cls: "tm-task-content" });
-    const primary = content.createDiv({ cls: "tm-task-primary" });
     this.listDrag?.row(row, primary, task);
-    const color = this.plugin.index.projectColor(task.path);
-    if (color) { row.addClass("has-project-color"); row.style.setProperty("--tm-project-color", color); }
-    const lead = things ? primary.createSpan({ cls: "tm-things-lead" }) : undefined;
-    primary.createEl("button", { cls: "tm-task-title", text: taskTitleLabel(task.title), attr: { title: taskTitleLabel(task.title), "data-tm-focus-key": `sidebar-row:${task.id}` } });
-    const metadata = content.createDiv({ cls: things ? "tm-things-secondary" : "tm-task-metadata" });
     const host = this.host();
     const details = {
       grouping: "none" as const, dateFormat: this.plugin.dateFormat(), show: (property: string) => property !== "defer", source: task.path, tags: task.tags ?? [],
       edit: (property: TaskEditorProperty) => { if (host) void this.edit(host, [task], property); },
       openSource: () => void this.openSource(task)
     };
-    if (lead) {
-      renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: true, subtaskMark: true, datesBelow: Platform.isPhone });
-      if (!lead.childElementCount) lead.remove();
-    } else renderTaskDetails(primary, metadata, task, details);
-    if (!metadata.childElementCount) metadata.remove();
+    if (lead) renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: true, subtaskMark: true, datesBelow: Platform.isPhone });
+    else renderTaskDetails(primary, metadata, task, details);
+    dropEmptyRowParts(parts);
     // The title selects as the rest of the row does; the checkbox and properties keep their own actions.
     row.addEventListener("click", event => {
       const control = (event.target as HTMLElement).closest("input, label, a, [role=button]:not(.tm-task-item)");
