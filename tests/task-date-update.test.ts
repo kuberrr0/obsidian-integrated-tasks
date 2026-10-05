@@ -12,6 +12,10 @@ describe("task date migration", () => {
     expect(update(source, true)).toContain("[[2026/09/08]] 09:00  2h {[[2026/09/10]] 17:30}");
   });
 
+  it("leaves a time written apart from its date where it is", () => {
+    expect(update("- [ ] Call [[08.09.2026]] p1 15:00 {09.09.2026}")).toBe("- [ ] Call 2026/09/08 p1 15:00 {2026/09/09}");
+  });
+
   it("leaves non-task text, descriptions, code, frontmatter and unrecognized dates intact", () => {
     const source = "---\n- [ ] YAML [[08.09.2026]]\n---\nText [[08.09.2026]]\n```md\n- [ ] Example [[08.09.2026]]\n```\n- [ ] Task [[Not a date]]\n  - Description 08.09.2026\n- [ ] Invalid {31.02.2026}\n";
     expect(update(source)).toBe(source);

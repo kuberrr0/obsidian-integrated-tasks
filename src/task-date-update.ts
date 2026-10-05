@@ -11,6 +11,8 @@ export function updateTaskDateTokens(content: string, sourceFormats: string[], t
     const ranges: ParsedTokenRange[] = [];
     const task = parseTaskLine(text, reference, formats[0], false, ranges, formats.slice(1));
     if (!task) continue;
+    // A time written apart from its date ("[[2026-01-05]] p1 15:00") is a range of its own, and stays where it is.
+    const scheduled = ranges.filter(range => range.kind === "scheduledDate").sort((a, b) => a.from - b.from);
     let updated = text;
     for (const range of ranges.sort((a, b) => b.from - a.from)) {
       if (range.kind === "defer" && task.deferDate) {
@@ -25,10 +27,11 @@ export function updateTaskDateTokens(content: string, sourceFormats: string[], t
         continue;
       }
       if (range.kind !== "scheduledDate" && range.kind !== "deadline") continue;
+      if (range.kind === "scheduledDate" && range !== scheduled[0]) continue;
       const date = task[range.kind];
       if (!date) continue;
       const label = formatDate(date, targetFormat);
-      const time = range.kind === "scheduledDate" ? task.scheduledTime : task.deadlineTime;
+      const time = range.kind === "scheduledDate" ? (scheduled.length > 1 ? undefined : task.scheduledTime) : task.deadlineTime;
       const value = `${linkDates ? `[[${label}]]` : label}${time ? ` ${time}` : ""}`;
       updated = updated.slice(0, range.from) + (range.kind === "deadline" ? `{${value}}` : value) + updated.slice(range.to);
     }
