@@ -987,8 +987,10 @@ button.tm-gantt-handle.is-finish:focus-visible,
   background: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 12%, var(--background-primary));
 }
 
-/* No separate "active" row: the arrow keys move the selection, so a focused row looks like any other. */
+/* No separate "active" row: the arrow keys move the selection, so a focused row looks like any other. A focused row
+   with nothing selected (after Escape, or on tabbing into the list) is outlined, so the keyboard's place shows. */
 .tm-main-view .tm-task-item:focus-visible { outline: none; }
+.tm-main-view .tm-task-item:focus-visible:not(.is-selected) { outline: 2px solid var(--background-modifier-border-focus, var(--interactive-accent)); outline-offset: -2px; }
 
 /* Titles never wrap, in any layout: a long one ends with an ellipsis, clipped within the title only. */
 .tm-main-view .tm-kanban button.tm-task-title {
@@ -2246,6 +2248,12 @@ button.tm-fold-toggle:focus-visible { opacity: 1; }
 /* Rows: just left of the checkbox at the row's depth. */
 .tm-main-view button.tm-row-fold { left: calc(var(--tm-depth, 0) * 24px - 20px); }
 .tm-main-view.tm-style-things button.tm-row-fold { left: calc(var(--tm-depth, 0) * 24px - 12px); }
+/* Narrow windows indent rows 12px a level, up to 36px (see .tm-task-row there): the fold button keeps clear of the checkbox. */
+@media (max-width: 700px) {
+  .tm-main-view:not(.tm-style-things) button.tm-row-fold { left: calc(min(calc(var(--tm-depth, 0) * 12px), 36px) - 20px); }
+}
+/* Without hover, a fold button shows where there is something to fold. */
+@media (hover: none) { button.tm-fold-toggle { opacity: 1; } }
 /* Groups: just left of the heading text. */
 .tm-main-view button.tm-group-fold { left: -22px; }
 .tm-main-view.tm-style-things button.tm-group-fold { left: -14px; }

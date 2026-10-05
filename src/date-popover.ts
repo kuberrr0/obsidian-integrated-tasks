@@ -183,7 +183,7 @@ export function openDatePopover(options: DatePopoverOptions): DatePopover {
     navButton("chevron-left", "Previous month", () => { month = shiftMonth(month, -1); });
     navButton("circle", "This month", () => { month = monthStart(today); });
     navButton("chevron-right", "Next month", () => { month = shiftMonth(month, 1); });
-    const grid = calendar.createDiv({ cls: "tm-date-popover-grid", attr: { role: "grid" } });
+    const grid = calendar.createDiv({ cls: "tm-date-popover-grid", attr: { role: "group", "aria-label": formatDate(month, "MMMM YYYY") } });
     for (const name of WEEKDAYS) grid.createSpan({ cls: "tm-date-popover-weekday", text: name });
     const [year, value] = month.split("-").map(Number);
     const lead = (new Date(year, value - 1, 1).getDay() + 6) % 7;
