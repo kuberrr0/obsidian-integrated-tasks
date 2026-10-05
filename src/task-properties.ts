@@ -31,7 +31,7 @@ export const TASK_PROPERTIES: { key: TaskProperty; label: string; kind: "text" |
   { key: "priority", label: "Priority", kind: "choice" },
   { key: "tags", label: "Tags", kind: "text" },
   { key: "source", label: "Source note / list", kind: "choice" },
-  { key: "section", label: "Section", kind: "choice" }
+  { key: "section", label: "Heading", kind: "choice" }
 ];
 
 export function propertyValue(task: Task, property: TaskProperty): string | number | undefined {

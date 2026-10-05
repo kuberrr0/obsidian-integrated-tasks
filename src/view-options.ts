@@ -39,18 +39,18 @@ interface DropdownSpec {
 
 const SORTS: Array<[TaskSort, string]> = [
   ["date", "Action date"], ["scheduledDate", "Scheduled date"], ["deadline", "Deadline"], ["priority", "Priority"], ["title", "Title"],
-  ["status", "Status"], ["duration", "Duration"], ["tags", "Tags"], ["source", "Note"], ["section", "Section"], ["completed", "Completed date"], ["defer", "Hidden until"]
+  ["status", "Status"], ["duration", "Duration"], ["tags", "Tags"], ["source", "Note"], ["section", "Heading"], ["completed", "Completed date"], ["defer", "Hidden until"]
 ];
 const GROUPS: Array<[TaskGrouping, string]> = [
   ["default", "View default"], ["none", "None"], ["date", "Action date"], ["scheduledDate", "Scheduled date"], ["deadline", "Deadline"], ["priority", "Priority"],
-  ["status", "Status"], ["tags", "Tags"], ["source", "Note"], ["section", "Section"], ["duration", "Duration"], ["repeat", "Repeat"], ["defer", "Hidden until"], ["completed", "Completed date"]
+  ["status", "Status"], ["tags", "Tags"], ["source", "Note"], ["section", "Heading"], ["duration", "Duration"], ["repeat", "Repeat"], ["defer", "Hidden until"], ["completed", "Completed date"]
 ];
 const SECTIONS: Array<[string, Array<[TaskProperty, string, string]>]> = [
   ["Status & priority", [["status", "Status", "circle-dot"], ["priority", "Priority", "flag"]]],
   ["Dates", [["scheduledDate", "Scheduled", "calendar"], ["scheduledTime", "Scheduled time", "clock"], ["deadline", "Deadline", "calendar-clock"],
     ["deadlineTime", "Deadline time", "alarm-clock"], ["defer", "Hidden until", "eye-off"], ["completed", "Completed", "check-check"]]],
   ["Details", [["tags", "Tags", "tag"], ["duration", "Duration", "timer"], ["repeat", "Repeat", "repeat"], ["title", "Title", "text"]]],
-  ["Location", [["source", "Note", "file-text"], ["section", "Section", "heading"]]]
+  ["Location", [["source", "Note", "file-text"], ["section", "Heading", "heading"]]]
 ];
 // Values filtered by picking from a list (multi-select "is").
 const CHOICE_PROPERTIES = new Set<TaskProperty>(["status", "priority", "tags", "source", "section"]);

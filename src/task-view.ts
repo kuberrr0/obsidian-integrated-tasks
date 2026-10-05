@@ -1141,7 +1141,7 @@ export class TaskMainView extends ItemView {
   private defaultGroupLabel(): string {
     if (this.layout === "calendar") return "None";
     const { mode, path } = this.defaults;
-    if (path) return "Section";
+    if (path) return "Heading";
     if (mode === "today") return "Overdue and today";
     if (mode === "upcoming") return "Action date";
     if (mode === "all") return "Note";
