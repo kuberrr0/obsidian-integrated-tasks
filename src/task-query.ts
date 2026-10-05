@@ -1,4 +1,4 @@
-import { parseDateExpression, todayIso } from "./date";
+import { parseDateExpression, parseTimeExpression, todayIso } from "./date";
 import { durationToMinutes } from "./parser";
 import { TASK_PROPERTIES } from "./task-properties";
 import { STATUS_LABELS, statusFromLabel } from "./task-status";
@@ -76,6 +76,11 @@ function condition(property: typeof TASK_PROPERTIES[number], text: string, conte
       const date = parseDateExpression(item, context.now, context.dateFormat);
       if (!date) return `"${raw}" isn't a date I understand. Try a date such as ${todayIso(context.now)}, today, or next friday.`;
       converted.push(date);
+    } else if (property.kind === "time") {
+      // Times compare as HH:mm text, so "9:00" or "9am" becomes "09:00".
+      const time = parseTimeExpression(item, context.now);
+      if (!time) return `"${raw}" isn't a time. Use a time such as 09:30 or 2pm.`;
+      converted.push(time);
     } else if (property.key === "status") {
       const status = statusFromLabel(item);
       if (status) converted.push(STATUS_LABELS[status]);

@@ -38,6 +38,14 @@ describe("task query parsing", () => {
     ]);
   });
 
+  it("reads times as HH:mm, so they compare in order", () => {
+    expect(parse("scheduled time: before 9:00\ndeadline time: between 9am and 5:30pm").query.filters).toEqual([
+      { property: "scheduledTime", operator: "before", values: ["09:00"] },
+      { property: "deadlineTime", operator: "between", values: ["09:00", "17:30"] }
+    ]);
+    expect(parse("scheduled time: after lunch").errors).toEqual(['Line 1: "lunch" isn\'t a time. Use a time such as 09:30 or 2pm.']);
+  });
+
   it("uses a smart list's filters, sort and grouping, and projects by name or this note", () => {
     expect(parse("smart list: quick wins\npriority: 1")).toMatchObject({
       sort: "priority", grouping: "tags", opens: { mode: "smartLists", smartListId: "q" },
