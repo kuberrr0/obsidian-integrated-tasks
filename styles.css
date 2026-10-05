@@ -2224,7 +2224,7 @@ button.tm-fold-toggle:focus-visible { opacity: 1; }
   padding: 4px 0 6px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 12px;
-  background: var(--background-secondary);
+  background: var(--background-primary);
   box-shadow: 0 12px 32px rgb(0 0 0 / 30%), 0 2px 6px rgb(0 0 0 / 20%);
   color: var(--text-normal);
   font-family: var(--font-interface);
@@ -2380,7 +2380,7 @@ button.tm-things-tag-remove:hover { color: var(--text-error); border-color: var(
   padding: 6px 0;
   border: 1px solid var(--background-modifier-border);
   border-radius: 12px;
-  background: var(--background-secondary);
+  background: var(--background-primary);
   box-shadow: 0 12px 32px rgb(0 0 0 / 30%), 0 2px 6px rgb(0 0 0 / 20%);
   color: var(--text-normal);
   font-family: var(--font-interface);
