@@ -354,10 +354,6 @@ button.tm-task-title {
   font-size: var(--font-ui-small);
 }
 
-.tm-editor-modal {
-  width: min(520px, calc(100vw - 32px));
-}
-
 .tm-editor-field {
   display: grid;
   grid-template-columns: 126px minmax(0, 1fr);
@@ -462,13 +458,7 @@ button.tm-task-title {
 }
 
 @media (max-width: 700px) {
-  .tm-project-row .tm-task-content {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
   .tm-project-row .tm-project-metadata {
-    grid-column: 1 / -1;
-    grid-row: 2;
     justify-content: flex-start;
     max-width: 100%;
     flex-wrap: wrap;
@@ -506,13 +496,12 @@ button.tm-task-title {
   .tm-task-metadata { justify-content: flex-start; flex-wrap: wrap; max-width: 100%; overflow: visible; gap: 4px; }
 
   .tm-project-row > .tm-project-icon { margin: 13px; }
-  .tm-project-row .tm-task-content { grid-template-columns: minmax(0, 1fr) auto; }
   .tm-project-progress { align-self: start; min-height: 44px; }
   .tm-section h2 { overflow-wrap: anywhere; }
   .tm-section-count { flex-shrink: 0; }
   .tm-empty { min-height: 220px; }
   .tm-navigation button.tm-nav-label { min-height: 44px; }
-  .tm-editor-modal { width: calc(100vw - 16px); max-width: 520px; max-height: calc(100dvh - 16px); }
+  .tm-editor-modal { max-width: 520px; max-height: calc(100dvh - 16px); }
   .tm-editor-modal .modal-content { min-height: 0; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
   .tm-editor-field { gap: 6px; margin-bottom: 16px; }
   .tm-editor-field input, .tm-editor-field select { min-width: 0; min-height: 44px; font-size: 16px; }
@@ -684,7 +673,6 @@ button.tm-calendar-slot:hover { background: var(--background-modifier-hover); }
 
 /* Week is seven daily schedules on a shared time axis. */
 .tm-calendar-week-scroll { overflow: auto; }
-.tm-calendar-week { min-width: 896px; }
 .tm-calendar-week-header { display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); position: sticky; top: 0; z-index: 3; background: var(--background-primary); border-bottom: 1px solid var(--background-modifier-border); }
 .tm-calendar-week-gutter { align-self: end; padding: 4px; color: var(--text-muted); font-size: 10px; }
 .tm-calendar-week-heading { min-width: 0; padding: 4px; border-left: 1px solid var(--background-modifier-border); }
@@ -698,7 +686,6 @@ button.tm-calendar-slot:hover { background: var(--background-modifier-hover); }
 .tm-calendar-resize-handle { position: absolute; left: 0; right: 0; height: 5px; cursor: ns-resize; touch-action: none; z-index: 2; }
 .tm-calendar-resize-handle.is-start { top: 0; }
 .tm-calendar-resize-handle.is-end { bottom: 0; }
-.tm-calendar-resize-handle:hover, .tm-calendar-resize-handle:focus-visible { background: var(--interactive-accent); }
 .tm-calendar-task.is-resizing { outline: 2px solid var(--interactive-accent); z-index: 4; }
 .tm-calendar-resize-preview { display: none; }
 .tm-calendar-task.is-resizing .tm-calendar-resize-preview { display: block; position: absolute; inset: 0; background: inherit; padding: 2px 4px; font-size: 11px; pointer-events: none; }
@@ -851,7 +838,7 @@ button.tm-list-drag-handle { touch-action: none; }
 .tm-kanban .tm-task-row { grid-template-columns: 24px minmax(0, 1fr); align-items: start; padding: 10px; min-height: 72px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; margin-left: min(calc(var(--tm-depth) * 10px), 30px); }
 .tm-kanban .tm-task-content { display: flex; flex-direction: column; align-items: stretch; min-width: 0; gap: 8px; text-align: left; }
 .tm-kanban .tm-task-primary { align-items: flex-start; justify-content: flex-start; }
-.tm-kanban button.tm-task-title { height: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; justify-content: flex-start; }
+.tm-kanban button.tm-task-title { height: auto; text-align: left; justify-content: flex-start; }
 .tm-kanban .tm-task-metadata { display: flex; flex-wrap: wrap; justify-content: flex-start; max-width: 100%; }
 .tm-kanban-column[data-drop-position="group"] { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
 .tm-kanban-empty { color: var(--text-muted); font-size: var(--font-ui-small); text-align: center; padding: 16px; pointer-events: none; }
@@ -896,16 +883,25 @@ button.tm-list-drag-handle { touch-action: none; }
 .tm-gantt-header .tm-gantt-label, .tm-gantt-group .tm-gantt-label { background: var(--background-secondary); font-weight: 600; }
 .tm-gantt-group { background: var(--background-secondary); min-height: 32px; }
 .tm-gantt-dates { display: flex; }
-.tm-gantt-date { flex: 0 0 var(--tm-gantt-day); width: var(--tm-gantt-day); font-size: 10px; white-space: normal; padding: 4px 0; border: 0; border-radius: 0; box-shadow: none; height: auto; background: var(--background-secondary); }
+.tm-gantt-date {
+  flex: 0 0 var(--tm-gantt-day); width: var(--tm-gantt-day); box-sizing: border-box; height: auto; padding: 4px 0 4px 8px;
+  border: 0; border-left: 1px solid var(--background-modifier-border); border-radius: 0; box-shadow: none; background: var(--background-secondary);
+  font-size: var(--font-ui-medium); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: clip;
+}
 .tm-gantt-track { position: relative; isolation: isolate; min-height: 36px; overflow: hidden; }
-button.tm-gantt-bar { position: absolute; top: 4px; height: 28px; min-width: 0; padding: 3px 6px; border: none; border-radius: 6px; background: var(--interactive-accent); color: var(--text-on-accent); text-align: left; justify-content: flex-start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+/* Tints keep text-normal readable on every colour; the border and grips carry the hue. */
+button.tm-gantt-bar {
+  position: absolute; top: 4px; height: 28px; min-width: 0; padding: 3px 14px;
+  border: 1px solid color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 40%, transparent); border-radius: 10px;
+  background: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 12%, var(--background-primary)); color: var(--text-normal);
+  font-size: var(--font-ui-small); text-align: left; justify-content: flex-start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
 .tm-gantt-row.is-completed .tm-gantt-bar { opacity: .55; text-decoration: line-through; }
 .tm-gantt-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--text-error); pointer-events: none; z-index: 3; }
 .tm-gantt-undated { display: inline-block; padding: 4px 12px; font-size: var(--font-ui-small); color: var(--text-muted); }
 button.tm-gantt-jump { margin: 4px 8px; height: 28px; font-size: var(--font-ui-small); }
 @media (max-width: 700px) { .tm-gantt-scroll { --tm-gantt-label: 225px; } }
 
-.tm-gantt-date { box-sizing: border-box; text-align: center; }
 .tm-gantt-bar[hidden], .tm-gantt-handle[hidden], .tm-gantt-jump[hidden] { display: none; }
 button.tm-gantt-handle { position: absolute; top: 4px; height: 28px; width: 8px; min-width: 0; padding: 0; border: 0; border-radius: 2px; box-shadow: none; background: var(--text-on-accent); opacity: .65; cursor: ew-resize; touch-action: none; z-index: 2; }
 button.tm-gantt-handle:hover { opacity: 1; outline: none; box-shadow: none; }
@@ -1235,25 +1231,20 @@ input.tm-task-checkbox.is-cancelled:checked::after {
 li.task-list-item { --tm-note-priority: initial; }
 
 /* Gantt rows retain one line for the title and one for its properties. */
-.tm-gantt-row { border-bottom: 1px solid var(--background-modifier-border); }
 .tm-main-view .tm-gantt-project button.tm-task-title { display: block; width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tm-main-view .tm-gantt-project .tm-project-header-metadata { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
 .tm-gantt-project .tm-project-date-range { flex-wrap: nowrap; flex-shrink: 0; }
 .tm-gantt-project .tm-task-source { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tm-gantt-project .tm-task-due { flex-shrink: 0; }
-.tm-gantt-date { flex-shrink: 0; border-left: 1px solid var(--background-modifier-border); white-space: nowrap; overflow: hidden; text-overflow: clip; text-align: left; padding-left: 8px; }
 .tm-gantt-grid { position: absolute; inset: 0; pointer-events: none; }
 .tm-gantt-grid-line { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--background-modifier-border); }
 
 /* Compact single-line Gantt labels and independent date controls. */
-.tm-gantt-row { border-bottom: 0; }
 .tm-gantt-project-content { flex-direction: row; align-items: center; gap: 10px; }
 .tm-main-view .tm-gantt-project button.tm-task-title { flex: 1 1 auto; width: auto; min-height: 0; padding-block: 0; }
 .tm-main-view .tm-gantt-project .tm-project-header-metadata { flex: 0 1 auto; min-width: 0; }
-.tm-gantt-date { font-size: var(--font-ui-medium); }
 /* A year's first month (or week) names the year beside it. */
 .tm-gantt-year { margin-left: 4px; font-weight: var(--font-semibold); color: var(--text-normal); }
-button.tm-gantt-bar { background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary)); color: var(--text-normal); border: 1px solid color-mix(in srgb, var(--interactive-accent) 40%, transparent); border-radius: 10px; padding-inline: 14px; font-size: var(--font-ui-small); }
 button.tm-gantt-handle.is-start, button.tm-gantt-handle.is-finish { top: 10px; height: 16px; width: 10px; background: transparent; border-radius: 2px; }
 button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: var(--interactive-accent); }
 
@@ -1334,7 +1325,6 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-calendar-controls { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 4px; }
 .tm-calendar-controls > button { border: 0; box-shadow: none; border-radius: 16px; background: var(--background-modifier-hover); }
 .tm-calendar-controls button:hover { background: var(--background-modifier-hover); }
-.tm-calendar-resize-handle:hover, .tm-calendar-resize-handle:focus-visible { background: transparent; }
 /* Keep a visible keyboard focus indicator on the otherwise invisible resize handles. */
 .tm-calendar-resize-handle:focus-visible { outline: 2px solid var(--background-modifier-border-focus, var(--interactive-accent)); outline-offset: -2px; border-radius: 2px; }
 .tm-calendar .tm-calendar-grid { border-left: 1px solid var(--background-modifier-border); border-bottom: 1px solid var(--background-modifier-border); }
@@ -1506,8 +1496,6 @@ button.tm-gantt-handle::before {
 /* Project colors */
 /* --tm-project-color is set inline from a validated colour; Obsidian's --color-* adapt to light and dark themes. */
 .tm-project-progress-circle { color: var(--tm-project-color, var(--interactive-accent)); }
-/* Tints keep text-normal readable on every colour; the border and grips carry the hue. */
-button.tm-gantt-bar { background: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 12%, var(--background-primary)); border-color: color-mix(in srgb, var(--tm-project-color, var(--interactive-accent)) 40%, transparent); }
 button.tm-gantt-bar.tm-project-colored { background: color-mix(in srgb, var(--tm-project-color) 20%, var(--background-primary)); border-color: color-mix(in srgb, var(--tm-project-color) 60%, transparent); }
 button.tm-gantt-handle::after { background: var(--tm-project-color, var(--interactive-accent)); }
 .tm-project-color-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
