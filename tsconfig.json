@@ -23,5 +23,5 @@
     "esModuleInterop": true,
     "lib": ["DOM", "ES2018"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.mts"]
 }
