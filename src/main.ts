@@ -787,6 +787,7 @@ export default class TaskManagerPlugin extends Plugin {
       const view = leaf.view;
       if (view instanceof TaskMainView) view.render();
     }
+    this.refreshNavigation();
     this.refreshTaskSidebar();
   }
 

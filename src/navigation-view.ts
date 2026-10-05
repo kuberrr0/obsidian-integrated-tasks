@@ -8,13 +8,13 @@ import { activeTaskDrag, highlightDropTarget, markDropTarget, TASK_DRAG_TYPE, ty
 export const TASK_NAV_VIEW = "task-manager-navigation";
 
 /** A list in the sidebar, as Things shows its lists: a coloured icon, the name, and (for some) how many tasks are open. */
-interface NavEntry { mode: TaskViewMode; label: string; icon: string; color: string; count?: boolean }
+interface NavEntry { mode: TaskViewMode; label: string; icon: string; color: string; count?: boolean; griplyIcon?: string }
 
 /** The lists, in groups set apart as Things sets its lists apart. */
 const NAV_GROUPS: NavEntry[][] = [
   [{ mode: "inbox", label: "Inbox", icon: "inbox", color: "blue", count: true }],
   [
-    { mode: "today", label: "Today", icon: "star", color: "yellow", count: true },
+    { mode: "today", label: "Today", icon: "star", griplyIcon: "calendar-x", color: "yellow", count: true },
     { mode: "upcoming", label: "Upcoming", icon: "calendar-days", color: "red" },
     { mode: "all", label: "All Tasks", icon: "layers", color: "cyan" }
   ]
@@ -227,7 +227,8 @@ export class TaskNavigationView extends ItemView {
       const lists = nav.createDiv({ cls: "tm-nav-group" });
       for (const entry of group) {
         const count = entry.count ? this.plugin.index.query({ mode: entry.mode, showCompleted: false }).length : undefined;
-        const row = item(lists, `mode:${entry.mode}`, entry.label, listActive(entry.mode), () => this.plugin.openTaskView({ mode: entry.mode }), entry.icon, entry.color, count);
+        const row = item(lists, `mode:${entry.mode}`, entry.label, listActive(entry.mode), () => this.plugin.openTaskView({ mode: entry.mode }),
+          (this.plugin.settings.style === "griply" && entry.griplyIcon) || entry.icon, entry.color, count);
         if (entry.mode === "inbox" || entry.mode === "today") this.dropTarget(row, { kind: entry.mode });
         // Smart lists, being saved views of all tasks, sit under All Tasks.
         if (entry.mode !== "all" || !folder(row, "smartLists", "smart lists")) continue;
