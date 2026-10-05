@@ -1,5 +1,4 @@
-import { NEW_TASK_TITLE, taskTitleLabel } from "./task-title";
-import { previewCreatedTask } from "./task-store";
+import { taskTitleLabel } from "./task-title";
 import { splitDestination } from "./structure";
 import { activeProjects, projectStatuses, renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
@@ -10,9 +9,11 @@ import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { cloneTaskFilters, smartListDraft, undatedFilters, type SmartListDraft } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
 import { TaskPropertyEditors } from "./task-property-editors";
+import { NEW_TASK_ID, patchPendingTask, startPendingTask, writePendingTask, type PendingTask } from "./pending-task";
+export { NEW_TASK_ID };
 import type { TaskEditorProperty } from "./task-editor";
 import type { ProjectDraft } from "./project-creator";
-import { draftFromTask, draftFromTitle, draftMatchesTask, draftWithTitle } from "./task-draft";
+import { draftFromTask, draftFromTitle, draftMatchesTask } from "./task-draft";
 import { openDatePopover } from "./date-popover";
 import { openActionMenu, openTagsPopover, openTaskMenu, priorityIcons } from "./task-menu";
 import { openConfirm } from "./confirm-modal";
@@ -36,7 +37,7 @@ import { groupTasks, orderTaskTree, sortTasks, taskMatchesQuery } from "./query"
 import { markDropZone, startTaskDrag, type SidebarDrop } from "./sidebar-drop";
 import type TaskManagerPlugin from "./main";
 import type { OpenEditorState } from "./main";
-import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskDraft, TaskEditorPreset, TaskManagerSettings, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
+import type { TaskFilter, Project, SmartList, SmartListScope, Task, TaskEditorPreset, TaskManagerSettings, TaskQuery, TaskViewMode, TaskViewState, TaskSort, TaskGrouping, TaskStatus, TaskProperty } from "./types";
 
 export const TASK_MAIN_VIEW = "task-manager-main";
 
@@ -47,8 +48,6 @@ export const TASK_MAIN_VIEW = "task-manager-main";
 export function tasksOpenInSidebar(settings: Pick<TaskManagerSettings, "taskDetails">): boolean {
   return Platform.isPhone || settings.taskDetails === "sidebar";
 }
-/** The id a new task goes by until it is written (written tasks' ids are their note and line). */
-export const NEW_TASK_ID = "tm-new-task";
 
 // Large lists render in pages; more rows load as the "Show more" button scrolls into view.
 const ROW_PAGE = 200;
@@ -161,7 +160,7 @@ export class TaskMainView extends ItemView {
    * (`draft`), the task it would be where it would go (`task`), and its title and notes as typed, in a card in the list
    * or in the Task Details sidebar.
    */
-  private newTaskEntry?: { draft: TaskDraft; task: Task; title: string; notes: string; host: "card" | "sidebar" };
+  private newTaskEntry?: PendingTask & { host: "card" | "sidebar" };
   private rovingRow?: HTMLElement;
   private moveTargets = new Map<string, { title: string; target: ListDropGroup }>();
   private viewOptions?: ViewOptionsPanel;
@@ -841,10 +840,10 @@ export class TaskMainView extends ItemView {
   private async startNewTask(state: OpenEditorState, host: "card" | "sidebar"): Promise<void> {
     await this.endNewTask();
     if (host === "card") await this.collapseCard();
-    const draft = this.plugin.newTaskDraft(state);
-    const task = await this.newTaskStandIn(draft);
-    if (!task) { this.plugin.openEditor(state); return; }
-    this.newTaskEntry = { draft, task, title: "", notes: "", host };
+    const pending = await startPendingTask(this.plugin, this.plugin.newTaskDraft(state), this.app.vault);
+    if (!pending) { this.plugin.openEditor(state); return; }
+    const task = pending.task;
+    this.newTaskEntry = { ...pending, host };
     if (host === "sidebar") {
       this.clearSelection();
       void this.plugin.showInTaskSidebar(NEW_TASK_ID, { focus: true }).catch((error: unknown) => new Notice(String(error)));
@@ -859,19 +858,6 @@ export class TaskMainView extends ItemView {
     }
   }
 
-  /** The task `draft` would be once written, at the place it would take in its note, standing in for it meanwhile. */
-  private async newTaskStandIn(draft: TaskDraft): Promise<Task | undefined> {
-    const path = splitDestination(draft.destination).path;
-    const file = this.app.vault.getAbstractFileByPath(path);
-    const content = file instanceof TFile ? await this.app.vault.cachedRead(file) : "";
-    const settings = this.plugin.settings;
-    const task = previewCreatedTask(path, content, { ...draft, title: NEW_TASK_TITLE }, {
-      dateFormat: this.plugin.dateFormat(), position: settings.newTaskPosition, linkDates: settings.linkDates, sectionHeadingLevel: settings.sectionHeadingLevel
-    });
-    // Just before the task now on its line, under an id no written task has.
-    return task && { ...task, id: NEW_TASK_ID, line: task.line - 0.5, endLine: task.line - 0.5, childIds: [] };
-  }
-
   /**
    * Ends the new task: written when it has a title (properties typed into it apply, as in the task editor), else, or
    * cancelled (`write` off), dropped. Returns the task written.
@@ -881,19 +867,7 @@ export class TaskMainView extends ItemView {
     if (!entry) return undefined;
     this.newTaskEntry = undefined;
     this.plugin.refreshTaskSidebar?.();
-    if (!write || !entry.title.trim()) return undefined;
-    const typed = draftWithTitle(entry.draft, "", entry.title, new Date(), this.plugin.dateFormat());
-    // A title of properties alone ("tomorrow p1") stays the title.
-    const draft: TaskDraft = { ...typed, title: typed.title || entry.title.trim(), description: entry.notes.trim() ? entry.notes : undefined };
-    const path = splitDestination(draft.destination).path;
-    try {
-      const line = await this.plugin.store.create(draft);
-      await this.plugin.index.refreshPath(path);
-      return this.plugin.index.tasksForPath(path).find(task => task.line === line);
-    } catch (cause) {
-      new Notice(cause instanceof Error ? cause.message : "Could not add the task.");
-      return undefined;
-    }
+    return write ? writePendingTask(this.plugin, entry) : undefined;
   }
 
   /** For the Task Details sidebar: the new task it shows (three panes), with its title and notes as typed and its note. */
@@ -938,10 +912,7 @@ export class TaskMainView extends ItemView {
   private patchNewTask(patch: BulkTaskPatch): void {
     const entry = this.newTaskEntry;
     if (!entry) return;
-    entry.draft = { ...entry.draft, ...patch };
-    const { destination, description, ...fields } = patch;
-    void destination; void description;
-    entry.task = { ...entry.task, ...fields };
+    patchPendingTask(entry, patch);
     if (entry.host === "card") this.renderTaskResults();
     this.plugin.refreshTaskSidebar?.();
   }
