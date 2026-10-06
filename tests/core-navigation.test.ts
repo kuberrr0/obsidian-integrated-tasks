@@ -67,7 +67,7 @@ function setup() {
   Object.assign(view, {
     containerEl: { children: [new FakeElement(), content], win },
     app: { workspace: { getActiveViewOfType: () => null, on: () => ({}) } } as unknown as App,
-    registerEvent: vi.fn()
+    registerEvent: vi.fn(), registerDomEvent: vi.fn()
   });
   const render = vi.spyOn(view as unknown as { render(): void }, "render");
   return { view, content, win, runFrames, render, tagSummaries, emit: () => listener() };

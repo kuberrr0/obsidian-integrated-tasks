@@ -18,7 +18,7 @@ it("syncs sidebar selection through the supported active-view API", async () => 
   const unsubscribe = vi.fn();
   const view = new TaskNavigationView({} as WorkspaceLeaf, { settings: {}, index: { subscribe: () => unsubscribe } } as unknown as TaskManagerPlugin);
   view.app = { workspace } as unknown as App;
-  Object.assign(view, { registerEvent: vi.fn() });
+  Object.assign(view, { registerEvent: vi.fn(), registerDomEvent: vi.fn(), containerEl: { win: {} } });
   vi.spyOn(view as unknown as { render(): void }, "render").mockImplementation(() => {});
   const setActive = vi.spyOn(view, "setActive");
   await view.onOpen();

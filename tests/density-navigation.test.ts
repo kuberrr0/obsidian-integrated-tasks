@@ -50,3 +50,26 @@ it("shows Today with calendar-x in the Griply style, and a star in the Things st
   expect(todayIcon()).toBe("star");
   expect(view.containerEl.querySelector(".tm-navigation")!.classList.contains("tm-style-things")).toBe(true);
 });
+
+it("keeps the list as it is while a row is pressed, so one tap opens it", async () => {
+  const openTaskView = vi.fn().mockResolvedValue(undefined);
+  let emit = (): void => {};
+  const plugin = {
+    settings: { ...DEFAULT_SETTINGS }, openTaskView,
+    index: { projects: () => [], tagSummaries: () => [], query: () => [], subscribe: (listener: () => void) => { emit = listener; return () => {}; } }
+  } as unknown as TaskManagerPlugin;
+  const app = { workspace: { on: () => ({}), getActiveViewOfType: () => null, rootSplit: {} } };
+  const view = new TaskNavigationView({ app } as unknown as WorkspaceLeaf, plugin);
+  await view.onOpen();
+  const inbox = () => Array.from(view.containerEl.querySelectorAll<HTMLElement>("button.tm-nav-label")).find(label => label.textContent === "Inbox")!;
+  const pressed = inbox();
+  pressed.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+  // A change arriving mid-tap (on a phone, the sidebar becoming active) does not rebuild the list under the finger.
+  emit();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(inbox()).toBe(pressed);
+  window.dispatchEvent(new Event("pointerup"));
+  pressed.click();
+  expect(openTaskView).toHaveBeenCalledExactlyOnceWith({ mode: "inbox" });
+  await view.onClose();
+});

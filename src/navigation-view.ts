@@ -90,6 +90,12 @@ export class TaskNavigationView extends ItemView {
   private fileEvents = false;
   private unsubscribe?: () => void;
   private frame?: number;
+  /**
+   * A press on the list in progress: rebuilding it now would take the pressed row away before its click (on phones,
+   * the first tap would only make the sidebar active), so the list waits until the press ends.
+   */
+  private pressed = false;
+  private renderAfterPress = false;
   // The toolbar is one tab stop; arrow keys move between its buttons.
   private toolbarFocus = 0;
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) { super(leaf); }
@@ -115,7 +121,24 @@ export class TaskNavigationView extends ItemView {
       if (mode) this.setActive(mode, typeof state.tag === "string" ? state.tag : undefined,
         mode === "tags" ? undefined : typeof state.pagePath === "string" ? state.pagePath : typeof state.projectPath === "string" ? state.projectPath : undefined);
     };
-    this.registerEvent(this.app.workspace.on("active-leaf-change", syncActive));
+    // Only a tab in the main area changes what is open; the sidebar itself (or another) becoming active changes nothing.
+    this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
+      if (leaf && leaf.getRoot?.() !== this.app.workspace.rootSplit) return;
+      syncActive();
+    }));
+    const release = (): void => {
+      if (!this.pressed) return;
+      this.pressed = false;
+      // After the click the press makes, which opens what it is on (and redraws the list itself).
+      this.containerEl.win.setTimeout(() => {
+        if (!this.renderAfterPress) return;
+        this.renderAfterPress = false;
+        this.scheduleRender();
+      }, 400);
+    };
+    this.registerDomEvent(this.containerEl, "pointerdown", () => { this.pressed = true; });
+    this.registerDomEvent(this.containerEl.win, "pointerup", release, true);
+    this.registerDomEvent(this.containerEl.win, "pointercancel", release, true);
     syncActive();
     this.render();
   }
@@ -149,6 +172,8 @@ export class TaskNavigationView extends ItemView {
 
   private render(): void {
     this.cancelRender();
+    if (this.pressed) { this.renderAfterPress = true; return; }
+    this.renderAfterPress = false;
     const container = this.containerEl.children[1] as HTMLElement;
     // Rebuilding the list would drop keyboard focus and scroll position; restore both afterwards.
     const focused = container.ownerDocument.activeElement as HTMLElement | null;
