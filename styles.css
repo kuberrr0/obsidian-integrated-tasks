@@ -1026,13 +1026,6 @@ button.tm-gantt-handle.is-finish:focus-visible,
   column-gap: 8px;
 }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
-/* Griply, as Things: the checkbox sits in the middle of the whole row, however many lines it takes; board cards keep it
-   at the top. */
-.tm-main-view.tm-style-griply .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: center; padding-top: 0; }
-.tm-main-view.tm-style-griply .tm-kanban .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
-/* A project listed among them has its progress in the middle of its row too. */
-.tm-main-view.tm-style-griply .tm-project-row > .tm-project-icon { align-self: center; }
-.tm-main-view.tm-style-griply .tm-kanban .tm-project-row > .tm-project-icon { align-self: start; }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content {
   font-family: var(--font-interface);
   font-size: var(--font-ui-smaller);
@@ -2575,6 +2568,11 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
   flex: 1; min-width: 0; height: auto; padding: 2px 0;
   border: 0; border-radius: 0; box-shadow: none; background: transparent; color: inherit; font: inherit;
 }
+/* Griply: a subtask's checkbox (or the dashed one for the next) sits on its title's line, as a list row's does, rather
+   than in the middle of the row. */
+.tm-task-sidebar.tm-style-griply .tm-sidebar-subtask { --tm-subtask-line: calc(var(--font-ui-small) * 1.5 + 4px); align-items: start; align-content: center; }
+.tm-task-sidebar.tm-style-griply input.tm-sidebar-subtask-title { height: var(--tm-subtask-line); line-height: 1.5; }
+.tm-task-sidebar.tm-style-griply .tm-sidebar-subtask > :first-child { margin-top: calc((var(--tm-subtask-line) - var(--checkbox-size, 16px)) / 2); }
 .tm-task-sidebar input.tm-sidebar-subtask-title:focus { border: 0; box-shadow: none; }
 .tm-sidebar-subtask.is-completed .tm-sidebar-subtask-title { color: var(--text-faint); text-decoration: line-through; }
 /* Where the next subtask's checkbox will be: a checkbox's outline, dashed. */
