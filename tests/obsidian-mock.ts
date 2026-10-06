@@ -45,7 +45,30 @@ export class ItemView {
   register(): void {}
   getState(): Record<string, unknown> { return {}; }
   async setState(): Promise<void> {}
+  addChild<T>(child: T): T { return child; }
+  removeChild<T>(child: T): T { return child; }
 }
+
+export class Component {
+  load(): void {}
+  unload(): void {}
+}
+
+export const Keymap = { isModEvent: (event?: MouseEvent | KeyboardEvent | null): boolean => Boolean(event && (event.metaKey || event.ctrlKey)) };
+
+// Markdown as Obsidian renders it, as far as tests look: a paragraph a line, its marks gone, its [[links]] as links.
+export const MarkdownRenderer = {
+  render: async (_app: unknown, markdown: string, element: HTMLElement): Promise<void> => {
+    for (const line of markdown.split("\n")) {
+      const paragraph = element.createEl("p");
+      for (const part of line.split(/(\[\[[^\]]+\]\])/)) {
+        const link = /^\[\[([^\]]+)\]\]$/.exec(part);
+        if (link) paragraph.createEl("a", { cls: "internal-link", text: link[1], attr: { "data-href": link[1], href: link[1] } });
+        else paragraph.appendText(part.replace(/\*\*|__|`/g, ""));
+      }
+    }
+  }
+};
 
 // A note open in the editor: its file, its mode, and an editor with its lines and selections.
 export class MarkdownView {

@@ -1,4 +1,4 @@
-import { ItemView, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { Component, ItemView, Keymap, MarkdownRenderer, Notice, Platform, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
 import { NEW_TASK_ID, TaskMainView, tasksOpenInSidebar } from "./task-view";
 import { splitDestination } from "./structure";
@@ -90,6 +90,10 @@ export class TaskSidebarView extends ItemView {
   private listDrag?: ListDragController;
   private indexVersion = 0;
   private renderFrame?: number;
+  /** The task whose notes are being edited as text, rather than shown rendered. */
+  private editingNotes?: string;
+  /** What the rendered notes hold on to (embeds, live previews…), let go of when they are drawn again. */
+  private notesComponent?: Component;
   private closed = false;
   private unsubscribe?: () => void;
   /** Beside a note: its tasks, the ones its caret is on, and a new task started there. */
@@ -662,6 +666,14 @@ export class TaskSidebarView extends ItemView {
     open.addEventListener("click", () => void this.openSource(task));
   }
 
+  /** Notes as Markdown renders them in a note, the links resolved from the task's own note. */
+  private renderNotes(element: HTMLElement, text: string, sourcePath: string): void {
+    if (this.notesComponent) this.removeChild(this.notesComponent);
+    const component = this.notesComponent = this.addChild(new Component());
+    element.empty();
+    void MarkdownRenderer.render(this.app, text, element, sourcePath, component);
+  }
+
   /** Typing is saved once focus leaves the title and notes (moving between the two keeps it). */
   private saveOnLeave(root: HTMLElement, fields: string): void {
     root.addEventListener("focusout", event => {
@@ -716,8 +728,47 @@ export class TaskSidebarView extends ItemView {
     };
     if (title.value !== task.title) preview();
 
+    // Notes show rendered, as in a note (their marks hidden, their links live), until clicked: then they edit as text.
+    // Without any yet, the field waits to be typed in.
+    const rendered = panel.createDiv({ cls: "tm-sidebar-notes-rendered markdown-rendered", attr: { tabindex: "0", role: "button", "aria-label": "Edit notes", "data-tm-focus-key": "sidebar-notes-rendered" } });
     const notes = panel.createEl("textarea", { cls: "tm-sidebar-notes", attr: { "aria-label": "Notes", placeholder: "Add notes", rows: "2", "data-tm-focus-key": "sidebar-notes" } });
     notes.value = draft.notes;
+    const showNotes = (): void => {
+      const editing = isNew || this.editingNotes === task.id || !notes.value.trim();
+      rendered.hidden = editing;
+      notes.hidden = !editing;
+      if (!editing) this.renderNotes(rendered, notes.value, task.path);
+    };
+    const editNotes = (): void => {
+      this.editingNotes = task.id;
+      showNotes();
+      notes.focus();
+      notes.setSelectionRange(notes.value.length, notes.value.length);
+      autosize(notes);
+    };
+    rendered.addEventListener("click", event => {
+      const link = (event.target as HTMLElement).closest("a");
+      if (!link) { editNotes(); return; }
+      // A note's link opens it, a tag its view; a web link opens as links do.
+      if (link.hasClass("internal-link")) {
+        event.preventDefault();
+        void this.app.workspace.openLinkText(link.getAttribute("data-href") ?? link.getAttribute("href") ?? "", task.path, Keymap.isModEvent(event));
+      } else if (link.hasClass("tag")) {
+        event.preventDefault();
+        void this.plugin.openTag((link.textContent ?? "").replace(/^#/, ""));
+      }
+    });
+    rendered.addEventListener("keydown", event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      editNotes();
+    });
+    notes.addEventListener("focusout", () => {
+      if (this.editingNotes !== task.id) return;
+      this.editingNotes = undefined;
+      showNotes();
+    });
+    showNotes();
     const change = (): void => this.typed(task, { title: title.value, notes: notes.value, subtask: this.draft?.subtask });
     title.addEventListener("input", () => {
       if (/[\r\n]/.test(title.value)) title.value = title.value.replace(/[\r\n]+/g, " ");
