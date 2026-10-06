@@ -29,7 +29,7 @@ import { TaskStore, type TaskChange } from "./task-store";
 import { TasksImportModal } from "./tasks-import-modal";
 import { TASK_QUERY_LANGUAGE, TASK_QUERY_TEMPLATE, TaskQueryBlock } from "./task-query-block";
 import { TaskMainView, TASK_MAIN_VIEW, tasksOpenInSidebar } from "./task-view";
-import { DEFAULT_SETTINGS, type Project, type SavedViewOptions, type SmartList, type ViewLayout, type Task, type TaskDraft, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
+import { DEFAULT_SETTINGS, type Project, type SavedViewOptions, type SmartList, type ViewLayout, type ViewPeriod, type Task, type TaskDraft, type TaskManagerSettings, type TaskViewMode, type TaskViewState } from "./types";
 import { TaskManagerSettingTab } from "./settings";
 import { addProjectProperties } from "./project-properties";
 import { dailyNoteDateFormat } from "./daily-notes";
@@ -348,6 +348,8 @@ export default class TaskManagerPlugin extends Plugin {
     const layouts: unknown = this.settings.viewLayouts;
     this.settings.viewLayouts = layouts && typeof layouts === "object" && !Array.isArray(layouts)
       ? Object.fromEntries(Object.entries(layouts as Record<string, unknown>).filter((entry): entry is [string, ViewLayout] => ["calendar", "kanban", "gantt"].includes(String(entry[1])))) : {};
+    const periods: unknown = this.settings.viewPeriods;
+    this.settings.viewPeriods = periods && typeof periods === "object" && !Array.isArray(periods) ? { ...periods as Record<string, ViewPeriod> } : {};
     for (const key of ["ignoredPaths", "ignoredTags"] as const) {
       const list: unknown = this.settings[key];
       this.settings[key] = Array.isArray(list) ? parseIgnoreList(list.filter((item): item is string => typeof item === "string").join("\n"), key === "ignoredTags") : [];
@@ -369,6 +371,13 @@ export default class TaskManagerPlugin extends Plugin {
   saveViewOptions(key: string, options: SavedViewOptions | undefined): void {
     if (options) this.settings.viewOptions[key] = options;
     else delete this.settings.viewOptions[key];
+    this.saveViewSoon();
+  }
+
+  /** Keeps a view's calendar scope and Gantt range (none: the defaults) for its next visit. */
+  saveViewPeriod(key: string, period: ViewPeriod | undefined): void {
+    if (period && Object.values(period).some(value => value !== undefined)) this.settings.viewPeriods[key] = period;
+    else delete this.settings.viewPeriods[key];
     this.saveViewSoon();
   }
 
@@ -468,6 +477,7 @@ export default class TaskManagerPlugin extends Plugin {
     const previous = this.settings.smartLists;
     this.settings.smartLists = previous.filter(list => list.id !== id);
     delete this.settings.viewLayouts[`smartList:${id}`];
+    delete this.settings.viewPeriods[`smartList:${id}`];
     try { await this.saveSettings(); }
     catch (cause) { this.settings.smartLists = previous; throw cause; }
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {
@@ -785,7 +795,7 @@ export default class TaskManagerPlugin extends Plugin {
   /** What is kept for a renamed note (or the notes in a renamed folder) follows it: its views' options and layouts, and the smart lists made from it. */
   private async renameKeptPaths(renamed: (path: unknown) => string | undefined): Promise<void> {
     let changed = false;
-    for (const kept of [this.settings.viewOptions, this.settings.viewLayouts] as Array<Record<string, unknown>>) {
+    for (const kept of [this.settings.viewOptions, this.settings.viewLayouts, this.settings.viewPeriods] as Array<Record<string, unknown>>) {
       for (const key of Object.keys(kept)) {
         const match = /^(project|tag):(.+)$/.exec(key);
         const target = match ? renamed(match[2]) : undefined;

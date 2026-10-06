@@ -24,7 +24,10 @@ import { parseTaskInput } from "./parser";
 import { TaskSelection } from "./task-selection";
 import { PROJECT_COLORS, projectColorValue, updateProjectDates } from "./project-properties";
 import { renderGantt } from "./gantt-view";
-import { ganttYearStart, GANTT_MAX_SCALE, GANTT_MIN_SCALE, type GanttZoom } from "./gantt";
+import { ganttYearStart, GANTT_MAX_SCALE, GANTT_MIN_SCALE, GANTT_ZOOMS, type GanttZoom } from "./gantt";
+
+const CALENDAR_SCOPES: CalendarScope[] = ["day", "four-day", "week", "month", "year"];
+const GANTT_ZOOM_NAMES = Object.keys(GANTT_ZOOMS) as GanttZoom[];
 import { projectHierarchy } from "./project-hierarchy";
 import { kanbanColumns, type KanbanColumn } from "./kanban";
 import { ListDragController } from "./list-drag-view";
@@ -247,6 +250,33 @@ export class TaskMainView extends ItemView {
   }
 
   /**
+   * The calendar scope and Gantt range a tab gave (its own, restored), else the ones the page was left with, else a month
+   * and a year. The calendar still opens on today, and the Gantt at the start of the year.
+   */
+  private restorePeriod(state: Record<string, unknown>): void {
+    const key = this.layoutKey;
+    const saved = key ? this.plugin.settings?.viewPeriods?.[key] : undefined;
+    if (!CALENDAR_SCOPES.includes(state.calendarScope as CalendarScope)) {
+      this.calendarScope = CALENDAR_SCOPES.includes(saved?.calendarScope as CalendarScope) ? saved!.calendarScope! : "month";
+    }
+    if (!("ganttZoom" in state) && !("ganttScale" in state)) {
+      this.ganttZoom = GANTT_ZOOM_NAMES.includes(saved?.ganttZoom as GanttZoom) ? saved!.ganttZoom! : "year";
+      const scale = saved?.ganttScale;
+      this.ganttScale = typeof scale === "number" && scale >= GANTT_MIN_SCALE && scale <= GANTT_MAX_SCALE ? scale : undefined;
+    }
+  }
+
+  /** Keeps the page's calendar scope and Gantt range for its next visit; at the defaults, nothing is kept. */
+  private savePeriod(): void {
+    const key = this.layoutKey;
+    if (!key) return;
+    this.plugin.saveViewPeriod?.(key, {
+      ...(this.calendarScope !== "month" ? { calendarScope: this.calendarScope } : {}),
+      ...(this.ganttZoom !== "year" || this.ganttScale !== undefined ? { ganttZoom: this.ganttZoom, ganttScale: this.ganttScale } : {})
+    });
+  }
+
+  /**
    * `result`: Obsidian's; moving to another page (a project, tag, list or smart list) records the page left in the
    * tab's history, as a note does when its file changes, so Back and Forward step through task pages too. Obsidian
    * itself leaves Back, Forward and linked panes out.
@@ -264,7 +294,7 @@ export class TaskMainView extends ItemView {
       this.ganttScale = typeof state.ganttScale === "number" && state.ganttScale >= GANTT_MIN_SCALE && state.ganttScale <= GANTT_MAX_SCALE ? state.ganttScale : undefined;
     }
     const ganttAnchor = typeof state.ganttAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.ganttAnchor) && parseDateExpression(state.ganttAnchor) ? state.ganttAnchor : undefined;
-    if (["day", "four-day", "week", "month", "year"].includes(String(state.calendarScope))) this.calendarScope = state.calendarScope as CalendarScope;
+    if (CALENDAR_SCOPES.includes(state.calendarScope as CalendarScope)) this.calendarScope = state.calendarScope as CalendarScope;
     if (typeof state.calendarAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(state.calendarAnchor) && parseDateExpression(state.calendarAnchor)) this.calendarAnchor = state.calendarAnchor;
     const newPage = this.state.mode !== mode || this.state.projectPath !== state.projectPath || this.state.pagePath !== state.pagePath || this.state.tag !== state.tag || this.state.smartListId !== state.smartListId;
     // The Gantt opens at the start of the year (for an overview of it) unless sent somewhere; it keeps its place only
@@ -298,6 +328,7 @@ export class TaskMainView extends ItemView {
     if (newPage || !this.stateSet) {
       this.restoreViewOptions(typeof state.showProjects === "boolean" ? state.showProjects : undefined);
       this.restoreLayout(layout, projectLayout);
+      this.restorePeriod(state);
     } else if ((layout && layout !== this.layout) || (projectLayout && projectLayout !== this.projectLayout)) {
       this.layout = layout ?? this.layout;
       this.projectLayout = projectLayout ?? this.projectLayout;
@@ -627,7 +658,12 @@ export class TaskMainView extends ItemView {
         anchor: this.calendarAnchor, scope: this.calendarScope, tasks, dateFormat: this.plugin.dateFormat(),
         color: task => this.plugin.settings.calendarProjectColors ? this.plugin.index.projectColor(task.path) : undefined,
         priorityColors: this.plugin.settings.calendarPriorityColors,
-        navigate: (anchor, scope) => { this.calendarAnchor = anchor; this.calendarScope = scope; this.renderTaskResults(); },
+        navigate: (anchor, scope) => {
+          const changed = scope !== this.calendarScope;
+          this.calendarAnchor = anchor; this.calendarScope = scope;
+          if (changed) this.savePeriod();
+          this.renderTaskResults();
+        },
         create: preset => this.newTask(preset),
         edit: task => this.editTask(task),
         toggle: (task, completed) => this.plugin.store.toggle(task, completed),
@@ -1261,11 +1297,11 @@ export class TaskMainView extends ItemView {
       renderGantt(container, {
         projects,
         anchor: this.ganttAnchor, zoom: this.ganttZoom, dateFormat: this.plugin.dateFormat(), things: this.plugin.settings.style === "things",
-        navigate: (anchor, zoom, scale) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.ganttScale = scale; this.render(); },
+        navigate: (anchor, zoom, scale) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.ganttScale = scale; this.savePeriod(); this.render(); },
         viewportChanged: anchor => { this.ganttAnchor = anchor; },
         scale: this.ganttScale,
         // The timeline redraws itself; the view keeps where it is for its next drawing.
-        zoomed: (anchor, zoom, scale) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.ganttScale = scale; },
+        zoomed: (anchor, zoom, scale) => { this.ganttAnchor = anchor; this.ganttZoom = zoom; this.ganttScale = scale; this.savePeriod(); },
         open: project => { void this.plugin.openProject(project.path).catch(error => new Notice(String(error))); },
         edit: (project, field) => this.openProjectProperty(project, field),
         update: async (project, changes) => {

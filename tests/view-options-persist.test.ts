@@ -11,7 +11,7 @@ import { TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
 import { TaskMainView } from "../src/task-view";
 import { parseTaskQuery } from "../src/task-query";
-import { DEFAULT_SETTINGS, type SavedViewOptions, type SmartList, type ViewLayout } from "../src/types";
+import { type ViewPeriod, DEFAULT_SETTINGS, type SavedViewOptions, type SmartList, type ViewLayout } from "../src/types";
 import { todayIso } from "../src/date";
 import type TaskManagerPlugin from "../src/main";
 
@@ -28,12 +28,13 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
   } as unknown as App;
   const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
   await index.initialize();
-  const settings = { ...DEFAULT_SETTINGS, viewOptions: {} as Record<string, SavedViewOptions>, viewLayouts: {} as Record<string, ViewLayout>, smartLists: [] as SmartList[] };
+  const settings = { ...DEFAULT_SETTINGS, viewOptions: {} as Record<string, SavedViewOptions>, viewLayouts: {} as Record<string, ViewLayout>, viewPeriods: {} as Record<string, ViewPeriod>, smartLists: [] as SmartList[] };
   const plugin = {
     settings, index, store: {}, dateFormat: () => "YYYY-MM-DD", openEditor: vi.fn(), openTaskView: vi.fn().mockResolvedValue(undefined),
     projectDraft: vi.fn(() => ({ tags: "" })),
     saveViewOptions: vi.fn((key: string, options?: SavedViewOptions) => { if (options) settings.viewOptions[key] = options; else delete settings.viewOptions[key]; }),
     saveViewLayout: vi.fn((key: string, layout?: ViewLayout) => { if (layout && layout !== "list") settings.viewLayouts[key] = layout; else delete settings.viewLayouts[key]; }),
+    saveViewPeriod: vi.fn((key: string, period?: ViewPeriod) => { if (period && Object.keys(period).length) settings.viewPeriods[key] = period; else delete settings.viewPeriods[key]; }),
     saveSmartList: vi.fn(async (draft: Omit<SmartList, "id">) => { const list = { ...draft, id: "new" }; settings.smartLists.push(list); return list; })
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
@@ -118,6 +119,34 @@ describe("Layouts kept for each view", () => {
     // Back to a list, nothing is kept.
     layoutButton("layout-list").click();
     expect(settings.viewLayouts.upcoming).toBeUndefined();
+  });
+});
+
+describe("Calendar scope and Gantt range kept for each view", () => {
+  it("opens each view's calendar at the scope it was left at, and the Projects Gantt at its range", async () => {
+    const today = todayIso();
+    const { view, settings, content } = await setup([["A.md", `- [ ] Call ${today}`], ["Site.md", "- [ ] Page"]], { "Site.md": { tags: ["project"], start: today, end: today } });
+    const scope = (label: string) => content().querySelector<HTMLButtonElement>(`.tm-calendar-scopes button[aria-label="${label}"]`)!;
+    await view.setState({ mode: "today", layout: "calendar" });
+    scope("Week").click();
+    expect(settings.viewPeriods.today).toEqual({ calendarScope: "week" });
+    // Another view keeps its own (a month until changed); back again, the week holds.
+    await view.setState({ mode: "upcoming", layout: "calendar" });
+    expect(view.getState().calendarScope).toBe("month");
+    await view.setState({ mode: "today", layout: "calendar" });
+    expect(view.getState().calendarScope).toBe("week");
+    // Back to a month, nothing is kept.
+    scope("Month").click();
+    expect(settings.viewPeriods.today).toBeUndefined();
+
+    await view.setState({ mode: "projects" });
+    content().querySelector<HTMLButtonElement>('[data-tm-focus-key="project-layout-gantt"]')!.click();
+    content().querySelector<HTMLButtonElement>('.tm-gantt-zoom button[aria-label="Zoom in"]')!.click();
+    const range = settings.viewPeriods.projects;
+    expect(range?.ganttScale ?? range?.ganttZoom).toBeDefined();
+    await view.setState({ mode: "today" });
+    await view.setState({ mode: "projects" });
+    expect([view.getState().ganttZoom, view.getState().ganttScale]).toEqual([range!.ganttZoom, range!.ganttScale]);
   });
 });
 

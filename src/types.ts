@@ -128,6 +128,14 @@ export interface SmartList {
 /** How a task view lays its tasks out (list, calendar or board), or the Projects list its projects (list or Gantt). */
 export type ViewLayout = "list" | "calendar" | "kanban" | "gantt";
 
+/** A view's calendar and Gantt periods, kept between visits: the calendar's scope, and the Gantt's zoom (or the range it was zoomed to). */
+export interface ViewPeriod {
+  calendarScope?: import("./calendar").CalendarScope;
+  ganttZoom?: import("./gantt").GanttZoom;
+  /** Pixels per day, when the Gantt was zoomed to a range between its zooms. */
+  ganttScale?: number;
+}
+
 /** A view's View options, kept between visits. */
 export interface SavedViewOptions {
   filters: TaskFilter[];
@@ -177,6 +185,8 @@ export interface TaskManagerSettings {
   viewOptions: Record<string, SavedViewOptions>;
   /** Each view's layout other than a list, by view as for its options, plus "smartList:<id>" and "projects" (the Projects list's). */
   viewLayouts: Record<string, ViewLayout>;
+  /** Each view's calendar scope and Gantt range other than the defaults (a month; a year), by view as for its layout. */
+  viewPeriods: Record<string, ViewPeriod>;
   /** Folders and notes whose tasks are left out of every view. */
   ignoredPaths: string[];
   /** Tags whose notes (frontmatter) and tasks are left out of every view. */
@@ -206,6 +216,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   completionDates: false,
   viewOptions: {},
   viewLayouts: {},
+  viewPeriods: {},
   ignoredPaths: [],
   ignoredTags: [],
   panelsPlaced: false
