@@ -138,6 +138,34 @@ describe("what the Task Details sidebar shows", () => {
     expect(side().querySelector(".tm-sidebar-empty p")!.textContent).toBe("Select a task in a task view, or put the cursor on a checklist in a note, to see its details here.");
   });
 
+  it("gives the tasks without a date View options of their own, to filter, sort and group them", async () => {
+    const { view, sidebar, plugin, side } = await setup([["A.md", ["- [ ] Bravo p2", "- [ ] Alpha p1", "- [ ] Charlie p2", "- [ ] Delta"].join("\n")]]);
+    const saved: Record<string, unknown> = {};
+    Object.assign(plugin, { saveViewOptions: (key: string, options: unknown) => {
+      if (options) plugin.settings.viewOptions = { ...plugin.settings.viewOptions, [key]: options as never };
+      else { const { [key]: _, ...rest } = plugin.settings.viewOptions; void _; plugin.settings.viewOptions = rest; }
+      saved[key] = options;
+    } });
+    await view.setState({ mode: "upcoming" });
+    const titles = () => Array.from(side().querySelectorAll(".tm-sidebar-planner .tm-task-item .tm-task-title")).map(title => title.textContent);
+    const toggle = side().querySelector<HTMLButtonElement>(".tm-sidebar-planner-head .tm-filter-toggle")!;
+    expect(side().querySelector(".tm-sidebar-planner-head .tm-sidebar-planner-title")!.textContent).toBe("No date");
+    const viewOrder = titles();
+    expect(viewOrder).toHaveLength(4);
+    toggle.click();
+    expect(side().querySelector<HTMLElement>(".tm-sidebar-planner-head .tm-options-panel")!.hidden).toBe(false);
+    // Its own options, kept with the views': P2 only, by title, grouped by priority.
+    plugin.settings.viewOptions = { ...plugin.settings.viewOptions, "sidebar:undated": { filters: [{ property: "priority", operator: "is", values: ["2"] }], sort: "title", descending: false, grouping: "priority" } };
+    sidebar.render(true);
+    expect(titles()).toEqual(["Bravo", "Charlie"]);
+    expect(Array.from(side().querySelectorAll(".tm-sidebar-planner .tm-section h2")).map(heading => heading.textContent)).toEqual(["P2"]);
+    expect(toggle.querySelector(".tm-options-badge")!.textContent).toBe("1");
+    // Clear all goes back to the view's order, all of them.
+    side().querySelector<HTMLButtonElement>(".tm-options-clear")!.click();
+    expect(saved["sidebar:undated"]).toBeUndefined();
+    expect(titles()).toEqual(viewOrder);
+  });
+
   it("lists the tasks without a date beside any view's calendar, as for Upcoming, under the plugin's icon", async () => {
     const today = todayIso();
     const { view, sidebar, main, side } = await setup([["A.md", [`- [ ] At nine ${today} 09:00`, "- [ ] No date"].join("\n")]]);

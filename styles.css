@@ -2484,6 +2484,12 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
 .tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-planner { display: flex; flex: 1 1 0; flex-direction: column; min-height: 160px; overflow-y: auto; }
 .tm-task-sidebar:is(.is-today, .is-upcoming) .tm-sidebar-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .tm-task-sidebar .tm-sidebar-planner[hidden], .tm-sidebar-pane[hidden] { display: none; }
+/* Above the tasks without a date: their name, and their View options, whose panel fills the sidebar's width below. */
+.tm-sidebar-planner-head { position: relative; display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--size-4-2); padding: 0 0 var(--size-4-2) 6px; }
+.tm-sidebar-planner-head[hidden] { display: none; }
+.tm-sidebar-planner-title { color: var(--text-muted); font-size: var(--font-ui-small); font-weight: var(--font-semibold); }
+.tm-sidebar-planner-head .tm-options-panel { left: 0; right: 0; width: auto; max-width: none; }
+.tm-task-sidebar .tm-sidebar-planner .tm-section { margin-bottom: var(--size-4-4); }
 .tm-task-sidebar.is-today .tm-sidebar-planner { overflow: hidden; }
 
 /* Today's hours fill their part, and scroll. */

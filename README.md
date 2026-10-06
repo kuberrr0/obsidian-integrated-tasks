@@ -34,7 +34,7 @@ Today and Upcoming consider both the scheduled date and the deadline, using whic
 The **Task Details sidebar** opens in Obsidian's right sidebar (drag its tab to move it, or run **Open Task Details sidebar** to bring it back). What it shows follows the task view in front:
 
 - With **Today** open, today's hours. Drag a task from Today's list onto an hour to schedule it then, drag one to another time, or click a time to add a task there.
-- With **Upcoming** open, your tasks with no date (no scheduled date and no deadline) as a list. Drag one onto a day in the view to give it that date, or drag a task from the view into the list to take its dates off.
+- With **Upcoming** open, your tasks with no date (no scheduled date and no deadline) as a list. Drag one onto a day in the view to give it that date, or drag a task from the view into the list to take its dates off. Its **View options** button filters, sorts and groups the list on its own, as a view's does; until you change them, it follows the view's sort.
 - With any view in its calendar layout, that view's own tasks with no date, as a list to drag onto its days: a project's, a tag's, or a smart list's, through the view's filters (except those on dates). All Tasks, Today and Upcoming list every task with no date.
 - With a note open instead of a task view, that note's tasks as a list, subtasks under their task. Put the cursor on a checklist to see and edit its details there, or select several to edit them together as **Multiple Tasks**; Escape puts the list back until the cursor moves.
 - Anywhere else, the selected task's details.
