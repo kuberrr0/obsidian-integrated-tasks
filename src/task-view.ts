@@ -721,7 +721,9 @@ export class TaskMainView extends ItemView {
     }
     if (defaults.mode === "today") {
       const today = todayIso();
-      this.renderSection(container, "Overdue", tasks.filter((task) => (actionDate(task) ?? today) < today), "alert", { property: "date", value: addDays(today, -1) });
+      // Overdue shows only with something overdue.
+      const overdue = tasks.filter((task) => (actionDate(task) ?? today) < today);
+      if (overdue.length) this.renderSection(container, "Overdue", overdue, "alert", { property: "date", value: addDays(today, -1) });
       this.renderSection(container, "Today", tasks.filter((task) => actionDate(task) === today), undefined, { property: "date", value: today });
     } else if (defaults.mode === "upcoming") {
       for (const [date, group] of groupTasks(tasks, "date")) this.renderSection(container, formatDate(date, this.plugin.dateFormat()), group, undefined, taskGroupTarget("date", group[0]));
@@ -749,9 +751,11 @@ export class TaskMainView extends ItemView {
     }
     if (defaults.mode === "today") {
       const today = todayIso();
+      // Overdue shows only with something overdue.
+      const overdue = tasks.filter(task => (actionDate(task) ?? today) < today);
       return [
-        { title: "Overdue", tasks: tasks.filter(task => (actionDate(task) ?? today) < today), target: { property: "date", value: addDays(today, -1) } },
-        { title: "Today", tasks: tasks.filter(task => actionDate(task) === today), target: { property: "date", value: today } }
+        ...overdue.length ? [{ title: "Overdue", tasks: overdue, target: { property: "date" as const, value: addDays(today, -1) } }] : [],
+        { title: "Today", tasks: tasks.filter(task => actionDate(task) === today), target: { property: "date" as const, value: today } }
       ];
     }
     if (defaults.mode === "upcoming") return kanbanColumns(tasks, "date");

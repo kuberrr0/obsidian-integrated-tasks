@@ -753,6 +753,19 @@ describe("a board's default grouping", () => {
   });
 });
 
+describe("Today's Overdue group", () => {
+  it("shows only with something overdue, in a list and on a board", async () => {
+    const plus = (days: number) => { const date = new Date(); date.setDate(date.getDate() + days); return todayIso(date); };
+    const { view, content, plugin } = await setup([["A.md", `- [ ] Now ${plus(0)}`]]);
+    plugin.settings.showSubtasks = true;
+    const groups = () => Array.from(content().querySelectorAll(".tm-section > h2, .tm-kanban-column-header h2")).map(title => title.textContent?.trim());
+    await view.setState({ mode: "today", showProjects: false } as never);
+    expect(groups()).toEqual(["Today"]);
+    await view.setState({ mode: "today", layout: "kanban", showProjects: false } as never);
+    expect(groups()).toEqual(["Today"]);
+  });
+});
+
 describe("View options › Projects", () => {
   it("lists the projects a view matches among its tasks by default, with their progress, from a switch", async () => {
     const today = todayIso();
