@@ -286,7 +286,7 @@ For habits you want a history of, use a routine note instead:
 
 Check off the recurring task (`- [x]`) to record its completion and advance it to the next occurrence (a deadline moves by the same number of days), or cancel it (`- [-]`, or **Cancelled** from its status menu) to record that this occurrence didn't happen and move on all the same. Either way the task stays open for next time, in the checklist where you closed it, and its routine note keeps the history: `COMPLETED: Sep 19, 2026` in green and `CANCELED: Sep 26, 2026` in red. A simple repeat moves on when cancelled too, with no history.
 
-Repeat rules include every day, every week, every other week, every month, every year, and named weekdays. Overdue routines advance one occurrence at a time. Monthly and yearly routines remember the day they started on, so a routine on the 31st returns to the 31st after a shorter month. (Simple repeats don't: they follow the shorter month from then on.) If a task has both a routine note and a rule, the routine note wins.
+Repeat rules include every day, every week, every other week, every month, every year, and named weekdays. Overdue routines advance one occurrence at a time. Monthly and yearly routines remember the day they started on, so a routine on the 31st returns to the 31st after a shorter month. (Simple repeats don't remember it, but one from a month's last day stays on the last day: Jan 31 goes to Feb 28, then Mar 31.) If a task has both a routine note and a rule, the routine note wins.
 
 ## Record when tasks were done
 
