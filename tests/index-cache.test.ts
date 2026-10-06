@@ -133,6 +133,17 @@ describe("persisted task index", () => {
     expect(cache.notes.get("A.md")!.schema).toBe(CACHE_SCHEMA);
   });
 
+  it("parses a note again when Obsidian's tab size changes, since a tab's width decides how deep a line sits", async () => {
+    const w = world({ "A.md": "- [ ] A" });
+    const cache = new MemoryIndexCache();
+    await shutdown(await boot(w, cache));
+    expect(cache.notes.get("A.md")!.tabSize).toBe(4);
+    cache.notes.get("A.md")!.tabSize = 2;
+    w.vault.cachedRead.mockClear();
+    await shutdown(await boot(w, cache));
+    expect(readPaths(w)).toEqual(["A.md"]);
+  });
+
   it("reuses relative dates only on the day they were parsed", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 8, 27, 10));

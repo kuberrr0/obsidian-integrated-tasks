@@ -5,7 +5,7 @@ import type { NoteHeading } from "./structure";
 import type { Task } from "./types";
 
 /** Bump whenever the Task shape or note parsing changes, so older records are parsed again. */
-export const CACHE_SCHEMA = 3;
+export const CACHE_SCHEMA = 4;
 
 /** A task without its path-derived fields; parent and children are stored as line numbers. */
 export type CachedTask = Omit<Task, "id" | "path" | "parentId" | "childIds"> & { parentId?: number; childIds?: number[] };
@@ -19,6 +19,8 @@ export interface CachedNote {
   /** The Tag format the note was read with; a note read with the other must be read again. */
   tagFormat?: string;
   sectionHeadingLevel: number;
+  /** Obsidian's tab size the note was read with: a tab's width decides how deep a line sits. */
+  tabSize?: number;
   /** Set when a task used a relative date, which only holds on the day it was parsed. */
   day?: string;
   tasks: CachedTask[];
@@ -41,6 +43,8 @@ export interface NoteScan {
   /** The Tag format the note was read with; a note read with the other must be read again. */
   tagFormat?: string;
   sectionHeadingLevel: number;
+  /** Obsidian's tab size the note was read with: a tab's width decides how deep a line sits. */
+  tabSize?: number;
   /** Local ISO date the note was parsed on. */
   day: string;
 }

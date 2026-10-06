@@ -7,6 +7,7 @@ import { formatLocalDate } from "./date";
 import { noteRecord, restoreTasks, CACHE_SCHEMA, type CachedNote, type IndexCache, type NoteScan } from "./index-cache";
 import { sortTasks, taskMatchesQuery } from "./query";
 import { tagFormat, taskTagSummaries, type TaskTagSummary } from "./task-tags";
+import { indentStep } from "./task-indentation";
 import type { Project, ProjectProperties, Task, TaskManagerSettings, TaskQuery } from "./types";
 
 export type IndexListener = () => void;
@@ -429,7 +430,8 @@ export class TaskIndex {
     // A note already being scanned, for example after an early modify event, keeps that scan.
     if (!note || !stat || this.scanTokens.has(path) || this.isDeleted(file, path)) return false;
     if (note.schema !== CACHE_SCHEMA || note.mtime !== stat.mtime || note.size !== stat.size || (note.day && note.day !== day) ||
-      note.dateFormat !== this.getDateFormat() || note.tagFormat !== tagFormat() || note.sectionHeadingLevel !== this.getSettings().sectionHeadingLevel) return false;
+      note.dateFormat !== this.getDateFormat() || note.tagFormat !== tagFormat() || note.sectionHeadingLevel !== this.getSettings().sectionHeadingLevel
+      || note.tabSize !== indentStep()) return false;
     // No indexedContent is stored, so the next modify or rescan parses the note for real.
     this.headingsByPath.set(path, note.headings);
     this.tasksByPath.set(path, restoreTasks(note));
@@ -473,7 +475,7 @@ export class TaskIndex {
     }
     if (this.cache && mtime !== undefined && size !== undefined) {
       this.unsavedDeletes.delete(path);
-      this.unsaved.set(path, { mtime, size, dateFormat, tagFormat: tagFormat(), sectionHeadingLevel: level, day: formatLocalDate(now) });
+      this.unsaved.set(path, { mtime, size, dateFormat, tagFormat: tagFormat(), sectionHeadingLevel: level, tabSize: indentStep(), day: formatLocalDate(now) });
       this.scheduleSave();
     }
     return !same;
