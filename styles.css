@@ -2563,9 +2563,14 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 .tm-task-sidebar textarea.tm-sidebar-notes:focus { border-color: var(--background-modifier-border-focus); background: transparent; box-shadow: none; }
 .tm-task-sidebar textarea.tm-sidebar-notes::placeholder { color: var(--text-faint); }
 .tm-sidebar-subtasks { display: flex; flex-direction: column; margin-top: var(--size-4-3); }
-.tm-sidebar-subtask { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 6px; border-radius: var(--radius-s); font-size: var(--font-ui-small); }
+/* As the task's own head (and a list's rows): the checkbox centred in a 22px column, the title 8px after it, so each
+   subtask's checkbox and title line up under the task's. The row to add one is laid out the same. */
+.tm-sidebar-subtask {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; align-items: center;
+  min-height: 30px; border-radius: var(--radius-s); font-size: var(--font-ui-small);
+}
 .tm-sidebar-subtask:hover { background: var(--background-modifier-hover); }
-.tm-sidebar-subtask .tm-task-checkbox { flex: none; margin: 0; }
+.tm-sidebar-subtask > :first-child { justify-self: center; margin: 0; }
 .tm-task-sidebar input.tm-sidebar-subtask-title {
   flex: 1; min-width: 0; height: auto; padding: 2px 0;
   border: 0; border-radius: 0; box-shadow: none; background: transparent; color: inherit; font: inherit;
@@ -2577,7 +2582,26 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
   flex: none; box-sizing: border-box; width: var(--checkbox-size, 15px); height: var(--checkbox-size, 15px);
   border: 1px dashed var(--checkbox-border-color, var(--text-faint)); border-radius: var(--checkbox-radius, 4px);
 }
-.tm-main-view.tm-style-things .tm-sidebar-subtask-add { --checkbox-size: 14px; --checkbox-radius: 3px; }
+/* The Things style: the details read like an open Things card. Each property is a line of its icon and its value, in the
+   card's weight (an unset one shows its name, faint); Today has its yellow star, a date its red calendar, a deadline its
+   flag; tags are pills; and the subtasks are the card's checklist, round boxes under the title, between hairlines. */
+.tm-task-sidebar.tm-style-things .tm-sidebar-property { grid-template-columns: 14px minmax(0, 1fr); gap: 7px; }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property-name > :not(.tm-sidebar-property-icon) { display: none; }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property-icon { color: var(--text-normal); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property-value { color: var(--text-normal); font-weight: var(--font-semibold); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property-value.is-empty { color: var(--text-faint); font-weight: var(--font-normal); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property-extra { color: var(--text-muted); font-weight: var(--font-normal); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property.is-today .tm-sidebar-property-icon { color: var(--color-yellow); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property.is-dated .tm-sidebar-property-icon { color: var(--color-red); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property:is(.is-today, .is-deadline) .tm-sidebar-property-icon svg { fill: currentColor; }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property.is-urgent :is(.tm-sidebar-property-icon, .tm-sidebar-property-value) { color: var(--text-error); }
+/* Priority colours its icon only, as on a card. */
+.tm-task-sidebar.tm-style-things .tm-sidebar-property:is(.is-p1, .is-p2, .is-p3) .tm-sidebar-property-value { color: var(--text-normal); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-property-value .tm-things-card-tag { font-weight: var(--font-semibold); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-subtasks { margin-left: 30px; border-top: 1px solid var(--background-modifier-border); }
+.tm-task-sidebar.tm-style-things .tm-sidebar-subtask { grid-template-columns: 12px minmax(0, 1fr); padding: 5px 2px; border-bottom: 1px solid var(--background-modifier-border); border-radius: 0; }
+.tm-task-sidebar.tm-style-things .tm-sidebar-subtask:hover { background: none; }
+.tm-task-sidebar.tm-style-things .tm-sidebar-subtask-add { --checkbox-size: 12px; --checkbox-radius: 50%; border: 1.5px dashed var(--interactive-accent); opacity: 0.6; }
 .tm-sidebar-subtask.is-new input::placeholder { color: var(--text-faint); }
 @media (pointer: coarse) { .tm-sidebar-property, .tm-sidebar-subtask { min-height: 40px; } }
 /* View options' footer: Convert to smart list, below the options, always in view. */

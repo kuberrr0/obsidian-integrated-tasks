@@ -6,7 +6,7 @@ import { renderCalendar } from "./calendar-view";
 import { ListDragController } from "./list-drag-view";
 import { activeTaskDrag, markDropZone, onTaskDrag, startTaskDrag, TASK_DRAG_TYPE, type SidebarDrop, type TaskDrag } from "./sidebar-drop";
 import { NEW_TASK_TITLE } from "./task-title";
-import { renderThingsTaskDetails } from "./things-row-details";
+import { renderThingsTaskDetails, thingsDeadlineLabel } from "./things-row-details";
 import { calendarDate, rescheduledDraft } from "./calendar";
 import { todayIso } from "./date";
 import { parseTaskInput, repeatLabel } from "./parser";
@@ -685,6 +685,9 @@ export class TaskSidebarView extends ItemView {
     const now = new Date();
     const today = todayIso(now);
     const properties = panel.createDiv({ cls: "tm-sidebar-properties", attr: { role: "group", "aria-label": "Properties" } });
+    // The Things style reads like an open Things card: each property a line of its icon and its value, an unset one its
+    // name (see styles.css).
+    const things = this.plugin.settings.style === "things";
     const shares = (key: (item: Task) => unknown): boolean => tasks.every(item => JSON.stringify(key(item)) === JSON.stringify(key(first)));
     const row = (icon: string, name: string, property: SidebarProperty, key: (item: Task) => unknown, fill: (value: HTMLElement) => void, cls = ""): void => {
       const shared = shares(key);
@@ -695,25 +698,38 @@ export class TaskSidebarView extends ItemView {
       const value = element.createSpan({ cls: "tm-sidebar-property-value" });
       if (shared) fill(value);
       else { value.addClass("is-mixed"); value.setText("Mixed"); }
-      if (!value.childElementCount && !value.textContent) { value.addClass("is-empty"); value.setText("None"); }
+      if (!value.childElementCount && !value.textContent) { value.addClass("is-empty"); value.setText(things ? name : "None"); }
       editable(element, `${name}: ${value.textContent}`, `sidebar-${property}`, () => void this.edit(host, tasks, property, element));
     };
     const status = (item: Task) => item.status;
     row(shares(status) ? STATUS_ICONS[task.status] : "circle-dashed", "Status", "status", status, value => { value.setText(STATUS_LABELS[task.status]); }, `is-status${statusClass(task.status)}`);
-    row("calendar", "Date", "scheduledDate", item => [item.scheduledDate, item.scheduledTime, item.durationMinutes], value => {
+    // In the Things style, as on a card: Today's star, a date's red calendar.
+    const isToday = task.scheduledDate === today;
+    row(things && isToday ? "star" : "calendar", "Date", "scheduledDate", item => [item.scheduledDate, item.scheduledTime, item.durationMinutes], value => {
       const time = taskTimeDurationLabel(task.scheduledTime, task.durationMinutes);
-      const day = task.scheduledDate ? task.scheduledDate === today ? "Today" : longDate(task.scheduledDate, now) : "";
+      const day = task.scheduledDate ? isToday ? "Today" : longDate(task.scheduledDate, now) : "";
       value.setText([day, time].filter(Boolean).join(", "));
-      value.toggleClass("is-overdue", Boolean(task.scheduledDate && task.scheduledDate < today && !task.completed));
-    });
+      value.toggleClass("is-overdue", !things && Boolean(task.scheduledDate && task.scheduledDate < today && !task.completed));
+    }, things && task.scheduledDate ? isToday ? "is-today" : "is-dated" : "");
+    const urgent = Boolean(task.deadline && !task.completed && (deadlineIsOverdue(task.deadline, task.deadlineTime, now) || task.deadline === today));
     row("flag", "Deadline", "deadline", item => [item.deadline, item.deadlineTime], value => {
       if (!task.deadline) return;
+      if (things) {
+        value.createSpan({ text: `${longDate(task.deadline, now)}${task.deadlineTime ? `, ${taskTimeLabel(task.deadlineTime)}` : ""}` });
+        value.createSpan({ cls: "tm-sidebar-property-extra", text: thingsDeadlineLabel(task.deadline, now) });
+        return;
+      }
       const pill = value.createSpan({ cls: `tm-task-due${deadlineIsDistant(task.deadline, now) ? " is-distant" : ""}${!task.completed && deadlineIsOverdue(task.deadline, task.deadlineTime, now) ? " is-overdue" : ""}` });
       setIcon(pill.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "flag");
       pill.createSpan({ text: taskDeadlineCountdown(task.deadline, now) });
       value.createSpan({ cls: "tm-sidebar-property-extra", text: `${longDate(task.deadline, now)}${task.deadlineTime ? `, ${taskTimeLabel(task.deadlineTime)}` : ""}` });
-    });
-    row("signal", "Priority", "priority", item => item.priority, value => { if (task.priority) value.setText(`P${task.priority} · ${PRIORITY_NAMES[task.priority]}`); }, task.priority ? `is-p${task.priority}` : "");
+    }, things && task.deadline ? `is-deadline${urgent ? " is-urgent" : ""}` : "");
+    row("signal", "Priority", "priority", item => item.priority, value => {
+      if (!task.priority) return;
+      if (!things) { value.setText(`P${task.priority} · ${PRIORITY_NAMES[task.priority]}`); return; }
+      value.createSpan({ text: `${PRIORITY_NAMES[task.priority]} priority` });
+      value.createSpan({ cls: "tm-sidebar-property-extra", text: `P${task.priority}` });
+    }, task.priority ? `is-p${task.priority}` : "");
     row("folder", "Project", "project", item => item.path, value => {
       const path = destination ? splitDestination(destination).path : task.path;
       const source = value.createSpan({ cls: "tm-task-source", text: path === this.plugin.settings.inboxPath ? "Inbox" : noteName(path) });
@@ -721,14 +737,22 @@ export class TaskSidebarView extends ItemView {
       if (color) source.style.setProperty("--tm-project-color", color);
     });
     row("tag", "Tags", "tags", item => item.tags ?? [], value => {
+      // The Things style's tags are the card's pills.
+      if (things) { for (const tag of task.tags ?? []) value.createSpan({ cls: "tm-things-card-tag", text: tag }); return; }
       for (const tag of task.tags ?? []) {
         const pill = value.createSpan({ cls: "tm-task-tag" });
         setIcon(pill.createSpan({ cls: "tm-task-detail-icon", attr: { "aria-hidden": "true" } }), "tag");
         pill.createSpan({ text: tag });
       }
     });
-    row("repeat", "Repeat", "repeat", item => item.repeat, value => { if (task.repeat) value.setText(repeatLabel(task.repeat)); });
-    row("eye-off", "Hidden until", "defer", item => [item.someday, item.deferDate], value => { value.setText(task.someday ? "Someday" : task.deferDate ? longDate(task.deferDate, now) : ""); });
+    // Without a name beside them, the Things style's lines say what they are, as a card's do.
+    row("repeat", "Repeat", "repeat", item => item.repeat, value => {
+      if (task.repeat) value.setText(things ? `Repeats ${repeatLabel(task.repeat).toLowerCase()}` : repeatLabel(task.repeat));
+    });
+    row("eye-off", "Hidden until", "defer", item => [item.someday, item.deferDate], value => {
+      const date = task.someday ? "Someday" : task.deferDate ? longDate(task.deferDate, now) : "";
+      value.setText(things && task.deferDate && !task.someday ? `Hidden until ${date}` : date);
+    });
     return properties;
   }
 
@@ -758,7 +782,9 @@ export class TaskSidebarView extends ItemView {
     const list = panel.createDiv({ cls: "tm-sidebar-subtasks", attr: { role: "list", "aria-label": "Subtasks" } });
     for (const child of children) {
       const item = list.createDiv({ cls: `tm-sidebar-subtask${child.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
-      const box = item.createEl("input", { type: "checkbox", cls: `tm-task-checkbox${child.priority ? ` is-p${child.priority}` : ""}${statusClass(child.status)}`, attr: { "aria-label": checkboxLabel(child) } });
+      // The Things style's subtasks are a card's checklist: round boxes in the accent colour.
+      const cls = this.plugin.settings.style === "things" ? "tm-things-card-check-box" : `tm-task-checkbox${child.priority ? ` is-p${child.priority}` : ""}${statusClass(child.status)}`;
+      const box = item.createEl("input", { type: "checkbox", cls, attr: { "aria-label": checkboxLabel(child) } });
       box.checked = child.completed;
       box.addEventListener("change", () => this.toggle(child, box.checked, false));
       const name = item.createEl("input", { type: "text", cls: "tm-sidebar-subtask-title", attr: { "aria-label": `Subtask: ${child.title}`, "data-tm-focus-key": `sidebar-subtask:${child.id}` } });

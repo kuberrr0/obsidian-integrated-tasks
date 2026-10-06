@@ -245,13 +245,18 @@ describe("what the Task Details sidebar shows", () => {
       expect(side().classList.contains(`tm-style-${style}`)).toBe(true);
       expect(side().querySelector(".tm-things-card")).toBeNull();
       expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Parent");
-      expect(property("Priority").textContent).toBe("P2 · Medium");
+      const things = style === "things";
+      // The Things style reads like an open card: each line says what it is; tags are pills, subtasks a round checklist.
+      expect(property("Priority").textContent).toBe(things ? "Medium priorityP2" : "P2 · Medium");
       expect(property("Tags").textContent).toBe("work");
-      expect(property("Repeat").textContent).toBe("Every week");
+      expect(Boolean(property("Tags").querySelector(".tm-things-card-tag"))).toBe(things);
+      expect(property("Repeat").textContent).toBe(things ? "Repeats every week" : "Every week");
       expect(property("Deadline").classList.contains("is-empty")).toBe(true);
+      expect(property("Deadline").textContent).toBe(things ? "Deadline" : "None");
       expect(Array.from(side().querySelectorAll<HTMLInputElement>(".tm-sidebar-subtask-title")).map(input => input.value)).toEqual(["Child", ""]);
+      expect(Boolean(side().querySelector(".tm-sidebar-subtask .tm-things-card-check-box"))).toBe(things);
       // A recurring task's checkbox is its repeat icon in the Things style, as in its row.
-      expect(Boolean(side().querySelector(".tm-sidebar-head .tm-repeat-icon"))).toBe(style === "things");
+      expect(Boolean(side().querySelector(".tm-sidebar-head .tm-repeat-icon"))).toBe(things);
     }
 
     rows(main()).find(row => row.textContent!.includes("Other"))!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
@@ -284,7 +289,7 @@ describe("what the Task Details sidebar shows", () => {
     expect(titles(store.bulkUpdate.mock.calls[0][0])).toEqual(["One", "Two"]);
     expect(store.bulkUpdate.mock.calls[0][1]).toEqual({ priority: 1 });
     // Still selected, now sharing P1.
-    await vi.waitFor(() => expect(property("Priority").querySelector(".tm-sidebar-property-value")!.textContent).toBe("P1 · High"));
+    await vi.waitFor(() => expect(property("Priority").querySelector(".tm-sidebar-property-value")!.textContent).toBe("High priorityP1"));
     expect(titles(view.getSelectedTasks())).toEqual(["One", "Two"]);
     side().querySelector<HTMLInputElement>(".tm-sidebar-head .tm-task-checkbox")!.click();
     expect(store.setStatus).toHaveBeenCalledOnce();
@@ -611,11 +616,11 @@ describe("beside a note (no task view in front)", () => {
     sidebar.render();
     const value = (name: string) => Array.from(side().querySelectorAll(".tm-sidebar-property"))
       .find(property => property.querySelector(".tm-sidebar-property-name")!.textContent === name)!.querySelector(".tm-sidebar-property-value")!.textContent;
-    expect(value("Priority")).toBe("None");
+    expect(value("Priority")).toBe("Priority");
     const title = side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
     title.value = "Call mom p1 #[[family]]";
     title.dispatchEvent(new Event("input"));
-    expect(value("Priority")).toBe("P1 · High");
+    expect(value("Priority")).toBe("High priorityP1");
     expect(value("Tags")).toBe("family");
     expect(side().querySelector(".tm-sidebar-head .tm-task-checkbox")!.classList.contains("is-p1")).toBe(true);
     // Nothing is written until the title is left.
