@@ -658,29 +658,6 @@ describe("beside a note (no task view in front)", () => {
     expect(side().querySelector(".tm-sidebar-subtask.is-new .tm-sidebar-subtask-add")).not.toBeNull();
   });
 
-  it("shows a task's notes rendered, without their bullets, until clicked to edit them as text", async () => {
-    const { sidebar, side, setActive, files, contents } = await setup([["A.md", "- [ ] Plan\n\t- Call **Sam** about [[Venue]]\n\t- Book it"]]);
-    setActive(noteView(files.get("A.md")!, contents, { from: 0 }));
-    sidebar.render();
-    const rendered = side().querySelector<HTMLElement>(".tm-sidebar-notes-rendered")!;
-    const field = side().querySelector<HTMLTextAreaElement>(".tm-sidebar-notes")!;
-    await vi.waitFor(() => expect(Array.from(rendered.querySelectorAll("p")).map(line => line.textContent)).toEqual(["Call Sam about Venue", "Book it"]));
-    expect([rendered.hidden, field.hidden]).toEqual([false, true]);
-    // A note's link opens the note, rather than editing.
-    const open = vi.fn();
-    Object.assign(sidebar.app.workspace, { openLinkText: open });
-    rendered.querySelector<HTMLElement>("a.internal-link")!.click();
-    expect(open).toHaveBeenCalledWith("Venue", "A.md", false);
-    expect(field.hidden).toBe(true);
-    // A click elsewhere edits the text, its lines as written without their bullets; leaving shows it rendered again.
-    rendered.click();
-    expect([rendered.hidden, field.hidden]).toEqual([true, false]);
-    expect(field.value).toBe("Call **Sam** about [[Venue]]\nBook it");
-    expect(document.activeElement).toBe(field);
-    field.dispatchEvent(new FocusEvent("focusout"));
-    expect([rendered.hidden, field.hidden]).toEqual([false, true]);
-  });
-
   it("finds the caret's task by its text while the note is ahead of the index", async () => {
     const { sidebar, side, setActive, files, contents } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
     setActive(noteView(files.get("A.md")!, contents, { from: 2 }));

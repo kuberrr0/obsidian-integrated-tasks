@@ -2561,16 +2561,6 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 .tm-task-sidebar textarea.tm-sidebar-notes:hover { background: var(--background-modifier-hover); }
 .tm-task-sidebar textarea.tm-sidebar-notes:focus { border-color: var(--background-modifier-border-focus); background: transparent; box-shadow: none; }
 .tm-task-sidebar textarea.tm-sidebar-notes::placeholder { color: var(--text-faint); }
-/* Notes as Markdown renders them, until clicked to edit: in the field's place, at its size. */
-.tm-task-sidebar .tm-sidebar-notes-rendered {
-  margin-top: var(--size-4-3); padding: 4px 6px; border: 1px solid transparent; border-radius: var(--radius-s);
-  color: var(--text-normal); font-size: var(--font-ui-small); line-height: 1.5; overflow-wrap: anywhere; cursor: text;
-}
-.tm-task-sidebar .tm-sidebar-notes-rendered:hover { background: var(--background-modifier-hover); }
-.tm-task-sidebar .tm-sidebar-notes-rendered[hidden], .tm-task-sidebar textarea.tm-sidebar-notes[hidden] { display: none; }
-.tm-task-sidebar .tm-sidebar-notes-rendered > :first-child { margin-top: 0; }
-.tm-task-sidebar .tm-sidebar-notes-rendered > :last-child { margin-bottom: 0; }
-.tm-task-sidebar .tm-sidebar-notes-rendered :is(p, ul, ol, blockquote, pre) { margin-block: 0 0.4em; }
 .tm-sidebar-subtasks { display: flex; flex-direction: column; margin-top: var(--size-4-3); }
 /* As the task's own head (and a list's rows): the checkbox centred in a 22px column, the title 8px after it, so each
    subtask's checkbox and title line up under the task's. The row to add one is laid out the same. */
