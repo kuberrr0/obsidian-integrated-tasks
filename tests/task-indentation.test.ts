@@ -46,3 +46,11 @@ it("nests a moved task, and its subtasks, with tabs", () => {
   const changed = planBulkTasks(new Map([["Work.md", text]]), [{ task: tasks[1], draft: draftForGroup(tasks[1]) }], { anchor: tasks[0], placement: "child" });
   expect(changed.get("Work.md")).toBe("- [ ] A\n\t- [ ] B\n\t\t- [ ] B1\n");
 });
+
+it("reads a task's notes indented with tabs without their indentation or bullets", async () => {
+  useIndentation(() => ({ useTab: true, tabSize: 4 }));
+  const [task] = scanTasks("Work.md", "- [ ] Plan\n\t- First note\n\t- Second note\n\t\t- Detail");
+  expect(task.description).toBe("- First note\n- Second note\n    - Detail");
+  const { cardNotes } = await import("../src/things-task-card");
+  expect(cardNotes(task.description)).toBe("First note\nSecond note\n    - Detail");
+});

@@ -530,7 +530,8 @@ export function scanTasks(path: string, content: string, reference = new Date(),
           for (let blank = previous + 1; blank < lineNumber; blank++) { entry.lines.push(""); entry.lineNumbers.push(blank); }
         }
         entry.lineNumbers.push(lineNumber);
-        entry.lines.push(indentText(indent) + line.trimStart());
+        // Spaces, whatever the note uses: the margin common to the lines comes off below, and saving indents them again.
+        entry.lines.push(" ".repeat(indent) + line.trimStart());
         if (bullet) entry.bulletIndent = indent;
         descriptions.set(owner, entry);
       }
