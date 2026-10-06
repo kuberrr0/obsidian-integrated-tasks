@@ -1097,6 +1097,9 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-task-tag, .tm-task-due { display: inline-flex; align-items: center; gap: 4px; }
 .tm-task-tag { max-width: 100%; overflow-wrap: anywhere; }
 .tm-task-detail-icon, .tm-task-recurring { display: inline-flex; align-items: center; flex-shrink: 0; }
+/* An icon's pill (a tag, Hidden until) sits on the line's baseline by its text, as the properties without an icon do:
+   left to its icon, it would sit on the icon's bottom edge instead, higher than the rest. */
+.tm-task-metadata .tm-task-detail-icon + span { align-self: baseline; }
 .tm-task-detail-icon svg, .tm-task-recurring svg { width: 0.95em; height: 0.95em; }
 .tm-task-recurring { color: var(--text-muted); }
 .tm-task-due {
