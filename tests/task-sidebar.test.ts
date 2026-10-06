@@ -605,6 +605,26 @@ describe("beside a note (no task view in front)", () => {
     expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Second");
   });
 
+  it("shows what the title sets as it is typed, before it is saved, as a card does", async () => {
+    const { sidebar, side, setActive, files, contents, store } = await setup([["A.md", "- [ ] Call"]]);
+    setActive(noteView(files.get("A.md")!, contents, { from: 0 }));
+    sidebar.render();
+    const value = (name: string) => Array.from(side().querySelectorAll(".tm-sidebar-property"))
+      .find(property => property.querySelector(".tm-sidebar-property-name")!.textContent === name)!.querySelector(".tm-sidebar-property-value")!.textContent;
+    expect(value("Priority")).toBe("None");
+    const title = side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
+    title.value = "Call mom p1 #[[family]]";
+    title.dispatchEvent(new Event("input"));
+    expect(value("Priority")).toBe("P1 · High");
+    expect(value("Tags")).toBe("family");
+    expect(side().querySelector(".tm-sidebar-head .tm-task-checkbox")!.classList.contains("is-p1")).toBe(true);
+    // Nothing is written until the title is left.
+    expect(store.update).not.toHaveBeenCalled();
+    // No Notes or Subtasks headings; a dashed checkbox stands for the next subtask.
+    expect(side().querySelector("h5")).toBeNull();
+    expect(side().querySelector(".tm-sidebar-subtask.is-new .tm-sidebar-subtask-add")).not.toBeNull();
+  });
+
   it("finds the caret's task by its text while the note is ahead of the index", async () => {
     const { sidebar, side, setActive, files, contents } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
     setActive(noteView(files.get("A.md")!, contents, { from: 2 }));

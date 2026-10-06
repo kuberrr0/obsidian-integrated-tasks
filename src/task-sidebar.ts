@@ -634,15 +634,24 @@ export class TaskSidebarView extends ItemView {
     const paint = (): void => paintTokens(backdrop, title.value, taskInputRanges(title.value, task.title, now, dateFormat));
     paint();
 
-    this.renderProperties(panel, host, [task], destination);
+    let properties = this.renderProperties(panel, host, [task], destination);
+    // As in a card, the properties read what the title sets as it is typed (dates, p1, #tags, a project…), before it is saved.
+    const preview = (): void => {
+      const next = draftFromTitle(task, title.value, new Date(), dateFormat);
+      const moved = next.destination !== draftFromTask(task).destination;
+      checkbox.className = `tm-task-checkbox${next.priority ? ` is-p${next.priority}` : ""}${statusClass(task.status)}`;
+      const shown = this.renderProperties(panel, host, [task], moved ? next.destination : destination, { ...task, ...next, path: task.path });
+      properties.replaceWith(shown);
+      properties = shown;
+    };
+    if (title.value !== task.title) preview();
 
-    panel.createEl("h5", { cls: "tm-sidebar-section-title", text: "Notes" });
     const notes = panel.createEl("textarea", { cls: "tm-sidebar-notes", attr: { "aria-label": "Notes", placeholder: "Add notes", rows: "2", "data-tm-focus-key": "sidebar-notes" } });
     notes.value = draft.notes;
     const change = (): void => this.typed(task, { title: title.value, notes: notes.value, subtask: this.draft?.subtask });
     title.addEventListener("input", () => {
       if (/[\r\n]/.test(title.value)) title.value = title.value.replace(/[\r\n]+/g, " ");
-      autosize(title); paint(); change();
+      autosize(title); paint(); preview(); change();
     });
     notes.addEventListener("input", () => { autosize(notes); change(); });
     // Enter in the title or notes confirms what was typed (Shift+Enter starts a line of notes): it is saved as the
@@ -667,14 +676,16 @@ export class TaskSidebarView extends ItemView {
 
   /**
    * The property rows, each a name and a value that opens its editor: one task's values, or for several the value they
-   * share (else Mixed), set for all of them at once. `destination`: a new task's note to be.
+   * share (else Mixed), set for all of them at once. `destination`: a new task's note to be (or the note typed in its
+   * title). `shown`: the one task as its title, typed but not yet saved, would make it.
    */
-  private renderProperties(panel: HTMLElement, host: DetailsHost, tasks: Task[], destination?: string): void {
-    const [task] = tasks;
+  private renderProperties(panel: HTMLElement, host: DetailsHost, tasks: Task[], destination?: string, shown?: Task): HTMLElement {
+    const [first] = tasks;
+    const task = shown ?? first;
     const now = new Date();
     const today = todayIso(now);
     const properties = panel.createDiv({ cls: "tm-sidebar-properties", attr: { role: "group", "aria-label": "Properties" } });
-    const shares = (key: (item: Task) => unknown): boolean => tasks.every(item => JSON.stringify(key(item)) === JSON.stringify(key(task)));
+    const shares = (key: (item: Task) => unknown): boolean => tasks.every(item => JSON.stringify(key(item)) === JSON.stringify(key(first)));
     const row = (icon: string, name: string, property: SidebarProperty, key: (item: Task) => unknown, fill: (value: HTMLElement) => void, cls = ""): void => {
       const shared = shares(key);
       const element = properties.createDiv({ cls: `tm-sidebar-property${shared && cls ? ` ${cls}` : ""}` });
@@ -718,6 +729,7 @@ export class TaskSidebarView extends ItemView {
     });
     row("repeat", "Repeat", "repeat", item => item.repeat, value => { if (task.repeat) value.setText(repeatLabel(task.repeat)); });
     row("eye-off", "Hidden until", "defer", item => [item.someday, item.deferDate], value => { value.setText(task.someday ? "Someday" : task.deferDate ? longDate(task.deferDate, now) : ""); });
+    return properties;
   }
 
   /**
@@ -743,8 +755,6 @@ export class TaskSidebarView extends ItemView {
   /** The subtasks: each checks off and renames in place; the last line adds one, and Enter starts the next. */
   private renderSubtasks(panel: HTMLElement, task: Task): void {
     const children = this.children(task);
-    const heading = panel.createEl("h5", { cls: "tm-sidebar-section-title", text: "Subtasks" });
-    if (children.length) heading.createSpan({ cls: "tm-sidebar-section-count", text: `${children.filter(child => child.completed).length}/${children.length}` });
     const list = panel.createDiv({ cls: "tm-sidebar-subtasks", attr: { role: "list", "aria-label": "Subtasks" } });
     for (const child of children) {
       const item = list.createDiv({ cls: `tm-sidebar-subtask${child.completed ? " is-completed" : ""}`, attr: { role: "listitem" } });
@@ -766,7 +776,8 @@ export class TaskSidebarView extends ItemView {
       });
     }
     const adding = list.createDiv({ cls: "tm-sidebar-subtask is-new" });
-    setIcon(adding.createSpan({ cls: "tm-sidebar-subtask-add", attr: { "aria-hidden": "true" } }), "plus");
+    // A dashed checkbox stands where the new subtask's checkbox will be.
+    adding.createSpan({ cls: "tm-sidebar-subtask-add", attr: { "aria-hidden": "true" } });
     const input = adding.createEl("input", { type: "text", cls: "tm-sidebar-subtask-title", attr: { "aria-label": "New subtask", placeholder: "Add subtask", "data-tm-focus-key": "sidebar-subtask-new" } });
     input.value = this.draft?.subtask?.text ?? "";
     const keep = (text: string): void => { if (this.draft) this.draft = { ...this.draft, subtask: text ? { text } : undefined }; };

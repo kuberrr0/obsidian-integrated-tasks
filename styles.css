@@ -1030,6 +1030,9 @@ button.tm-gantt-handle.is-finish:focus-visible,
    at the top. */
 .tm-main-view.tm-style-griply .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: center; padding-top: 0; }
 .tm-main-view.tm-style-griply .tm-kanban .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { align-self: start; padding-top: 3px; }
+/* A project listed among them has its progress in the middle of its row too. */
+.tm-main-view.tm-style-griply .tm-project-row > .tm-project-icon { align-self: center; }
+.tm-main-view.tm-style-griply .tm-kanban .tm-project-row > .tm-project-icon { align-self: start; }
 .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content {
   font-family: var(--font-interface);
   font-size: var(--font-ui-smaller);
@@ -2547,20 +2550,16 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 .tm-sidebar-property.is-p3 :is(.tm-sidebar-property-icon, .tm-sidebar-property-value) { color: var(--color-blue); }
 .tm-sidebar-property.is-status.is-doing .tm-sidebar-property-icon { color: var(--text-accent); }
 .tm-sidebar-property.is-status.is-waiting .tm-sidebar-property-icon { color: var(--color-orange); }
-.tm-task-sidebar h5.tm-sidebar-section-title {
-  display: flex; align-items: center; gap: 6px; margin: var(--size-4-4) 0 var(--size-4-1); padding: 0 6px;
-  color: var(--text-muted); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); letter-spacing: 0.02em;
-}
-.tm-sidebar-section-count { color: var(--text-faint); font-weight: var(--font-normal); font-variant-numeric: tabular-nums; }
+/* Notes, then the subtasks, follow the properties without headings of their own. */
 .tm-task-sidebar textarea.tm-sidebar-notes {
-  display: block; width: 100%; min-height: 0; padding: 4px 6px;
+  display: block; width: 100%; min-height: 0; margin-top: var(--size-4-3); padding: 4px 6px;
   border: 1px solid transparent; border-radius: var(--radius-s); box-shadow: none; background: transparent;
   color: var(--text-normal); font-family: inherit; font-size: var(--font-ui-small); line-height: 1.5; resize: none; overflow: hidden;
 }
 .tm-task-sidebar textarea.tm-sidebar-notes:hover { background: var(--background-modifier-hover); }
 .tm-task-sidebar textarea.tm-sidebar-notes:focus { border-color: var(--background-modifier-border-focus); background: transparent; box-shadow: none; }
 .tm-task-sidebar textarea.tm-sidebar-notes::placeholder { color: var(--text-faint); }
-.tm-sidebar-subtasks { display: flex; flex-direction: column; }
+.tm-sidebar-subtasks { display: flex; flex-direction: column; margin-top: var(--size-4-3); }
 .tm-sidebar-subtask { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 6px; border-radius: var(--radius-s); font-size: var(--font-ui-small); }
 .tm-sidebar-subtask:hover { background: var(--background-modifier-hover); }
 .tm-sidebar-subtask .tm-task-checkbox { flex: none; margin: 0; }
@@ -2570,8 +2569,12 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 }
 .tm-task-sidebar input.tm-sidebar-subtask-title:focus { border: 0; box-shadow: none; }
 .tm-sidebar-subtask.is-completed .tm-sidebar-subtask-title { color: var(--text-faint); text-decoration: line-through; }
-.tm-sidebar-subtask-add { display: inline-flex; flex: none; justify-content: center; width: var(--checkbox-size, 16px); color: var(--text-faint); }
-.tm-sidebar-subtask-add svg { width: 14px; height: 14px; }
+/* Where the next subtask's checkbox will be: a checkbox's outline, dashed. */
+.tm-sidebar-subtask-add {
+  flex: none; box-sizing: border-box; width: var(--checkbox-size, 15px); height: var(--checkbox-size, 15px);
+  border: 1px dashed var(--checkbox-border-color, var(--text-faint)); border-radius: var(--checkbox-radius, 4px);
+}
+.tm-main-view.tm-style-things .tm-sidebar-subtask-add { --checkbox-size: 14px; --checkbox-radius: 3px; }
 .tm-sidebar-subtask.is-new input::placeholder { color: var(--text-faint); }
 @media (pointer: coarse) { .tm-sidebar-property, .tm-sidebar-subtask { min-height: 40px; } }
 /* View options' footer: Convert to smart list, below the options, always in view. */
