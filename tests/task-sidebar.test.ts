@@ -288,8 +288,8 @@ describe("what the Task Details sidebar shows", () => {
     }
 
     rows(main()).find(row => row.textContent!.includes("Other"))!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
-    // Several: Multiple Tasks in the title's place, the values they share (else Mixed), and no notes or subtasks.
-    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple Tasks");
+    // Several: Multiple tasks in the title's place, the values they share (else Mixed), and no notes or subtasks.
+    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple tasks");
     expect(side().querySelector(".tm-sidebar-head")!.textContent).not.toContain("selected");
     expect(side().querySelector(".tm-sidebar-title-field, .tm-sidebar-notes, .tm-sidebar-subtasks, .tm-sidebar-open-note")).toBeNull();
     expect(property("Priority").textContent).toBe("Mixed");
@@ -309,7 +309,7 @@ describe("what the Task Details sidebar shows", () => {
     rows(main())[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
     // Together they have the sidebar to themselves, as one task does.
     expect(planner().hidden).toBe(true);
-    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple Tasks");
+    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple tasks");
     property("Priority").click();
     await vi.waitFor(() => expect(document.querySelector(".tm-choice-popover [data-value='1']")).not.toBeNull());
     document.querySelector<HTMLElement>(".tm-choice-popover [data-value='1']")!.click();
@@ -497,7 +497,7 @@ describe("three panes (Task details › Three panes: in the sidebar)", () => {
     const key = (name: string) => title().dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
     const type = (text: string) => { title().value = text; title().dispatchEvent(new Event("input", { bubbles: true })); };
     view.newTask();
-    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
+    await vi.waitFor(() => expect(title()?.placeholder).toBe("New to-do"));
     expect(title().value).toBe("");
     expect(document.activeElement).toBe(title());
     // Nothing is written (or listed) yet; its subtasks and note wait until it is.
@@ -515,7 +515,7 @@ describe("three panes (Task details › Three panes: in the sidebar)", () => {
 
     // What is set before it is written goes with it; Enter writes it, and it stays shown, now selected.
     view.newTask();
-    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
+    await vi.waitFor(() => expect(title()?.placeholder).toBe("New to-do"));
     type("Buy milk");
     side().querySelector<HTMLElement>("[data-tm-focus-key='sidebar-priority']")!.click();
     await vi.waitFor(() => expect(document.querySelector(".tm-choice-popover [data-value='1']")).not.toBeNull());
@@ -531,7 +531,7 @@ describe("three panes (Task details › Three panes: in the sidebar)", () => {
 
     // Selecting another task writes one left titled; that task stays selected though its line moved.
     view.newTask();
-    await vi.waitFor(() => expect(title()?.placeholder).toBe("New To-Do"));
+    await vi.waitFor(() => expect(title()?.placeholder).toBe("New to-do"));
     type("Call Sam");
     rows(main()).find(row => row.textContent?.includes("Existing"))!.click();
     await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Call Sam\n- [ ] Buy milk p1\n- [ ] Existing"));
@@ -625,10 +625,10 @@ describe("beside a note (no task view in front)", () => {
     sidebar.render();
     expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("First");
     expect(side().querySelector<HTMLElement>(".tm-sidebar-planner")!.hidden).toBe(true);
-    // A selection over several: Multiple Tasks.
+    // A selection over several: Multiple tasks.
     Object.assign(caret, { from: 1, to: 4 });
     sidebar.render();
-    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple Tasks");
+    expect(side().querySelector(".tm-sidebar-selection-name")!.textContent).toBe("Multiple tasks");
     // Escape puts the list back until the caret moves.
     side().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     sidebar.render();

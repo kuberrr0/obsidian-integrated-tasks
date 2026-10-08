@@ -974,7 +974,7 @@ describe("Create new task in the Things style", () => {
     expect(extra.create).not.toHaveBeenCalled();
     expect(listed()).toEqual(["card", "Existing"]);
     expect(title().value).toBe("");
-    expect(title().placeholder).toBe("New To-Do");
+    expect(title().placeholder).toBe("New to-do");
     // Nothing to complete, nor subtasks to add, until it is written.
     expect(card()!.querySelector<HTMLInputElement>(".tm-task-checkbox")!.disabled).toBe(true);
     expect(card()!.querySelector("[data-tm-focus-key='card-add-checklist']")).toBeNull();

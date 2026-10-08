@@ -102,7 +102,7 @@ export class TaskSidebarView extends ItemView {
   }
 
   getViewType(): string { return TASK_SIDEBAR_VIEW; }
-  getDisplayText(): string { return "Task Details"; }
+  getDisplayText(): string { return "Task details"; }
   getIcon(): string { return "circle-check-big"; }
 
   async onOpen(): Promise<void> {
@@ -827,7 +827,7 @@ export class TaskSidebarView extends ItemView {
   }
 
   /**
-   * Several tasks selected: Multiple Tasks in place of a title, a checkbox that completes (or reopens) them all, and
+   * Several tasks selected: Multiple tasks in place of a title, a checkbox that completes (or reopens) them all, and
    * their properties, set for all of them at once; no notes or subtasks, which are each task's own.
    */
   private renderSelectionDetails(container: HTMLElement, host: DetailsHost, tasks: Task[]): void {
@@ -839,7 +839,7 @@ export class TaskSidebarView extends ItemView {
     checkbox.checked = done;
     checkbox.indeterminate = !done && tasks.some(task => task.completed);
     checkbox.addEventListener("change", () => host.setTaskStatus(host.getSelectedTasks(), checkbox.checked ? "done" : "todo"));
-    head.createDiv({ cls: "tm-sidebar-selection-name", text: "Multiple Tasks" });
+    head.createDiv({ cls: "tm-sidebar-selection-name", text: "Multiple tasks" });
     const close = head.createEl("button", { cls: "clickable-icon tm-sidebar-close", attr: { type: "button", "aria-label": "Close", title: "Close (Escape)", "data-tm-focus-key": "sidebar-close" } });
     setIcon(close, "x");
     close.addEventListener("click", () => this.closeDetails());

@@ -104,7 +104,7 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     // what saving reads as a property (dates, p1, #[[tags]]…); the text area's own text is transparent.
     const titleBox = head.createDiv({ cls: "tm-things-card-title-box" });
     const backdrop = titleBox.createDiv({ cls: "tm-things-card-title-backdrop", attr: { "aria-hidden": "true" } });
-    const title = titleBox.createEl("textarea", { cls: "tm-things-card-title", attr: { "aria-label": "Title", placeholder: "New To-Do", rows: "1", "data-tm-focus-key": "card-title" } });
+    const title = titleBox.createEl("textarea", { cls: "tm-things-card-title", attr: { "aria-label": "Title", placeholder: "New to-do", rows: "1", "data-tm-focus-key": "card-title" } });
     title.value = draft.title;
     const paintTitle = (): void => paintTokens(backdrop, title.value, taskInputRanges(title.value, task.title, now, options.dateFormat));
     paintTitle();

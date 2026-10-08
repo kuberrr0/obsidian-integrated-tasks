@@ -98,9 +98,9 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       {
         section: "How tasks are written",
         name: "Date format",
-        desc: "Moment date format for task dates, for example DD/MM/YYYY. Leave empty to use the Daily Notes format (YYYY-MM-DD if unset).",
+        desc: "Moment date format for task dates, for example DD/MM/YYYY. Leave empty to use the Daily notes format (YYYY-MM-DD if unset).",
         render: (setting: Setting) => { setting.addText(text => text
-          .setPlaceholder("Daily Notes format")
+          .setPlaceholder("Daily notes format")
           .setValue(this.plugin.settings.dateFormat)
           .onChange(value => this.applySoon("dateFormat", () => this.plugin.setDateFormat(value)))); }
       },

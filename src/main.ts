@@ -137,7 +137,7 @@ export default class TaskManagerPlugin extends Plugin {
         return true;
       } });
     }
-    this.addCommand({ id: "open-task-sidebar", name: "Open Task Details sidebar", callback: () => void this.activateTaskSidebar().catch((error) => new Notice(String(error))) });
+    this.addCommand({ id: "open-task-sidebar", name: "Open task details sidebar", callback: () => void this.activateTaskSidebar().catch((error) => new Notice(String(error))) });
     this.addCommand({ id: "create-new-smart-list", name: "Create new smart list", callback: () => this.openSmartListEditor() });
     this.addCommand({ id: "edit-smart-list", name: "Edit smart list", checkCallback: checking => {
       const list = this.activeSmartList();
@@ -685,7 +685,7 @@ export default class TaskManagerPlugin extends Plugin {
     const original = Reflect.get(prototype, "setViewState") as (this: WorkspaceLeaf, viewState: ViewState, eState?: unknown) => Promise<void>;
     let active = true;
     const wrapper = function (this: WorkspaceLeaf, viewState: ViewState, eState?: unknown): Promise<void> {
-      return original.call(this, active ? controller.redirect(this, viewState) : viewState, eState);
+      return original.call(this, active ? controller.redirect(this, viewState) : viewState, eState) as Promise<void>;
     };
     prototype.setViewState = wrapper;
     this.register(() => {
