@@ -1665,6 +1665,13 @@ body .modal-container .modal.tm-bottom-sheet.is-top::before { top: auto; bottom:
 .tm-query-block .tm-task-list { margin: 0; }
 .tm-query-block .tm-query-row { min-height: 0; padding-block: var(--size-2-2); }
 .tm-query-block button.tm-task-title { background: transparent; }
+/* Native buttons center flex content, clipping a long title at both ends; block text keeps truncation at the end. */
+.tm-query-block .tm-query-row button.tm-task-title { display: block; max-width: 100%; text-align: left; }
+/* Properties sit beside the title while they fit, and otherwise move under it and wrap whole, instead of squeezing. */
+.tm-query-block .tm-query-row .tm-task-content { display: flex; flex-wrap: wrap; row-gap: 2px; }
+.tm-query-block .tm-query-row .tm-task-primary { flex: 1 1 auto; }
+.tm-query-block .tm-query-row .tm-task-metadata { flex: 0 1 auto; min-width: 0; max-width: 100%; flex-wrap: wrap; justify-content: flex-start; overflow: visible; }
+.tm-query-block .tm-query-row .tm-checkbox-target { align-self: start; height: var(--input-height, 30px); }
 .tm-query-block .tm-query-row.is-completed .tm-task-title { color: var(--text-muted); text-decoration: line-through; }
 .tm-query-empty, .tm-query-footer { color: var(--text-muted); font-size: var(--font-ui-small); }
 .tm-query-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--size-4-2); margin-top: var(--size-4-2); }
