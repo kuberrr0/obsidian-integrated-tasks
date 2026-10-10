@@ -67,7 +67,7 @@ it.each(["day", "week"] as const)("snaps %s calendar drops to quarter hours whil
   }
 });
 
-it("leaves tasks without a date out, with no planner or tray for them (the Task Details sidebar lists them), and drags a task to another day", () => {
+it("leaves tasks without a date out, with no planner or tray for them (the Task Details sidebar lists them), and drags a task to another day", async () => {
   const container = new Element();
   const [undated, dated] = scanTasks("Tasks.md", "- [ ] Plan workshop\n- [ ] Book the room 2026-09-21");
   const move = vi.fn().mockResolvedValue(undefined), navigate = vi.fn();
@@ -84,6 +84,12 @@ it("leaves tasks without a date out, with no planner or tray for them (the Task 
   cards[0].dispatchEvent(Object.assign(new Event("dragstart"), { clientY: 0 }));
   lanes[2].dispatchEvent(Object.assign(new Event("drop"), { clientY: 432 }));
   expect(move).toHaveBeenCalledWith(dated, "2026-09-22", "09:00");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  // The all-day row above a day's hours takes the time off, as its tasks have none.
+  const headings = container.all().filter(el => el.cls.split(" ").includes("tm-calendar-week-heading"));
+  cards[0].dispatchEvent(Object.assign(new Event("dragstart"), { clientY: 0 }));
+  headings[3].dispatchEvent(Object.assign(new Event("drop"), { clientY: 0 }));
+  expect(move).toHaveBeenLastCalledWith(dated, "2026-09-23", null);
   container.all().find(el => el.attrs["aria-label"] === "Next period")!.dispatchEvent(new Event("click"));
   expect(navigate).toHaveBeenCalledWith("2026-09-24", "four-day");
 });

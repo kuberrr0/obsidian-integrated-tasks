@@ -30,7 +30,8 @@ export interface CalendarOptions {
   project?: (task: Task) => Project | undefined;
   openProject?: (project: Project) => void;
   resize: (task: Task, date: string, time: string, duration: number) => Promise<void>;
-  move: (task: Task, date: string, time?: string) => Promise<void>;
+  /** `time`: where it was dropped in a day's hours; none keeps the task's own, and null (its all-day row) takes it off. */
+  move: (task: Task, date: string, time?: string | null) => Promise<void>;
   /** A restored time-grid scroll position; without one, day and week views open near the current time. */
   initialScrollTop?: number;
   /** False draws no toolbar, and the period and scope then stay as given (no keys change them either). */
@@ -107,7 +108,7 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   // a day's hours, or after a day's tasks.
   let gap: HTMLElement | undefined;
   const hideGap = (): void => { gap?.remove(); gap = undefined; };
-  const showGap = (element: HTMLElement, task: Task, time?: string): void => {
+  const showGap = (element: HTMLElement, task: Task, time?: string | null): void => {
     gap ??= createDiv();
     gap.className = `tm-calendar-drop-gap${time ? " is-timed" : ""}`;
     gap.setAttribute("aria-hidden", "true");
@@ -125,9 +126,9 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
   // A card dragged in another calendar (its drag is the task drag in progress) drops here too, as do a list's rows
   // dragged in another pane (on this day as a drop zone): either is scheduled on this day, at the time dropped on.
   const foreign = (event: DragEvent): TaskDrag | undefined => !dragged && event.dataTransfer?.types.includes(TASK_DRAG_TYPE) ? activeTaskDrag() : undefined;
-  const scheduleElsewhere = (drag: TaskDrag, date: string, time?: string): Promise<void> => drag.drop({ kind: "schedule", date, time })
+  const scheduleElsewhere = (drag: TaskDrag, date: string, time?: string | null): Promise<void> => drag.drop({ kind: "schedule", date, time })
     .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not reschedule task."); });
-  const dropTarget = (element: HTMLElement, targetDate: string, getTime?: (point: { clientY: number }) => string): void => {
+  const dropTarget = (element: HTMLElement, targetDate: string, getTime?: (point: { clientY: number }) => string | null): void => {
     element.addEventListener("dragover", event => {
       const task = dragged ?? foreign(event)?.tasks[0];
       if (!task || moving) return;
@@ -510,7 +511,8 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
         const button = column.createEl("button", { cls: "tm-calendar-date", text: localDate(day).toLocaleDateString(undefined, { weekday: "short", day: "numeric" }), attr: { "aria-label": `New task on ${formatDate(day, options.dateFormat)}` } });
         button.addEventListener("click", () => options.create({ scheduledDate: day }));
         for (const task of (byDate.get(day) ?? []).filter(task => !calendarTime(task))) taskCard(column, task);
-        dropTarget(column, day);
+        // A task dropped in the all-day row lands as it shows there: without a time.
+        dropTarget(column, day, () => null);
       }
       const timeline = week.createDiv({ cls: "tm-calendar-timeline tm-calendar-week-timeline" });
       renderHours(timeline);

@@ -2,9 +2,9 @@ import type { Task } from "./types";
 
 /** A list in the task sidebar that takes dropped tasks, as Things' lists do: Inbox, a project and a note in the file
  * tree take them in, Today schedules them for today, and a tag is added to them. A calendar's day (and hour) in another
- * pane schedules them then; without a date, their dates come off. */
+ * pane schedules them then (a null time: all day); without a date, their dates come off. */
 export type SidebarDrop = { kind: "inbox" } | { kind: "today" } | { kind: "project"; path: string } | { kind: "note"; path: string } | { kind: "tag"; tag: string }
-  | { kind: "schedule"; date?: string; time?: string };
+  | { kind: "schedule"; date?: string; time?: string | null };
 
 /** The tasks being dragged in a task view, and what dropping them on a sidebar list does. */
 export interface TaskDrag {

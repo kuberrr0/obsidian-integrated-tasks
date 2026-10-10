@@ -53,8 +53,9 @@ export function shiftCalendar(anchor: string, scope: CalendarScope, direction: n
   date.setDate(Math.min(day, lastDay));
   return formatLocalDate(date);
 }
-export function rescheduledDraft(task: Task, date: string, time?: string): TaskDraft {
-  return { ...task, scheduledDate: date, scheduledTime: time ?? task.scheduledTime,
+/** `task` moved to `date`: at `time`, keeping its own without one, or with none when `time` is null (an all-day row). */
+export function rescheduledDraft(task: Task, date: string, time?: string | null): TaskDraft {
+  return { ...task, scheduledDate: date, scheduledTime: time === null ? undefined : time ?? task.scheduledTime,
     destination: destinationString(task.path, task.section) };
 }
 

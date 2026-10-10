@@ -18,6 +18,8 @@ describe("calendar scheduling", () => {
     const draft = rescheduledDraft(task, "2026-10-01", "12:30");
     expect(draft).toMatchObject({ scheduledDate: "2026-10-01", scheduledTime: "12:30", deadline: task.deadline, deadlineTime: task.deadlineTime, durationMinutes: 45, priority: 1, indent: 2, destination: "Work.md#Next" });
     expect(rescheduledDraft(task, "2026-10-01").scheduledTime).toBe("09:00");
+    // Dropped in an all-day row, it has no time.
+    expect(rescheduledDraft(task, "2026-10-01", null).scheduledTime).toBeUndefined();
     expect(task.scheduledDate).toBe("2026-09-01");
   });
   it("clamps month/year navigation at short months and leap years", () => {
