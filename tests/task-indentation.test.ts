@@ -28,6 +28,13 @@ it("indents with tabs, a tab as wide as Obsidian's tab size", () => {
   expect(indentWidth("\t\t- [ ] A")).toBe(4);
 });
 
+it("reads a tab-indented subtask afresh after the tab size changes", () => {
+  useIndentation(() => ({ useTab: true, tabSize: 4 }));
+  expect(scanTasks("Project.md", "- [ ] Parent\n\t- [ ] Step")[1].indent).toBe(4);
+  useIndentation(() => ({ useTab: true, tabSize: 2 }));
+  expect(scanTasks("Project.md", "- [ ] Parent\n\t- [ ] Step")[1].indent).toBe(2);
+});
+
 it("adds a first subtask one level in, as Obsidian would type it", async () => {
   useIndentation(() => ({ useTab: true, tabSize: 4 }));
   let { store: tabs, read } = store("- [ ] Parent\n");

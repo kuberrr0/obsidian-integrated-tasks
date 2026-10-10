@@ -1,5 +1,5 @@
 import { formatTags, normalizeTags, tagFormat, trailingTag } from "./task-tags";
-import { indentText, indentWidth } from "./task-indentation";
+import { indentStep, indentText, indentWidth } from "./task-indentation";
 import { bodyLines, scanSections, splitDestination, destinationString } from "./structure";
 import { findInputDate, findInputDeadline, findInputTime, formatDate, formatLocalDate, parseDateTimeExpression, parseTimeExpression, removeSpans } from "./date";
 import { STATUS_CHARS, draftStatus, isClosedStatus, statusFromChar } from "./task-status";
@@ -489,8 +489,8 @@ const parseCache = new Map<string, ParsedTaskLine | null>();
 
 function cachedParseTaskLine(line: string, reference: Date, dateFormat?: string): ParsedTaskLine | undefined {
   if (!CHECKBOX.test(line)) return undefined;
-  // The Tag format decides what counts as a tag, so a switch reads every line again.
-  const context = `${dateFormat ?? ""}\u0000${formatLocalDate(reference)}\u0000${tagFormat()}`;
+  // The Tag format decides what counts as a tag, and the tab size how deep a line sits, so a switch reads every line again.
+  const context = `${dateFormat ?? ""}\u0000${formatLocalDate(reference)}\u0000${tagFormat()}\u0000${indentStep()}`;
   if (context !== parseCacheContext) { parseCache.clear(); parseCacheContext = context; }
   let parsed = parseCache.get(line);
   if (parsed === undefined) {
