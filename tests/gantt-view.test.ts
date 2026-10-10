@@ -22,6 +22,15 @@ it("groups month dates by Monday, quarter/year by month, and five years by year"
   expect(partial.map(s => [s.label, s.offset, s.days])).toEqual([["Sep 7", 0, 4], ["Sep 14", 4, 6]]);
 });
 
+it("names months in Obsidian's language, as the plugin's other dates are", async () => {
+  const { moment } = await import("obsidian");
+  moment.defineLocale("tm-de", { parentLocale: "en", monthsShort: "Jan._Feb._März_Apr._Mai_Juni_Juli_Aug._Sep._Okt._Nov._Dez.".split("_") });
+  try {
+    expect(ganttSegments("2026-03-01", 31, "quarter")[0].label).toBe("März");
+    expect(ganttSegments("2026-03-02", 7, "month")[0].label).toBe("März 2");
+  } finally { moment.locale("en"); }
+});
+
 it("names the year once, at its first month, or by weeks its first week", () => {
   for (const zoom of ["quarter", "year"] as const) {
     expect(ganttSegments("2026-11-01", 92, zoom).map(s => [s.label, s.year])).toEqual([["Nov", undefined], ["Dec", undefined], ["Jan", "2027"]]);

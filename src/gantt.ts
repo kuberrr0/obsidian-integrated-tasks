@@ -1,4 +1,5 @@
 import { addDays, localDate } from "./calendar";
+import { formatDate } from "./date";
 import type { ProjectProperties } from "./types";
 
 export type GanttZoom = "month" | "quarter" | "year" | "five-year";
@@ -70,10 +71,10 @@ export function ganttSegments(start: string, days: number, zoom: GanttZoom): Gan
     const iso = addDays(start, offset), date = localDate(iso);
     const boundary = zoom === "month" ? date.getDay() === 1 : zoom === "five-year" ? date.getMonth() === 0 && date.getDate() === 1 : date.getDate() === 1;
     if (offset === 0 || boundary) {
-      const weekStart = localDate(addDays(iso, -((date.getDay() + 6) % 7)));
-      const label = zoom === "month" ? weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-        : zoom === "five-year" ? String(date.getFullYear()) : date.toLocaleDateString("en-US", { month: "short" });
-      const year = (zoom === "month" ? weekStart : date).getFullYear();
+      const weekStartIso = addDays(iso, -((date.getDay() + 6) % 7));
+      // In Obsidian's language, as the plugin's other dates are.
+      const label = zoom === "month" ? formatDate(weekStartIso, "MMM D") : zoom === "five-year" ? String(date.getFullYear()) : formatDate(iso, "MMM");
+      const year = zoom === "month" ? localDate(weekStartIso).getFullYear() : date.getFullYear();
       const segment: GanttSegment = { start: iso, offset, days: 0, label };
       if (zoom !== "five-year" && lastYear !== undefined && year !== lastYear) segment.year = String(year);
       lastYear = year;
