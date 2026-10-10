@@ -212,6 +212,7 @@ describe("plugin lifecycle", () => {
 
   it("starts Create new task in the Task Details sidebar with three panes, else in the task editor", async () => {
     const { plugin } = await loaded();
+    plugin.settings.taskDetails = "view";
     const inSidebar = vi.spyOn(plugin as unknown as { newTaskInSidebar(state: unknown): Promise<void> }, "newTaskInSidebar").mockResolvedValue();
     const editor = vi.spyOn(plugin, "openEditor").mockImplementation(() => {});
     plugin.newTask();
@@ -226,6 +227,7 @@ describe("plugin lifecycle", () => {
 
   it("opens a task from a task-query block in the task editor, or with three panes in the Task Details sidebar", async () => {
     const { plugin } = await loaded();
+    plugin.settings.taskDetails = "view";
     const inSidebar = vi.spyOn(plugin, "showInTaskSidebar").mockResolvedValue();
     const editor = vi.spyOn(plugin, "openEditor").mockImplementation(() => {});
     const task = { id: "A.md:0", path: "A.md", title: "One", line: 0 } as never;

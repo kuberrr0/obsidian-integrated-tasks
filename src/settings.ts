@@ -196,7 +196,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           .addOption("view", "Two panes: in the view").addOption("sidebar", "Three panes: in the sidebar")
           .setValue(this.plugin.settings.taskDetails)
           .onChange(async value => {
-            this.plugin.settings.taskDetails = value === "sidebar" ? "sidebar" : "view";
+            this.plugin.settings.taskDetails = value === "view" ? "view" : "sidebar";
             await this.plugin.saveSettings();
             this.plugin.refreshViews();
             // The details have nowhere else to go.

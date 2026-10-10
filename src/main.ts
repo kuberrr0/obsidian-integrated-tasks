@@ -338,11 +338,13 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings.showUndoNotices = this.settings.showUndoNotices === true;
     // Compact is the default; only an explicit Comfortable choice keeps Comfortable.
     this.settings.density = this.settings.density === "comfortable" ? "comfortable" : "compact";
-    this.settings.showFiles = this.settings.showFiles === true;
+    // Files show by default; only an explicit Off hides them.
+    this.settings.showFiles = this.settings.showFiles !== false;
     if (!["alphabetical", "alphabeticalReverse", "byModifiedTime", "byModifiedTimeReverse", "byCreatedTime", "byCreatedTimeReverse"].includes(this.settings.fileSortOrder)) this.settings.fileSortOrder = "alphabetical";
     // Griply is the default; only an explicit Things choice keeps Things.
     this.settings.style = this.settings.style === "things" ? "things" : "griply";
-    this.settings.taskDetails = this.settings.taskDetails === "sidebar" ? "sidebar" : "view";
+    // Three panes are the default; only an explicit Two panes choice keeps two.
+    this.settings.taskDetails = this.settings.taskDetails === "view" ? "view" : "sidebar";
     this.settings.completionDates = this.settings.completionDates !== false;
     if (typeof this.settings.sidebarIdleView !== "string" || !this.settings.sidebarIdleView) this.settings.sidebarIdleView = DEFAULT_SETTINGS.sidebarIdleView;
     const options: unknown = this.settings.viewOptions;

@@ -41,6 +41,18 @@ it("defaults density to compact and keeps only known values", async () => {
   }
 });
 
+it("shows files and opens tasks in three panes by default, keeping only an explicit opposite choice", async () => {
+  expect(DEFAULT_SETTINGS.showFiles).toBe(true);
+  expect(DEFAULT_SETTINGS.taskDetails).toBe("sidebar");
+  for (const [saved, files, details] of [[null, true, "sidebar"], [{ showFiles: false, taskDetails: "view" }, false, "view"], [{ showFiles: true, taskDetails: "sidebar" }, true, "sidebar"], [{ showFiles: "yes", taskDetails: "other" }, true, "sidebar"]] as const) {
+    const plugin = new TaskManagerPlugin({} as App, {} as never);
+    plugin.loadData = vi.fn().mockResolvedValue(saved);
+    await plugin.loadSettings();
+    expect(plugin.settings.showFiles).toBe(files);
+    expect(plugin.settings.taskDetails).toBe(details);
+  }
+});
+
 it("offers a Density dropdown in Appearance that saves and refreshes task and navigation views", async () => {
   rows.length = 0;
   const plugin = {

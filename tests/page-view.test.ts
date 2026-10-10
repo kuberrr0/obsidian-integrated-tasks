@@ -726,6 +726,7 @@ it("creates a project note from a name alone, refusing an existing note", async 
 
 it("creates a new task in the open view's context: a task view, a project or tag note, else the Inbox", () => {
   const plugin = new TaskManagerPlugin({} as App, {} as never);
+  plugin.settings.taskDetails = "view";
   const newTask = vi.fn();
   const taskView = Object.assign(Object.create(TaskMainView.prototype) as TaskMainView, { newTask });
   const note = (path: string) => Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, { file: { path } });

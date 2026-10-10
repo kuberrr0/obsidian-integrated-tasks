@@ -69,7 +69,7 @@ function setup() {
       dragFolder: (_event: DragEvent, folder: TFolder) => ({ type: "folder", file: folder })
     }
   };
-  const settings = { ...DEFAULT_SETTINGS };
+  const settings = { ...DEFAULT_SETTINGS, showFiles: false };
   const plugin = { settings, index: { projects: () => [], tagSummaries: () => [], query: () => [] } } as unknown as TaskManagerPlugin;
   const view = new TaskNavigationView({ app } as unknown as WorkspaceLeaf, plugin);
   const container = view.containerEl.children[1] as HTMLElement;

@@ -66,7 +66,7 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
   await index.initialize();
   const store = { toggle: vi.fn().mockResolvedValue(undefined), bulkDrop: vi.fn().mockResolvedValue([]), bulkChange: vi.fn().mockResolvedValue([]), setStatus: vi.fn().mockResolvedValue([]) };
   const plugin = {
-    settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
+    settings: { ...DEFAULT_SETTINGS, taskDetails: "view" }, index, store, dateFormat: () => "YYYY-MM-DD",
     openEditor: vi.fn(), openTaskView: vi.fn(), undoTaskChange: vi.fn(), redoTaskChange: vi.fn(), openQuickSwitcher: vi.fn(), saveSettings: vi.fn(),
     showInTaskSidebar: vi.fn().mockResolvedValue(undefined),
     projectDraft: vi.fn(() => ({ name: "Site", date: "", endDate: "", deadline: "", priority: "", parent: "", tags: "work", archived: false, color: "" })),

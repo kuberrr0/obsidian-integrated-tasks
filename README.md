@@ -196,7 +196,7 @@ group: source
 
 ![A dashboard note in Reading view, with live lists of overdue tasks, deadlines in the next seven days, and tasks waiting on others grouped by note](resources/images/dashboard-task-queries.png)
 
-Tasks look as they do in your task views, in the style you chose. Check them off, click a tag to open its tasks, or click a title or date to edit the task right from the note: it opens in the task editor, or with three panes in the Task details sidebar.
+Tasks look as they do in your task views, in the style you chose. Check them off, click a tag to open its tasks, or click a title or date to edit the task right from the note: it opens in the Task details sidebar, or in the task editor with two panes.
 
 Add `layout: board` to show the tasks as a board, with a column for each status (or for each group, with `group`). Add `layout: calendar` for a week calendar, where you can page through the weeks, drag a task to another day or time, and drag across empty time to add one. `layout: calendar month` opens on a month instead, and a date after it opens on that date's month or week, as in `layout: calendar month 2026-11-01` or `layout: calendar next monday`.
 
@@ -293,7 +293,7 @@ Swipe a task right to select it, or left for its actions. Tap a task to open its
 
 ![The Today view in the Griply style, with each task's dates, project and tags on a line under its title](resources/images/today-griply-style.png)
 
-Choose between two **Styles** in settings: **Griply** (the default, shown above), where each task's details sit under its title and tasks open in the task editor, and **Things**, shown at the top of this page, where tasks open as cards in the list. To work in three panes, set **Task details** to **Three panes: in the sidebar**, and tasks open in the Task details sidebar instead.
+Choose between two **Styles** in settings: **Griply** (the default, shown above), where each task's details sit under its title, and **Things**, shown at the top of this page. Tasks open in the Task details sidebar, beside your list. To open them in the list instead, set **Task details** to **Two panes: in the view**: Griply opens a task in the task editor, and Things opens it as a card in the list.
 
 | Setting | What it does |
 | --- | --- |
