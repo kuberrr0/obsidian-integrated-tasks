@@ -16,12 +16,14 @@ export interface TasksImportOptions {
   reference?: Date;
 }
 
-export type TasksImportSkip = "status" | "numbered" | "repeat" | "dependency" | "cancelled";
+export type TasksImportSkip = "status" | "numbered" | "repeat" | "whenDone" | "dependency" | "cancelled";
 
 const SKIP_LABELS: Record<TasksImportSkip, [string, string, string]> = {
   status: ["task", "tasks", "with an unsupported status, such as [!] or [>], left unchanged"],
   numbered: ["numbered-list task", "numbered-list tasks", "left unchanged"],
   repeat: ["repeat rule", "repeat rules", "this plugin doesn't support, kept as text"],
+  // Converted, but repeating from the task's date rather than from when it's done.
+  whenDone: ["repeat rule", "repeat rules", "with “when done” converted to a fixed schedule"],
   dependency: ["task", "tasks", "with IDs, dependencies, or on-completion actions, kept as text"],
   cancelled: ["cancelled date", "cancelled dates", "kept as text"]
 };
@@ -67,6 +69,14 @@ export function convertTasksLine(line: string, options: TasksImportOptions): Tas
       return " ";
     });
   };
+  const repeat = (text: string): boolean => {
+    const whenDone = /\s+when done$/i.test(text);
+    const rule = parseRepeatRule(text.replace(/\s+when done$/i, ""));
+    if (!rule) { skips.push("repeat"); return false; }
+    found.repeat = rule;
+    if (whenDone) skips.push("whenDone");
+    return true;
+  };
   // A kept date stays joined to its emoji (the Tasks plugin accepts both), so it is never read as a scheduled date.
   const keepDate = (emoji: string, date: string): string => `${emoji}${date}`;
 
@@ -78,11 +88,7 @@ export function convertTasksLine(line: string, options: TasksImportOptions): Tas
       if (priority) found.priority = priority;
       return Boolean(priority);
     }
-    if (field === "repeat") {
-      const rule = parseRepeatRule(trimmed.replace(/\s+when done$/i, ""));
-      if (rule) found.repeat = rule; else skips.push("repeat");
-      return Boolean(rule);
-    }
+    if (field === "repeat") return repeat(trimmed);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
     if (field === "created") return options.dropCreatedDates || keepDate("➕", trimmed);
     if (field === "cancelled") { skips.push("cancelled"); return keepDate("❌", trimmed); }
@@ -98,11 +104,7 @@ export function convertTasksLine(line: string, options: TasksImportOptions): Tas
     });
   }
   // A recurrence runs until the next signifier, a tag, a block ID, or the end of the line.
-  take(new RegExp(`🔁${VS}\\s*([^${SIGNIFIERS}#^\\[(]+)`, "gu"), rule => {
-    const parsed = parseRepeatRule(rule.trim().replace(/\s+when done$/i, ""));
-    if (parsed) found.repeat = parsed; else skips.push("repeat");
-    return Boolean(parsed);
-  });
+  take(new RegExp(`🔁${VS}\\s*([^${SIGNIFIERS}#^\\[(]+)`, "gu"), rule => repeat(rule.trim()));
   for (const [emoji, priority] of PRIORITIES) take(new RegExp(`${emoji}${VS}`, "gu"), () => { found.priority ??= priority; return true; });
   if (/[🆔⛔🏁]/u.test(body)) skips.push("dependency");
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseTaskLine } from "../src/parser";
-import { convertTasksLine, convertTasksNote, type TasksImportOptions } from "../src/tasks-import";
+import { convertTasksLine, convertTasksNote, skipLabel, type TasksImportOptions } from "../src/tasks-import";
 
 const options: TasksImportOptions = { dateFormat: "MMM D, YYYY", linkDates: false, convertTags: true, dropCreatedDates: true, reference: new Date(2026, 8, 27) };
 const convert = (line: string, overrides: Partial<TasksImportOptions> = {}) => convertTasksLine(line, { ...options, ...overrides });
@@ -28,6 +28,13 @@ describe("Tasks plugin import", () => {
   it("reads Dataview-style fields", () => {
     expect(convert("- [ ] Plan [due:: 2026-10-01] [scheduled:: 2026-09-28] (priority:: high) [repeat:: every week when done]").line)
       .toBe("- [ ] Plan Sep 28, 2026 {Oct 1, 2026} every week p1");
+  });
+
+  it("says when a repeat “when done” becomes a fixed schedule", () => {
+    expect(convert("- [ ] Water plants 🔁 every week when done ⏳ 2026-09-28")).toMatchObject({ line: "- [ ] Water plants Sep 28, 2026 every week", skips: ["whenDone"] });
+    expect(convert("- [ ] Plan [repeat:: every week when done]").skips).toEqual(["whenDone"]);
+    expect(convert("- [ ] Water plants 🔁 every week").skips).toEqual([]);
+    expect(skipLabel("whenDone", 2)).toBe("2 repeat rules with “when done” converted to a fixed schedule.");
   });
 
   it("removes the global filter tag, optionally keeps #tags and created dates", () => {
