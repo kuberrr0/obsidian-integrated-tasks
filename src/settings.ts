@@ -12,6 +12,12 @@ type SettingGroup = typeof SETTING_GROUPS[number];
 /** Text settings apply once typing pauses, so each keystroke does not save and re-index the vault. */
 export const TEXT_SETTING_DELAY_MS = 500;
 
+/** A date format with a year, a month and a day, or empty for the Daily notes format. */
+function usableDateFormat(value: string): boolean {
+  const format = value.trim();
+  return !format || (/Y/.test(format) && /M/.test(format) && /D/.test(format));
+}
+
 export class TaskManagerSettingTab extends PluginSettingTab {
   private readonly pendingText = new Map<string, { timer: number; apply: () => Promise<void> }>();
 
@@ -27,6 +33,12 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       void apply().catch(error => new Notice(String(error)));
     }, TEXT_SETTING_DELAY_MS);
     this.pendingText.set(key, { timer, apply });
+  }
+
+  private cancelSoon(key: string): void {
+    const pending = this.pendingText.get(key);
+    if (pending) window.clearTimeout(pending.timer);
+    this.pendingText.delete(key);
   }
 
   /** Apply edits still waiting when the settings page closes. */
@@ -102,7 +114,11 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         render: (setting: Setting) => { setting.addText(text => text
           .setPlaceholder("Daily notes format")
           .setValue(this.plugin.settings.dateFormat)
-          .onChange(value => this.applySoon("dateFormat", () => this.plugin.setDateFormat(value)))); }
+          .onChange(value => {
+            // A part-typed format, such as "DD/MM", would misread every date in the vault, so it waits until whole.
+            if (usableDateFormat(value)) this.applySoon("dateFormat", () => this.plugin.setDateFormat(value));
+            else this.cancelSoon("dateFormat");
+          })); }
       },
       {
         section: "How tasks are written",
@@ -260,8 +276,8 @@ export class TaskManagerSettingTab extends PluginSettingTab {
   private renderIgnoreSetting(setting: Setting, key: "ignoredPaths" | "ignoredTags", placeholder: string): void {
     setting.addTextArea(area => {
       area.setPlaceholder(placeholder).setValue((this.plugin.settings[key] ?? []).join("\n")).onChange(value => {
-        this.plugin.settings[key] = parseIgnoreList(value, key === "ignoredTags");
         this.applySoon(key, async () => {
+          this.plugin.settings[key] = parseIgnoreList(value, key === "ignoredTags");
           await this.plugin.saveSettings();
           this.plugin.index.applyIgnoreRules();
         });
@@ -275,9 +291,10 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       .setPlaceholder("Inbox.md")
       .setValue(this.plugin.settings.inboxPath)
       .onChange((value) => {
-        const path = value.trim() || "Inbox.md";
-        this.plugin.settings.inboxPath = path.endsWith(".md") ? path : `${path}.md`;
+        // Applied once typing pauses, so tasks never go to a part-typed note.
         this.applySoon("inboxPath", async () => {
+          const path = value.trim() || "Inbox.md";
+          this.plugin.settings.inboxPath = path.endsWith(".md") ? path : `${path}.md`;
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
         });

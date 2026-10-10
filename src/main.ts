@@ -887,6 +887,8 @@ export default class TaskManagerPlugin extends Plugin {
   }
 
   async setDateFormat(value: string): Promise<void> {
+    // The same format again changes nothing, so it doesn't rescan the vault.
+    if (value.trim() === this.settings.dateFormat) return;
     const previous = this.dateFormat();
     this.settings.dateFormat = value.trim();
     if (previous !== this.dateFormat()) this.settings.previousDateFormat ??= previous;

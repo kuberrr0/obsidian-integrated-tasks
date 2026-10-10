@@ -22,6 +22,9 @@ it("defaults to Daily Notes, overrides it, and retains the source format until u
   expect(plugin.dateFormat()).toBe("DD.MM.YYYY");
   await plugin.setDateFormat(" MM/DD/YYYY ");
   expect(plugin.dateFormat()).toBe("MM/DD/YYYY");
+  // The same format again doesn't re-read the vault.
+  await plugin.setDateFormat("MM/DD/YYYY");
+  expect(rescanAll).toHaveBeenCalledOnce();
   await plugin.setDateFormat("YYYY/MM/DD");
   expect(plugin.settings.previousDateFormat).toBe("DD.MM.YYYY");
   await plugin.updateTaskDates();

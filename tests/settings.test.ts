@@ -101,16 +101,18 @@ describe("settings compatibility", () => {
     expect(position.value).toBe("top");
     await inbox.change!("  Projects/Qu");
     await inbox.change!("  Projects/Queue  ");
-    expect(plugin.settings.inboxPath).toBe("Projects/Queue.md");
+    // Nothing goes to a part-typed note: the path changes once typing pauses.
+    expect(plugin.settings.inboxPath).toBe("Tasks.md");
     expect(plugin.saveSettings).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(500);
+    expect(plugin.settings.inboxPath).toBe("Projects/Queue.md");
     expect(plugin.saveSettings).toHaveBeenCalledOnce();
     expect(plugin.refreshViews).toHaveBeenCalledOnce();
     await inbox.change!("   ");
-    expect(plugin.settings.inboxPath).toBe("Inbox.md");
     // Closing the settings page applies an edit that is still waiting.
     tab.hide();
     await vi.advanceTimersByTimeAsync(0);
+    expect(plugin.settings.inboxPath).toBe("Inbox.md");
     expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
     expect(plugin.refreshViews).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1000);
@@ -137,11 +139,14 @@ describe("settings compatibility", () => {
     const folders = rows.find(row => row.name === "Ignored folders and notes")!;
     const tags = rows.find(row => row.name === "Ignored tags")!;
     expect(folders.value).toBe("");
+    await folders.change!("Temp");
     await folders.change!("Templates/\n Archive ");
     await tags.change!("#Template, someday");
-    expect(plugin.settings).toMatchObject({ ignoredPaths: ["Templates/", "Archive"], ignoredTags: ["template", "someday"] });
+    // A part-typed folder hides nothing in the meantime.
+    expect(plugin.settings).not.toHaveProperty("ignoredPaths");
     expect(plugin.index.applyIgnoreRules).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(500);
+    expect(plugin.settings).toMatchObject({ ignoredPaths: ["Templates/", "Archive"], ignoredTags: ["template", "someday"] });
     expect(plugin.saveSettings).toHaveBeenCalled();
     expect(plugin.index.applyIgnoreRules).toHaveBeenCalled();
   });
@@ -160,6 +165,11 @@ describe("settings compatibility", () => {
     expect(plugin.setDateFormat).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(500);
     expect(plugin.setDateFormat).toHaveBeenCalledExactlyOnceWith("DD/MM/YYYY");
+    // A pause partway through a format applies nothing; one without a year, month and day never applies.
+    await format.change!("YYYY-MM");
+    await vi.advanceTimersByTimeAsync(1000);
+    tab.hide();
+    expect(plugin.setDateFormat).toHaveBeenCalledOnce();
     const update = rows.find(row => row.name === "Update dates")!;
     const pending = update.click!();
     expect(update.disabled).toBe(true);
