@@ -1129,7 +1129,7 @@ button.tm-gantt-handle.is-finish:focus-visible,
 .tm-main-view.tm-style-griply .tm-task-due {
   padding: 1px 8px 1px 7px;
   border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-  background: color-mix(in srgb, currentColor 9%, transparent);
+  background: color-mix(in srgb, currentColor 4%, transparent);
 }
 .tm-main-view.tm-style-griply .tm-task-due .tm-task-detail-icon svg { fill: currentColor; }
 /* A repeat, and notes, show as icons beside the title. */
@@ -2567,7 +2567,7 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 .tm-task-sidebar .tm-sidebar-property .tm-task-due {
   padding: 1px 8px 1px 7px;
   border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-  background: color-mix(in srgb, currentColor 9%, transparent);
+  background: color-mix(in srgb, currentColor 4%, transparent);
 }
 .tm-sidebar-property .tm-task-due .tm-task-detail-icon svg { fill: currentColor; }
 .tm-sidebar-property.is-p1 :is(.tm-sidebar-property-icon, .tm-sidebar-property-value) { color: var(--text-error); }
