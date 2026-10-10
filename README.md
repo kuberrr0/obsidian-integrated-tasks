@@ -8,7 +8,7 @@ Plan your work from the checklists already in your notes. Integrated Task Manage
 - **Views for every question.** Inbox, Today, Upcoming, All Tasks, Projects, Tags, and smart lists you save yourself.
 - **List, calendar or board.** Any task view can switch layout, and the Projects list switches to a Gantt chart.
 - **Projects are notes.** Tag a note `project` and its headings become sections, with dates, a deadline, a colour and progress.
-- **A sidebar that follows you.** The Task details sidebar shows today's hours, your tasks with no date, a note's tasks, or the task you selected.
+- **A sidebar that follows you.** The Task details sidebar shows today's hours, your tasks with no date, a note's tasks, the task you selected, or else what's coming up.
 - **Live task lists in any note.** A `task-query` block turns a daily note or a dashboard into a checkable list.
 - **Fast to drive.** Select many tasks at once, use single-key shortcuts, and undo any change.
 
@@ -89,7 +89,7 @@ Press **Cmd/Ctrl+K** in a task view (or run **Quick switch to view, project, tag
 
 Click the filter button at the top of a view to open **View options**. Pick several statuses, priorities, tags or notes at once, or a date range such as **Overdue**, **Today** or **Next 7 days**. Date ranges stay relative, so "Next 7 days" always means the coming week. **More conditions…** adds anything else: "is not", a range between two dates, or conditions joined with AND and OR.
 
-Each view remembers its own options and layout. To keep a setup, choose **Convert to smart list** at the bottom of View options and give it a name. Smart lists appear in the task sidebar under **All Tasks** and update as your tasks change.
+Each view remembers its own options and layout. To keep a setup, choose **Convert to smart list** at the bottom of View options and give it a name. Smart lists appear in the task sidebar under **All Tasks** and update as your tasks change. To change a smart list later, adjust its View options and choose **Update smart list** at the bottom.
 
 ### The Task details sidebar
 
@@ -99,8 +99,9 @@ The Task details sidebar sits in Obsidian's right sidebar. What it shows follows
 - **A calendar, or Upcoming:** that view's tasks with no date. Drag one onto a day to give it a date.
 - **A note:** the note's tasks. Put the cursor on a checklist line to see and edit its details.
 - **A selected task:** its title, properties, notes and subtasks, all editable in place. With several tasks selected, change a property once and every selected task follows.
+- **Nothing else:** your upcoming tasks, by date. Click one to see its details. Click the **Upcoming** heading to show Inbox, Today, All Tasks or one of your smart lists here instead, and use the filter button beside it to filter, sort and group that list.
 
-Press Escape to go back to the hours or the list. If you close the sidebar, run **Open task details sidebar** to bring it back.
+In the title, Enter saves what you typed and Shift+Enter moves on to the notes (a task card in the list works the same way). Press Escape to go back to the hours or the list. If you close the sidebar, run **Open task details sidebar** to bring it back.
 
 ## Choose a layout
 
@@ -108,7 +109,7 @@ Every task view switches between list, calendar and Kanban with the buttons at i
 
 ### List
 
-Click a checkbox to complete a task, or double-click a task to open it. Drag tasks to reorder them, move them between sections and notes, or nest them: drag right to make a task a subtask of the one above, left to move it out. Subtasks and notes travel with their task.
+Click a checkbox to complete a task, or double-click a task to open it. Click a group's heading to fold its tasks away, and click it again to bring them back. Drag tasks to reorder them, move them between sections and notes, or nest them: drag right to make a task a subtask of the one above, left to move it out. Subtasks and notes travel with their task.
 
 You can also drop tasks on the task sidebar: on **Inbox**, a project or a note to move them there, on **Today** to schedule them for today, or on a tag to add it. Everything you can do by dragging also works from the keyboard (see [Keyboard shortcuts](#keyboard-shortcuts)).
 
@@ -195,7 +196,11 @@ group: source
 
 ![A dashboard note in Reading view, with live lists of overdue tasks, deadlines in the next seven days, and tasks waiting on others grouped by note](resources/images/dashboard-task-queries.png)
 
-Check tasks off, click a title to edit it, or click a date or tag to change it, right from the note. Write one option per line:
+Tasks look as they do in your task views, in the style you chose. Check them off, click a tag to open its tasks, or click a title or date to edit the task right from the note: it opens in the task editor, or with three panes in the Task details sidebar.
+
+Add `layout: board` to show the tasks as a board, with a column for each status (or for each group, with `group`). Add `layout: calendar` for a week calendar, where you can page through the weeks, drag a task to another day or time, and drag across empty time to add one. `layout: calendar month` opens on a month instead, and a date after it opens on that date's month or week, as in `layout: calendar month 2026-11-01` or `layout: calendar next monday`.
+
+Write one option per line:
 
 | Option | Examples |
 | --- | --- |
@@ -207,7 +212,8 @@ Check tasks off, click a title to edit it, or click a date or tag to change it, 
 | Dates | `deadline: before next friday` · `scheduled: between today and in 7 days` · `completed: after 7 days ago` · `deadline: missing` |
 | `search` | words in the title, notes or tags |
 | `sort`, `group` | `sort: priority desc` · `group: source` |
-| `limit` | how many tasks to show (50 by default) |
+| `layout` | `list` (the default), `board`, `calendar`, or `calendar` followed by `day`, `4 days`, `week` or `month` and a date to open on |
+| `limit` | how many tasks a list or board shows (50 by default) |
 | `title` | a heading for the list |
 | `show completed` | `yes` to include completed tasks |
 
@@ -287,7 +293,7 @@ Swipe a task right to select it, or left for its actions. Tap a task to open its
 
 ![The Today view in the Griply style, with each task's dates, project and tags on a line under its title](resources/images/today-griply-style.png)
 
-Choose between two **Styles** in settings: **Things** (the default, shown at the top of this page), where tasks open as cards in the list, and **Griply**, shown above, where each task's details sit under its title and tasks open in the task editor. To work in three panes, set **Task details** to **Three panes: in the sidebar**, and tasks open in the Task details sidebar instead.
+Choose between two **Styles** in settings: **Griply** (the default, shown above), where each task's details sit under its title and tasks open in the task editor, and **Things**, shown at the top of this page, where tasks open as cards in the list. To work in three panes, set **Task details** to **Three panes: in the sidebar**, and tasks open in the Task details sidebar instead.
 
 | Setting | What it does |
 | --- | --- |
