@@ -5,7 +5,7 @@ import { LONG_PRESS_MS, PRESS_SLOP } from "./list-drag-view";
 import { Notice, setIcon } from "obsidian";
 import { formatDate, todayIso } from "./date";
 import { formatDuration } from "./parser";
-import { addDays, SLOT_MINUTES, calendarDate, calendarDays, calendarTime, localDate, minuteTime, resizedRange, selectionPreset, shiftCalendar, timeMinutes, type CalendarPreset, type CalendarScope } from "./calendar";
+import { addDays, SLOT_MINUTES, calendarDate, calendarDays, calendarTime, localDate, minuteTime, overlapColumns, resizedRange, selectionPreset, shiftCalendar, timeMinutes, type CalendarPreset, type CalendarScope } from "./calendar";
 import type { Project, Task } from "./types";
 import { renderProjectProgress } from "./project-progress";
 
@@ -373,22 +373,19 @@ export function renderCalendar(container: HTMLElement, options: CalendarOptions)
     });
     // Separate columns keep overlapping tasks individually draggable and clickable.
     const timed = tasks.filter(task => calendarTime(task)).sort((a, b) => timeMinutes(calendarTime(a)!) - timeMinutes(calendarTime(b)!));
-    const ends: number[] = [];
-    const placements = timed.map(task => {
+    const ranges = timed.map(task => {
       const begin = timeMinutes(calendarTime(task)!);
-      const end = Math.min(1440, begin + (task.durationMinutes ?? 30));
-      let column = ends.findIndex(value => value <= begin);
-      if (column < 0) column = ends.length;
-      ends[column] = end;
-      return { task, begin, end, column };
+      return { task, begin, end: Math.min(1440, begin + (task.durationMinutes ?? 30)) };
     });
-    for (const { task, begin, end, column } of placements) {
+    const columns = overlapColumns(ranges);
+    for (const [i, { task, begin, end }] of ranges.entries()) {
+      const { column, columns: count } = columns[i];
       const card = taskCard(lane, task);
       card.addClass("is-timed");
       card.style.top = `${begin / 15 * 12}px`;
       card.style.height = `${Math.max(12, (end - begin) / 15 * 12)}px`;
-      card.style.left = `calc(${column / ends.length * 100}% + 2px)`;
-      card.style.width = `calc(${100 / ends.length}% - 4px)`;
+      card.style.left = `calc(${column / count * 100}% + 2px)`;
+      card.style.width = `calc(${100 / count}% - 4px)`;
       const preview = card.createSpan({ cls: "tm-calendar-resize-preview" });
       const restore = (): void => {
         card.style.top = `${begin / 15 * 12}px`;

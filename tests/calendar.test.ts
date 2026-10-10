@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, calendarDate, calendarDays, rescheduledDraft, resizedRange, selectionPreset, shiftCalendar } from "../src/calendar";
+import { addDays, calendarDate, calendarDays, overlapColumns, rescheduledDraft, resizedRange, selectionPreset, shiftCalendar } from "../src/calendar";
 import type { Task } from "../src/types";
 const task: Task = { id: "a", title: "Write", path: "Work.md", section: "Next", line: 0, endLine: 0, raw: "", indent: 2, status: "todo", completed: false, childIds: [], priority: 1, durationMinutes: 45, scheduledDate: "2026-09-01", scheduledTime: "09:00", deadline: "2026-09-10", deadlineTime: "17:00" };
 describe("calendar scheduling", () => {
@@ -51,5 +51,20 @@ describe("calendar resizing", () => {
     expect(resizedRange(540, 600, "end", 500)).toEqual({ start: 540, duration: 15 });
     expect(resizedRange(30, 90, "start", -30)).toEqual({ start: 0, duration: 90 });
     expect(resizedRange(1380, 1440, "end", 1500)).toEqual({ start: 1380, duration: 60 });
+  });
+});
+
+describe("calendar overlap columns", () => {
+  it("narrows only the tasks that overlap, directly or through another", () => {
+    const at = (from: number, to: number) => ({ begin: from * 60, end: to * 60 });
+    // A lone 09:00 task keeps the whole width while three overlap at 14:00.
+    expect(overlapColumns([at(9, 10), at(14, 15), at(14, 15), at(14, 16)])).toEqual([
+      { column: 0, columns: 1 }, { column: 0, columns: 3 }, { column: 1, columns: 3 }, { column: 2, columns: 3 }
+    ]);
+    // A chain: the third starts as the first ends, so it reuses the first column, but all three share two.
+    expect(overlapColumns([at(9, 10), at(9.5, 10.5), at(10, 11)])).toEqual([
+      { column: 0, columns: 2 }, { column: 1, columns: 2 }, { column: 0, columns: 2 }
+    ]);
+    expect(overlapColumns([])).toEqual([]);
   });
 });

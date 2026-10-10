@@ -59,6 +59,30 @@ export function rescheduledDraft(task: Task, date: string, time?: string | null)
     destination: destinationString(task.path, task.section) };
 }
 
+/**
+ * Side-by-side columns for a day's timed tasks, given in order of start: tasks that overlap, directly or through
+ * another, share the width between them; a task that overlaps none takes all of it.
+ */
+export function overlapColumns(ranges: Array<{ begin: number; end: number }>): Array<{ column: number; columns: number }> {
+  const placed: Array<{ column: number; columns: number }> = [];
+  let cluster: Array<{ column: number; columns: number }> = [];
+  let ends: number[] = [];
+  let clusterEnd = -Infinity;
+  const close = (): void => { for (const item of cluster) item.columns = ends.length; };
+  for (const { begin, end } of ranges) {
+    if (begin >= clusterEnd) { close(); cluster = []; ends = []; }
+    let column = ends.findIndex(value => value <= begin);
+    if (column < 0) column = ends.length;
+    ends[column] = end;
+    clusterEnd = cluster.length ? Math.max(clusterEnd, end) : end;
+    const item = { column, columns: 1 };
+    cluster.push(item);
+    placed.push(item);
+  }
+  close();
+  return placed;
+}
+
 /** Resize one boundary, keeping the opposite boundary fixed within the day. */
 export function resizedRange(begin: number, end: number, edge: "start" | "end", target: number): { start: number; duration: number } {
   const snapped = Math.round(target / SLOT_MINUTES) * SLOT_MINUTES;
