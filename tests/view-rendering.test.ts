@@ -1332,6 +1332,14 @@ describe("copy, paste, delete and duplicate on selected tasks", () => {
     expect(extra.bulkDelete).not.toHaveBeenCalled();
   });
 
+  it("leaves Delete and Backspace to a button that has focus", async () => {
+    const { content, extra } = await selected();
+    const button = content().querySelector<HTMLElement>("button")!;
+    key(button, "Backspace");
+    key(button, "Delete");
+    expect(extra.bulkDelete).not.toHaveBeenCalled();
+  });
+
   it("leaves the keys to a field being typed in", async () => {
     const { content, extra } = await selected();
     const field = content().appendChild(document.createElement("textarea"));

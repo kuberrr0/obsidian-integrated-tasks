@@ -374,8 +374,10 @@ export class TaskMainView extends ItemView {
       }
       if (event.shiftKey) return;
       const selected = this.getSelectedTasks();
-      // Delete or Backspace deletes the selected tasks (with their subtasks); Cmd/Ctrl+Z brings them back.
-      if ((key === "delete" || key === "backspace") && selected.length && (mod || (!event.metaKey && !event.ctrlKey))) {
+      // Delete or Backspace deletes the selected tasks (with their subtasks); Cmd/Ctrl+Z brings them back. On a button
+      // or menu (View options, a card's date) the keys aren't about the selection.
+      const control = (event.target as HTMLElement | null)?.closest?.("button, [role=button], [role=menuitem], [role=option], a, select, label");
+      if ((key === "delete" || key === "backspace") && selected.length && !control && (mod || (!event.metaKey && !event.ctrlKey))) {
         event.preventDefault();
         void this.commit(async () => { const paths = await this.plugin.store.bulkDelete(selected); this.clearSelection(); return paths; }, "Could not delete the tasks.", false);
         return;
