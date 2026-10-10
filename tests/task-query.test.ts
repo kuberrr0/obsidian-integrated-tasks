@@ -99,4 +99,12 @@ describe("task query parsing", () => {
       "Line 8: Limit is a whole number, such as 10."
     ]);
   });
+
+  it("explains an option written without a value", () => {
+    expect(parse("layout:\ndeadline:\npriority:").errors).toEqual([
+      'Line 1: Write a layout after "layout:": list, board, or calendar.',
+      'Line 2: Write a value after "deadline:", or "has" or "missing".',
+      'Line 3: Write a value after "priority:", or "has" or "missing".'
+    ]);
+  });
 });

@@ -147,5 +147,21 @@ describe("task query blocks", () => {
     expect(render("priority: 3").element.querySelector(".tm-query-empty")!.textContent).toBe("No matching tasks.");
     const error = render("view: nope").element.querySelector("[role=alert]")!;
     expect(error.textContent).toContain('Line 1: "nope" isn\'t a view.');
+    expect(render("layout:").element.querySelector("[role=alert]")!.textContent).toContain('Write a layout after "layout:"');
+  });
+
+  it("shows a problem it runs into while drawing, and still redraws when tasks change", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frames.push(callback); return frames.length; });
+    const { render, edit, plugin } = await setup({ "Work.md": "- [ ] One p1" });
+    const query = plugin.index.query.bind(plugin.index);
+    const failing = vi.spyOn(plugin.index, "query").mockImplementation(() => { throw new Error("Index unavailable"); });
+    const { element } = render("priority: 1");
+    expect(element.querySelector("[role=alert]")!.textContent).toContain("Index unavailable");
+    failing.mockImplementation(query);
+    await edit("Work.md", "- [ ] One p1\n- [ ] Two p1");
+    frames.shift()!(0);
+    expect(titles(element)).toEqual(["One", "Two"]);
+    vi.restoreAllMocks();
   });
 });

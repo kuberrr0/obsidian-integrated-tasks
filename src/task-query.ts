@@ -65,6 +65,7 @@ function splitValues(text: string): string[] {
 /** Parse one property condition, e.g. `before next friday`, `is not 3`, `has`. */
 function condition(property: typeof TASK_PROPERTIES[number], text: string, context: TaskQueryContext): TaskFilter | string {
   const value = text.trim();
+  if (!value) return `Write a value after "${property.label.toLowerCase()}:", or "has" or "missing".`;
   const lower = value.toLowerCase();
   let operator: FilterOperator = "is";
   let values: string[];
@@ -179,7 +180,8 @@ export function parseTaskQuery(source: string, context: TaskQueryContext): Parse
       case "layout": {
         // "calendar" opens on this week; "calendar month" (or day, 4 days) on another period, and "calendar month
         // 2026-11-01" (or "calendar next monday") on the period with that date.
-        const [, name, after] = /^(\S+)\s*(.*)$/.exec(value) ?? [];
+        const [, name = "", after = ""] = /^(\S+)\s*(.*)$/.exec(value) ?? [];
+        if (!name) { fail(`Write a layout after "layout:": list, board, or calendar.`); break; }
         const layout = name.toLowerCase() === "kanban" ? "board" : name.toLowerCase();
         let rest = after.trim();
         if (layout !== "list" && layout !== "board" && layout !== "calendar" || (rest && layout !== "calendar")) {

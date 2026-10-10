@@ -43,8 +43,9 @@ export class TaskQueryBlock extends MarkdownRenderChild {
         if ((event.target as HTMLElement).closest("button, input, a, [role=button], .tm-calendar")) event.stopPropagation();
       });
     }
-    this.render();
+    // Subscribed first, so a block that fails to draw still redraws once its tasks or source change.
     this.register(this.plugin.index.subscribe(() => this.schedule()));
+    this.render();
   }
 
   onunload(): void {
@@ -56,7 +57,20 @@ export class TaskQueryBlock extends MarkdownRenderChild {
     this.frame = this.containerEl.win.requestAnimationFrame(() => { this.frame = undefined; this.render(); });
   }
 
+  /** Draws the block; anything that goes wrong shows in it as a problem, rather than leaving it blank. */
   render(): void {
+    try {
+      this.renderNow();
+    } catch (error) {
+      const root = this.containerEl;
+      root.empty();
+      const box = root.createDiv({ cls: "tm-query-error", attr: { role: "alert" } });
+      box.createEl("strong", { text: "This task query has a problem" });
+      box.createEl("ul").createEl("li", { text: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  private renderNow(): void {
     const root = this.containerEl;
     const settings = this.plugin.settings;
     root.empty();
