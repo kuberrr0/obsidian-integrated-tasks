@@ -24,6 +24,19 @@ const SCAN_SLICE_MS = 30;
 const SAVE_DELAY_MS = 2000;
 const SAVE_MAX_DELAY_MS = 10_000;
 
+/** A note's length and a 53-bit hash of its text: enough to tell an edit from the same text read again. */
+function contentHash(text: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${text.length}:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
+}
+
 type ProjectEntry = ProjectProperties & { parent?: string };
 
 export class TaskIndex {
@@ -46,7 +59,8 @@ export class TaskIndex {
   private readonly deletedPaths = new Set<string>();
   // The content each note was last parsed from. cachedRead returns Obsidian's cached
   // string, so this mostly shares memory with the vault cache rather than copying it.
-  private readonly indexedContent = new Map<string, { content: string; day: string }>();
+  // A hash of each note's text as last scanned, not the text itself, which would keep the whole vault in memory.
+  private readonly indexedContent = new Map<string, { hash: string; day: string }>();
   // Refreshes of one path requested in the same microtask share a single scan.
   private readonly pendingRefreshes = new Map<string, { file: TFile; force: boolean; promise: Promise<void> }>();
   // Derived from tasksByPath; rebuilt lazily after any change.
@@ -460,7 +474,8 @@ export class TaskIndex {
     // Relative dates such as "tomorrow" resolve against the scan day, so a new day parses again.
     const day = new Date().toDateString();
     const previous = this.indexedContent.get(path);
-    if (!force && previous?.content === content && previous.day === day) return false;
+    const hash = contentHash(content);
+    if (!force && previous?.hash === hash && previous.day === day) return false;
     const level = this.getSettings().sectionHeadingLevel;
     const dateFormat = this.getDateFormat();
     const now = new Date();
@@ -469,7 +484,7 @@ export class TaskIndex {
     // Typing in a note's prose changes nothing the views show: no redraw.
     const same = this.tasksByPath.has(path) && JSON.stringify(tasks) === JSON.stringify(this.tasksByPath.get(path))
       && JSON.stringify(headings) === JSON.stringify(this.headingsByPath.get(path));
-    this.indexedContent.set(path, { content, day });
+    this.indexedContent.set(path, { hash, day });
     if (!same) {
       this.headingsByPath.set(path, headings);
       this.tasksByPath.set(path, tasks);
