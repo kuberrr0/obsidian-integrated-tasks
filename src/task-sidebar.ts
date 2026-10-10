@@ -22,7 +22,7 @@ import { NoteTaskHost } from "./note-task-host";
 import { createTaskRow, dropEmptyRowParts } from "./task-row";
 import type { OpenEditorState } from "./main";
 import { groupingLabel, ViewOptionsPanel, type ViewOptionsState } from "./view-options";
-import { openChoicePopover } from "./choice-popover";
+import { dismissPopovers, openChoicePopover } from "./choice-popover";
 import { cloneTaskFilters } from "./task-filters";
 import type { SavedViewOptions, Task, TaskEditorPreset, TaskGrouping, TaskQuery, TaskSort } from "./types";
 
@@ -32,6 +32,8 @@ export const TASK_SIDEBAR_VIEW = "task-manager-sidebar";
  * task; or for a note in front, its tasks. */
 type SidebarMode = "today" | "upcoming" | "details" | "note";
 /** What the details edit through: the task view in front, or beside a note, the note's (see NoteTaskHost). */
+/** A task's line and title, as last seen. */
+type TaskSource = { raw: string; title: string };
 type DetailsHost = Pick<TaskMainView, "editTaskProperty" | "setTaskStatus" | "changeTask" | "newTaskInSidebar" | "typeNewTask" | "finishNewTask" | "getSelectedTasks" | "clearSelection" | "sidebarSelection">;
 /** A property the sidebar edits through the task view showing the task (see TaskMainView.editTaskProperty). */
 type SidebarProperty = TaskEditorProperty | "status" | "project";
@@ -71,7 +73,8 @@ interface UndatedList { query: ReturnType<TaskMainView["undatedQuery"]>["query"]
 export class TaskSidebarView extends ItemView {
   private mode?: SidebarMode;
   /** The shown task's title and notes as typed (and a subtask being typed); `dirty` until they are saved. */
-  private draft?: { id: string; dirty: boolean } & TaskCardDraft;
+  /** `source`: the task's line and title when the draft began (or was last saved), to find it by if its line moves. */
+  private draft?: { id: string; dirty: boolean; source?: TaskSource } & TaskCardDraft;
   /** Saves and writes, one after another, so each sees the task as the last one left it. */
   private saving: Promise<void> = Promise.resolve();
   /** The layout drawn (mode, style, density) and its parts: the day or the list on top, then the details. */
@@ -141,6 +144,8 @@ export class TaskSidebarView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    // A popover opened from here goes with it, as a task view's do, rather than saving later through a closed sidebar.
+    dismissPopovers(this.containerEl);
     this.closed = true;
     this.unsubscribe?.();
     this.stopDragWatch?.();
@@ -672,7 +677,7 @@ export class TaskSidebarView extends ItemView {
       void this.saveDraft();
       this.draft = undefined;
     }
-    if (task && !this.draft?.dirty) this.draft = { id: task.id, dirty: false, title: entry?.title ?? task.title, notes: entry?.notes ?? cardNotes(task.description), subtask: this.draft?.subtask };
+    if (task && !this.draft?.dirty) this.draft = { id: task.id, dirty: false, source: { raw: task.raw, title: task.title }, title: entry?.title ?? task.title, notes: entry?.notes ?? cardNotes(task.description), subtask: this.draft?.subtask };
   }
 
   private typed(task: Task, next: TaskCardDraft): void {
@@ -680,7 +685,30 @@ export class TaskSidebarView extends ItemView {
     // A new task's typing is the view's to keep until it is written.
     if (task.id === NEW_TASK_ID) { this.draft = { ...next, id: task.id, dirty: false }; this.host()?.typeNewTask(next.title, next.notes); return; }
     const dirty = this.draft.dirty || next.title !== this.draft.title || next.notes !== this.draft.notes;
-    this.draft = { ...next, id: task.id, dirty };
+    this.draft = { ...next, id: task.id, source: this.draft.source, dirty };
+  }
+
+  /**
+   * The task with `id` as it now reads: that line while it is still the task (the same text, or the same title, as
+   * `source`), else the one line in its note that reads as `source` did. Ids are line numbers, so a line added above it
+   * (by sync or another plugin) moves the task off its id, and another task can take it.
+   */
+  private liveTask(id: string, source?: TaskSource): Task | undefined {
+    const index = this.plugin.index;
+    const byId = index.taskById(id);
+    if (!source || (byId && (byId.raw === source.raw || byId.title === source.title))) return byId;
+    const tasks = index.tasksForPath(byId?.path ?? id.slice(0, id.lastIndexOf(":")));
+    for (const same of [(task: Task) => task.raw === source.raw, (task: Task) => task.title === source.title]) {
+      const matches = tasks.filter(same);
+      if (matches.length === 1) return matches[0];
+    }
+    return undefined;
+  }
+
+  /** A task shown here as it now reads (see liveTask), after any typing for it was saved. */
+  private current(task: Task): Task | undefined {
+    const source = this.draft?.id === task.id ? this.draft.source : undefined;
+    return this.liveTask(task.id, source ?? { raw: task.raw, title: task.title });
   }
 
   /**
@@ -692,22 +720,26 @@ export class TaskSidebarView extends ItemView {
     if (!draft?.dirty) return this.saving;
     const typed = { ...draft };
     this.saving = this.saving.then(async () => {
-      const task = this.plugin.index.taskById(typed.id);
-      if (!task) return;
+      const task = this.liveTask(typed.id, typed.source);
+      if (!task) { new Notice("The task changed in its note, so what you typed wasn't saved."); return; }
       // A title cleared keeps the task's own.
       const next = draftFromTitle(task, typed.title.trim() ? typed.title : task.title, new Date(), this.plugin.dateFormat());
       const notes = typed.notes.trim() === cardNotes(task.description).trim() ? undefined : typed.notes;
       try {
+        let moveTo: string | undefined;
         if (!draftMatchesTask(task, next) || notes !== undefined) {
-          const moveTo = next.destination !== draftFromTask(task).destination ? next.destination.split("#")[0] : undefined;
+          moveTo = next.destination !== draftFromTask(task).destination ? next.destination.split("#")[0] : undefined;
           // Saving puts the line's properties in order, as a card does.
           await this.change(task, async () => {
             await this.plugin.store.update(task, { ...next, description: notes, sortProperties: true });
             return moveTo ? [task.path, moveTo] : [task.path];
           }, moveTo);
         }
-        // Anything typed while saving is still to save.
         const current = this.draft;
+        // What was saved is the task's line now, for the next save (or toggle) to find it by.
+        const saved = moveTo ? undefined : this.plugin.index.taskById(task.id);
+        if (current?.id === typed.id && saved) current.source = { raw: saved.raw, title: saved.title };
+        // Anything typed while saving is still to save.
         if (current?.id === typed.id && current.title === typed.title && current.notes === typed.notes) {
           current.dirty = false;
           if (!this.closed) this.render(true);
@@ -742,7 +774,7 @@ export class TaskSidebarView extends ItemView {
     // Saving redraws: open beside the same control in the new drawing.
     const target = anchor?.isConnected ? anchor : (key ? this.content.querySelector<HTMLElement>(`[data-tm-focus-key="${CSS.escape(key)}"]`) : null) ?? this.content;
     // Several are the view's selection as it now reads; one, as saved.
-    const current = tasks.length > 1 ? host.getSelectedTasks() : tasks.map(task => this.plugin.index.taskById(task.id) ?? task);
+    const current = tasks.length > 1 ? host.getSelectedTasks() : tasks.map(task => this.current(task) ?? task);
     host.editTaskProperty(current, property, target);
   }
 
@@ -753,7 +785,8 @@ export class TaskSidebarView extends ItemView {
     void this.saveDraft();
     // As the task reads once any typing is saved.
     this.saving = this.saving.then(() => {
-      const current = this.plugin.index.taskById(task.id) ?? task;
+      // Not found as it was, the task as last drawn: the store finds its line by its text, or refuses.
+      const current = this.current(task) ?? task;
       return this.change(current, async () => { await this.plugin.store.toggle(current, completed); return [current.path]; });
     }).catch(failed);
   }

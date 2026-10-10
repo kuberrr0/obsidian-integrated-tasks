@@ -488,6 +488,32 @@ describe("editing in the Task Details sidebar", () => {
     expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Book the flights");
   });
 
+  it("saves typing to the shown task after a line is added above it, not to the task that took its line", async () => {
+    const { view, main, side, contents, plugin } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
+    await view.setState({ mode: "all" });
+    rows(main())[1].click();
+    const title = side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!;
+    title.focus();
+    title.value = "Second, renamed";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    // Sync (or another plugin) adds a line above while the title is still being typed.
+    contents.set("A.md", "- [ ] Inserted\n- [ ] First\n- [ ] Second");
+    await plugin.index.refreshPath("A.md");
+    side().querySelector<HTMLElement>(".tm-sidebar-open-note")!.focus();
+    await vi.waitFor(() => expect(contents.get("A.md")).toBe("- [ ] Inserted\n- [ ] First\n- [ ] Second, renamed"));
+  });
+
+  it("closes a popover opened from it when it closes", async () => {
+    const { view, sidebar, main, side } = await setup([["A.md", "- [ ] Plan the offsite\n- [ ] Other"]]);
+    await view.setState({ mode: "all" });
+    rows(main())[0].click();
+    Array.from(side().querySelectorAll<HTMLElement>(".tm-sidebar-property")).find(row => row.textContent!.includes("Priority"))!.click();
+    await settle();
+    expect(document.querySelector(".tm-choice-popover")).not.toBeNull();
+    await sidebar.onClose();
+    expect(document.querySelector(".tm-choice-popover")).toBeNull();
+  });
+
   it("saves typing before the shown task changes", async () => {
     const { view, main, side, contents } = await setup([["A.md", "- [ ] First\n- [ ] Second"]]);
     await view.setState({ mode: "all" });
