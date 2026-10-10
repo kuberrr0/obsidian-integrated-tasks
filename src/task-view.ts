@@ -1757,12 +1757,15 @@ export class TaskMainView extends ItemView {
     this.updateSelection();
   }
 
-  /** A selected task drags the whole selection along; returns what moves. */
-  private prepareDrag(task: Task): Task[] {
+  /**
+   * A selected task drags the whole selection along; returns what moves. A pointer drag (`announce`) also tells the
+   * sidebar, which shows where it could drop; a move from the keyboard has no pointer to let go, so it does not.
+   */
+  private prepareDrag(task: Task, announce = true): Task[] {
     const tasks = this.selection.has(task) ? this.getSelectedTasks() : [task];
     this.draggedTasks = tasks;
     const doc = this.selectionRows.get(task.id)?.[0]?.ownerDocument;
-    if (doc) startTaskDrag(doc, { tasks, drop: target => this.dropTasks(tasks, target) });
+    if (doc && announce) startTaskDrag(doc, { tasks, drop: target => this.dropTasks(tasks, target) });
     return tasks;
   }
 
@@ -2015,7 +2018,7 @@ export class TaskMainView extends ItemView {
     else if (key === "ArrowRight" && nesting) { anchor = siblings[index - 1]; placement = "child"; }
     else if (key === "ArrowLeft" && nesting && task.parentId) { anchor = this.plugin.index.taskById(task.parentId); placement = "after"; }
     if (!anchor || !placement) return;
-    this.prepareDrag(task);
+    this.prepareDrag(task, false);
     this.pendingFocus = { path: task.path, title: task.title };
     void this.dropListTask(task, target, anchor, placement);
   }
@@ -2024,7 +2027,7 @@ export class TaskMainView extends ItemView {
   private openMoveMenu(task: Task, row: HTMLElement): void {
     const menu = new Menu();
     const move = (group: ListDropGroup): void => {
-      this.prepareDrag(task);
+      this.prepareDrag(task, false);
       this.pendingFocus = { path: task.path, title: task.title };
       void this.dropListTask(task, group);
     };

@@ -28,6 +28,7 @@ vi.mock("obsidian", async importOriginal => {
 
 import { Platform, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import { TaskIndex } from "../src/task-index";
+import { activeTaskDrag } from "../src/sidebar-drop";
 import { TaskMainView } from "../src/task-view";
 import { DEFAULT_SETTINGS, type Project } from "../src/types";
 import { todayIso } from "../src/date";
@@ -257,6 +258,8 @@ describe("keyboard", () => {
     act(byTitle("Child"), "ArrowLeft", { altKey: true });
     await Promise.resolve();
     expect(store.bulkDrop).toHaveBeenLastCalledWith([task("Child")], { destination: "A.md" }, task("Two"), "after");
+    // A move from the keyboard is no pointer drag: the sidebar is not told to show where to drop.
+    expect(activeTaskDrag()).toBeUndefined();
   });
 
   it("offers only the places to move to in the M menu", async () => {
