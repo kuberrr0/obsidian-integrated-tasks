@@ -1065,7 +1065,7 @@ export class TaskMainView extends ItemView {
             choose: name => { menu.close(); save({ ...smartListDraft(list), name }, `Renamed to “${name}”`); }
           });
         } },
-        { kind: "item", label: "Update View Options", icon: "refresh-cw", key: "u", run: () => this.updateSmartList(list) },
+        { kind: "item", label: "Update view options", icon: "refresh-cw", key: "u", run: () => this.updateSmartList(list) },
         { kind: "separator" },
         { kind: "item", label: "Delete smart list", icon: "trash-2", danger: true, run: () => this.confirmDeleteSmartList(list) }
       ]

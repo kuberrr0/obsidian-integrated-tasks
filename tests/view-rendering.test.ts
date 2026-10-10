@@ -936,17 +936,17 @@ describe("smart list actions", () => {
     expect(more().getAttribute("aria-label")).toBe("Smart list actions");
     // Nothing changed yet: updating saves nothing.
     more().click();
-    menuButton("Update View Options").click();
+    menuButton("Update view options").click();
     expect(saveSmartList).not.toHaveBeenCalled();
     // The view's sorting and grouping change, then go into the list.
     Object.assign(view, { sort: "priority", descending: true, grouping: "priority" });
     more().click();
-    menuButton("Update View Options").click();
+    menuButton("Update view options").click();
     expect(saveSmartList).toHaveBeenLastCalledWith({ name: "Calls", filters: [], sort: "priority", descending: true, grouping: "priority" }, "calls");
     // Turning projects off goes in too (they show by default).
     Object.assign(view, { showProjects: false });
     more().click();
-    menuButton("Update View Options").click();
+    menuButton("Update view options").click();
     expect(saveSmartList).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "priority", showProjects: false }), "calls");
     more().click();
     menuButton("Rename").click();
