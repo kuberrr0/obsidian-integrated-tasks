@@ -1126,6 +1126,12 @@ button.tm-gantt-handle.is-finish:focus-visible,
   transform: none;
 }
 .tm-main-view.tm-style-griply .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-content { font-size: var(--font-ui-small); }
+/* The properties under the title (and a project's dates under its name) are a step smaller than what sits beside the title. */
+.tm-main-view.tm-style-griply .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-metadata,
+.tm-main-view.tm-style-griply .tm-project-row .tm-project-header-metadata { font-size: var(--font-ui-smaller); }
+/* The checkbox sits in a box as tall as the title's first line, centred on it whatever the checkbox's size, so it stays
+   level with the title with or without properties below (and in narrow windows, with its wider tap area). */
+.tm-main-view.tm-style-griply .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { height: calc(var(--font-ui-medium) * 1.4); min-height: 0; padding-top: 0; }
 .tm-main-view.tm-style-griply .tm-task-due {
   padding: 1px 8px 1px 7px;
   border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
@@ -1305,6 +1311,8 @@ button.tm-gantt-handle::after { content: ""; position: absolute; top: 0; bottom:
 .tm-main-view .tm-project-row .tm-task-primary > .tm-task-due { flex-shrink: 0; }
 .tm-main-view .tm-project-row button.tm-task-title { height: auto; min-height: 0; padding-block: 0; line-height: 1.4; }
 .tm-main-view .tm-project-row > .tm-project-icon { margin: 0; height: 1.4em; font-size: var(--font-ui-medium); align-items: center; }
+/* A row with nothing under its name sits in the middle of the row, so its progress (or icon) does too, level with the name. */
+.tm-main-view .tm-project-row:not(:has(> .tm-task-content > :is(.tm-task-metadata, .tm-things-secondary))) > .tm-project-icon { align-self: center; }
 .tm-project-header-metadata .tm-project-progress { gap: 4px; min-height: 0; }
 .tm-project-percentage { min-width: 0; text-align: left; }
 /* Each grid edge is drawn once. */
