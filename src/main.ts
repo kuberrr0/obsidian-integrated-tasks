@@ -336,7 +336,8 @@ export default class TaskManagerPlugin extends Plugin {
     if (typeof this.settings.inboxPath !== "string" || !this.settings.inboxPath.trim()) this.settings.inboxPath = DEFAULT_SETTINGS.inboxPath;
     if (!this.settings.inboxPath.endsWith(".md")) this.settings.inboxPath = `${this.settings.inboxPath}.md`;
     this.settings.showUndoNotices = this.settings.showUndoNotices === true;
-    this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
+    // Compact is the default; only an explicit Comfortable choice keeps Comfortable.
+    this.settings.density = this.settings.density === "comfortable" ? "comfortable" : "compact";
     this.settings.showFiles = this.settings.showFiles === true;
     if (!["alphabetical", "alphabeticalReverse", "byModifiedTime", "byModifiedTimeReverse", "byCreatedTime", "byCreatedTimeReverse"].includes(this.settings.fileSortOrder)) this.settings.fileSortOrder = "alphabetical";
     // Griply is the default; only an explicit Things choice keeps Things.

@@ -217,7 +217,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   inboxPath: "Inbox.md",
   newTaskPosition: "top",
   showUndoNotices: false,
-  density: "comfortable",
+  density: "compact",
   showFiles: false,
   fileSortOrder: "alphabetical",
   style: "griply",

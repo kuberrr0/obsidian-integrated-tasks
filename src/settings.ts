@@ -211,7 +211,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           .addOption("comfortable", "Comfortable").addOption("compact", "Compact")
           .setValue(this.plugin.settings.density)
           .onChange(async value => {
-            this.plugin.settings.density = value === "compact" ? "compact" : "comfortable";
+            this.plugin.settings.density = value === "comfortable" ? "comfortable" : "compact";
             await this.plugin.saveSettings();
             this.plugin.refreshViews();
             this.plugin.refreshNavigation();

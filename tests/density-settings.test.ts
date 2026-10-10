@@ -31,9 +31,9 @@ import TaskManagerPlugin from "../src/main";
 import { TaskManagerSettingTab } from "../src/settings";
 import { DEFAULT_SETTINGS } from "../src/types";
 
-it("defaults density to comfortable and keeps only known values", async () => {
-  expect(DEFAULT_SETTINGS.density).toBe("comfortable");
-  for (const [saved, expected] of [[null, "comfortable"], [{ density: "compact" }, "compact"], [{ density: "tiny" }, "comfortable"], [{ density: 3 }, "comfortable"]] as const) {
+it("defaults density to compact and keeps only known values", async () => {
+  expect(DEFAULT_SETTINGS.density).toBe("compact");
+  for (const [saved, expected] of [[null, "compact"], [{ density: "comfortable" }, "comfortable"], [{ density: "compact" }, "compact"], [{ density: "tiny" }, "compact"], [{ density: 3 }, "compact"]] as const) {
     const plugin = new TaskManagerPlugin({} as App, {} as never);
     plugin.loadData = vi.fn().mockResolvedValue(saved);
     await plugin.loadSettings();
@@ -55,14 +55,14 @@ it("offers a Density dropdown in Appearance that saves and refreshes task and na
   definition.render(new Setting({} as HTMLElement));
   const row = rows[0];
   expect(row.options).toEqual(["comfortable", "compact"]);
-  expect(row.value).toBe("comfortable");
-  await row.change!("compact");
-  expect(plugin.settings.density).toBe("compact");
+  expect(row.value).toBe("compact");
+  await row.change!("comfortable");
+  expect(plugin.settings.density).toBe("comfortable");
   expect(plugin.saveSettings).toHaveBeenCalledOnce();
   expect(plugin.refreshViews).toHaveBeenCalledOnce();
   expect(plugin.refreshNavigation).toHaveBeenCalledOnce();
   await row.change!("unknown");
-  expect(plugin.settings.density).toBe("comfortable");
+  expect(plugin.settings.density).toBe("compact");
 });
 
 it("records completion dates unless turned off", async () => {
