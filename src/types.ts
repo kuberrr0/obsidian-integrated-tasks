@@ -222,7 +222,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   fileSortOrder: "alphabetical",
   style: "griply",
   taskDetails: "view",
-  completionDates: false,
+  completionDates: true,
   viewOptions: {},
   viewLayouts: {},
   viewPeriods: {},

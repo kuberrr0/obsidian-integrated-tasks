@@ -64,3 +64,13 @@ it("offers a Density dropdown in Appearance that saves and refreshes task and na
   await row.change!("unknown");
   expect(plugin.settings.density).toBe("comfortable");
 });
+
+it("records completion dates unless turned off", async () => {
+  expect(DEFAULT_SETTINGS.completionDates).toBe(true);
+  for (const [saved, expected] of [[null, true], [{ completionDates: false }, false], [{ completionDates: "no" }, true]] as const) {
+    const plugin = new TaskManagerPlugin({} as App, {} as never);
+    plugin.loadData = vi.fn().mockResolvedValue(saved);
+    await plugin.loadSettings();
+    expect(plugin.settings.completionDates).toBe(expected);
+  }
+});
