@@ -76,6 +76,36 @@ it("scrolls indefinitely in either direction with bounded date columns and stabl
   }
 });
 
+it("scrolls to its dates once shown, when drawn in a hidden tab", () => {
+  class Hidden extends Element {
+    constructor() {
+      super();
+      this.clientWidth = 0;
+      // A hidden element has no width and keeps no scroll position.
+      let left = 0;
+      Object.defineProperty(this, "scrollLeft", { get: () => left, set: (value: number) => { if (this.clientWidth) left = value; } });
+    }
+    createEl(_tag: string, options: { text?: string; cls?: string; attr?: Record<string, string> } = {}) {
+      const child = Object.assign(new Hidden(), { text: options.text ?? "", cls: options.cls ?? "", attrs: options.attr ?? {} });
+      this.children.push(child); return child;
+    }
+  }
+  const resized: (() => void)[] = [];
+  const ResizeObserver = class { constructor(callback: () => void) { resized.push(callback); } observe() {} disconnect() {} };
+  Object.defineProperty(Hidden.prototype, "ownerDocument", { value: { defaultView: { ResizeObserver } } });
+  const container = new Hidden();
+  const viewportChanged = vi.fn();
+  renderGantt(container as unknown as HTMLElement, { projects: [], anchor: "2026-09-18", zoom: "month", dateFormat: "YYYY-MM-DD", navigate: vi.fn(), open: vi.fn(), update: vi.fn(), viewportChanged });
+  // Nothing in view yet, so the stored date stays as it was.
+  expect(viewportChanged).not.toHaveBeenCalled();
+  const scroll = container.all().find(el => el.cls === "tm-gantt-scroll")!;
+  scroll.clientWidth = 900;
+  for (const callback of resized) callback();
+  expect(viewportChanged).toHaveBeenLastCalledWith("2026-09-18");
+  const first = container.all().find(el => el.cls.split(" ").includes("tm-gantt-date"))!.attrs.title;
+  expect(addDays(first, Math.floor(scroll.scrollLeft / 32))).toBe("2026-09-18");
+});
+
 it("repositions project bars after scrolling and retains date editing", async () => {
   const container = new Element();
   const project = { path: "Project.md", name: "Project", openTasks: 1, completedTasks: 0, archived: false, scheduledDate: "2026-09-18", endDate: "2026-09-25", deadline: "2026-10-01" };

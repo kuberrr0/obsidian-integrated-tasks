@@ -407,7 +407,19 @@ export function renderGantt(container: HTMLElement, options: GanttOptions): void
       button.addEventListener("blur", () => { if (keyTimer !== undefined) saveKeys(); });
     }
   }
-  scroll.scrollLeft = buffer * 2 * width;
-  syncViewport();
+  const initial = buffer * 2 * width;
+  scroll.scrollLeft = initial;
+  if (Math.abs(scroll.scrollLeft - initial) < 1) { syncViewport(); return; }
+  // Drawn in a hidden tab, the timeline can't scroll yet: it scrolls to its dates once it's shown.
+  const Observer = scroll.ownerDocument?.defaultView?.ResizeObserver;
+  if (!Observer) return;
+  const shown = new Observer(() => {
+    if (!scroll.isConnected) { shown.disconnect(); return; }
+    if (!scroll.clientWidth) return;
+    shown.disconnect();
+    scroll.scrollLeft = initial;
+    syncViewport();
+  });
+  shown.observe(scroll);
 
 }
