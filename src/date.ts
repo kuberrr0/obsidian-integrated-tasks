@@ -122,9 +122,10 @@ const NOT_A_DATE = /^(?:sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat|\d{1,2}\/\d{
  * Chrono's readings of editor prose that may set a schedule: whole words, inside `within`, not a repeat's
  * ("every Friday") or the past's ("last Friday"), and never a bare weekday abbreviation or a fraction.
  */
-function inputResults(value: string, reference: Date, within?: InputRange): chrono.ParsedResult[] {
+function inputResults(value: string, reference: Date, within?: InputRange, dateFormat: string = DEFAULT_DATE_FORMAT): chrono.ParsedResult[] {
   const prose = inputProse(value, within);
-  return chrono.parse(prose, reference, { forwardDate: true }).filter(match =>
+  // Typed dates read as the vault's notes do: 5/10/2026 is 5 October with a day-first format.
+  return chronoFor(dateFormat).parse(prose, reference, { forwardDate: true }).filter(match =>
     !match.end && (!within || boundedMatch(value, match.index, match.text.length, /[\p{L}\p{N}]/u))
     && !/(?:^|\s)(?:every|each|last|past|previous)\s*$/i.test(prose.slice(0, match.index))
     && !/^(?:last|past|previous)\b/i.test(match.text) && !NOT_A_DATE.test(match.text.trim())
@@ -159,8 +160,8 @@ const certainDay = (result: chrono.ParsedResult): boolean => result.start.isCert
  * Find a date in editor prose without interpreting links or inline code as dates. A date and a time written apart
  * ("tomorrow p1 3pm") make one schedule; a time alone counts too, for its next occurrence.
  */
-export function findInputDate(value: string, reference = new Date(), within?: InputRange): InputDate | undefined {
-  const results = inputResults(value, reference, within);
+export function findInputDate(value: string, reference = new Date(), within?: InputRange, dateFormat?: string): InputDate | undefined {
+  const results = inputResults(value, reference, within, dateFormat);
   const dated = results.find(certainDay);
   const timed = results.find(result => result !== dated && result.start.isCertain("hour") && !certainDay(result));
   const first = dated ?? timed;
@@ -174,8 +175,8 @@ export function findInputDate(value: string, reference = new Date(), within?: In
 }
 
 /** A time alone in editor prose ("3pm", "at 9"), for a date given by a token. */
-export function findInputTime(value: string, reference = new Date(), within?: InputRange): { index: number; text: string; time: string } | undefined {
-  const result = inputResults(value, reference, within).find(item => item.start.isCertain("hour") && !certainDay(item));
+export function findInputTime(value: string, reference = new Date(), within?: InputRange, dateFormat?: string): { index: number; text: string; time: string } | undefined {
+  const result = inputResults(value, reference, within, dateFormat).find(item => item.start.isCertain("hour") && !certainDay(item));
   const time = result && resultTime(result);
   return result && time && endsTitle(value, [result]) ? { index: result.index, text: result.text, time } : undefined;
 }

@@ -147,6 +147,12 @@ describe("date parser", () => {
     }
     expect(parseDateExpression("5/10/2026", reference, "MM/DD/YYYY")).toBe("2026-05-10");
   });
+
+  it("reads a typed date in the same order as a note does", () => {
+    expect(parseTaskInput("Pay rent 5/10/2026", reference, "DD/MM/YYYY")?.scheduledDate).toBe("2026-10-05");
+    expect(parseTaskInput("Pay rent 5/10/2026", reference, "MM/DD/YYYY")?.scheduledDate).toBe("2026-05-10");
+    expect(parseTaskInput("Pay rent 5/10/2026", reference)?.scheduledDate).toBe("2026-05-10");
+  });
 });
 
 describe("Daily Notes settings", () => {

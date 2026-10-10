@@ -279,7 +279,7 @@ function parseLine(
 
     if (!changed && naturalDates && !consumed.has("scheduled")) {
       // A date and a time may be written apart ("tomorrow p1 3pm"); both parts come out of the title.
-      const date = findInputDate(remainder, reference);
+      const date = findInputDate(remainder, reference, undefined, dateFormat);
       if (date) {
         metadata.scheduledDate = date.date;
         if (date.time) metadata.scheduledTime = date.time;
@@ -291,7 +291,7 @@ function parseLine(
 
     // A time typed apart from a date token gives that date its time.
     if (!changed && naturalDates && metadata.scheduledDate && !metadata.scheduledTime && !consumed.has("time")) {
-      const time = findInputTime(remainder, reference);
+      const time = findInputTime(remainder, reference, undefined, dateFormat);
       if (time) {
         metadata.scheduledTime = time.time;
         remainder = removeSpans(remainder, [time]).replace(/ {2,}/g, " ").trim();

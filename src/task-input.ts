@@ -79,8 +79,8 @@ export function taskInputRanges(text: string, original = "", reference = new Dat
   };
   if (!strict.some(range => range.kind === "deadline")) add("deadline", findInputDeadline(prose, reference, dateFormat, within));
   // A date and its time may sit apart; each part is marked on its own.
-  if (!strict.some(range => range.kind === "scheduledDate")) for (const part of findInputDate(prose, reference, within)?.parts ?? []) add("scheduledDate", part);
-  else if (!parseTaskLine(`- [ ] ${text}`, reference, dateFormat)?.scheduledTime) add("scheduledDate", findInputTime(prose, reference, within));
+  if (!strict.some(range => range.kind === "scheduledDate")) for (const part of findInputDate(prose, reference, within, dateFormat)?.parts ?? []) add("scheduledDate", part);
+  else if (!parseTaskLine(`- [ ] ${text}`, reference, dateFormat)?.scheduledTime) add("scheduledDate", findInputTime(prose, reference, within, dateFormat));
   if (!natural.length) return strict;
   // With the words read as dates taken out (blanked, so places stay put), tokens they stood in front of end the
   // line too, as saving reads them: "tomorrow p1 3pm" sets the priority as well.
@@ -134,9 +134,9 @@ export function parseEditedTaskInput(text: string, original: string, reference =
   if (!strict || !text.slice(within.from, within.to).trim()) return strict;
   const prose = maskTokens(text, ranges.map(range => ({ ...range, from: range.from - checkbox.length, to: range.to - checkbox.length })));
   const deadline = strict.deadline ? undefined : findInputDeadline(prose, reference, dateFormat, within);
-  const scheduled = strict.scheduledDate ? undefined : findInputDate(prose, reference, within);
+  const scheduled = strict.scheduledDate ? undefined : findInputDate(prose, reference, within, dateFormat);
   // A time typed apart from a date token gives that date its time.
-  const time = strict.scheduledDate && !strict.scheduledTime ? findInputTime(prose, reference, within) : undefined;
+  const time = strict.scheduledDate && !strict.scheduledTime ? findInputTime(prose, reference, within, dateFormat) : undefined;
   if (!deadline && !scheduled && !time) return strict;
   const cleaned = removeSpans(text, [...(deadline ? [deadline] : []), ...(scheduled?.parts ?? []), ...(time ? [time] : [])]);
   const parsed = parseTaskInput(checkbox + cleaned, reference, dateFormat, false);
