@@ -43,3 +43,29 @@ it("syncs sidebar selection through the supported active-view API", async () => 
   view.setActive("tags", "work");
   expect(expanded.has("tags")).toBe(true);
 });
+
+it("draws nothing more once closed, even after a press that was waiting to redraw", async () => {
+  vi.useFakeTimers();
+  try {
+    const handlers = new Map<string, () => void>();
+    const requestAnimationFrame = vi.fn(() => 1);
+    const view = new TaskNavigationView({} as WorkspaceLeaf, { settings: {}, index: { subscribe: () => () => {} } } as unknown as TaskManagerPlugin);
+    view.app = { workspace: { getActiveViewOfType: () => null, on: () => ({}) } } as unknown as App;
+    Object.assign(view, {
+      registerEvent: vi.fn(), registerDomEvent: (_target: unknown, type: string, handler: () => void) => handlers.set(type, handler),
+      containerEl: { win: { setTimeout, clearTimeout, requestAnimationFrame, cancelAnimationFrame: vi.fn() } }
+    });
+    const render = vi.spyOn(view as unknown as { render(): void }, "render").mockImplementation(() => {});
+    await view.onOpen();
+    handlers.get("pointerdown")!();
+    // A redraw that came during the press waits for it to end.
+    Object.assign(view, { renderAfterPress: true });
+    handlers.get("pointerup")!();
+    await view.onClose();
+    render.mockRestore();
+    vi.advanceTimersByTime(400);
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    view.refresh();
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+  } finally { vi.useRealTimers(); }
+});

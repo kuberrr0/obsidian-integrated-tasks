@@ -96,6 +96,8 @@ export class TaskNavigationView extends ItemView {
    */
   private pressed = false;
   private renderAfterPress = false;
+  private releaseTimer?: number;
+  private closed = false;
   // The toolbar is one tab stop; arrow keys move between its buttons.
   private toolbarFocus = 0;
   constructor(leaf: WorkspaceLeaf, private readonly plugin: TaskManagerPlugin) { super(leaf); }
@@ -110,6 +112,7 @@ export class TaskNavigationView extends ItemView {
     this.render();
   }
   async onOpen(): Promise<void> {
+    this.closed = false;
     this.unsubscribe = this.plugin.index.subscribe(() => this.scheduleRender());
     const syncActive = (): void => {
       if (this.plugin.settings.showFiles) this.scheduleRender();
@@ -130,7 +133,9 @@ export class TaskNavigationView extends ItemView {
       if (!this.pressed) return;
       this.pressed = false;
       // After the click the press makes, which opens what it is on (and redraws the list itself).
-      this.containerEl.win.setTimeout(() => {
+      if (this.releaseTimer !== undefined) this.containerEl.win.clearTimeout(this.releaseTimer);
+      this.releaseTimer = this.containerEl.win.setTimeout(() => {
+        this.releaseTimer = undefined;
         if (!this.renderAfterPress) return;
         this.renderAfterPress = false;
         this.scheduleRender();
@@ -142,7 +147,13 @@ export class TaskNavigationView extends ItemView {
     syncActive();
     this.render();
   }
-  async onClose(): Promise<void> { this.unsubscribe?.(); this.cancelRender(); }
+  async onClose(): Promise<void> {
+    this.closed = true;
+    this.unsubscribe?.();
+    this.cancelRender();
+    if (this.releaseTimer !== undefined) this.containerEl.win.clearTimeout(this.releaseTimer);
+    this.releaseTimer = undefined;
+  }
   setActive(mode: TaskViewMode, tag?: string, project?: string, smartListId?: string): void {
     this.activeSmartList = smartListId;
     this.activeMode = mode; this.activeTag = tag; this.activeProject = project;
@@ -156,7 +167,7 @@ export class TaskNavigationView extends ItemView {
 
   /** Index events arrive in bursts, so render at most once per frame. */
   private scheduleRender(): void {
-    if (this.frame !== undefined) return;
+    if (this.closed || this.frame !== undefined) return;
     this.frame = this.containerEl.win.requestAnimationFrame(() => {
       this.frame = undefined;
       // A name being typed keeps its field; the list catches up when the rename ends.
@@ -172,6 +183,7 @@ export class TaskNavigationView extends ItemView {
 
   private render(): void {
     this.cancelRender();
+    if (this.closed) return;
     if (this.pressed) { this.renderAfterPress = true; return; }
     this.renderAfterPress = false;
     const container = this.containerEl.children[1] as HTMLElement;
