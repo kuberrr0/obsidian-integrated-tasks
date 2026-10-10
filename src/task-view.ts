@@ -2094,7 +2094,7 @@ export class TaskMainView extends ItemView {
       cls: `tm-task-item${board ? " tm-things-board-card" : ""}`, depth, repeatCheckbox: things && isRepeatingTask(this.app, task), things, lead: things && !board,
       color: task.path !== this.taskSourcePath ? color : undefined, markColor: true, focusKeys: { checkbox: "checkbox", title: "title" }
     });
-    const { row, checkbox, primary, title, lead, metadata } = parts;
+    const { row, checkbox, primary, lead, metadata } = parts;
     // Not `disabled`: disabling the focused checkbox would drop keyboard focus before the re-render restores it.
     let pending = false;
     checkbox.addEventListener("change", () => {
@@ -2110,7 +2110,6 @@ export class TaskMainView extends ItemView {
       });
     });
     this.listDrag?.row(row, primary, task, target);
-    title.addEventListener("click", () => this.editTask(task));
     try {
       // Routine-note repeats get an icon; inline `every …` repeats show a Repeat pill in the details instead.
       // (In the Things style the repeat icon is the task's checkbox.)
