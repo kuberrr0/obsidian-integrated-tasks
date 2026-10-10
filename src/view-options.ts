@@ -23,6 +23,8 @@ export interface ViewOptionsHost {
   setExpanded(open: boolean): void;
   /** Makes a smart list of the view as its options now show it, named in a popover beside `anchor`; the panel's footer offers it. */
   convert?: (anchor: HTMLElement) => void;
+  /** In a smart list: saves the options it now shows into the list; the panel's footer offers it while they differ from the list's. */
+  updateSmartList?: { changed(): boolean; save(): void };
 }
 
 type Property = typeof TASK_PROPERTIES[number];
@@ -45,6 +47,8 @@ const GROUPS: Array<[TaskGrouping, string]> = [
   ["default", "View default"], ["none", "None"], ["date", "Action date"], ["scheduledDate", "Scheduled date"], ["deadline", "Deadline"], ["priority", "Priority"],
   ["status", "Status"], ["tags", "Tags"], ["source", "Note"], ["section", "Heading"], ["duration", "Duration"], ["repeat", "Repeat"], ["defer", "Hidden until"], ["completed", "Completed date"]
 ];
+/** A grouping's name, as View options › Group lists it. */
+export const groupingLabel = (grouping: TaskGrouping): string => GROUPS.find(([value]) => value === grouping)?.[1] ?? grouping;
 const SECTIONS: Array<[string, Array<[TaskProperty, string, string]>]> = [
   ["Status & priority", [["status", "Status", "circle-dot"], ["priority", "Priority", "flag"]]],
   ["Dates", [["scheduledDate", "Scheduled", "calendar"], ["scheduledTime", "Scheduled time", "clock"], ["deadline", "Deadline", "calendar-clock"],
@@ -138,6 +142,8 @@ export class ViewOptionsPanel {
   readonly panel: HTMLElement;
   private readonly body: HTMLElement;
   private readonly clearButton: HTMLButtonElement;
+  /** Update smart list, in a smart list's panel; enabled while the view's options differ from the list's. */
+  private updateButton?: HTMLButtonElement;
   private readonly directionButton: HTMLButtonElement;
   /** The Show section's Projects switch, and the section (hidden where the view cannot show projects). */
   private readonly projectsSwitch: HTMLElement;
@@ -215,6 +221,14 @@ export class ViewOptionsPanel {
       button.createSpan({ text: "Convert to smart list" });
       button.addEventListener("click", () => { this.setOpen(false); convert.call(host, this.toggle); });
     }
+    const update = host.updateSmartList;
+    if (update) {
+      const footer = this.panel.createDiv({ cls: "tm-options-footer" });
+      const button = this.updateButton = footer.createEl("button", { cls: "tm-options-update", attr: { type: "button", "data-tm-focus-key": "option-update" } });
+      setIcon(button.createSpan({ cls: "tm-options-icon", attr: { "aria-hidden": "true" } }), "refresh-cw");
+      button.createSpan({ text: "Update smart list" });
+      button.addEventListener("click", () => { this.setOpen(false); this.toggle.focus(); update.save(); });
+    }
     this.sync();
   }
 
@@ -251,6 +265,7 @@ export class ViewOptionsPanel {
     this.badge.hidden = !filters.length;
     const state = this.host.state();
     this.clearButton.disabled = !filters.length && state.sort === "date" && !state.descending && state.grouping === "default" && state.showProjects !== false;
+    if (this.updateButton) this.updateButton.disabled = !this.host.updateSmartList?.changed();
     this.showSection.hidden = state.showProjects === undefined;
     this.projectsSwitch.toggleClass("is-enabled", state.showProjects === true);
     this.projectsSwitch.setAttribute("aria-checked", String(state.showProjects === true));

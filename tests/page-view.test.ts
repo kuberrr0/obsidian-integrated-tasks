@@ -354,8 +354,8 @@ it("offers Open task menu only for an active view with selected tasks", () => {
 });
 
 
-it.each([[null, "things"], [{ style: "unknown" }, "things"], [{ style: "things" }, "things"], [{ style: "griply" }, "griply"]] as const)(
-  "defaults to the Things style, keeping a saved Griply choice (%j)", async (saved, expected) => {
+it.each([[null, "griply"], [{ style: "unknown" }, "griply"], [{ style: "things" }, "things"], [{ style: "griply" }, "griply"]] as const)(
+  "defaults to the Griply style, keeping a saved Things choice (%j)", async (saved, expected) => {
     const plugin = new TaskManagerPlugin({} as App, {} as never);
     plugin.loadData = vi.fn().mockResolvedValue(saved);
     await plugin.loadSettings();

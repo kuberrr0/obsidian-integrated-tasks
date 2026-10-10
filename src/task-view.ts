@@ -2,9 +2,9 @@ import { taskTitleLabel } from "./task-title";
 import { splitDestination } from "./structure";
 import { activeProjects, projectStatuses, renderProjectProgress } from "./project-progress";
 import { renderProjectHeaderDetails } from "./project-header-details";
-import { editable, renderTaskDetails } from "./task-row-details";
+import { renderTaskDetails } from "./task-row-details";
 import { renderThingsProjectDetails, renderThingsTaskDetails } from "./things-row-details";
-import { animateCardClose, animateCardOpen, cardNotes, renderThingsCardProperties, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
+import { animateCardClose, animateCardOpen, cardNotes, renderThingsBoardCard, renderThingsTaskCard, type TaskCardDraft } from "./things-task-card";
 import { isRepeatingTask, recurringFile } from "./recurring-task";
 import { cloneTaskFilters, smartListDraft, undatedFilters, type SmartListDraft } from "./task-filters";
 import { ViewOptionsPanel } from "./view-options";
@@ -1055,16 +1055,25 @@ export class TaskMainView extends ItemView {
             choose: name => { menu.close(); save({ ...smartListDraft(list), name }, `Renamed to “${name}”`); }
           });
         } },
-        { kind: "item", label: "Update View Options", icon: "refresh-cw", key: "u", run: () => {
-          const draft: SmartListDraft = { name: list.name, filters: cloneTaskFilters(this.propertyFilters), sort: this.sort, descending: this.descending, grouping: this.grouping,
-            ...(this.showProjects ? {} : { showProjects: false }), ...(list.scope ? { scope: list.scope } : {}) };
-          if (JSON.stringify(draft) === JSON.stringify(smartListDraft(list))) { new Notice(`“${list.name}” already has these view options`); return; }
-          save(draft, `Updated “${list.name}” with the current view options`);
-        } },
+        { kind: "item", label: "Update View Options", icon: "refresh-cw", key: "u", run: () => this.updateSmartList(list) },
         { kind: "separator" },
         { kind: "item", label: "Delete smart list", icon: "trash-2", danger: true, run: () => this.confirmDeleteSmartList(list) }
       ]
     });
+  }
+
+  /** The smart list with the filters, sorting, grouping and projects the view now has, in its own scope. */
+  private smartListAsShown(list: SmartList): SmartListDraft {
+    return { name: list.name, filters: cloneTaskFilters(this.propertyFilters), sort: this.sort, descending: this.descending, grouping: this.grouping,
+      ...(this.showProjects ? {} : { showProjects: false }), ...(list.scope ? { scope: list.scope } : {}) };
+  }
+
+  /** Saves the view's options into its smart list (its title's menu, or View options › Update smart list). */
+  private updateSmartList(list: SmartList): void {
+    const draft = this.smartListAsShown(list);
+    if (JSON.stringify(draft) === JSON.stringify(smartListDraft(list))) { new Notice(`“${list.name}” already has these view options`); return; }
+    void this.plugin.saveSmartList(draft, list.id).then(() => new Notice(`Updated “${list.name}” with the current view options`))
+      .catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not save the smart list."); });
   }
 
   private confirmDeleteSmartList(list: SmartList): void {
@@ -1199,8 +1208,19 @@ export class TaskMainView extends ItemView {
       tasks: () => this.plugin.index.allTasks(),
       expanded: () => this.filtersExpanded,
       setExpanded: open => { this.filtersExpanded = open; },
-      // A smart list already is one: its own options are saved from its title's menu.
-      ...(this.state.mode === "smartLists" ? {} : { convert: (anchor: HTMLElement) => this.convertToSmartList(anchor) })
+      // A smart list already is one: its options save into it instead.
+      ...(this.state.mode !== "smartLists" ? { convert: (anchor: HTMLElement) => this.convertToSmartList(anchor) } : {
+        updateSmartList: {
+          changed: () => {
+            const list = this.plugin.settings.smartLists.find(item => item.id === this.state.smartListId);
+            return Boolean(list) && JSON.stringify(this.smartListAsShown(list!)) !== JSON.stringify(smartListDraft(list));
+          },
+          save: () => {
+            const list = this.plugin.settings.smartLists.find(item => item.id === this.state.smartListId);
+            if (list) this.updateSmartList(list);
+          }
+        }
+      })
     });
   }
 
@@ -1415,6 +1435,14 @@ export class TaskMainView extends ItemView {
     setIcon(button, "chevron-right");
     button.addEventListener("click", event => { event.stopPropagation(); this.toggleFold(key); });
     heading.prepend(button);
+    // The whole heading folds too, except its own buttons and links, and a click that ends a text selection in it.
+    heading.toggleClass("tm-foldable-heading", true);
+    heading.addEventListener("click", event => {
+      if (event.target instanceof Element && event.target.closest("button, a, input")) return;
+      const selection = heading.ownerDocument.defaultView?.getSelection();
+      if (selection && !selection.isCollapsed && heading.contains(selection.anchorNode)) return;
+      this.toggleFold(key);
+    });
     return folded;
   }
 
@@ -2087,7 +2115,7 @@ export class TaskMainView extends ItemView {
       edit: (property: TaskEditorProperty) => this.editTask(task, property), openSource: () => { void this.openSource(task); },
       openTag: (tag: string) => void this.openTagView(tag)
     };
-    if (board) this.renderBoardCard(primary, metadata, task, details);
+    if (board) renderThingsBoardCard(metadata, task, details);
     else if (lead) {
       // With subtasks listed as rows, the mark saying a task has them would only repeat what is in view.
       renderThingsTaskDetails({ lead, inline: primary, secondary: metadata }, task, { ...details, todayMarker: this.state.mode !== "today", subtaskMark: !this.plugin.settings.showSubtasks, datesBelow: Platform.isPhone });
@@ -2110,23 +2138,6 @@ export class TaskMainView extends ItemView {
     // or opens the task.
     this.bindSelection(row, task);
     this.bindRowKeyboard(row, task, target, foldable);
-  }
-
-  /**
-   * A Things board card, laid out like an open task card: the title, a few lines of its notes, its property lines,
-   * and below them the note it lives in.
-   */
-  private renderBoardCard(primary: HTMLElement, below: HTMLElement, task: Task, details: { grouping: TaskGrouping; tags: string[]; source?: string; edit: (property: TaskEditorProperty) => void }): void {
-    const notes = cardNotes(task.description).trim();
-    if (notes) below.before(below.parentElement!.createDiv({ cls: "tm-things-board-notes", text: notes }));
-    // Grouped by tag, the column names it; grouped by anything else, the card keeps every property.
-    const properties = renderThingsCardProperties(below.parentElement!, task, details.grouping === "tags" ? [] : details.tags, details.edit, undefined, { open: tag => void this.openTagView(tag) });
-    if (properties) below.before(properties);
-    // Left out when the board is grouped by note: the column already names it.
-    if (details.source && details.grouping !== "source") {
-      const source = below.createSpan({ cls: "tm-things-source", text: details.source.replace(/\.md$/i, "").split("/").pop(), attr: { title: details.source } });
-      editable(source, `Open source note: ${details.source}`, "source", () => { void this.openSource(task); });
-    }
   }
 
   /** A task page or tag list leaves out the tag it is showing. */

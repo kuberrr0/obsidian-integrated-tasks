@@ -35,7 +35,11 @@ async function setup(notes: Array<[string, string]>, frontmatter: Record<string,
     saveViewOptions: vi.fn((key: string, options?: SavedViewOptions) => { if (options) settings.viewOptions[key] = options; else delete settings.viewOptions[key]; }),
     saveViewLayout: vi.fn((key: string, layout?: ViewLayout) => { if (layout && layout !== "list") settings.viewLayouts[key] = layout; else delete settings.viewLayouts[key]; }),
     saveViewPeriod: vi.fn((key: string, period?: ViewPeriod) => { if (period && Object.keys(period).length) settings.viewPeriods[key] = period; else delete settings.viewPeriods[key]; }),
-    saveSmartList: vi.fn(async (draft: Omit<SmartList, "id">) => { const list = { ...draft, id: "new" }; settings.smartLists.push(list); return list; })
+    saveSmartList: vi.fn(async (draft: Omit<SmartList, "id">, id?: string) => {
+      const list = { ...draft, id: id ?? "new" };
+      settings.smartLists = [...settings.smartLists.filter(item => item.id !== list.id), list];
+      return list;
+    })
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const content = () => view.containerEl.children[1] as HTMLElement;
@@ -175,5 +179,27 @@ describe("Convert to smart list", () => {
     // So does a task-query block that names it.
     const parsed = parseTaskQuery("smart list: Urgent today", { sourcePath: "Note.md", dateFormat: "YYYY-MM-DD", smartLists: settings.smartLists, resolveNote: () => undefined });
     expect(parsed.query).toMatchObject({ mode: "today", filters: [{ property: "priority", operator: "is", values: ["1"] }] });
+  });
+
+  it("offers Update smart list in a smart list's View options once its options change, and saves them into it", async () => {
+    const today = todayIso();
+    const { view, plugin, settings, content } = await setup([["A.md", `- [ ] Urgent ${today} p1\n- [ ] Plain ${today}`]]);
+    settings.smartLists = [{ id: "focus", name: "Focus", filters: [], sort: "date", descending: false, grouping: "default", scope: { mode: "today" } }];
+    await view.setState({ mode: "smartLists", smartListId: "focus" });
+    const update = () => content().querySelector<HTMLButtonElement>(".tm-options-update")!;
+    expect(update().textContent).toBe("Update smart list");
+    // Nothing to save until the view's options differ from the list's.
+    expect(update().disabled).toBe(true);
+    filterP1(content());
+    expect(titles(content())).toEqual(["Urgent"]);
+    expect(update().disabled).toBe(false);
+    update().click();
+    expect(content().querySelector<HTMLElement>(".tm-options-panel")!.hidden).toBe(true);
+    expect(plugin.saveSmartList).toHaveBeenCalledWith({ name: "Focus", filters: [{ property: "priority", operator: "is", values: ["1"] }],
+      sort: "date", descending: false, grouping: "default", scope: { mode: "today" } }, "focus");
+    await vi.waitFor(() => expect(settings.smartLists[0].filters).toHaveLength(1));
+    view.render();
+    expect(titles(content())).toEqual(["Urgent"]);
+    expect(update().disabled).toBe(true);
   });
 });

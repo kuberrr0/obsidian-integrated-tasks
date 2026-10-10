@@ -224,6 +224,21 @@ describe("plugin lifecycle", () => {
     plugin.unload();
   });
 
+  it("opens a task from a task-query block in the task editor, or with three panes in the Task Details sidebar", async () => {
+    const { plugin } = await loaded();
+    const inSidebar = vi.spyOn(plugin, "showInTaskSidebar").mockResolvedValue();
+    const editor = vi.spyOn(plugin, "openEditor").mockImplementation(() => {});
+    const task = { id: "A.md:0", path: "A.md", title: "One", line: 0 } as never;
+    plugin.openTask(task, "deadline");
+    expect(editor).toHaveBeenCalledExactlyOnceWith({ mode: "all", task, focusProperty: "deadline" });
+    expect(inSidebar).not.toHaveBeenCalled();
+    plugin.settings.taskDetails = "sidebar";
+    plugin.openTask(task);
+    expect(inSidebar).toHaveBeenCalledExactlyOnceWith("A.md:0", { focus: true });
+    expect(editor).toHaveBeenCalledOnce();
+    plugin.unload();
+  });
+
   it("does nothing on layout ready after an early unload", async () => {
     const env = environment();
     const plugin = new TaskManagerPlugin(env.app, {} as never);

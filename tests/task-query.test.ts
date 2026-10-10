@@ -17,6 +17,29 @@ describe("task query parsing", () => {
     expect(parse("").query).toMatchObject({ mode: "all" });
   });
 
+  it("reads layouts: a list unless a board or a calendar (on a week, or another period) is asked for", () => {
+    expect(parse("")).toMatchObject({ layout: "list", calendarScope: "week" });
+    expect(parse("layout: board")).toMatchObject({ layout: "board", errors: [] });
+    expect(parse("layout: Kanban")).toMatchObject({ layout: "board", errors: [] });
+    expect(parse("layout: calendar")).toMatchObject({ layout: "calendar", calendarScope: "week", errors: [] });
+    expect(parse("layout: calendar month")).toMatchObject({ layout: "calendar", calendarScope: "month" });
+    expect(parse("layout: calendar 4 days")).toMatchObject({ layout: "calendar", calendarScope: "four-day" });
+    expect(parse("layout: calendar day")).toMatchObject({ layout: "calendar", calendarScope: "day" });
+    expect(parse("layout: gantt").errors).toEqual(['Line 1: "gantt" isn\'t a layout. Use list, board, calendar, or calendar with day, 4 days, week or month and a date.']);
+    expect(parse("layout: board month").errors).toHaveLength(1);
+    expect(parse("layout: board 2026-11-01").errors).toHaveLength(1);
+  });
+
+  it("reads the date a calendar opens on, with or without its period, in the vault's format or in words", () => {
+    expect(parse("layout: calendar").calendarAnchor).toBeUndefined();
+    expect(parse("layout: calendar month 2026-11-01")).toMatchObject({ calendarScope: "month", calendarAnchor: "2026-11-01", errors: [] });
+    expect(parse("layout: calendar 2026-11-01 month")).toMatchObject({ calendarScope: "month", calendarAnchor: "2026-11-01", errors: [] });
+    expect(parse("layout: calendar Nov 3, 2026")).toMatchObject({ calendarScope: "week", calendarAnchor: "2026-11-03", errors: [] });
+    expect(parse("layout: calendar 4 days from tomorrow")).toMatchObject({ calendarScope: "four-day", calendarAnchor: "2026-09-28", errors: [] });
+    expect(parse("layout: calendar week of 2026-12-24")).toMatchObject({ calendarScope: "week", calendarAnchor: "2026-12-24", errors: [] });
+    expect(parse("layout: calendar month someday").errors).toEqual(['Line 1: "someday" isn\'t a date I understand. Try a date such as 2026-09-27, today, or next friday.']);
+  });
+
   it("turns property lines into filters, resolving relative dates when rendered", () => {
     const { query, errors } = parse([
       "deadline: before next friday", "scheduled: between today and in 7 days", "priority: 1, 2", "tags: #work or [[home]]",

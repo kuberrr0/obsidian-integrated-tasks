@@ -74,7 +74,7 @@ async function setup(notes: Array<[string, string]>) {
     })
   };
   const plugin = {
-    settings: { ...DEFAULT_SETTINGS }, index, store, dateFormat: () => "YYYY-MM-DD",
+    settings: { ...DEFAULT_SETTINGS, style: "things" as "things" | "griply" }, index, store, dateFormat: () => "YYYY-MM-DD",
     openEditor: vi.fn(), openTag: vi.fn().mockResolvedValue(undefined), openQuickSwitcher: vi.fn(), undoTaskChange: vi.fn(), redoTaskChange: vi.fn(),
     refreshTaskSidebar: () => sidebar.render(),
     showInTaskSidebar: vi.fn(async (id: string, options?: { focus?: boolean }) => sidebar.showTask(id, options)),
@@ -136,6 +136,90 @@ describe("what the Task Details sidebar shows", () => {
     setActive(undefined);
     sidebar.render();
     expect(side().querySelector(".tm-sidebar-empty p")!.textContent).toBe("Select a task in a task view, or put the cursor on a checklist in a note, to see its details here.");
+  });
+
+  it("shows Upcoming's tasks where it would otherwise show nothing, and a picked one's details until Escape", async () => {
+    const tomorrow = todayIso(new Date(Date.now() + 86400000));
+    const later = todayIso(new Date(Date.now() + 3 * 86400000));
+    const { view, sidebar, side, setActive, files, contents } = await setup([
+      ["A.md", `- [ ] Undated\n- [ ] Later on ${later}\n- [ ] Tomorrow's ${tomorrow}\n  - [ ] Its subtask ${tomorrow}\n- [x] Done already ${tomorrow}`],
+      ["Empty.md", "Just text."]
+    ]);
+    const upcoming = () => Array.from(side().querySelectorAll<HTMLElement>(".tm-sidebar-idle .tm-section")).map(section =>
+      [section.querySelector("h2")!.textContent, Array.from(section.querySelectorAll(".tm-task-title")).map(title => title.textContent)]);
+    // A task view with nothing selected: by date, open tasks only, subtasks with their task.
+    await view.setState({ mode: "all" });
+    expect(side().querySelector(".tm-sidebar-planner-title")!.textContent).toBe("Upcoming");
+    expect(upcoming()).toEqual([[tomorrow, ["Tomorrow's"]], [later, ["Later on"]]]);
+    // A note without tasks of its own, and neither a view nor a note in front.
+    setActive(noteView(files.get("Empty.md")!, contents, { from: 0 }));
+    sidebar.render();
+    expect(side().querySelector(".tm-sidebar-empty")).toBeNull();
+    expect(upcoming().map(([date]) => date)).toEqual([tomorrow, later]);
+    setActive(undefined);
+    sidebar.render();
+    expect(upcoming().map(([date]) => date)).toEqual([tomorrow, later]);
+    // A click shows the task's details; Escape goes back to the list.
+    side().querySelector<HTMLElement>(".tm-sidebar-idle .tm-task-item")!.click();
+    expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Tomorrow's");
+    side().querySelector<HTMLElement>(".tm-sidebar-title-field")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(upcoming()).toHaveLength(2);
+  });
+
+  it("lets the idle list's name pick what it shows (a view or a smart list), with View options of its own for each", async () => {
+    const today = todayIso();
+    const tomorrow = todayIso(new Date(Date.now() + 86400000));
+    const { view, plugin, side } = await setup([
+      [DEFAULT_SETTINGS.inboxPath, "- [ ] Triage p1\n- [ ] Sort mail"],
+      ["A.md", `- [ ] Now ${today} p2\n- [ ] Overdue one 2020-01-01\n- [ ] Next ${tomorrow} p1`]
+    ]);
+    const saveSettings = vi.fn().mockResolvedValue(undefined);
+    Object.assign(plugin, { saveSettings, saveViewOptions: (key: string, options: unknown) => {
+      if (options) plugin.settings.viewOptions = { ...plugin.settings.viewOptions, [key]: options as never };
+      else { const { [key]: _, ...rest } = plugin.settings.viewOptions; void _; plugin.settings.viewOptions = rest; }
+    } });
+    plugin.settings.smartLists = [{ id: "urgent", name: "Urgent", filters: [{ property: "priority", operator: "is", values: ["1"] }], sort: "title", descending: false, grouping: "default" }];
+    await view.setState({ mode: "all" });
+    const title = () => side().querySelector<HTMLButtonElement>(".tm-sidebar-idle-title")!;
+    const sections = () => Array.from(side().querySelectorAll(".tm-sidebar-idle-list > .tm-section")).map(section =>
+      [section.querySelector("h2")!.textContent, Array.from(section.querySelectorAll(".tm-task-title")).map(item => item.textContent)]);
+    const listed = () => Array.from(side().querySelectorAll(".tm-sidebar-idle-list .tm-task-title")).map(item => item.textContent);
+    const pick = (label: string) => {
+      title().click();
+      const options = Array.from(document.querySelectorAll<HTMLElement>(".tm-choice-popover [role=option]"));
+      options.find(option => option.textContent === label)!.click();
+    };
+    expect(title().textContent).toBe("Upcoming");
+    expect(sections()).toEqual([[tomorrow, ["Next"]]]);
+    // Today: overdue first, then today, as the view groups them; the choice is kept in the settings.
+    pick("Today");
+    expect(plugin.settings.sidebarIdleView).toBe("today");
+    expect(saveSettings).toHaveBeenCalledOnce();
+    expect(title().textContent).toBe("Today");
+    expect(sections()).toEqual([["Overdue", ["Overdue one"]], ["Today", ["Now"]]]);
+    pick("Inbox");
+    expect(listed()).toEqual(["Triage", "Sort mail"]);
+    // A smart list, in its own sort.
+    title().click();
+    expect(Array.from(document.querySelectorAll(".tm-choice-popover [role=option]")).map(option => option.textContent)).toEqual(["Inbox", "Today", "Upcoming", "All Tasks", "Urgent"]);
+    expect(document.querySelector(".tm-choice-popover [aria-selected=true]")!.textContent).toBe("Inbox");
+    document.querySelector<HTMLElement>(".tm-choice-popover [data-value='smartList:urgent']")!.click();
+    expect(listed()).toEqual(["Next", "Triage"]);
+
+    // View options of its own, for the list it shows: they stay open as its tasks redraw.
+    const toggle = side().querySelector<HTMLButtonElement>(".tm-sidebar-idle .tm-filter-toggle")!;
+    toggle.click();
+    const panel = side().querySelector<HTMLElement>(".tm-sidebar-idle .tm-options-panel")!;
+    expect(panel.hidden).toBe(false);
+    side().querySelector<HTMLButtonElement>(".tm-sidebar-idle [data-tm-focus-key='option-direction']")!.click();
+    expect(plugin.settings.viewOptions["sidebar:smartList:urgent"]).toMatchObject({ sort: "title", descending: true });
+    expect(listed()).toEqual(["Triage", "Next"]);
+    expect(side().querySelector(".tm-sidebar-idle .tm-options-panel")).toBe(panel);
+    expect(panel.hidden).toBe(false);
+    // Another list keeps its own.
+    pick("Upcoming");
+    expect(plugin.settings.viewOptions["sidebar:upcoming"]).toBeUndefined();
+    expect(listed()).toEqual(["Next"]);
   });
 
   it("gives the tasks without a date View options of their own, to filter, sort and group them", async () => {
@@ -352,8 +436,12 @@ describe("editing in the Task Details sidebar", () => {
     rows(main())[0].click();
     expect(title().value).toBe("Draft the brief");
 
-    notes().focus();
+    // Shift+Enter in the title goes on to the notes; in the notes it starts a line.
+    title().focus();
+    expect(key(title(), { key: "Enter", shiftKey: true }).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(notes());
     expect(key(notes(), { key: "Enter", shiftKey: true }).defaultPrevented).toBe(false);
+    expect(store.update).not.toHaveBeenCalled();
     title().focus();
     title().value = "Draft the launch brief";
     title().dispatchEvent(new Event("input", { bubbles: true }));

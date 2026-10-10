@@ -29,7 +29,8 @@ async function setup(notes: Record<string, string>) {
   await index.initialize();
   const plugin = {
     app, index, settings: { ...DEFAULT_SETTINGS, smartLists: [] }, dateFormat: () => "YYYY-MM-DD",
-    store: { toggle: vi.fn().mockResolvedValue(undefined) }, openEditor: vi.fn(), openTaskView: vi.fn().mockResolvedValue(undefined)
+    store: { toggle: vi.fn().mockResolvedValue(undefined) }, openEditor: vi.fn(), openTask: vi.fn(), startTask: vi.fn(),
+    openTaskView: vi.fn().mockResolvedValue(undefined), openTag: vi.fn().mockResolvedValue(undefined)
   };
   const render = (source: string, sourcePath = "Daily.md") => {
     const element = document.body.appendChild(document.createElement("div"));
@@ -57,8 +58,62 @@ describe("task query blocks", () => {
     const checkbox = rows[0].querySelector<HTMLInputElement>("input[type=checkbox]")!;
     checkbox.click();
     expect(plugin.store.toggle).toHaveBeenCalledWith(expect.objectContaining({ title: "Ship it" }), true);
+    // Opening a task is the plugin's: the task editor, or with three panes the Task Details sidebar.
     rows[0].querySelector<HTMLButtonElement>(".tm-task-title")!.click();
-    expect(plugin.openEditor).toHaveBeenCalledWith({ mode: "all", task: expect.objectContaining({ title: "Ship it" }) });
+    expect(plugin.openTask).toHaveBeenCalledWith(expect.objectContaining({ title: "Ship it" }));
+  });
+
+  it("draws rows as the task views do, in the chosen style", async () => {
+    const { render, plugin } = await setup({ "Work.md": `- [ ] Ship it ${today} p1 #[[client]]\n- [ ] Plan it p2` });
+    plugin.settings.style = "things";
+    const things = render("view: all").element;
+    // Shared styles hang off the task views' class; rows are their rows, with the priority on the checkbox.
+    expect(things.classList.contains("tm-main-view")).toBe(true);
+    expect(things.classList.contains("tm-style-things")).toBe(true);
+    const row = things.querySelector<HTMLElement>(".tm-query-row")!;
+    expect(row.classList.contains("tm-task-item")).toBe(true);
+    expect(row.querySelector(".tm-task-checkbox")!.classList.contains("is-p1")).toBe(true);
+    expect(row.querySelector(".tm-things-secondary .tm-things-source")!.textContent).toBe("Work");
+    expect(row.querySelector(".tm-things-tag")!.textContent).toContain("client");
+    plugin.settings.style = "griply";
+    const griply = render("view: all").element;
+    expect(griply.classList.contains("tm-style-griply")).toBe(true);
+    expect(griply.querySelector(".tm-query-row .tm-task-metadata .tm-task-source")!.textContent).toBe("Work");
+  });
+
+  it("lays tasks out as a board, by status unless grouped otherwise", async () => {
+    const { render } = await setup({ "Work.md": "- [ ] One\n- [/] Two\n- [x] Three\n- [ ] Four p1" });
+    const columns = (element: HTMLElement) => Array.from(element.querySelectorAll<HTMLElement>(".tm-kanban-column")).map(column =>
+      [column.querySelector("h2")!.textContent, Array.from(column.querySelectorAll(".tm-task-title")).map(title => title.textContent)]);
+    const board = render("layout: board").element;
+    expect(board.classList.contains("is-kanban-view")).toBe(true);
+    // Done and Cancelled stay out unless completed tasks show.
+    expect(columns(board)).toEqual([["To do", ["Four", "One"]], ["In progress", ["Two"]], ["Waiting", []]]);
+    expect(columns(render("layout: kanban\nshow completed: yes").element).map(([title]) => title)).toEqual(["To do", "In progress", "Waiting", "Done", "Cancelled"]);
+    expect(columns(render("layout: board\ngroup: priority").element)).toEqual([["P1", ["Four"]], ["P2", []], ["P3", []], ["No priority", ["One", "Two"]]]);
+  });
+
+  it("lays dated tasks out on a calendar, whose toolbar moves it", async () => {
+    const { render, plugin } = await setup({ "Work.md": `- [ ] Dated ${today}\n- [ ] Undated` });
+    const { element } = render("layout: calendar month\ntitle: Month");
+    expect(element.classList.contains("is-calendar-view")).toBe(true);
+    expect(element.querySelector(".tm-calendar")!.classList.contains("is-month-scope")).toBe(true);
+    expect(element.querySelector(".tm-query-title")!.textContent).toBe("Month1");
+    expect(Array.from(element.querySelectorAll(".tm-calendar-task")).map(card => card.textContent)).toEqual([expect.stringContaining("Dated")]);
+    element.querySelector<HTMLButtonElement>(".tm-calendar-scopes button[aria-label=Week]")!.click();
+    expect(element.querySelector(".tm-calendar")!.classList.contains("is-week-scope")).toBe(true);
+    element.querySelector<HTMLElement>(".tm-calendar-task")!.click();
+    expect(plugin.openTask).toHaveBeenCalledWith(expect.objectContaining({ title: "Dated" }));
+  });
+
+  it("opens a calendar on the date the block names, until its toolbar moves it", async () => {
+    const { render } = await setup({ "Work.md": `- [ ] Dated ${today}\n- [ ] Later 2031-03-12` });
+    const { element } = render("layout: calendar month 2031-03-10");
+    const cards = () => Array.from(element.querySelectorAll(".tm-calendar-task")).map(card => card.textContent);
+    expect(element.querySelector(".tm-calendar-toolbar h2")!.textContent).toContain("2031");
+    expect(cards()).toEqual([expect.stringContaining("Later")]);
+    Array.from(element.querySelectorAll<HTMLButtonElement>(".tm-calendar-controls button")).find(button => button.textContent === "Today")!.click();
+    expect(cards()).toEqual([expect.stringContaining("Dated")]);
   });
 
   it("updates when tasks change and stops after the block unloads", async () => {

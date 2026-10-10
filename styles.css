@@ -1658,21 +1658,23 @@ body .modal-container .modal.tm-bottom-sheet.is-top::before { top: auto; bottom:
 .tm-import-examples li { margin-bottom: var(--size-2-3); overflow-wrap: anywhere; }
 .tm-import-skip { margin: var(--size-2-2) 0 0; color: var(--text-muted); font-size: var(--font-ui-small); }
 
-/* Task query blocks in notes */
+/* Task query blocks in notes. They share the task views' styles (rows in either style, boards, the calendar) through
+   .tm-main-view, but grow with their tasks inside the note instead of filling and scrolling a pane. */
 .tm-query-block { margin: var(--size-4-2) 0; padding: var(--size-4-2) var(--size-4-3); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); background: var(--background-primary); }
+.tm-query-block.tm-main-view { height: auto; overflow: visible; font-family: var(--font-interface); }
+/* The note's own heading styles stay out of the board's columns and the calendar's month. */
+.tm-query-block.tm-main-view h2 { margin: 0; color: var(--text-normal); font-size: var(--font-ui-medium); font-weight: var(--font-semibold); line-height: 1.3; }
 .tm-query-title { display: flex; align-items: center; gap: var(--size-4-2); margin-bottom: var(--size-4-1); font-weight: var(--font-semibold); }
 .tm-query-group { margin: var(--size-4-2) 0 var(--size-2-2); color: var(--text-muted); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); text-transform: uppercase; letter-spacing: .04em; }
 .tm-query-block .tm-task-list { margin: 0; }
-.tm-query-block .tm-query-row { min-height: 0; padding-block: var(--size-2-2); }
-.tm-query-block button.tm-task-title { background: transparent; }
-/* Native buttons center flex content, clipping a long title at both ends; block text keeps truncation at the end. */
-.tm-query-block .tm-query-row button.tm-task-title { display: block; max-width: 100%; text-align: left; }
-/* Properties sit beside the title while they fit, and otherwise move under it and wrap whole, instead of squeezing. */
-.tm-query-block .tm-query-row .tm-task-content { display: flex; flex-wrap: wrap; row-gap: 2px; }
-.tm-query-block .tm-query-row .tm-task-primary { flex: 1 1 auto; }
-.tm-query-block .tm-query-row .tm-task-metadata { flex: 0 1 auto; min-width: 0; max-width: 100%; flex-wrap: wrap; justify-content: flex-start; overflow: visible; }
-.tm-query-block .tm-query-row .tm-checkbox-target { align-self: start; height: var(--input-height, 30px); }
-.tm-query-block .tm-query-row.is-completed .tm-task-title { color: var(--text-muted); text-decoration: line-through; }
+/* A board's columns are narrower than a task view's, so a few fit across a note; more scroll sideways. */
+.tm-query-block .tm-kanban { gap: var(--size-4-3); min-height: 0; padding: var(--size-4-2) 0 var(--size-4-1); }
+.tm-query-block .tm-kanban-column { flex: 1 0 220px; min-width: 220px; padding: 0; }
+/* A calendar's hours scroll within a note-sized frame. */
+.tm-query-block.is-calendar-view .tm-calendar { height: auto; }
+.tm-query-block.is-calendar-view .tm-calendar-day-scroll { flex: none; max-height: min(60vh, 540px); }
+.tm-query-block .tm-calendar .tm-calendar-week:not(.is-four-day) { min-width: 560px; }
+.tm-query-block .tm-calendar-toolbar { margin-bottom: var(--size-4-3); }
 .tm-query-empty, .tm-query-footer { color: var(--text-muted); font-size: var(--font-ui-small); }
 .tm-query-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--size-4-2); margin-top: var(--size-4-2); }
 .tm-query-error { color: var(--text-normal); font-size: var(--font-ui-small); }
@@ -2214,6 +2216,8 @@ button.tm-fold-toggle:focus-visible { opacity: 1; }
 .tm-main-view button.tm-group-fold { left: -22px; }
 .tm-main-view.tm-style-things button.tm-group-fold { left: -14px; }
 .tm-section.is-folded { margin-bottom: var(--size-4-4); }
+/* A click anywhere on a group's heading folds it as well. */
+.tm-section h2.tm-foldable-heading { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { button.tm-fold-toggle, button.tm-fold-toggle svg { transition: none; } }
 
 /* Date popover: natural-language input, quick picks, a month calendar, and time/duration rows. */
@@ -2497,14 +2501,24 @@ button.tm-things-card-project:hover, button.tm-things-card-project:focus-visible
 .tm-sidebar-planner-title { color: var(--text-muted); font-size: var(--font-ui-small); font-weight: var(--font-semibold); }
 .tm-sidebar-planner-head .tm-options-panel { left: 0; right: 0; width: auto; max-width: none; }
 .tm-task-sidebar .tm-sidebar-planner .tm-section { margin-bottom: var(--size-4-4); }
+/* With nothing else to show: a view's tasks under its name, a button that picks the view, beside their View options. */
+.tm-task-sidebar .tm-sidebar-idle { display: flex; flex-direction: column; }
+button.tm-sidebar-planner-title.tm-sidebar-idle-title {
+  display: inline-flex; align-items: center; gap: 4px; height: auto; margin-left: -6px; padding: 2px 6px;
+  border: 0; border-radius: var(--radius-s); box-shadow: none; background: transparent; cursor: pointer;
+}
+button.tm-sidebar-idle-title:hover, button.tm-sidebar-idle-title:focus-visible { background: var(--background-modifier-hover); color: var(--text-normal); }
+.tm-sidebar-idle-chevron { display: inline-flex; }
+.tm-sidebar-idle-chevron svg { width: 12px; height: 12px; color: var(--text-faint); }
+.tm-task-sidebar .tm-sidebar-idle .tm-section { margin-bottom: var(--size-4-4); }
 .tm-task-sidebar.is-today .tm-sidebar-planner { overflow: hidden; }
 
 /* Today's hours fill their part, and scroll. */
 .tm-sidebar-calendar, .tm-sidebar-calendar .tm-calendar { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .tm-task-sidebar .tm-calendar-day-scroll { flex: 1; min-height: 0; max-height: none; border-radius: var(--radius-m); }
 /* Upcoming's tasks with no date are a list's rows, narrower: their properties go below the title. */
-.tm-task-sidebar .tm-sidebar-planner .tm-task-list { margin: 0; }
-.tm-task-sidebar .tm-sidebar-planner .tm-task-content { grid-template-columns: minmax(0, 1fr); }
+.tm-task-sidebar :is(.tm-sidebar-planner, .tm-sidebar-idle) .tm-task-list { margin: 0; }
+.tm-task-sidebar :is(.tm-sidebar-planner, .tm-sidebar-idle) .tm-task-content { grid-template-columns: minmax(0, 1fr); }
 
 /* The selected task. */
 .tm-task-sidebar .tm-sidebar-empty { flex: 1; min-height: 240px; padding: 0 var(--size-4-4); }
@@ -2619,9 +2633,11 @@ button.tm-sidebar-open-note:hover, button.tm-sidebar-open-note:focus-visible { b
 @media (pointer: coarse) { .tm-sidebar-property, .tm-sidebar-subtask { min-height: 40px; } }
 /* View options' footer: Convert to smart list, below the options, always in view. */
 .tm-options-footer { flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--background-modifier-border); }
-button.tm-options-convert {
+button.tm-options-convert, button.tm-options-update {
   display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: auto; padding: 8px 10px;
   border: 0; border-radius: 8px; box-shadow: none; background: transparent;
   color: var(--text-accent); font-size: var(--font-ui-small); font-weight: var(--font-medium); cursor: pointer;
 }
-button.tm-options-convert:hover, button.tm-options-convert:focus-visible { background: var(--background-modifier-hover); }
+button.tm-options-convert:hover, button.tm-options-convert:focus-visible,
+button.tm-options-update:not(:disabled):hover, button.tm-options-update:focus-visible { background: var(--background-modifier-hover); }
+button.tm-options-update:disabled { color: var(--text-faint); cursor: default; }

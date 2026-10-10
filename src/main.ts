@@ -20,8 +20,8 @@ import { noteTokenEditor } from "./note-token-editor";
 import { noteTaskEditEditor, registerNoteTaskEdit } from "./note-task-edit";
 import { renderNoteTokens } from "./note-token-reading";
 import { EditorView } from "@codemirror/view";
-import { MarkdownView, Notice, Plugin, TFile, TFolder, WorkspaceLeaf, type Editor, type TAbstractFile, type ViewState } from "obsidian";
-import { TaskEditorModal, initialDraft, type TaskEditorOptions } from "./task-editor";
+import { MarkdownView, Notice, Platform, Plugin, TFile, TFolder, WorkspaceLeaf, type Editor, type TAbstractFile, type ViewState } from "obsidian";
+import { TaskEditorModal, initialDraft, type TaskEditorOptions, type TaskEditorProperty } from "./task-editor";
 import { TaskIndex, type RefreshOptions } from "./task-index";
 import { IndexedDbCache } from "./index-cache";
 import { TaskNavigationView, TASK_NAV_VIEW } from "./navigation-view";
@@ -338,10 +338,11 @@ export default class TaskManagerPlugin extends Plugin {
     this.settings.density = this.settings.density === "compact" ? "compact" : "comfortable";
     this.settings.showFiles = this.settings.showFiles === true;
     if (!["alphabetical", "alphabeticalReverse", "byModifiedTime", "byModifiedTimeReverse", "byCreatedTime", "byCreatedTimeReverse"].includes(this.settings.fileSortOrder)) this.settings.fileSortOrder = "alphabetical";
-    // Things is the default; only an explicit Griply choice keeps Griply.
-    this.settings.style = this.settings.style === "griply" ? "griply" : "things";
+    // Griply is the default; only an explicit Things choice keeps Things.
+    this.settings.style = this.settings.style === "things" ? "things" : "griply";
     this.settings.taskDetails = this.settings.taskDetails === "sidebar" ? "sidebar" : "view";
     this.settings.completionDates = this.settings.completionDates === true;
+    if (typeof this.settings.sidebarIdleView !== "string" || !this.settings.sidebarIdleView) this.settings.sidebarIdleView = DEFAULT_SETTINGS.sidebarIdleView;
     const options: unknown = this.settings.viewOptions;
     // A fresh object, never the defaults' own: views write into it.
     this.settings.viewOptions = options && typeof options === "object" && !Array.isArray(options) ? { ...options as Record<string, SavedViewOptions> } : {};
@@ -707,9 +708,22 @@ export default class TaskManagerPlugin extends Plugin {
     const tag = path ? this.index.tagForPath(path) : undefined;
     const state: OpenEditorState = path && this.index.isProject(path) ? { mode: "all", projectPath: path }
       : path && tag ? { mode: "tags", tag, pagePath: path } : { mode: "inbox" };
-    // With three panes it starts in the Task Details sidebar, as a task view's new task does.
+    this.startTask(state);
+  }
+
+  /** A new task for `state`: with three panes in the Task Details sidebar, as a task view's new task, else in the task editor. */
+  startTask(state: OpenEditorState): void {
     if (tasksOpenInSidebar(this.settings)) void this.newTaskInSidebar(state).catch(error => new Notice(String(error)));
     else this.openEditor(state);
+  }
+
+  /**
+   * Opens a task shown outside a task view (in a task-query block): with three panes in the Task Details sidebar, with
+   * the caret in its title (but on phones and tablets, where it only shows); else in the task editor, at `focusProperty`.
+   */
+  openTask(task: Task, focusProperty?: TaskEditorProperty): void {
+    if (tasksOpenInSidebar(this.settings)) void this.showInTaskSidebar(task.id, { focus: !Platform.isMobile }).catch(error => new Notice(String(error)));
+    else this.openEditor({ mode: "all", task, ...(focusProperty ? { focusProperty } : {}) });
   }
 
   private async newTaskInSidebar(state: OpenEditorState): Promise<void> {

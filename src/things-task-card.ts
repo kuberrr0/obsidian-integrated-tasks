@@ -8,7 +8,7 @@ import { renderThingsTaskDetails, thingsDeadlineLabel, type ThingsDetailsOptions
 import { openTagsPopover } from "./task-menu";
 import { taskInputRanges, tokenHighlightClass, type InputTokenRange } from "./task-input";
 import { draftFromTask, draftFromTitle } from "./task-draft";
-import type { Task } from "./types";
+import type { Task, TaskGrouping } from "./types";
 
 /** The card's unsaved title, notes and new subtask, kept by the view so a re-render does not lose typing. */
 export interface TaskCardDraft {
@@ -128,6 +128,12 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
             event.preventDefault(); event.stopPropagation();
             cancelled = true;
             (options.cancel ?? options.collapse)();
+        }
+        // Shift+Enter in the title goes on to the notes, at their end.
+        else if (event.target === title && event.key === "Enter" && event.shiftKey && !event.isComposing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+            event.preventDefault(); event.stopPropagation();
+            notes.focus();
+            notes.setSelectionRange(notes.value.length, notes.value.length);
         }
         // Enter in the title or notes (Shift+Enter starts a line of notes), or Cmd/Ctrl+Enter anywhere, confirms it.
         else if (event.key === "Enter" && !event.isComposing && ((field && !event.shiftKey) || event.metaKey || event.ctrlKey)) {
@@ -272,6 +278,23 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     const focus = options.focus === "new" ? typing : options.focus ? card.querySelector<HTMLInputElement>(`[data-tm-focus-key="card-subtask:${CSS.escape(options.focus)}"]`) : undefined;
     if (focus?.isConnected) { focus.focus(); focus.setSelectionRange(focus.value.length, focus.value.length); }
     return card;
+}
+
+/**
+ * A Things board card, laid out like an open task card: the title, a few lines of its notes, its property lines, and
+ * below them (in `below`, the row's secondary line) the note it lives in.
+ */
+export function renderThingsBoardCard(below: HTMLElement, task: Task, details: { grouping: TaskGrouping; tags: string[]; source?: string; edit: (property: TaskEditorProperty) => void; openSource: () => void; openTag?: (tag: string) => void }): void {
+    const notes = cardNotes(task.description).trim();
+    if (notes) below.before(below.parentElement!.createDiv({ cls: "tm-things-board-notes", text: notes }));
+    // Grouped by tag, the column names it; grouped by anything else, the card keeps every property.
+    const properties = renderThingsCardProperties(below.parentElement!, task, details.grouping === "tags" ? [] : details.tags, details.edit, undefined, { open: details.openTag });
+    if (properties) below.before(properties);
+    // Left out when the board is grouped by note: the column already names it.
+    if (details.source && details.grouping !== "source") {
+        const source = below.createSpan({ cls: "tm-things-source", text: details.source.replace(/\.md$/i, "").split("/").pop(), attr: { title: details.source } });
+        editable(source, `Open source note: ${details.source}`, "source", details.openSource);
+    }
 }
 
 /**

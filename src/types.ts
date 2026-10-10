@@ -193,6 +193,11 @@ export interface TaskManagerSettings {
   ignoredTags: string[];
   /** Set once the task sidebar and Task Details have opened on first run; closed later, they stay closed. */
   panelsPlaced: boolean;
+  /**
+   * What the Task Details sidebar lists when it has nothing else to show (no task selected, or a note without tasks):
+   * "upcoming", "today", "inbox", "all", or a smart list as "smartList:<id>".
+   */
+  sidebarIdleView: string;
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
@@ -211,7 +216,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   density: "comfortable",
   showFiles: false,
   fileSortOrder: "alphabetical",
-  style: "things",
+  style: "griply",
   taskDetails: "view",
   completionDates: false,
   viewOptions: {},
@@ -219,7 +224,8 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   viewPeriods: {},
   ignoredPaths: [],
   ignoredTags: [],
-  panelsPlaced: false
+  panelsPlaced: false,
+  sidebarIdleView: "upcoming"
 };
 
 export type TaskEditorPreset = Partial<Omit<TaskDraft, "indent">>;

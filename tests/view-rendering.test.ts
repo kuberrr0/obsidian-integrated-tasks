@@ -569,6 +569,7 @@ it("lays board cards out like an open task card in the Things style", async () =
 
 it("lists a subtask on its own row only with Show subtasks on, or when its task is not in the view", async () => {
   const { view, content, plugin } = await setup([["A.md", `- [ ] Parent 2026-10-20\n  - [ ] Child ${todayIso()}\n- [ ] Other`]]);
+  plugin.settings.style = "things";
   const titles = () => Array.from(content().querySelectorAll<HTMLElement>(".tm-task-row .tm-task-title")).map(title => title.textContent);
   await view.setState({ mode: "all" });
   expect(titles()).toEqual(["Parent", "Other"]);
@@ -614,6 +615,11 @@ describe("folding", () => {
     expect(section("B").querySelectorAll(".tm-task-row")).toHaveLength(1);
     section("A").querySelector<HTMLElement>(".tm-group-fold")!.click();
     expect(section("A").querySelectorAll(".tm-task-row")).toHaveLength(2);
+    // A click on the heading itself folds and unfolds it too.
+    section("A").querySelector<HTMLElement>("h2 > span")!.click();
+    expect(section("A").classList.contains("is-folded")).toBe(true);
+    section("A").querySelector<HTMLElement>("h2")!.click();
+    expect(section("A").classList.contains("is-folded")).toBe(false);
   });
 
   it("keeps folds across a reload of the same page and drops them on another page", async () => {
@@ -932,6 +938,7 @@ describe("smart list actions", () => {
 describe("Things card subtasks", () => {
   it("leaves subtasks to their own rows when Show subtasks is on", async () => {
     const { view, content, index, plugin } = await setup([["A.md", "- [ ] Parent\n  - [ ] Child"]]);
+    plugin.settings.style = "things";
     await view.setState({ mode: "all" });
     const parent = index.allTasks()[0];
     const open = (showSubtasks: boolean) => {

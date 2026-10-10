@@ -1,8 +1,12 @@
+import type { CalendarScope } from "./calendar";
 import { parseDateExpression, parseTimeExpression, todayIso } from "./date";
 import { durationToMinutes } from "./parser";
 import { TASK_PROPERTIES } from "./task-properties";
 import { STATUS_LABELS, statusFromLabel } from "./task-status";
 import type { FilterOperator, SmartList, TaskFilter, TaskGrouping, TaskProperty, TaskQuery, TaskSort } from "./types";
+
+/** How a block lays its tasks out: rows, a board's columns (one per group), or a calendar. */
+export type TaskQueryLayout = "list" | "board" | "calendar";
 
 /**
  * A ```task-query block: one `key: value` per line, such as `view: today`, `tags: work`,
@@ -14,6 +18,11 @@ export interface ParsedTaskQuery {
   descending: boolean;
   grouping: TaskGrouping;
   limit: number;
+  layout: TaskQueryLayout;
+  /** The period a calendar opens on (its toolbar changes it). */
+  calendarScope: CalendarScope;
+  /** The date whose period a calendar opens on, when not today's (an ISO date). */
+  calendarAnchor?: string;
   title?: string;
   /** The view or smart list to open for "Show all". */
   opens?: { mode: TaskQuery["mode"]; smartListId?: string };
@@ -37,8 +46,11 @@ const ALIASES: Record<string, TaskProperty> = {
   "deadline time": "deadlineTime", tag: "tags", note: "source", source: "source", "hidden until": "defer", snoozed: "defer", defer: "defer",
   done: "completed", "completed date": "completed", "done date": "completed", heading: "section", "task title": "title"
 };
+const CALENDAR_SCOPES: Record<string, CalendarScope> = { day: "day", "4 days": "four-day", "four days": "four-day", week: "week", month: "month" };
+// A calendar's period, before its date ("month 2026-11-01") or after it ("2026-11-01 month").
+const CALENDAR_SCOPE = [/^(day|4 days|four days|week|month)(?:\s+|$)/i, /(?:^|\s+)(day|4 days|four days|week|month)$/i];
 // `title:` names the block; filter on task titles with `task title:` (or `search:`).
-export const QUERY_KEYS = ["view", "smart list", "project", "search", "show completed", "sort", "group", "limit", "title",
+export const QUERY_KEYS = ["view", "smart list", "project", "search", "show completed", "sort", "group", "layout", "limit", "title",
   ...TASK_PROPERTIES.map(property => property.key === "title" ? "task title" : property.label.toLowerCase())];
 
 function propertyFor(key: string): typeof TASK_PROPERTIES[number] | undefined {
@@ -105,7 +117,7 @@ function condition(property: typeof TASK_PROPERTIES[number], text: string, conte
 }
 
 export function parseTaskQuery(source: string, context: TaskQueryContext): ParsedTaskQuery {
-  const result: ParsedTaskQuery = { query: { mode: "all", showCompleted: false, filters: [] }, sort: "date", descending: false, grouping: "none", limit: DEFAULT_QUERY_LIMIT, errors: [] };
+  const result: ParsedTaskQuery = { query: { mode: "all", showCompleted: false, filters: [] }, sort: "date", descending: false, grouping: "none", limit: DEFAULT_QUERY_LIMIT, layout: "list", calendarScope: "week", errors: [] };
   const filters = result.query.filters!;
   let explicitCompleted: boolean | undefined;
   for (const [index, rawLine] of source.split(/\r?\n/).entries()) {
@@ -162,6 +174,26 @@ export function parseTaskQuery(source: string, context: TaskQueryContext): Parse
         if (name !== "date" && !property) { fail(`Can't sort by "${value}".`); break; }
         result.sort = property?.key ?? "date";
         result.descending = /^(desc|descending|reverse)$/.test(direction ?? "");
+        break;
+      }
+      case "layout": {
+        // "calendar" opens on this week; "calendar month" (or day, 4 days) on another period, and "calendar month
+        // 2026-11-01" (or "calendar next monday") on the period with that date.
+        const [, name, after] = /^(\S+)\s*(.*)$/.exec(value) ?? [];
+        const layout = name.toLowerCase() === "kanban" ? "board" : name.toLowerCase();
+        let rest = after.trim();
+        if (layout !== "list" && layout !== "board" && layout !== "calendar" || (rest && layout !== "calendar")) {
+          fail(`"${value}" isn't a layout. Use list, board, calendar, or calendar with day, 4 days, week or month and a date.`);
+          break;
+        }
+        const scope = CALENDAR_SCOPE[0].exec(rest) ?? CALENDAR_SCOPE[1].exec(rest);
+        if (scope) rest = rest.replace(scope[0], "");
+        rest = rest.replace(/^(?:on|of|from|at)\s+/i, "").trim();
+        const anchor = rest ? parseDateExpression(rest, context.now, context.dateFormat) : undefined;
+        if (rest && !anchor) { fail(`"${rest}" isn't a date I understand. Try a date such as ${todayIso(context.now)}, today, or next friday.`); break; }
+        result.layout = layout as TaskQueryLayout;
+        if (scope) result.calendarScope = CALENDAR_SCOPES[scope[1].toLowerCase()];
+        if (anchor) result.calendarAnchor = anchor;
         break;
       }
       case "group": {

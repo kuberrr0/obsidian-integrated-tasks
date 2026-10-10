@@ -279,6 +279,20 @@ describe("Things task card", () => {
     expect(second.options.collapse).toHaveBeenCalledOnce();
   });
 
+  it("goes on from the title to the end of the notes on Shift+Enter", () => {
+    const { element, options } = card("- [ ] Task 1\n  Some notes", { cancel: vi.fn() });
+    const title = element.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
+    const notes = element.querySelector<HTMLTextAreaElement>(".tm-things-card-notes")!;
+    title.focus();
+    const event = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true });
+    title.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(notes);
+    expect(notes.selectionStart).toBe(notes.value.length);
+    expect(title.value).toBe("Task 1");
+    expect(options.collapse).not.toHaveBeenCalled();
+  });
+
   it("confirms on Enter in the title or the notes (Shift+Enter starts a line of notes), and cancels on Escape", () => {
     const { element, options } = card("- [ ] Task 1", { cancel: vi.fn() });
     const title = element.querySelector<HTMLTextAreaElement>(".tm-things-card-title")!;
