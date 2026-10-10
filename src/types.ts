@@ -199,7 +199,7 @@ export interface TaskManagerSettings {
   panelsPlaced: boolean;
   /**
    * What the Task Details sidebar lists when it has nothing else to show (no task selected, or a note without tasks):
-   * "upcoming", "today", "inbox", "all", or a smart list as "smartList:<id>".
+   * "upcoming", "today", "inbox", "all", a smart list as "smartList:<id>", a project as "project:<path>" or a tag as "tag:<name>".
    */
   sidebarIdleView: string;
 }

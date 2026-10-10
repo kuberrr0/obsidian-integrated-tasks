@@ -24,6 +24,8 @@ import type { OpenEditorState } from "./main";
 import { groupingLabel, ViewOptionsPanel, type ViewOptionsState } from "./view-options";
 import { dismissPopovers, openChoicePopover } from "./choice-popover";
 import { cloneTaskFilters } from "./task-filters";
+import { listGlyph, SMART_LIST_GLYPH, TAG_GLYPH } from "./navigation-view";
+import { activeProjects, renderProjectProgress } from "./project-progress";
 import type { SavedViewOptions, Task, TaskEditorPreset, TaskGrouping, TaskQuery, TaskSort } from "./types";
 
 export const TASK_SIDEBAR_VIEW = "task-manager-sidebar";
@@ -60,7 +62,7 @@ const UNDATED_OPTIONS = "sidebar:undated";
  * smart list's, grouped by default as the view groups them ("today": overdue, then today).
  */
 interface IdleView { key: string; label: string; query: TaskQuery; sort: TaskSort; descending: boolean; group: Exclude<TaskGrouping, "default"> | "today" }
-const IDLE_VIEWS = [["inbox", "Inbox", "inbox"], ["today", "Today", "star"], ["upcoming", "Upcoming", "calendar-days"], ["all", "All Tasks", "layers"]] as const;
+const IDLE_VIEWS = [["inbox", "Inbox"], ["today", "Today"], ["upcoming", "Upcoming"], ["all", "All Tasks"]] as const;
 /** The view's tasks without a date, as this list shows them: through its own filters too, in its sort and grouping. */
 interface UndatedList { query: ReturnType<TaskMainView["undatedQuery"]>["query"]; sort: TaskSort; descending: boolean; grouping: TaskGrouping }
 
@@ -455,9 +457,18 @@ export class TaskSidebarView extends ItemView {
     return { sort: list?.sort ?? "date", descending: list?.descending ?? false, grouping: list?.grouping ?? "default", filters: this.undatedOptions()?.filters ?? [], openOnly: true, defaultGroup: "None" };
   }
 
-  /** What the sidebar lists when it has nothing else to show: Upcoming unless another view, or a smart list, is chosen. */
+  /** What the sidebar lists when it has nothing else to show: Upcoming unless another view, a smart list, a project or a tag is chosen. */
   private idleView(): IdleView {
     const chosen = this.plugin.settings.sidebarIdleView;
+    // A project's open tasks, by heading as its page groups them; a project since removed falls back to Upcoming.
+    const project = chosen?.startsWith("project:") ? this.plugin.index.projects().find(item => `project:${item.path}` === chosen) : undefined;
+    if (project) return { key: chosen, label: project.name, query: { mode: "project", projectPath: project.path, showCompleted: false }, sort: "date", descending: false, group: "section" };
+    // A tag's, as its page lists them: through its note when it links to one, so a tag's other spellings count too.
+    if (chosen?.startsWith("tag:")) {
+      const tag = chosen.slice("tag:".length);
+      const file = this.plugin.index.tagFile(tag);
+      return { key: chosen, label: tag, query: { mode: "tags", showCompleted: false, ...file ? { tagPath: file.path } : { tag } }, sort: "date", descending: false, group: "none" };
+    }
     const list = chosen?.startsWith("smartList:") ? this.plugin.settings.smartLists.find(item => `smartList:${item.id}` === chosen) : undefined;
     if (list) {
       // A list made from a view filters that view's tasks, and groups them as it does by default.
@@ -523,13 +534,32 @@ export class TaskSidebarView extends ItemView {
     this.idleEmpty = empty;
   }
 
-  /** The idle list's name opens a list of what it can show: Inbox, Today, Upcoming, All Tasks, or a smart list. */
+  /**
+   * The idle list's name opens a list of what it can show, with a search on top: Inbox, Today, Upcoming, All Tasks, a
+   * smart list, a project or a tag, each with the icon the task sidebar gives it.
+   */
   private chooseIdleView(anchor: HTMLElement): void {
+    const style = this.plugin.settings.style;
+    const projects = activeProjects(this.plugin.index.projects()).sort((a, b) => a.name.localeCompare(b.name));
+    const byPath = new Map(projects.map(project => [project.path, project]));
+    const glyph = (color: string): string => `tm-choice-color-${color}`;
     openChoicePopover({
       anchor, label: "Show when no task is selected", selected: this.idleView().key,
+      input: { placeholder: "Find a list, project or tag", filter: true },
       choices: [
-        ...IDLE_VIEWS.map(([value, label, icon]) => ({ value, label, icon })),
-        ...this.plugin.settings.smartLists.map((list, index) => ({ value: `smartList:${list.id}`, label: list.name, icon: "list-filter", separated: index === 0 }))
+        ...IDLE_VIEWS.map(([value, label]) => {
+          const { icon, color } = listGlyph(value, style)!;
+          // Things fills Today's star, as the task sidebar does.
+          return { value, label, icon, cls: `${glyph(color)}${style === "things" && value === "today" ? " is-filled" : ""}` };
+        }),
+        ...this.plugin.settings.smartLists.map((list, index) => ({ value: `smartList:${list.id}`, label: list.name, icon: SMART_LIST_GLYPH.icon, cls: glyph(SMART_LIST_GLYPH.color), separated: index === 0 })),
+        // A project's progress, in its colour, as the task sidebar draws it.
+        ...projects.map((project, index) => ({
+          value: `project:${project.path}`, label: project.name, separated: index === 0, cls: "is-project",
+          detail: project.parentPath ? byPath.get(project.parentPath)?.name ?? noteName(project.parentPath) : undefined,
+          drawIcon: (icon: HTMLElement) => renderProjectProgress(icon, project, false)
+        })),
+        ...this.plugin.index.tagSummaries().map((tag, index) => ({ value: `tag:${tag.name}`, label: tag.name, icon: TAG_GLYPH.icon, cls: glyph(TAG_GLYPH.color), separated: index === 0 }))
       ],
       choose: value => {
         if (value === this.plugin.settings.sidebarIdleView) return;
@@ -567,6 +597,11 @@ export class TaskSidebarView extends ItemView {
     const groups: Array<readonly [string, Task[]]> = grouping === "today"
       ? ([["Overdue", shown.filter(overdue)], ["Today", shown.filter(task => !overdue(task))]] as const).filter(([, group]) => group.length)
       : grouping === "none" ? [["", shown]] : [...groupTasks(shown, grouping, descending && sort === grouping)];
+    // A project's headings in the order its note has them, as its page shows them.
+    if (grouping === "section" && idle.query.projectPath) {
+      const first = (group: Task[]): number => Math.min(...group.map(task => task.line));
+      groups.sort(([, a], [, b]) => first(a) - first(b));
+    }
     for (const [key, group] of groups) {
       const parent = key ? element.createEl("section", { cls: "tm-section" }) : element;
       const title = /^\d{4}-\d{2}-\d{2}$/.test(key) ? formatDate(key, this.plugin.dateFormat()) : grouping === "source" ? key.replace(/\.md$/i, "") : key;

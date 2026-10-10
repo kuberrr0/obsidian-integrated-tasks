@@ -2380,6 +2380,16 @@ button.tm-things-tag-remove:hover { color: var(--text-error); border-color: var(
 .tm-choice-popover .is-p1 .tm-choice-icon { color: var(--text-error); }
 .tm-choice-popover .is-p2 .tm-choice-icon { color: var(--color-orange); }
 .tm-choice-popover .is-p3 .tm-choice-icon { color: var(--color-blue); }
+/* The Task Details sidebar's view picker: each list, project and tag with the icon and colour the task sidebar gives it. */
+.tm-choice-popover .tm-choice-color-blue .tm-choice-icon { color: var(--color-blue); }
+.tm-choice-popover .tm-choice-color-yellow .tm-choice-icon { color: var(--color-yellow); }
+.tm-choice-popover .tm-choice-color-red .tm-choice-icon { color: var(--color-red); }
+.tm-choice-popover .tm-choice-color-cyan .tm-choice-icon { color: var(--color-cyan); }
+.tm-choice-popover .tm-choice-color-orange .tm-choice-icon { color: var(--color-orange); }
+.tm-choice-popover .tm-choice-color-muted .tm-choice-icon { color: var(--text-faint); }
+.tm-choice-popover .is-filled .tm-choice-icon svg { fill: currentColor; }
+.tm-choice-popover .is-project .tm-choice-icon { width: 15px; justify-content: center; }
+.tm-choice-popover .is-project .tm-project-progress { min-height: 0; font-size: 14px; }
 
 /* Task menu: right-click on a task. Rows of date and priority icons, then rows that open a popover beside it. */
 .tm-task-menu {

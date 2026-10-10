@@ -35,7 +35,8 @@ async function setup(notes: Array<[string, string]>) {
       cachedRead: async (file: TFile) => contents.get(file.path) ?? "",
       on: () => ({}), offref: () => {}
     },
-    metadataCache: { getFileCache: () => ({}), on: () => ({}), offref: () => {}, getFirstLinkpathDest: () => null },
+    // Notes under Projects/ are projects.
+    metadataCache: { getFileCache: (file: TFile) => file.path.startsWith("Projects/") ? { frontmatter: { tags: ["project"] } } : {}, on: () => ({}), offref: () => {}, getFirstLinkpathDest: () => null },
     workspace: {
       getActiveViewOfType: (type: new (...args: never[]) => unknown) => active instanceof type ? active : null,
       getMostRecentLeaf: () => ({ view: active }), on: () => ({}), getLeaf: () => ({ openFile: vi.fn() }), requestSaveLayout: vi.fn()
@@ -78,7 +79,7 @@ async function setup(notes: Array<[string, string]>) {
     openEditor: vi.fn(), openTag: vi.fn().mockResolvedValue(undefined), openQuickSwitcher: vi.fn(), undoTaskChange: vi.fn(), redoTaskChange: vi.fn(),
     refreshTaskSidebar: () => sidebar.render(),
     showInTaskSidebar: vi.fn(async (id: string, options?: { focus?: boolean }) => sidebar.showTask(id, options)),
-    newTaskDraft: () => ({ title: "", completed: false, indent: 0, destination: "A.md" })
+    newTaskDraft: () => ({ title: "", completed: false, indent: 0, destination: "A.md" }), projectDraft: () => ({ tags: "" })
   };
   const view = new TaskMainView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
   const sidebar = new TaskSidebarView({ app } as unknown as WorkspaceLeaf, plugin as unknown as TaskManagerPlugin);
@@ -166,12 +167,13 @@ describe("what the Task Details sidebar shows", () => {
     expect(upcoming()).toHaveLength(2);
   });
 
-  it("lets the idle list's name pick what it shows (a view or a smart list), with View options of its own for each", async () => {
+  it("lets the idle list's name pick what it shows (a view, a smart list, a project or a tag), with View options of its own for each", async () => {
     const today = todayIso();
     const tomorrow = todayIso(new Date(Date.now() + 86400000));
     const { view, plugin, side } = await setup([
       [DEFAULT_SETTINGS.inboxPath, "- [ ] Triage p1\n- [ ] Sort mail"],
-      ["A.md", `- [ ] Now ${today} p2\n- [ ] Overdue one 2020-01-01\n- [ ] Next ${tomorrow} p1`]
+      ["A.md", `- [ ] Now ${today} p2\n- [ ] Overdue one 2020-01-01\n- [ ] Next ${tomorrow} p1`],
+      ["Projects/Site.md", "- [ ] Draft copy #[[errand]]\n# Launch\n- [ ] Ship it"]
     ]);
     const saveSettings = vi.fn().mockResolvedValue(undefined);
     Object.assign(plugin, { saveSettings, saveViewOptions: (key: string, options: unknown) => {
@@ -201,7 +203,7 @@ describe("what the Task Details sidebar shows", () => {
     expect(listed()).toEqual(["Triage", "Sort mail"]);
     // A smart list, in its own sort.
     title().click();
-    expect(Array.from(document.querySelectorAll(".tm-choice-popover [role=option]")).map(option => option.textContent)).toEqual(["Inbox", "Today", "Upcoming", "All Tasks", "Urgent"]);
+    expect(Array.from(document.querySelectorAll(".tm-choice-popover [role=option]")).map(option => option.textContent)).toEqual(["Inbox", "Today", "Upcoming", "All Tasks", "Urgent", "Site", "errand"]);
     expect(document.querySelector(".tm-choice-popover [aria-selected=true]")!.textContent).toBe("Inbox");
     document.querySelector<HTMLElement>(".tm-choice-popover [data-value='smartList:urgent']")!.click();
     expect(listed()).toEqual(["Next", "Triage"]);
@@ -220,6 +222,58 @@ describe("what the Task Details sidebar shows", () => {
     pick("Upcoming");
     expect(plugin.settings.viewOptions["sidebar:upcoming"]).toBeUndefined();
     expect(listed()).toEqual(["Next"]);
+
+    // A project, by heading in its note's order; a tag.
+    pick("Site");
+    expect(plugin.settings.sidebarIdleView).toBe("project:Projects/Site.md");
+    expect(title().textContent).toBe("Site");
+    expect(sections()).toEqual([["No section", ["Draft copy"]], ["Launch", ["Ship it"]]]);
+    pick("errand");
+    expect(plugin.settings.sidebarIdleView).toBe("tag:errand");
+    expect(listed()).toEqual(["Draft copy"]);
+  });
+
+  it("searches the idle list's choices, and gives each the icon and colour the task sidebar gives it", async () => {
+    const { view, plugin, side } = await setup([
+      ["A.md", "- [ ] Call #[[errand]]\n- [ ] Plan #[[work]]"],
+      ["Projects/Site.md", "- [ ] Draft copy\n- [x] Brief"],
+      ["Projects/Shop.md", "- [ ] Stock"]
+    ]);
+    Object.assign(plugin, { saveSettings: vi.fn().mockResolvedValue(undefined) });
+    plugin.settings.smartLists = [{ id: "urgent", name: "Urgent", filters: [], sort: "date", descending: false, grouping: "default" }];
+    await view.setState({ mode: "all" });
+    const setIcon = vi.mocked((await import("obsidian")).setIcon);
+    setIcon.mockClear();
+    side().querySelector<HTMLButtonElement>(".tm-sidebar-idle-title")!.click();
+    let popover = document.querySelector<HTMLElement>(".tm-choice-popover")!;
+    const option = (value: string) => popover.querySelector<HTMLElement>(`[data-value='${value}']`)!;
+    const icon = (value: string) => setIcon.mock.calls.find(([element]) => option(value).contains(element as Node))?.[1];
+    // Today's icon follows the style: a filled star in Things.
+    expect(["inbox", "today", "upcoming", "all", "smartList:urgent", "tag:errand"].map(icon)).toEqual(["inbox", "star", "calendar-days", "layers", "list-filter", "hash"]);
+    expect(["inbox", "today", "upcoming", "all", "smartList:urgent", "tag:errand"].map(value => option(value).className))
+      .toEqual(["blue", "yellow is-filled", "red", "cyan", "orange", "muted"].map(color => `tm-options-option tm-choice-color-${color}`));
+    // A project shows its progress where a list shows an icon.
+    expect(option("project:Projects/Site.md").querySelector(".tm-choice-icon .tm-project-progress")!.getAttribute("aria-valuenow")).toBe("50");
+    // The search on top narrows them.
+    const input = popover.querySelector<HTMLInputElement>("input.tm-options-input")!;
+    expect(input.placeholder).toBe("Find a list, project or tag");
+    expect(document.activeElement).toBe(input);
+    input.value = "s";
+    input.dispatchEvent(new Event("input"));
+    const shown = () => Array.from(popover.querySelectorAll<HTMLElement>("[role=option]")).filter(item => !item.hidden).map(item => item.textContent);
+    expect(shown()).toEqual(["All Tasks", "Shop", "Site"]);
+    input.value = "sho";
+    input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(plugin.settings.sidebarIdleView).toBe("project:Projects/Shop.md");
+
+    // In the Griply style Today's is the calendar the task sidebar shows, not filled.
+    plugin.settings.style = "griply";
+    setIcon.mockClear();
+    side().querySelector<HTMLButtonElement>(".tm-sidebar-idle-title")!.click();
+    popover = document.querySelector<HTMLElement>(".tm-choice-popover")!;
+    expect(icon("today")).toBe("calendar-x");
+    expect(option("today").classList.contains("is-filled")).toBe(false);
   });
 
   it("gives the tasks without a date View options of their own, to filter, sort and group them", async () => {

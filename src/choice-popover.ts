@@ -9,6 +9,8 @@ export interface Choice {
   /** Muted text after the label. */
   detail?: string;
   icon?: string;
+  /** Draws the icon itself, where a named icon would go (a project's progress). */
+  drawIcon?: (icon: HTMLElement) => void;
   /** Extra class on the option, e.g. to colour its icon. */
   cls?: string;
   /** A colour for the icon (a project's colour). */
@@ -64,9 +66,10 @@ export function openChoicePopover(options: ChoicePopoverOptions): { element: HTM
     const selected = choice.value === options.selected;
     const item = list.createDiv({ cls: `tm-options-option${choice.cls ? ` ${choice.cls}` : ""}`, attr: { role: "option", tabindex: "-1", "aria-selected": String(selected), "data-value": choice.value } });
     const label = item.createSpan({ cls: "tm-options-option-label tm-choice-label" });
-    if (choice.icon) {
+    if (choice.icon || choice.drawIcon) {
       const icon = label.createSpan({ cls: "tm-choice-icon", attr: { "aria-hidden": "true" } });
-      setIcon(icon, choice.icon);
+      if (choice.drawIcon) choice.drawIcon(icon);
+      else if (choice.icon) setIcon(icon, choice.icon);
       if (choice.color) icon.style.color = choice.color;
     }
     label.createSpan({ text: choice.label });

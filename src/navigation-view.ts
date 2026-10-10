@@ -1,6 +1,6 @@
 import { ItemView, Keymap, Menu, Notice, setIcon, TFile, TFolder, type TAbstractFile, type WorkspaceLeaf } from "obsidian";
 import type TaskManagerPlugin from "./main";
-import type { FileSortOrder, TaskViewMode } from "./types";
+import type { FileSortOrder, TaskManagerSettings, TaskViewMode } from "./types";
 import { activeProjects, renderProjectProgress } from "./project-progress";
 import { projectHierarchy } from "./project-hierarchy";
 import { activeTaskDrag, highlightDropTarget, markDropTarget, TASK_DRAG_TYPE, type SidebarDrop } from "./sidebar-drop";
@@ -19,6 +19,15 @@ const NAV_GROUPS: NavEntry[][] = [
     { mode: "all", label: "All Tasks", icon: "layers", color: "cyan" }
   ]
 ];
+/** The icon and colour a smart list and a tag show, here and wherever else the sidebar's lists are named. */
+export const SMART_LIST_GLYPH = { icon: "list-filter", color: "orange" } as const;
+export const TAG_GLYPH = { icon: "hash", color: "muted" } as const;
+
+/** A list's icon and colour as the sidebar draws it: Today's icon follows the style, a star in Things and a calendar in Griply. */
+export function listGlyph(mode: TaskViewMode, style: TaskManagerSettings["style"]): { icon: string; color: string } | undefined {
+  const entry = NAV_GROUPS.flat().find(item => item.mode === mode);
+  return entry && { icon: (style === "griply" && entry.griplyIcon) || entry.icon, color: entry.color };
+}
 
 /** What folds away from a chevron: smart lists under All Tasks, and the sections below the lists (each a heading over
  * its items). */
@@ -265,15 +274,15 @@ export class TaskNavigationView extends ItemView {
       const lists = nav.createDiv({ cls: "tm-nav-group" });
       for (const entry of group) {
         const count = entry.count ? this.plugin.index.query({ mode: entry.mode, showCompleted: false }).length : undefined;
-        const row = item(lists, `mode:${entry.mode}`, entry.label, listActive(entry.mode), () => this.plugin.openTaskView({ mode: entry.mode }),
-          (this.plugin.settings.style === "griply" && entry.griplyIcon) || entry.icon, entry.color, count);
+        const glyph = listGlyph(entry.mode, this.plugin.settings.style)!;
+        const row = item(lists, `mode:${entry.mode}`, entry.label, listActive(entry.mode), () => this.plugin.openTaskView({ mode: entry.mode }), glyph.icon, glyph.color, count);
         if (entry.mode === "inbox" || entry.mode === "today") this.dropTarget(row, { kind: entry.mode });
         // Smart lists, being saved views of all tasks, sit under All Tasks.
         if (entry.mode !== "all" || !folder(row, "smartLists", "smart lists")) continue;
         const children = lists.createDiv({ cls: "tree-item-children nav-folder-children tm-nav-children" });
         const smartLists = this.plugin.settings.smartLists;
         // Indented a step under All Tasks, as a subproject is under its parent.
-        for (const list of smartLists) item(children, `list:${list.id}`, list.name, this.activeSmartList === list.id, () => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }), "list-filter", "orange")
+        for (const list of smartLists) item(children, `list:${list.id}`, list.name, this.activeSmartList === list.id, () => this.plugin.openTaskView({ mode: "smartLists", smartListId: list.id }), SMART_LIST_GLYPH.icon, SMART_LIST_GLYPH.color)
           .setCssProps({ "--tm-nav-depth": "1" });
         if (!smartLists.length) children.createDiv({ cls: "tm-nav-empty", text: "No smart lists yet" });
       }
@@ -313,7 +322,7 @@ export class TaskNavigationView extends ItemView {
       } else {
         const tags = this.plugin.index.tagSummaries();
         for (const tag of tags) {
-          const row = item(children, `tag:${tag.name}`, tag.name, this.activeTag === tag.name, () => this.plugin.openTag(tag.name), "hash", "muted", tag.openTasks);
+          const row = item(children, `tag:${tag.name}`, tag.name, this.activeTag === tag.name, () => this.plugin.openTag(tag.name), TAG_GLYPH.icon, TAG_GLYPH.color, tag.openTasks);
           this.dropTarget(row, { kind: "tag", tag: tag.name });
         }
         if (!tags.length) children.createDiv({ cls: "tm-nav-empty", text: "No tags yet" });
