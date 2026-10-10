@@ -80,7 +80,7 @@ it("resolves parent links relative to the project note and refreshes changes", a
   let parentValue: unknown = ["[[Parent|Parent project]]"];
   let changed: (file: TFile) => void = () => {};
   const app = {
-    vault: { getMarkdownFiles: () => [parent, child], cachedRead: async () => "", on: () => ({}), offref: () => {} },
+    vault: { getMarkdownFiles: () => [parent, child], cachedRead: async (file: TFile) => file === parent ? "- [x] Plan\n" : "- [ ] Build\n- [ ] Test\n", on: () => ({}), offref: () => {} },
     metadataCache: {
       getFileCache: (file: TFile) => ({ frontmatter: { tags: ["project"], ...(file === child ? { parent: parentValue } : {}) } }),
       getFirstLinkpathDest: (link: string, source: string) => link === "Parent" && source === child.path ? parent : null,
@@ -90,9 +90,12 @@ it("resolves parent links relative to the project note and refreshes changes", a
   const index = new TaskIndex(app, () => DEFAULT_SETTINGS, () => "YYYY-MM-DD");
   await index.initialize();
   expect(index.projects().find(project => project.path === child.path)?.parentPath).toBe(parent.path);
+  // The parent's progress counts its subproject's tasks.
+  expect(index.projects().find(project => project.path === parent.path)).toMatchObject({ openTasks: 0, completedTasks: 1, totals: { open: 2, completed: 1 } });
   parentValue = null;
   changed(child);
   expect(index.projects().find(project => project.path === child.path)?.parentPath).toBeUndefined();
+  expect(index.projects().find(project => project.path === parent.path)?.totals).toEqual({ open: 0, completed: 1 });
 });
 
 it("resolves tag notes and queries links from all source notes without mixing duplicate filenames", async () => {

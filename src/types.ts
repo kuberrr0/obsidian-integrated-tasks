@@ -54,8 +54,12 @@ export interface Project extends ProjectProperties {
   headings?: import("./structure").NoteHeading[];
   openTasks: number;
   completedTasks: number;
+  /** Its tasks together with its subprojects' (archived ones aside), which its progress ring shows. */
+  totals?: ProjectTotals;
   archived: boolean;
 }
+
+export interface ProjectTotals { open: number; completed: number }
 
 export type TaskViewMode = "inbox" | "today" | "upcoming" | "all" | "projects" | "tags" | "smartLists";
 

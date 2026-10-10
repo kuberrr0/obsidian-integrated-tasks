@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { activeProjects, projectStatuses } from "../src/project-progress";
+import { activeProjects, projectStatuses, projectTotals } from "../src/project-progress";
 import { projectChoices } from "../src/choice-popover";
 import type { Project } from "../src/types";
 
@@ -20,4 +20,18 @@ it("counts a project whose tasks are all done as completed, not active", () => {
   expect(activeProjects(projects).map(item => item.name)).toEqual(["Doing", "Empty", "Parent", "Child"]);
   // Moving a task offers only active projects.
   expect(projectChoices(projects, "Inbox.md").map(choice => choice.label)).toEqual(["Inbox", "Child", "Doing", "Empty", "Parent"]);
+});
+
+it("counts a subproject's tasks towards its parent, leaving an archived one out", () => {
+  const projects = [
+    // Two done tasks of its own, twenty open in a subproject: a tenth done, and active.
+    project("House", 0, 2), project("Kitchen", 20, 0, { parentPath: "House.md" }),
+    // With no tasks of its own, it completes with its subprojects.
+    project("Trip", 0, 0), project("Flights", 0, 2, { parentPath: "Trip.md" }), project("Hotel", 0, 1, { parentPath: "Trip.md" }),
+    project("Garden", 0, 1), project("Pond", 3, 0, { parentPath: "Garden.md", archived: true })
+  ];
+  expect(projectTotals(projects).get("House.md")).toEqual({ open: 20, completed: 2 });
+  expect(projectTotals(projects).get("Trip.md")).toEqual({ open: 0, completed: 3 });
+  expect(projectTotals(projects).get("Garden.md")).toEqual({ open: 0, completed: 1 });
+  expect(Object.fromEntries(projectStatuses(projects))).toMatchObject({ "House.md": "active", "Trip.md": "completed", "Garden.md": "completed" });
 });

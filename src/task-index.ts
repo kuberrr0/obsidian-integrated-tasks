@@ -6,6 +6,7 @@ import { scanTasks } from "./parser";
 import { formatLocalDate } from "./date";
 import { noteRecord, restoreTasks, CACHE_SCHEMA, type CachedNote, type IndexCache, type NoteScan } from "./index-cache";
 import { sortTasks, taskMatchesQuery } from "./query";
+import { projectTotals } from "./project-progress";
 import { tagFormat, taskTagSummaries, type TaskTagSummary } from "./task-tags";
 import { indentStep } from "./task-indentation";
 import type { Project, ProjectProperties, Task, TaskManagerSettings, TaskQuery } from "./types";
@@ -296,7 +297,7 @@ export class TaskIndex {
   }
 
   projects(): Project[] {
-    return [...this.projectPaths]
+    const projects: Project[] = [...this.projectPaths]
       .map((path) => {
         const tasks = this.tasksForPath(path);
         const properties = this.projectProperties.get(path);
@@ -314,6 +315,8 @@ export class TaskIndex {
         };
       })
       .sort((left, right) => left.name.localeCompare(right.name));
+    const totals = projectTotals(projects);
+    return projects.map(project => ({ ...project, totals: totals.get(project.path) }));
   }
 
   /** The project's CSS colour, or its nearest coloured ancestor's; undefined for non-project notes. */

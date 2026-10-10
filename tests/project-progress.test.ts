@@ -20,3 +20,8 @@ it("uses only the circle when replacing a project list icon", () => {
     expect(createSpan).toHaveBeenCalledOnce();
     expect(createSpan).toHaveBeenCalledWith(expect.objectContaining({ cls: "tm-project-progress-circle" }));
 });
+it("draws a parent's ring from its subprojects' tasks too", () => {
+    const createDiv = vi.fn(() => ({ createSpan: () => ({ style: { setProperty: vi.fn() } }) }));
+    renderProjectProgress({ createDiv } as never, { name: "House", openTasks: 0, completedTasks: 2, totals: { open: 18, completed: 2 } } as Project);
+    expect(createDiv).toHaveBeenCalledWith(expect.objectContaining({ attr: expect.objectContaining({ "aria-valuenow": "10", "aria-label": "House: 2 of 20 tasks completed" }) }));
+});
