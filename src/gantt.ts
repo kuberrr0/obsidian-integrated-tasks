@@ -40,15 +40,13 @@ export function ganttRange(project: ProjectProperties): { start: string; end: st
 export function resizeProjectDate(project: ProjectProperties, handle: GanttHandle, delta: number): { field: ProjectDateField; value: string } {
   const range = ganttRange(project);
   if (!range) throw new Error("Set a start date and a valid end date first.");
-  const field = handle === "start" ? "scheduledDate" : "endDate";
-  const original = project[field];
-  if (!original) throw new Error("This project has no end date to move.");
-  let value = addDays(original, Math.round(delta));
-  if (field === "scheduledDate") {
-    const limit = project.endDate && project.endDate < range.end ? project.endDate : range.end;
-    if (value > limit) value = limit;
-  } else if (value < range.start) value = range.start;
-  return { field, value };
+  // The start stops at the end, and the end at the start.
+  if (handle === "start") {
+    const value = addDays(range.start, Math.round(delta));
+    return { field: "scheduledDate", value: value > range.end ? range.end : value };
+  }
+  const value = addDays(range.end, Math.round(delta));
+  return { field: "endDate", value: value < range.start ? range.start : value };
 }
 
 
