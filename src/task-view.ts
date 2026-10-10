@@ -102,6 +102,11 @@ function pageTitle(parent: HTMLElement, text: string): HTMLElement {
   return heading;
 }
 
+/** The element under `root` whose attribute `name` is exactly `value`; keys hold heading text, quotes and all, so no selector is built from them. */
+function withAttribute(root: HTMLElement, name: string, value: string): HTMLElement | null {
+  return Array.from(root.querySelectorAll<HTMLElement>(`[${name}]`)).find(element => element.getAttribute(name) === value) ?? null;
+}
+
 export class TaskMainView extends ItemView {
   private state: TaskViewState = { mode: "today" };
   /** Whether `setState` has run, so the title names the view's list rather than its starting one. */
@@ -437,7 +442,7 @@ export class TaskMainView extends ItemView {
     this.preserving = true;
     try { update(); } finally { this.preserving = false; }
     for (const { key, top, left } of scrolled) {
-      const element = key ? container.querySelector<HTMLElement>(`[data-tm-scroll-key="${key}"]`) : container;
+      const element = key ? withAttribute(container, "data-tm-scroll-key", key) : container;
       if (!element) continue;
       element.scrollTop = top;
       // The Gantt lays its dates out from where it was left (or sent): only its vertical scroll is kept.
@@ -452,8 +457,8 @@ export class TaskMainView extends ItemView {
     } else if (focus?.taskId !== undefined) {
       const rows = this.rowElements();
       const row = rows.find(item => item.getAttribute("data-task-id") === focus.taskId) ?? rows[Math.min(focus.index ?? 0, rows.length - 1)];
-      target = focus.part ? row?.querySelector<HTMLElement>(`[data-tm-focus-key="${focus.part}"]`) ?? row : row;
-    } else if (focus?.key) target = container.querySelector<HTMLElement>(`[data-tm-focus-key="${focus.key}"]`);
+      target = focus.part ? (row && withAttribute(row, "data-tm-focus-key", focus.part)) ?? row : row;
+    } else if (focus?.key) target = withAttribute(container, "data-tm-focus-key", focus.key);
     target?.focus({ preventScroll: true });
   }
 

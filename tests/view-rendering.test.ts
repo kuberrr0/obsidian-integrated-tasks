@@ -625,6 +625,15 @@ describe("folding", () => {
     expect(section("A").classList.contains("is-folded")).toBe(false);
   });
 
+  it("keeps focus on a heading's fold button across a redraw, whatever the heading says", async () => {
+    const { view, content } = await setup([["A.md", '# Review "draft"\n- [ ] One']]);
+    await view.setState({ mode: "all", pagePath: "A.md" });
+    const fold = () => content().querySelector<HTMLElement>(".tm-group-fold")!;
+    fold().focus();
+    expect(() => view.render()).not.toThrow();
+    expect(document.activeElement).toBe(fold());
+  });
+
   it("keeps folds across a reload of the same page and drops them on another page", async () => {
     const { view, content, plugin } = await setup([["A.md", "- [ ] Parent\n  - [ ] Child"]]);
     plugin.settings.showSubtasks = true;
