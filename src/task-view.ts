@@ -1496,7 +1496,10 @@ export class TaskMainView extends ItemView {
       rendered = Math.min(ordered.length, rendered + count);
       return list.children[first] as HTMLElement | undefined;
     };
-    const initial = Math.min(ordered.length, Math.max(this.listRows.get(key) ?? 0, this.rowsLeft, floor));
+    // A selected task that a change sorted past the page still shows, so it stays selected.
+    let lastSelected = -1;
+    ordered.forEach((task, i) => { if (this.selection.has(task)) lastSelected = i; });
+    const initial = Math.min(ordered.length, Math.max(this.listRows.get(key) ?? 0, this.rowsLeft, floor, lastSelected + 1));
     this.rowsLeft = Math.max(0, this.rowsLeft - initial);
     renderRows(initial);
     if (rendered < ordered.length) this.renderShowMore(container, key, () => ordered.length - rendered, count => {

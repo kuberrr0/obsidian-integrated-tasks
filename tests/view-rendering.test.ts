@@ -101,6 +101,19 @@ describe("paged task lists", () => {
     expect(b.querySelector(".tm-show-more-tasks")!.textContent).toBe("Show 80 more (80 hidden)");
   });
 
+  it("keeps a selected task shown and selected when other tasks push it past the page", async () => {
+    const { view, internals, content, edit } = await setup([["A.md", ""], note("B.md", 30)]);
+    await view.setState({ mode: "all" });
+    rows(content())[25].click();
+    await edit("A.md", note("A.md", 300)[1]);
+    internals.refresh();
+    const [a, b] = sections(content());
+    expect(rows(content(), a)).toHaveLength(200);
+    expect(rows(content(), b)).toHaveLength(26);
+    expect(rows(content(), b)[25].classList.contains("is-selected")).toBe(true);
+    expect(view.getSelectedTasks().map(task => task.title)).toEqual(["B.md task 25"]);
+  });
+
   it("shows today's tasks even when overdue tasks fill the page", async () => {
     // Local date: an ISO (UTC) date is yesterday or tomorrow for part of the day in many time zones.
     const { view, content } = await setup([note("Late.md", 300, i => `- [ ] Late ${i} 2020-01-01`), note("Now.md", 5, i => `- [ ] Now ${i} ${todayIso()}`)]);
