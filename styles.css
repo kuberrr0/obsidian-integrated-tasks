@@ -1193,7 +1193,7 @@ input.tm-task-checkbox.is-cancelled:checked::after {
   color: var(--checklist-done-color);
 }
 @media (max-width: 700px) {
-  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { width: 22px; height: 44px; min-height: 44px; padding-top: 0; }
+  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { width: 22px; }
   .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-primary,
   .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-task-metadata { flex-basis: auto; }
 }
@@ -1537,15 +1537,19 @@ button.tm-project-color-swatch:focus-visible { outline: 2px solid var(--interact
 .tm-density-compact.tm-navigation .tm-nav-item { min-height: 24px; }
 .tm-density-compact.tm-navigation button.tm-nav-label { padding: 2px 0; }
 @media (max-width: 700px) {
-  .tm-density-compact .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { height: 32px; min-height: 32px; }
   .tm-density-compact.tm-navigation button.tm-nav-label { min-height: 32px; }
 }
 /* Touch targets stay at least 32px tall. */
 @media (pointer: coarse) {
   .tm-density-compact .tm-task-row.tm-task-item { padding-top: 6px; padding-bottom: 6px; }
-  .tm-density-compact .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { min-height: 32px; }
   .tm-density-compact.tm-navigation .tm-nav-item,
   .tm-density-compact.tm-navigation button.tm-nav-label { min-height: 32px; }
+}
+/* In narrow windows and on touch screens a row's checkbox stays on its title's first line, as on desktop; the tap area
+   reaches past it instead of the checkbox moving down to the middle of a taller target. */
+@media (max-width: 700px), (pointer: coarse) {
+  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target { position: relative; height: auto; min-height: 0; padding-top: 2px; }
+  .tm-main-view .tm-task-row.tm-task-item:not(.tm-project-row) .tm-checkbox-target::before { content: ""; position: absolute; inset: -11px -10px; }
 }
 
 /* Mobile bottom sheet */
