@@ -405,6 +405,8 @@ export class TaskMainView extends ItemView {
     if (this.renderFrame !== undefined) this.containerEl.win.cancelAnimationFrame(this.renderFrame);
     this.renderFrame = undefined;
     this.disconnectRowObservers();
+    this.listDrag?.dispose();
+    this.listDrag = undefined;
     this.plugin.refreshTaskSidebar?.();
   }
 
@@ -590,6 +592,7 @@ export class TaskMainView extends ItemView {
     container.empty();
     this.resetRows();
     this.updateSelection();
+    this.listDrag?.dispose();
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), (id, group, anchor, placement) => this.dropListTask(id, group, anchor, placement), this.layout !== "kanban", task => this.prepareDrag(task));
     this.listDrag.onIdle = () => {
       if (!this.renderAfterDrag) return;

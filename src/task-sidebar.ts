@@ -149,6 +149,8 @@ export class TaskSidebarView extends ItemView {
     this.closed = true;
     this.unsubscribe?.();
     this.stopDragWatch?.();
+    this.listDrag?.dispose();
+    this.listDrag = undefined;
     if (this.renderFrame !== undefined) this.containerEl.win.cancelAnimationFrame(this.renderFrame);
     this.renderFrame = undefined;
     await this.saveDraft();
@@ -246,6 +248,8 @@ export class TaskSidebarView extends ItemView {
   private build(mode: SidebarMode, skeleton: string): void {
     const container = this.content;
     const settings = this.plugin.settings;
+    this.listDrag?.dispose();
+    this.listDrag = undefined;
     container.empty();
     // It shares the task views' styles (checkboxes, rows, the calendar), which hang off .tm-main-view.
     container.addClass("tm-main-view", "tm-task-sidebar");
@@ -387,6 +391,7 @@ export class TaskSidebarView extends ItemView {
       return;
     }
     // Its rows drag to the view (or a sidebar list); among themselves, there is nothing to reorder.
+    this.listDrag?.dispose();
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), async () => {}, false, task => this.startDrag([task]), false);
     const shown = tasks.slice(0, this.listRows);
     // Grouped (from its View options), each group under its heading; else one list.
@@ -554,6 +559,7 @@ export class TaskSidebarView extends ItemView {
       return;
     }
     // Its rows drag to a task view or a sidebar list, as a view's do.
+    this.listDrag?.dispose();
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), async () => {}, false, task => this.startDrag([task]), false);
     const shown = tasks.slice(0, this.listRows);
     const today = todayIso();
@@ -583,6 +589,7 @@ export class TaskSidebarView extends ItemView {
       return;
     }
     // Its rows drag to a task view or a sidebar list, as a view's do.
+    this.listDrag?.dispose();
     this.listDrag = new ListDragController(id => this.plugin.index.taskById(id), async () => {}, false, task => this.startDrag([task]), false);
     const list = element.createDiv({ cls: "tm-task-list", attr: { role: "list", "aria-label": `Tasks in ${noteName(path)}` } });
     for (const { task, depth } of tasks.slice(0, this.listRows)) this.renderRow(list, task, depth);

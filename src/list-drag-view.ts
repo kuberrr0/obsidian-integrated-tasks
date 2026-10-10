@@ -87,10 +87,24 @@ export class ListDragController {
   /** A row is being dragged: a redraw now would take it from under the pointer, so the list waits for `onIdle`. */
   dragging = false;
   onIdle?: () => void;
+  /** Each row's way to end a press or drag in flight, for `dispose`. */
+  private teardowns = new Set<() => void>();
   /** `reorder`: false for a list whose rows only drag elsewhere (to another pane or a sidebar list), taking no drops themselves. */
   constructor(private readonly getTask: (id: string) => Task | undefined,
     private readonly drop: (task: Task, group?: ListDropGroup, anchor?: Task, placement?: ListPlacement) => Promise<void>, private readonly allowNesting = true,
     private readonly dragStart: (task: Task) => Task[] | void = () => {}, private readonly reorder = true) {}
+
+  /**
+   * Ends any press or drag in flight, for a list about to be redrawn or closed: a removed row never hears that its
+   * pointer capture went, so its lifted copy, gap and long-press timer would stay. Nothing is dropped.
+   */
+  dispose(): void {
+    this.onIdle = undefined;
+    for (const teardown of this.teardowns) teardown();
+    this.teardowns.clear();
+    this.removeGap(false);
+    this.restoreSources(false);
+  }
 
   private clear(): void {
     this.highlighted?.removeAttribute("data-drop-position");
@@ -736,6 +750,12 @@ export class ListDragController {
       this.restoreSources(false);
       reset();
     };
+    this.teardowns.add(() => {
+      if (dragging && pointer !== undefined) {
+        try { row.releasePointerCapture(pointer); } catch { /* Already released. */ }
+      }
+      if (dragging) cancelDrag(); else reset();
+    });
     /** No drop: the row flies back and its slot reopens. */
     const flyBack = (): void => {
       cancelFrame();

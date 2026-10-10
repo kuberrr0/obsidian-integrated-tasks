@@ -697,3 +697,30 @@ it("slides a heading out of the way when the gap moves past it, as rows do", () 
     expect(call[0][0].transform).toBe("translateY(-40px)");
   } finally { delete (HTMLElement.prototype as { animate?: unknown }).animate; }
 });
+
+it("ends a drag in flight, and a long press waiting to lift, when the list is redrawn", () => {
+  vi.useFakeTimers();
+  try {
+    const { rows, drop, controller, element, point } = list("- [ ] A\n- [ ] B\n- [ ] C");
+    const idle = vi.fn();
+    controller.onIdle = idle;
+    fire(rows[0].row, "pointerdown");
+    point(rows[1].row);
+    fire(rows[0].row, "pointermove", { clientY: 30 });
+    expect(preview()).not.toBeNull();
+    // A touch on another row, held: the lift is still waiting.
+    fire(rows[2].row, "pointerdown", { pointerType: "touch", pointerId: 2 });
+    // The redraw takes the rows away; a removed row never hears that its pointer capture went.
+    element.remove();
+    controller.dispose();
+    expect(preview()).toBeNull();
+    expect(gap()).toBeNull();
+    expect(document.body.classList.contains("tm-list-dragging")).toBe(false);
+    expect(controller.dragging).toBe(false);
+    vi.advanceTimersByTime(1000);
+    expect(rows[2].row.classList.contains("is-drag-armed")).toBe(false);
+    // Nothing dropped, and the old list asks for no redraw of its own.
+    expect(drop).not.toHaveBeenCalled();
+    expect(idle).not.toHaveBeenCalled();
+  } finally { vi.useRealTimers(); }
+});
