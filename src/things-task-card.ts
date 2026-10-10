@@ -141,8 +141,9 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
             for (const commit of commits) commit();
             (options.submit ?? options.collapse)();
         }
-        // Keep row shortcuts (M, S, arrows) from acting while typing.
-        else event.stopPropagation();
+        // Keep row shortcuts (M, S, arrows) from acting while typing; Cmd/Ctrl shortcuts (undo, the quick switcher, Obsidian's
+        // own) still reach the view and the app.
+        else if (!event.metaKey && !event.ctrlKey) event.stopPropagation();
     });
     // Size now when already on the page, so the opening animation measures the final height.
     const fit = (): void => { autosize(title); autosize(notes); };

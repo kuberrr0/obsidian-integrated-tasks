@@ -314,6 +314,19 @@ describe("Things task card", () => {
   });
 });
 
+it("keeps row keys inside the card but lets Cmd/Ctrl shortcuts through", () => {
+  const { element } = card("- [ ] Task 1");
+  const outside = vi.fn();
+  document.body.addEventListener("keydown", outside);
+  try {
+    const button = element.querySelector<HTMLElement>("button")!;
+    for (const init of [{ key: "m" }, { key: "ArrowDown" }]) button.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...init }));
+    expect(outside).not.toHaveBeenCalled();
+    for (const init of [{ key: "z", metaKey: true }, { key: "k", ctrlKey: true }]) button.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...init }));
+    expect(outside.mock.calls.map(([event]) => (event as KeyboardEvent).key)).toEqual(["z", "k"]);
+  } finally { document.body.removeEventListener("keydown", outside); }
+});
+
 describe("the card title's highlight", () => {
   it("marks what typing into the title will set, behind the text", () => {
     const { element } = card("- [ ] Call mom", { dateFormat: "YYYY-MM-DD" });
