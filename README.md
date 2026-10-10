@@ -101,7 +101,7 @@ The Task details sidebar sits in Obsidian's right sidebar. What it shows follows
 - **A selected task:** its title, properties, notes and subtasks, all editable in place. With several tasks selected, change a property once and every selected task follows.
 - **Nothing else:** your upcoming tasks, by date. Click one to see its details. Click the **Upcoming** heading to show Inbox, Today, All Tasks, a smart list, a project or a tag here instead (type to search them), and use the filter button beside it to filter, sort and group that list.
 
-In the title, Enter saves what you typed and Shift+Enter moves on to the notes (a task card in the list works the same way). Press Escape to go back to the hours or the list. If you close the sidebar, run **Open task details sidebar** to bring it back.
+In the title, Enter saves what you typed and Shift+Enter moves on to the notes (a task card in the list works the same way). Press Escape to go back to the hours or the list. **Open in note**, at the bottom, opens the task's note at its line, turning task mode off when that note would otherwise open as its task view. If you close the sidebar, run **Open task details sidebar** to bring it back.
 
 ## Choose a layout
 

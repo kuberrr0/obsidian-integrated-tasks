@@ -522,6 +522,28 @@ describe("editing in the Task Details sidebar", () => {
     expect(side().querySelector<HTMLTextAreaElement>(".tm-sidebar-title-field")!.value).toBe("Draft the launch brief");
   });
 
+  it("opens the selected task's note at its line, turning task mode off first when the note would open as its task view", async () => {
+    const { view, sidebar, main, side, plugin } = await setup([["Projects/Site.md", "- [ ] Draft copy\n- [ ] Ship it"], ["A.md", "- [ ] Loose task"]]);
+    const steps: string[] = [];
+    const openFile = vi.fn(async (file: TFile, state: { eState: { line: number } }) => { steps.push(`open ${file.path}:${state.eState.line}`); });
+    (sidebar as unknown as { app: App }).app.workspace.getLeaf = (() => ({ openFile })) as never;
+    Object.assign(plugin.settings, { taskMode: true });
+    Object.assign(plugin, { setTaskMode: vi.fn(async (on: boolean) => { plugin.settings.taskMode = on; steps.push(`task mode ${on ? "on" : "off"}`); }) });
+    await view.setState({ mode: "all" });
+    const openIn = async (title: string) => {
+      rows(main()).find(row => row.querySelector(".tm-task-title")!.textContent === title)!.click();
+      side().querySelector<HTMLButtonElement>(".tm-sidebar-open-note")!.click();
+      await vi.waitFor(() => expect(openFile).toHaveBeenCalled());
+      openFile.mockClear();
+    };
+    // A note task mode leaves as it is opens as it is.
+    await openIn("Loose task");
+    expect(steps).toEqual(["open A.md:0"]);
+    // A project's note would open as its task view: task mode goes off first.
+    await openIn("Ship it");
+    expect(steps).toEqual(["open A.md:0", "task mode off", "open Projects/Site.md:1"]);
+  });
+
   it("keeps the task selected through writes in quick succession, before its row is redrawn", async () => {
     const { view, main, side, contents } = await setup([["A.md", "- [ ] Book flights\n- [ ] Other"]]);
     await view.setState({ mode: "all" });

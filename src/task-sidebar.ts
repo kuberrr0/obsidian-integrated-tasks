@@ -856,10 +856,17 @@ export class TaskSidebarView extends ItemView {
     }
   }
 
-  private async openSource(task: Task): Promise<void> {
+  /**
+   * The task's note in a new tab, at the task's line. `showTask` (Open in note): task mode would open a project's or
+   * tag's note as its task view, so it is turned off first, for the task to show in the note.
+   */
+  private async openSource(task: Task, showTask = false): Promise<void> {
     await this.saveDraft();
     const file = this.app.vault.getAbstractFileByPath(task.path);
-    if (file instanceof TFile) await this.app.workspace.getLeaf("tab").openFile(file, { eState: { line: task.line } });
+    if (!(file instanceof TFile)) return;
+    const index = this.plugin.index;
+    if (showTask && this.plugin.settings.taskMode && (index.isProject(file.path) || index.tagForPath(file.path))) await this.plugin.setTaskMode(false);
+    await this.app.workspace.getLeaf("tab").openFile(file, { eState: { line: task.line } });
   }
 
   /** `destination`: for a new task, the note it will go to. */
@@ -876,7 +883,7 @@ export class TaskSidebarView extends ItemView {
     const open = footer.createEl("button", { cls: "tm-sidebar-open-note", attr: { type: "button", title: task.path, "data-tm-focus-key": "sidebar-open-note" } });
     setIcon(open.createSpan({ cls: "tm-sidebar-open-note-icon", attr: { "aria-hidden": "true" } }), "file-text");
     open.createSpan({ text: "Open in note" });
-    open.addEventListener("click", () => void this.openSource(task));
+    open.addEventListener("click", () => void this.openSource(task, true).catch((cause: unknown) => { new Notice(cause instanceof Error ? cause.message : "Could not open the note."); }));
   }
 
   /** Typing is saved once focus leaves the title and notes (moving between the two keeps it). */
