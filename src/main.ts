@@ -305,7 +305,8 @@ export default class TaskManagerPlugin extends Plugin {
     // View options changed in the last moments are still written.
     if (this.viewOptionsSave !== undefined) void this.saveSettings();
     this.taskModeController?.dispose();
-    this.index.destroy();
+    // Unset when loading failed early, in loadSettings.
+    (this.index as TaskIndex | undefined)?.destroy();
     dismissPopovers();
     // A note open as its task view (in task mode) goes back to the note, so a disabled plugin leaves no dead tab.
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_MAIN_VIEW)) {

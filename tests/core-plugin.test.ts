@@ -251,6 +251,14 @@ describe("plugin lifecycle", () => {
     expect(env.vault.listenerCount() + env.metadataCache.listenerCount() + env.workspace.listenerCount()).toBe(0);
   });
 
+  it("unloads cleanly after loading its settings failed", async () => {
+    const env = environment();
+    const plugin = new TaskManagerPlugin(env.app, {} as never);
+    plugin.loadData = async () => { throw new Error("Unreadable data.json"); };
+    await expect(plugin.onload()).rejects.toThrow("Unreadable data.json");
+    expect(() => plugin.unload()).not.toThrow();
+  });
+
   it("does not start task mode when unloaded while the vault is still being indexed", async () => {
     const env = environment();
     const plugin = new TaskManagerPlugin(env.app, {} as never);
