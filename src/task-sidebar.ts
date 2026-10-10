@@ -924,7 +924,8 @@ export class TaskSidebarView extends ItemView {
     });
     const fit = (): void => { autosize(title); autosize(notes); };
     if (panel.isConnected) fit();
-    window.requestAnimationFrame(fit);
+    // The frame of the window it's in: a pop-out's, not the main window's, which may be in the background.
+    (panel.ownerDocument.defaultView ?? window).requestAnimationFrame(fit);
     this.saveOnLeave(panel, ".tm-sidebar-title-field, .tm-sidebar-notes");
 
     // A new task's subtasks wait until it is written.

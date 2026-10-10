@@ -148,7 +148,8 @@ export function renderThingsTaskCard(parent: HTMLElement, options: TaskCardOptio
     // Size now when already on the page, so the opening animation measures the final height.
     const fit = (): void => { autosize(title); autosize(notes); };
     if (card.isConnected) fit();
-    window.requestAnimationFrame(fit);
+    // The frame of the window it's in: a pop-out's, not the main window's, which may be in the background.
+    (card.ownerDocument.defaultView ?? window).requestAnimationFrame(fit);
 
     // The checklist: subtask names edit in place, and Enter starts a new subtask right below.
     const checklist = card.createDiv({ cls: "tm-things-card-checklist", attr: { role: "list", "aria-label": "Subtasks" } });

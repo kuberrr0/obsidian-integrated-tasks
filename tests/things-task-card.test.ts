@@ -314,6 +314,18 @@ describe("Things task card", () => {
   });
 });
 
+it("sizes itself on its own window's next frame, a pop-out's when it's in one", () => {
+  const frame = vi.fn();
+  const popout = new Proxy(window, { get: (target, key) => key === "requestAnimationFrame" ? frame : Reflect.get(target, key) });
+  const view = vi.spyOn(document, "defaultView", "get").mockReturnValue(popout);
+  const main = vi.spyOn(window, "requestAnimationFrame");
+  try {
+    card("- [ ] Task 1");
+    expect(frame).toHaveBeenCalledOnce();
+    expect(main).not.toHaveBeenCalled();
+  } finally { view.mockRestore(); main.mockRestore(); }
+});
+
 it("keeps row keys inside the card but lets Cmd/Ctrl shortcuts through", () => {
   const { element } = card("- [ ] Task 1");
   const outside = vi.fn();
