@@ -2,6 +2,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { installObsidianDom } from "./helpers/obsidian-dom";
 import { renderNoteTokens } from "../src/note-token-reading";
+import { setTagFormat } from "../src/task-tags";
 
 beforeAll(() => installObsidianDom());
 
@@ -25,6 +26,19 @@ describe("Reading view highlights", () => {
     // The link is still Obsidian's own, inside the highlight.
     expect(li.querySelector(".tm-nlp-token.is-date > a.internal-link")).not.toBeNull();
     expect(li.classList.contains("tm-note-task-item")).toBe(true);
+    expect(li.getAttribute("data-tm-priority")).toBe("1");
+  });
+
+  it("reads a #tag link as the tag it is, so the tokens before it still highlight", () => {
+    setTagFormat("hash");
+    const li = item(`Buy milk <a class="internal-link" data-href="2026-10-10" href="2026-10-10">2026-10-10</a> p1 <a href="#errand" class="tag" target="_blank" rel="noopener">#errand</a>`);
+    expect(li.textContent).toBe("Buy milk 2026-10-10 p1 #errand");
+    expect(tokens(li)).toEqual([
+      ["2026-10-10", "tm-nlp-token is-date"],
+      ["p1", "tm-nlp-token is-priority is-p1"]
+    ]);
+    // The tag keeps Obsidian's own look and link.
+    expect(li.querySelector("a.tag")?.closest(".tm-nlp-token")).toBeNull();
     expect(li.getAttribute("data-tm-priority")).toBe("1");
   });
 

@@ -43,6 +43,11 @@ export function renderNoteTokens(root: HTMLElement, dateFormat?: string): void {
         const text = `[[${element.getAttribute("data-href") ?? element.getAttribute("href") ?? element.textContent}]]`;
         segments.push({ node, from: source.length, to: source.length + text.length, atomic: true });
         source += text;
+      } else if (element?.matches("a.tag")) {
+        // A `#tag` reads as itself, as the source has it, so the tokens before it are still found.
+        const text = element.textContent ?? "";
+        segments.push({ node, from: source.length, to: source.length + text.length, atomic: true });
+        source += text;
       } else if (element?.matches("code, strong, em, del, s, mark, a, .internal-embed")) {
         // Protect formatted prose, literal code, external links and embeds from metadata parsing.
         source += `\`${element.textContent}\``;
