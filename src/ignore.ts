@@ -46,23 +46,58 @@ export function frontmatterTags(frontmatter: Record<string, unknown> | undefined
   return values;
 }
 
-/** The task's tags (`#[[tag]]`) and any inline `#tag` in its text. */
+/** Every tag written in a line of text, in either form: `#tag` and `#[[tag]]`. */
+function lineTagNames(text: string): string[] {
+  return [...text.matchAll(/(?:^|\s)#(?:\[\[([^[\]\r\n|]+)\]\]|([^\s#[\]]+))/gu)].map(match => match[1] ?? match[2]);
+}
+
+/** The task's tags and any other tag in its text. */
 function taskTagNames(task: Task): string[] {
-  const inline = [...task.raw.matchAll(/(?:^|\s)#(?!\[\[)([^\s#[\]]+)/gu)].map(match => match[1]);
-  return [...(task.tags ?? []), ...inline];
+  return [...(task.tags ?? []), ...lineTagNames(task.raw)];
 }
 
 /**
- * Drops tasks carrying an ignored tag, together with their subtasks, and removes the dropped
- * tasks from the remaining ones' child lists. Returns the input array when nothing is dropped.
+ * Whether a line counts as a task under the Task tag setting: it carries the tag, or one nested under it, anywhere on
+ * the line. With no task tag set, every checklist item does.
  */
-export function visibleTasks(tasks: Task[], ignoredTags: readonly string[]): Task[] {
-  if (!ignoredTags.length) return tasks;
+export function hasTaskTag(text: string, taskTag: string | undefined): boolean {
+  const tag = normalizeIgnoredTag(taskTag ?? "");
+  return !tag || lineTagNames(text).some(name => isIgnoredTag(name, [tag]));
+}
+
+/**
+ * Drops tasks carrying an ignored tag, together with their subtasks, and removes the dropped tasks from the remaining
+ * ones' child lists. With a task tag, items without it are dropped too, though not their subtasks: a tagged subtask
+ * moves up to the nearest task above it. Returns the input array when nothing is dropped.
+ */
+export function visibleTasks(tasks: Task[], ignoredTags: readonly string[], taskTag = ""): Task[] {
+  const tag = normalizeIgnoredTag(taskTag);
+  if (!ignoredTags.length && !tag) return tasks;
   const dropped = new Set<string>();
+  const untracked = new Set<string>();
   for (const task of tasks) {
-    if ((task.parentId && dropped.has(task.parentId)) || taskTagNames(task).some(tag => isIgnoredTag(tag, ignoredTags))) dropped.add(task.id);
+    if ((task.parentId && dropped.has(task.parentId)) || taskTagNames(task).some(name => isIgnoredTag(name, ignoredTags))) dropped.add(task.id);
+    else if (!hasTaskTag(task.raw, tag)) untracked.add(task.id);
   }
-  if (!dropped.size) return tasks;
-  return tasks.filter(task => !dropped.has(task.id)).map(task => task.childIds.some(id => dropped.has(id))
-    ? { ...task, childIds: task.childIds.filter(id => !dropped.has(id)) } : task);
+  if (!dropped.size && !untracked.size) return tasks;
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const parentOf = (task: Task): string | undefined => {
+    let parent = task.parentId;
+    while (parent && untracked.has(parent)) parent = byId.get(parent)?.parentId;
+    return parent;
+  };
+  const kept = tasks.filter(task => !dropped.has(task.id) && !untracked.has(task.id));
+  const parents = new Map(kept.map(task => [task.id, parentOf(task)]));
+  const children = new Map<string, string[]>();
+  for (const task of kept) {
+    const parent = parents.get(task.id);
+    if (parent) children.set(parent, [...children.get(parent) ?? [], task.id]);
+  }
+  return kept.map(task => {
+    const parentId = parents.get(task.id);
+    const childIds = children.get(task.id) ?? [];
+    if (parentId === task.parentId && childIds.length === task.childIds.length && childIds.every((id, at) => id === task.childIds[at])) return task;
+    const { parentId: _parent, ...rest } = task;
+    return { ...rest, ...(parentId ? { parentId } : {}), childIds };
+  });
 }

@@ -62,7 +62,7 @@ function lineChange(from: number, before: string, after: string): ChangeSpec {
  * Catch native checkbox commands (and typed checks or `-`) without persisting a closed instance of a
  * repeating task: it is completed (`[x]`) or cancelled (`[-]`) instead; with completion dates on, stamp other
  * checked tasks and unstamp reopened ones. With `placement` (Settings › Completed tasks), a task checked or unchecked
- * moves in the note as it says.
+ * moves in the note as it says. Lines `isTask` turns down (no task tag) are plain checklist items, left as checked.
  */
 export function noteRecurringCompletion(
     getDateFormat: () => string,
@@ -71,14 +71,15 @@ export function noteRecurringCompletion(
     getPath: (state: EditorState) => string | undefined = state => state.field(editorInfoField, false)?.file?.path,
     completionDates?: NoteCompletionDates,
     getSectionHeadingLevel: () => number = () => 1,
-    placement: () => Pick<PlacementOptions, "placement" | "section"> | undefined = () => undefined
+    placement: () => Pick<PlacementOptions, "placement" | "section"> | undefined = () => undefined,
+    isTask: (text: string) => boolean = () => true
 ): Extension {
     return [
         EditorState.transactionFilter.of(transaction => {
             if (!transaction.docChanged || transaction.isUserEvent("undo") || transaction.isUserEvent("redo")) return transaction;
             const path = getPath(transaction.startState);
             if (!path) return transaction;
-            const flipped = flippedLines(transaction);
+            const flipped = flippedLines(transaction).filter(entry => isTask(entry.line.text));
             if (!flipped.length) return transaction;
             // An open task closed: checked done, or cancelled. Moves between open statuses (Obsidian's own click on `[/]`
             // writes `[ ]`), and from one closed status to the other, close nothing.

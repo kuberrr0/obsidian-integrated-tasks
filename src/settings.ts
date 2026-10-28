@@ -1,4 +1,4 @@
-import { parseIgnoreList } from "./ignore";
+import { normalizeIgnoredTag, parseIgnoreList } from "./ignore";
 import { DEFAULT_COMPLETED_SECTION, completedSectionName } from "./structure";
 import { Notice, PluginSettingTab, Setting, type App, type SettingDefinitionRender } from "obsidian";
 import type TaskManagerPlugin from "./main";
@@ -223,6 +223,12 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       },
       {
         section: "Ignored tasks",
+        name: "Task tag",
+        desc: "Only checklist items with this tag, or a tag nested under it, are tasks; other checkboxes in your notes are left alone. New tasks get the tag. Leave empty to make every checklist item a task.",
+        render: (setting: Setting) => this.renderTaskTagSetting(setting)
+      },
+      {
+        section: "Ignored tasks",
         name: "Ignore tasks in code blocks",
         desc: "Leave out checklist items inside fenced code blocks (``` or ~~~), such as examples in notes. When off, they are tasks like any other.",
         render: (setting: Setting) => { setting.addToggle(toggle => toggle.setValue(this.plugin.settings.ignoreCodeBlockTasks)
@@ -368,6 +374,20 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       });
       area.inputEl.rows = 3;
     });
+  }
+
+  private renderTaskTagSetting(setting: Setting): void {
+    setting.addText(text => text
+      .setPlaceholder("#task")
+      .setValue(this.plugin.settings.taskTag ? `#${this.plugin.settings.taskTag}` : "")
+      .onChange(value => {
+        // Applied once typing pauses, so a part-typed tag never hides tasks.
+        this.applySoon("taskTag", async () => {
+          this.plugin.settings.taskTag = normalizeIgnoredTag(value);
+          await this.plugin.saveSettings();
+          this.plugin.index.applyIgnoreRules();
+        });
+      }));
   }
 
   private renderInboxSetting(setting: Setting): void {

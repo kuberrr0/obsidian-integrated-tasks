@@ -1,7 +1,7 @@
 import { dismissPopovers } from "./choice-popover";
 import { todayIso } from "./date";
 import { useIndentation } from "./task-indentation";
-import { parseIgnoreList } from "./ignore";
+import { hasTaskTag, normalizeIgnoredTag, parseIgnoreList } from "./ignore";
 import { noteRecurringCompletion } from "./note-recurring-completion";
 import type { PlacementOptions } from "./completed-placement";
 import { isRepeatingTask, recurringFile, type RecurringOutcome } from "./recurring-task";
@@ -67,7 +67,7 @@ export default class TaskManagerPlugin extends Plugin {
     });
     this.index = new TaskIndex(this.app, () => this.settings, () => this.dateFormat(), new IndexedDbCache(this.app));
     this.store = new TaskStore(this.app, () => this.dateFormat(), () => this.settings.newTaskPosition, () => this.settings.linkDates, () => this.settings.sectionHeadingLevel, () => this.settings.completionDates,
-      () => this.completedPlacement());
+      () => this.completedPlacement(), () => this.settings.taskTag);
     this.store.onChange = change => this.offerUndo(change);
 
     this.registerView(TASK_NAV_VIEW, (leaf) => new TaskNavigationView(leaf, this));
@@ -77,7 +77,7 @@ export default class TaskManagerPlugin extends Plugin {
     this.registerEditorExtension(noteRecurringCompletion(() => this.dateFormat(), task => !this.settings.taskMode && isRepeatingTask(this.app, task),
       (task, outcome) => { this.completeRecurringTaskFromNote(task, outcome); }, undefined,
       { enabled: () => this.settings.completionDates, linkDates: () => this.settings.linkDates }, () => this.settings.sectionHeadingLevel,
-      () => this.settings.taskMode ? undefined : this.completedPlacement()));
+      () => this.settings.taskMode ? undefined : this.completedPlacement(), text => hasTaskTag(text, this.settings.taskTag)));
     this.registerEditorExtension(noteTokenEditor(() => this.dateFormat()));
     // The Task Details sidebar follows the caret in a note, showing the task it is on.
     this.registerEditorExtension(EditorView.updateListener.of(update => { if (update.selectionSet || update.docChanged) this.refreshTaskSidebar(); }));
@@ -393,6 +393,7 @@ export default class TaskManagerPlugin extends Plugin {
       const list: unknown = this.settings[key];
       this.settings[key] = Array.isArray(list) ? parseIgnoreList(list.filter((item): item is string => typeof item === "string").join("\n"), key === "ignoredTags") : [];
     }
+    this.settings.taskTag = typeof this.settings.taskTag === "string" ? normalizeIgnoredTag(this.settings.taskTag) : "";
   }
 
   async saveSettings(): Promise<void> {
@@ -743,9 +744,11 @@ export default class TaskManagerPlugin extends Plugin {
 
   /**
    * Reading view writes checkbox clicks itself; with completion dates on (or completed tasks moving), the store completes
-   * (stamping it) or reopens the task instead.
+   * (stamping it) or reopens the task instead. Items without the task tag are left to Obsidian.
    */
   private toggleTaskFromReadingView(task: Task, completed: boolean): boolean {
+    // A checkbox without the task tag is a plain checklist item: Obsidian ticks it as it is.
+    if (!hasTaskTag(task.raw, this.settings.taskTag)) return false;
     if (completed && this.completeRecurringTaskFromNote(task)) return true;
     if (this.settings.taskMode || (!this.settings.completionDates && this.settings.completedPlacement === "keep")) return false;
     this.recurringNoteQueue = this.recurringNoteQueue.then(async () => {

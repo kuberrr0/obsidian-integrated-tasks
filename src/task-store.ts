@@ -7,6 +7,8 @@ import { isMove, planBulkTasks, type BulkTaskPatch, type BulkTaskOptions } from 
 import { draftForGroup, type ListDropGroup } from "./list-drag";
 import { copiedTaskText, duplicateTaskBlocks, insertAfterTask, liveTaskBlock, pastedTaskLines, subtaskIndent } from "./task-block";
 import { parseTaskLine, scanTasks, serializeTask } from "./parser";
+import { hasTaskTag } from "./ignore";
+import { formatTags } from "./task-tags";
 import type { ListPlacement } from "./list-drag";
 import { splitDestination } from "./structure";
 import { normalizePath, type App, TFile, TFolder } from "obsidian";
@@ -54,6 +56,17 @@ export function previewCreatedTask(path: string, content: string, draft: TaskDra
   }
 }
 
+/**
+ * The draft with the task tag added (see Settings › Task tag), to it and to each subtask among its additional lines, so
+ * a new task is not left out once written. Lines that carry the tag already are left as they are.
+ */
+export function withTaskTag<T extends ParsedTaskMetadata & { additionalLines?: string[] }>(draft: T, taskTag: string): T {
+  if (!taskTag) return draft;
+  const tagged = hasTaskTag([draft.title, ...(draft.tags ?? []).map(tag => `#[[${tag}]]`)].join(" "), taskTag) ? draft : { ...draft, tags: [...draft.tags ?? [], taskTag] };
+  const additionalLines = draft.additionalLines?.map(line => /^\s*[-*+]\s+\[.\]/.test(line) && !hasTaskTag(line, taskTag) ? `${line.trimEnd()} ${formatTags([taskTag])}` : line);
+  return additionalLines ? { ...tagged, additionalLines } : tagged;
+}
+
 function taskName(title: string): string {
   const trimmed = title.trim();
   return `“${trimmed.length > 40 ? `${trimmed.slice(0, 39)}…` : trimmed}”`;
@@ -79,7 +92,8 @@ export class TaskStore {
     private readonly getLinkDates: () => boolean = () => true,
     private readonly getSectionHeadingLevel: () => number = () => 1,
     private readonly getCompletionDates: () => boolean = () => false,
-    private readonly getPlacement: () => Pick<PlacementOptions, "placement" | "section"> = () => ({ placement: "keep", section: "" })
+    private readonly getPlacement: () => Pick<PlacementOptions, "placement" | "section"> = () => ({ placement: "keep", section: "" }),
+    private readonly getTaskTag: () => string = () => ""
   ) {}
 
   updateDates(sourceFormats: string[]): Promise<string[]> {
@@ -190,7 +204,8 @@ export class TaskStore {
   }
 
   /** Writes a new task; resolves to the line it landed on in its note. */
-  create(draft: TaskDraft): Promise<number> {
+  create(input: TaskDraft): Promise<number> {
+    const draft = withTaskTag(input, this.getTaskTag());
     return this.run(`Added ${taskName(draft.title)}`, async () => {
       const { path, heading } = splitDestination(draft.destination);
       const file = heading ? this.requireFile(path) : await this.ensureFile(path);
@@ -208,7 +223,8 @@ export class TaskStore {
    * Adds a to-do subtask to `parent`: right after `after` (one of its subtasks, keeping that subtask's
    * indentation) or, with no `after`, at the end of the parent's block one level deeper. Resolves to the line it took.
    */
-  addSubtask(parent: Task, subtask: ParsedTaskMetadata, after?: Task): Promise<number> {
+  addSubtask(parent: Task, input: ParsedTaskMetadata, after?: Task): Promise<number> {
+    const subtask = withTaskTag(input, this.getTaskTag());
     return this.run(`Added ${taskName(subtask.title)}`, async () => {
       const file = this.requireFile(parent.path);
       let added = -1;

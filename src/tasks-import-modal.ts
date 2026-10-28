@@ -1,5 +1,6 @@
 import { Modal, Notice, TFile, type App } from "obsidian";
 import type TaskManagerPlugin from "./main";
+import { normalizeIgnoredTag } from "./ignore";
 import { convertTasksNote, skipLabel, type TasksImportOptions, type TasksImportSkip } from "./tasks-import";
 
 type ImportHost = Pick<TaskManagerPlugin, "store" | "index" | "settings" | "dateFormat">;
@@ -70,7 +71,9 @@ export class TasksImportModal extends Modal {
     this.convertButton.addEventListener("click", () => void this.convert());
 
     void tasksPluginGlobalFilter(this.app).then(found => {
-      if (found && !filter.value) { filter.value = found; this.options.globalFilter = found; }
+      // A global filter that is also the Task tag marks what is a task here too, so it is kept unless asked.
+      const taskTag = this.plugin.settings.taskTag;
+      if (found && !filter.value && !(taskTag && normalizeIgnoredTag(found) === taskTag)) { filter.value = found; this.options.globalFilter = found; }
       return this.preview();
     });
   }

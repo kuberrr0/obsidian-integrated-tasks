@@ -176,12 +176,12 @@ export class TaskIndex {
     return this.sortedTasks;
   }
 
-  /** A note's tasks minus those the ignore rules leave out. */
+  /** A note's tasks minus those the ignore rules (and the task tag) leave out. */
   private visible(path: string): Task[] {
     if (this.ignoredNotes.has(path)) return [];
     let tasks = this.visibleByPath.get(path);
     if (!tasks) {
-      tasks = visibleTasks(this.tasksByPath.get(path) ?? [], this.getSettings().ignoredTags ?? []);
+      tasks = visibleTasks(this.tasksByPath.get(path) ?? [], this.getSettings().ignoredTags ?? [], this.getSettings().taskTag ?? "");
       this.visibleByPath.set(path, tasks);
     }
     return tasks;

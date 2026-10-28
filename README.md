@@ -311,6 +311,7 @@ Choose between two **Styles** in settings: **Griply** (the default, shown above)
 | **Tag format** | `#tag` or `#[[tag]]`; **Convert notes** rewrites existing tags |
 | **Record completion dates** | Add `✓date` when you complete a task |
 | **Ignored folders and notes**, **Ignored tags** | Leave out templates, archives or private notes |
+| **Task tag** | Only checklist items tagged with it, such as `#task`, are tasks, like the Tasks plugin's global filter; new tasks get the tag (empty by default: every checklist item is a task) |
 | **Ignore tasks in code blocks** | Leave out checklist items inside fenced code blocks (on by default) |
 | **Style**, **Task details**, **Density** | How lists look and where tasks open |
 | **Task sidebar** | Choose what the task sidebar shows: Favorites, each list, Projects, Tags and your vault's files |

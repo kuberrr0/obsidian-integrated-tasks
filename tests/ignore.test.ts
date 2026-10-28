@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { TFile, type App } from "obsidian";
-import { frontmatterTags, isIgnoredPath, isIgnoredTag, parseIgnoreList, visibleTasks } from "../src/ignore";
+import { frontmatterTags, hasTaskTag, isIgnoredPath, isIgnoredTag, parseIgnoreList, visibleTasks } from "../src/ignore";
 import { scanTasks } from "../src/parser";
 import { TaskIndex } from "../src/task-index";
 import { DEFAULT_SETTINGS, type TaskManagerSettings } from "../src/types";
@@ -38,6 +38,24 @@ describe("ignore rules", () => {
     expect(visible[0].childIds).toEqual(["A.md:3"]);
     expect(tasks[0].childIds).toEqual(["A.md:1", "A.md:3"]);
     expect(visibleTasks(tasks, [])).toBe(tasks);
+  });
+
+  it("count a line as a task only with the task tag, in either form, or one nested under it", () => {
+    expect(hasTaskTag("- [ ] Buy milk #task", "task")).toBe(true);
+    expect(hasTaskTag("- [ ] #Task Buy milk", "#task")).toBe(true);
+    expect(hasTaskTag("- [ ] Buy milk #[[task]] today", "task")).toBe(true);
+    expect(hasTaskTag("- [ ] Errand #task/errand", "task")).toBe(true);
+    expect(hasTaskTag("- [ ] Buy milk #tasks", "task")).toBe(false);
+    expect(hasTaskTag("- [ ] Socks", "task")).toBe(false);
+    expect(hasTaskTag("- [ ] Socks", "")).toBe(true);
+  });
+
+  it("drop items without the task tag, moving tagged subtasks up to the nearest task above", () => {
+    const tasks = scanTasks("A.md", "- [ ] Trip #[[task]]\n  - [ ] Packing list\n    - [ ] Socks\n    - [ ] Book hotel #[[Task]]\n- [ ] Loose\n  - [ ] Orphan #task/errand\n- [ ] Later #task #[[someday]]");
+    const visible = visibleTasks(tasks, ["someday"], "task");
+    expect(visible.map(task => [task.title, task.parentId ?? null, task.childIds])).toEqual([
+      ["Trip", null, ["A.md:3"]], ["Book hotel", "A.md:0", []], ["Orphan #task/errand", null, []]]);
+    expect(visibleTasks(tasks, [], "")).toBe(tasks);
   });
 });
 
@@ -104,5 +122,22 @@ describe("ignored notes and tags in the index", () => {
     changed("Work.md");
     expect(titles()).not.toContain("Report");
     expect(index.isProject("Work.md")).toBe(false);
+  });
+
+  it("leave out items without the task tag from tasks, projects and tags, and follow the setting at once", async () => {
+    const { index, current, titles, notes, cachedRead } = await setup({});
+    notes["Work.md"].content = "- [ ] Report #[[task]]\n- [ ] Packing #[[errand]]";
+    await index.refreshPath("Work.md");
+    const reads = cachedRead.mock.calls.length;
+    current.taskTag = "task";
+    index.applyIgnoreRules();
+    expect(titles()).toEqual(["Report"]);
+    // Old project stays a project; its untagged task no longer counts.
+    expect(index.projects().map(project => [project.name, project.openTasks])).toEqual([["Old project", 0], ["Work", 1]]);
+    expect(index.tagSummaries().map(tag => tag.name)).toEqual(["task"]);
+    current.taskTag = "";
+    index.applyIgnoreRules();
+    expect(titles()).toContain("Packing");
+    expect(cachedRead.mock.calls.length).toBe(reads);
   });
 });

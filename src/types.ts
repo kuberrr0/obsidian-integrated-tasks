@@ -224,6 +224,8 @@ export interface TaskManagerSettings {
   ignoredPaths: string[];
   /** Tags whose notes (frontmatter) and tasks are left out of every view. */
   ignoredTags: string[];
+  /** The tag, such as "task", without which a checklist item is not a task; empty: every checklist item is one. */
+  taskTag: string;
   /** Leave out tasks inside fenced code blocks; when off, they are read like any other task. */
   ignoreCodeBlockTasks: boolean;
   /** Set once the task sidebar and Task Details have opened on first run; closed later, they stay closed. */
@@ -275,6 +277,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   viewPeriods: {},
   ignoredPaths: [],
   ignoredTags: [],
+  taskTag: "",
   ignoreCodeBlockTasks: true,
   panelsPlaced: false,
   sidebarIdleView: "context"

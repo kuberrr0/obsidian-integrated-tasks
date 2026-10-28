@@ -69,7 +69,7 @@ describe("settings compatibility", () => {
     expect(groups.map(group => [group.heading, group.items.map(item => item.name)])).toEqual([
       ["General", ["Inbox note", "New project location", "Move converted notes to the project location", "New task position", "Completed tasks", "Completed tasks section", "Section heading level", "Task mode", "Show undo notices"]],
       ["How tasks are written", ["Date format", "Link dates", "Update dates", "Tag format", "Record completion dates"]],
-      ["Ignored tasks", ["Ignored folders and notes", "Ignored tags", "Ignore tasks in code blocks"]],
+      ["Ignored tasks", ["Ignored folders and notes", "Ignored tags", "Task tag", "Ignore tasks in code blocks"]],
       ["Appearance", ["Style", "Task details", "Density", "Note group names", "Show subtasks in task views"]],
       ["Task sidebar", ["Favorites", "Inbox", "Today", "Upcoming", "All tasks", "Projects", "Tags", "Files"]],
       ["Calendar", ["Color calendar tasks by project", "Color calendar checkboxes by priority"]],
@@ -151,6 +151,22 @@ describe("settings compatibility", () => {
     expect(plugin.settings).toMatchObject({ ignoredPaths: ["Templates/", "Archive"], ignoredTags: ["template", "someday"] });
     expect(plugin.saveSettings).toHaveBeenCalled();
     expect(plugin.index.applyIgnoreRules).toHaveBeenCalled();
+  });
+
+  it("saves the task tag once typing pauses, without its #, and re-applies it to the index", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => { vi.useRealTimers(); });
+    const { tab, plugin } = setup();
+    tab.display();
+    const tag = rows.find(row => row.name === "Task tag")!;
+    expect(tag.value).toBe("");
+    await tag.change!("#ta");
+    await tag.change!("#Task ");
+    expect(plugin.settings).not.toHaveProperty("taskTag");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(plugin.settings).toMatchObject({ taskTag: "task" });
+    expect(plugin.saveSettings).toHaveBeenCalledOnce();
+    expect(plugin.index.applyIgnoreRules).toHaveBeenCalledOnce();
   });
 
   it("changes the format once typing pauses and runs the date updater with a disabled button until completion", async () => {
